@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "f29f1fd6-09b6-4a8e-9405-d05fb59ace86"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.pediatrichousecalls.providerapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

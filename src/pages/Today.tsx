@@ -1,0 +1,908 @@
+import { useEffect, useState } from 'react'
+import { CheckCircle2, Video, ChevronDown, FileText, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
+import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import { VISIT_TYPES } from '../lib/constants'
+import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
+import type { Appointment } from '../types'
+
+const VISIT_TYPE_OPTIONS = Object.keys(VISIT_TYPES) as (keyof typeof VISIT_TYPES)[]
+
+function to12h(time24: string): string {
+  const [h, m] = time24.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return time24
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+function parseTime(raw: string): string {
+  const s = raw.trim().toUpperCase()
+  const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/)
+  if (!match) return '00:00'
+  let h = parseInt(match[1], 10)
+  const mins = match[2] !== undefined ? parseInt(match[2], 10) : 0
+  const period = match[3]
+  if (period === 'PM' && h !== 12) h += 12
+  else if (period === 'AM' && h === 12) h = 0
+  return `${h.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+}
+
+interface ScheduleBlock {
+  id: string
+  provider_id: string
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  all_day: boolean
+  reason: string | null
+  created_at: string
+}
+
+export function Today() {
+  const { provider } = useAuth()
+  const [appts, setAppts] = useState<Appointment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [viewDate, setViewDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [charmDetails, setCharmDetails] = useState<Record<string, any>>({})
+
+  // Add appointment
+  const [adding, setAdding] = useState(false)
+  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', date: '', time: '', notes: '' })
+  const [addCustomTime, setAddCustomTime] = useState('')
+  const [addSubmitting, setAddSubmitting] = useState(false)
+  const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
+  const [addForProviderId, setAddForProviderId] = useState('')
+
+  // Cancel appointment
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+
+  // Mark done
+  const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
+  const [doneInstructions, setDoneInstructions] = useState('')
+  const [doneSubmitting, setDoneSubmitting] = useState(false)
+
+  // Schedule blocks
+  const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
+  const [blocking, setBlocking] = useState(false)
+  const [blockSubmitting, setBlockSubmitting] = useState(false)
+  const [blockForm, setBlockForm] = useState({
+    mode: 'single' as 'single' | 'range',
+    startDate: '',
+    endDate: '',
+    allDay: true,
+    startTime: '',
+    endTime: '',
+    reason: '',
+  })
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+
+  async function fetchAppts() {
+    if (!provider) return
+    const { data } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('provider_id', provider.id)
+      .eq('scheduled_date', viewDate)
+      .order('scheduled_time')
+    setAppts((data ?? []) as Appointment[])
+    setLoading(false)
+  }
+
+  async function fetchBlocks() {
+    if (!provider) return
+    const { data } = await supabase
+      .from('schedule_blocks')
+      .select('*')
+      .eq('provider_id', provider.id)
+      .lte('start_date', viewDate)
+      .gte('end_date', viewDate)
+      .order('start_time')
+    setBlocks((data ?? []) as ScheduleBlock[])
+  }
+
+  useEffect(() => { fetchAppts(); fetchBlocks(); setExpanded(null); setCharmDetails({}) }, [provider, viewDate])
+
+  useEffect(() => {
+    if (!provider) return
+    supabase.from('providers').select('id, name').neq('role', 'admin').order('name')
+      .then(({ data }) => setAllProviders((data ?? []) as { id: string; name: string }[]))
+  }, [provider])
+
+  async function fetchCharmDetails(appt: Appointment) {
+    if (charmDetails[appt.id]) return
+
+    let charmPatientId = appt.charm_patient_id
+    let charmAppointmentId = appt.charm_appointment_id
+
+    // If no charm_patient_id stored, look it up via reference code in notes
+    if (!charmPatientId && appt.notes) {
+      const refMatch = appt.notes.match(/Ref: (PUC-\d+)/)
+      if (refMatch) {
+        const { data: booking } = await supabase
+          .from('booking_requests')
+          .select('child_ids, charm_appointment_id')
+          .eq('reference_code', refMatch[1])
+          .single()
+        if (booking?.child_ids?.length) {
+          const { data: child } = await supabase
+            .from('children')
+            .select('charm_patient_id')
+            .eq('id', booking.child_ids[0])
+            .single()
+          charmPatientId = (child as any)?.charm_patient_id || null
+          charmAppointmentId = booking.charm_appointment_id || null
+        }
+      }
+    }
+
+    if (!charmPatientId) {
+      setCharmDetails(prev => ({ ...prev, [appt.id]: { notFound: true } }))
+      return
+    }
+
+    const { data } = await supabase.functions.invoke('get-charm-details', {
+      body: { charm_patient_id: charmPatientId, charm_appointment_id: charmAppointmentId },
+    })
+    if (data?.ok) setCharmDetails(prev => ({ ...prev, [appt.id]: data }))
+    else setCharmDetails(prev => ({ ...prev, [appt.id]: { notFound: true } }))
+  }
+
+  async function submitDone() {
+    if (!doneTarget) return
+    setDoneSubmitting(true)
+    const instructions = doneInstructions.trim() || null
+    // Update status separately so it always succeeds even if after_visit_instructions column is missing
+    await supabase.from('appointments')
+      .update({ status: 'done' } as any)
+      .eq('id', doneTarget.id)
+    if (instructions) {
+      void supabase.from('appointments')
+        .update({ after_visit_instructions: instructions } as any)
+        .eq('id', doneTarget.id)
+    }
+    if (instructions && doneTarget.charm_appointment_id) {
+      void supabase.from('booking_requests')
+        .update({ after_visit_instructions: instructions } as any)
+        .eq('charm_appointment_id', doneTarget.charm_appointment_id)
+    }
+    void supabase.functions.invoke('send-notifications', { body: { type: 'post_visit_email', appointmentId: doneTarget.id } })
+    setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
+    setDoneTarget(null)
+    setDoneInstructions('')
+    setDoneSubmitting(false)
+  }
+
+  function openAdd() {
+    setAddForProviderId(provider?.id || '')
+    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', date: viewDate, time: '', notes: '' })
+    setAddCustomTime('')
+    setAdding(true)
+  }
+
+  async function submitAdd() {
+    const effectiveTime = addForm.time === '__custom__' ? addCustomTime : addForm.time
+    if (!provider || !addForm.date || !effectiveTime || !addForm.visitType) return
+    setAddSubmitting(true)
+
+    const time24 = parseTime(effectiveTime)
+
+    const noteParts = []
+    if (addForm.patientName) noteParts.push(`PATIENT:${addForm.patientName}`)
+    if (addForm.dob) noteParts.push(`DOB:${addForm.dob}`)
+    if (addForm.gender) noteParts.push(`GENDER:${addForm.gender}`)
+    const fullAddr = addForm.address
+      ? (addForm.zip && !addForm.address.includes(addForm.zip) ? `${addForm.address.trim()} ${addForm.zip}` : addForm.address)
+      : ''
+    if (fullAddr) noteParts.push(`ADDR:${fullAddr}`)
+    if (addForm.email) noteParts.push(`PARENTEMAIL:${addForm.email}`)
+    if (addForm.phone) noteParts.push(`PARENTPHONE:${addForm.phone}`)
+    if (addForm.notes) noteParts.push(`NOTES:${addForm.notes}`)
+
+    const providerId = addForProviderId || provider.id
+    const assignedProvider = allProviders.find(p => p.id === providerId)
+
+    await supabase.from('appointments').insert({
+      provider_id: providerId,
+      visit_type: addForm.visitType,
+      zone: addForm.zone || addForm.address || 'Unspecified',
+      scheduled_time: time24,
+      scheduled_date: addForm.date,
+      status: 'upcoming',
+      notes: noteParts.join('|') || null,
+    })
+
+    setAddSubmitting(false)
+    setAdding(false)
+    fetchAppts()
+
+    supabase.functions.invoke('send-notifications', {
+      body: {
+        type: 'appointment_added',
+        providerName: assignedProvider?.name || provider.name,
+        visitType: addForm.visitType,
+        zone: addForm.zone || addForm.address || 'Unspecified',
+        date: addForm.date,
+        time: effectiveTime,
+        parentEmail: addForm.email || null,
+      },
+    }).catch(() => {})
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget || !provider) return
+    setCancelling(true)
+
+    await supabase.from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('id', cancelTarget.id)
+
+    setAppts(prev => prev.map(a => a.id === cancelTarget.id ? { ...a, status: 'cancelled' } : a))
+
+    const matchingZips = Object.entries(ZIP_TO_ZONE)
+      .filter(([, z]) => z === cancelTarget.zone)
+      .map(([zip]) => zip)
+
+    if (matchingZips.length > 0) {
+      supabase.functions.invoke('send-notifications', {
+        body: {
+          type: 'slot_opened',
+          providerId: provider.id,
+          providerName: provider.name,
+          zone: cancelTarget.zone,
+          visitType: cancelTarget.visit_type,
+          date: cancelTarget.scheduled_date,
+          time: to12h(cancelTarget.scheduled_time),
+          matchingZips,
+        },
+      }).catch(() => {})
+    }
+
+    setCancelling(false)
+    setCancelTarget(null)
+  }
+
+  function openBlock() {
+    setBlockForm({ mode: 'single', startDate: today, endDate: today, allDay: true, startTime: '', endTime: '', reason: '' })
+    setBlocking(true)
+  }
+
+  async function submitBlock() {
+    if (!provider || !blockForm.startDate) return
+    if (!blockForm.allDay && (!blockForm.startTime || !blockForm.endTime)) return
+    setBlockSubmitting(true)
+
+    await supabase.from('schedule_blocks').insert({
+      provider_id: provider.id,
+      start_date: blockForm.startDate,
+      end_date: blockForm.mode === 'range' ? blockForm.endDate : blockForm.startDate,
+      all_day: blockForm.allDay,
+      start_time: blockForm.allDay ? null : blockForm.startTime,
+      end_time: blockForm.allDay ? null : blockForm.endTime,
+      reason: blockForm.reason || null,
+    })
+
+    setBlockSubmitting(false)
+    setBlocking(false)
+    fetchBlocks()
+  }
+
+  async function deleteBlock(id: string) {
+    await supabase.from('schedule_blocks').delete().eq('id', id)
+    setBlocks(prev => prev.filter(b => b.id !== id))
+  }
+
+  const done = appts.filter(a => a.status === 'done').length
+  const inProgress = appts.filter(a => a.status === 'in-progress').length
+  const remaining = appts.filter(a => a.status === 'upcoming').length
+
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  if (!provider) return null
+
+  const firstName = provider.name.split(' ').slice(-2)[0]
+
+  // Available end times must come after the selected start time
+  const endTimeOptions = blockForm.startTime
+    ? TIME_SLOTS.slice(TIME_SLOTS.indexOf(blockForm.startTime) + 1)
+    : TIME_SLOTS
+
+  return (
+    <div>
+      {/* ── Header ── */}
+      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div className="font-display text-[18px] font-medium text-[#1A1A2E]">
+          {greeting()}, {firstName}!
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#F1EFE8] rounded-lg px-1 py-1">
+            <button onClick={() => setViewDate(format(subDays(parseISO(viewDate), 1), 'yyyy-MM-dd'))}
+              className="p-1 rounded hover:bg-white transition-colors">
+              <ChevronLeft size={14} className="text-[#555]" />
+            </button>
+            <span className="text-[13px] font-medium text-[#1A1A2E] px-2 min-w-[140px] text-center">
+              {isToday(parseISO(viewDate)) ? 'Today' : format(parseISO(viewDate), 'EEE, MMM d')}
+            </span>
+            <button onClick={() => setViewDate(format(addDays(parseISO(viewDate), 1), 'yyyy-MM-dd'))}
+              className="p-1 rounded hover:bg-white transition-colors">
+              <ChevronRight size={14} className="text-[#555]" />
+            </button>
+          </div>
+          {!isToday(parseISO(viewDate)) && (
+            <button onClick={() => setViewDate(today)}
+              className="text-[12px] text-[#7F77DD] hover:underline">
+              Back to today
+            </button>
+          )}
+          <Badge variant="purple">{appts.length} appointments</Badge>
+          <Button variant="secondary" size="sm" onClick={openBlock}>
+            <Ban size={13} /> Block time
+          </Button>
+          <Button variant="teal" size="sm" onClick={openAdd}>
+            <Plus size={13} /> Add appointment
+          </Button>
+        </div>
+      </div>
+
+      <div className="p-6">
+
+        {/* ── Stat cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
+          {[
+            { label: 'Total today', value: appts.length, color: '#1A1A2E' },
+            { label: 'Completed',   value: done,         color: '#1D9E75' },
+            { label: 'In progress', value: inProgress,   color: '#7F77DD' },
+            { label: 'Remaining',   value: remaining,    color: '#555' },
+          ].map(s => (
+            <div key={s.label} className="bg-white border border-[#E8E8E4] rounded-lg p-4 shadow-sm">
+              <div className="font-display text-2xl font-medium mb-0.5" style={{ color: s.color }}>{loading ? '—' : s.value}</div>
+              <div className="text-[12px] text-[#555]">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Today's schedule blocks ── */}
+        {blocks.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {blocks.map(block => (
+              <div key={block.id} className="flex items-center gap-3 px-4 py-3 bg-[#FAEEDA] border border-[#FAC775] rounded-lg">
+                <Ban size={15} className="text-[#633806] flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-[#633806]">
+                    {block.all_day ? 'Schedule blocked — all day' : `Schedule blocked · ${block.start_time} – ${block.end_time}`}
+                  </div>
+                  <div className="flex items-center gap-3 text-[12px] text-[#7A4A18] mt-0.5">
+                    {block.reason && <span>{block.reason}</span>}
+                    {block.start_date !== block.end_date && (
+                      <span>
+                        {format(new Date(block.start_date + 'T12:00:00'), 'MMM d')} –{' '}
+                        {format(new Date(block.end_date + 'T12:00:00'), 'MMM d')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => deleteBlock(block.id)}
+                  title="Remove block"
+                  className="p-1.5 rounded-lg hover:bg-[#FAC775]/60 text-[#633806] flex-shrink-0 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Appointments list ── */}
+        {!loading && appts.length === 0 ? (
+          <div className="text-center py-16 text-[#999] text-[14px]">
+            No appointments scheduled for today.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {appts.map(appt => {
+              const vt = VISIT_TYPES[appt.visit_type]
+              const isExpanded = expanded === appt.id
+              const isVirtual = appt.visit_type === 'Video telemedicine' || appt.visit_type === 'Text visit'
+
+              return (
+                <div key={appt.id}
+                  className={`border rounded-lg overflow-hidden transition-all cursor-pointer ${isExpanded ? 'border-[#7F77DD] bg-[#EEEDFE]/30' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+                  onClick={() => { const next = isExpanded ? null : appt.id; setExpanded(next); if (next) fetchCharmDetails(appt) }}>
+
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="text-[13px] font-medium text-[#555] w-16 flex-shrink-0">{to12h(appt.scheduled_time)}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-display text-[15px] font-medium ${isExpanded ? 'text-[#3C3489]' : 'text-[#1A1A2E]'}`}>{appt.visit_type}</div>
+                      <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
+                    </div>
+                    <Badge color={vt?.color} textColor={vt?.textColor}>{vt?.badge || appt.visit_type}</Badge>
+                    {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
+                    {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
+                    <ChevronDown size={14} className={`text-[#999] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-[#AFA9EC]/40 pt-3" onClick={e => e.stopPropagation()}>
+                      {(() => {
+                        const NOTE_LABELS: Record<string, string> = {
+                          CC: 'Chief complaint', NOTES: 'Additional notes',
+                          ALLERGY: 'Allergies', MEDS: 'Medications', PMH: 'Medical history',
+                          VAX: 'Vaccination status', PCP: 'Primary care physician',
+                          PHARMACY: 'Preferred pharmacy', INSURANCE: 'Insurance',
+                          CHILDREN: 'Children seen', PARENTEMAIL: 'Parent email',
+                          PARENTPHONE: 'Parent phone', GENDER: 'Sex',
+                          CARDFRONT: 'Insurance card front', CARDBACK: 'Insurance card back',
+                        }
+
+                        // Always parse clinical data from notes — no API needed
+                        const noteMap: Record<string, string> = {}
+                        ;(appt.notes || '').split('|').forEach((part: string) => {
+                          const colon = part.indexOf(':')
+                          if (colon > 0) {
+                            const k = part.slice(0, colon).trim()
+                            const v = part.slice(colon + 1).trim()
+                            if (!['Ref', 'ADDR'].includes(k) && v) noteMap[k] = v
+                          }
+                        })
+
+                        const cd = charmDetails[appt.id]
+                        const p = cd?.patient || {}
+
+                        return (
+                          <div className="mb-3 space-y-2">
+                            {/* Patient demographics from Charm */}
+                            {cd && !cd.notFound && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
+                                {p.first_name && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Name </span><strong>{p.first_name} {p.last_name}</strong></div>}
+                                {p.dob && <div className="text-[13px]"><span className="text-[#999] text-[11px]">DOB </span>{p.dob}</div>}
+                                {p.gender && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Sex </span>{p.gender}</div>}
+                                {p.phone && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Phone </span>{p.phone}</div>}
+                                {cd.allergies && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Allergies </span>{cd.allergies}</div>}
+                              </div>
+                            )}
+                            {!cd && (
+                              <div className="p-2 text-[11px] text-[#999] italic">Loading patient name from Charm…</div>
+                            )}
+
+                            {noteMap.PARENTPHONE && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-0.5">Parent phone</div>
+                                  <div className="text-[14px] font-medium text-[#1A1A2E]">{noteMap.PARENTPHONE}</div>
+                                </div>
+                                <a href={`tel:${noteMap.PARENTPHONE}`} onClick={e => e.stopPropagation()}
+                                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">
+                                  Call
+                                </a>
+                              </div>
+                            )}
+
+                            {/* Clinical intake data from appointment notes — always shown */}
+                            {Object.keys(noteMap).filter(k => k !== 'PARENTPHONE').length > 0 ? (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Visit details</div>
+                                {Object.entries(noteMap).filter(([k]) => k !== 'PARENTPHONE').map(([k, v]) => (
+                                  <div key={k} className="text-[13px]">
+                                    <span className="text-[#999] text-[11px] block">{NOTE_LABELS[k] || k}</span>
+                                    {(k === 'CARDFRONT' || k === 'CARDBACK') ? (
+                                      <a href={v} target="_blank" rel="noopener noreferrer">
+                                        <img src={v} alt={NOTE_LABELS[k]} className="mt-1 max-h-28 rounded border border-[#E8E8E4] object-contain" />
+                                      </a>
+                                    ) : v}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-[#EEEDFE] border border-[#AFA9EC] rounded-lg text-[12px] text-[#3C3489]">
+                                No intake data — this appointment was added manually or booked before intake tracking was enabled.
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        {[
+                          { label: 'Visit type', value: appt.visit_type },
+                          { label: 'Zone',       value: appt.zone },
+                        ].map(d => (
+                          <div key={d.label} className="bg-[#7F77DD]/6 rounded-lg p-2.5">
+                            <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">{d.label}</div>
+                            <div className="text-[13px] text-[#1A1A2E]">{d.value}</div>
+                          </div>
+                        ))}
+                        {(() => {
+                          const addr = appt.notes?.split('|').find(p => p.startsWith('ADDR:'))?.replace('ADDR:', '')
+                          return addr ? (
+                            <div className="col-span-2 bg-[#7F77DD]/6 rounded-lg p-2.5">
+                              <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Visit address</div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-[13px] text-[#1A1A2E]">{addr}</div>
+                                <a
+                                  href={`https://maps.google.com/maps?daddr=${encodeURIComponent(addr)}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">
+                                  <Navigation size={11} /> Navigate
+                                </a>
+                              </div>
+                            </div>
+                          ) : null
+                        })()}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {appt.status !== 'done' && appt.status !== 'cancelled' ? (
+                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                            <CheckCircle2 size={13} /> Mark complete
+                          </Button>
+                        ) : appt.status === 'done' ? (
+                          <Badge variant="teal">Visit completed</Badge>
+                        ) : null}
+                        {isVirtual && appt.status !== 'cancelled' && (
+                          <Button variant="secondary" size="sm">
+                            <Video size={13} /> Join video call
+                          </Button>
+                        )}
+                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                          <Button variant="secondary" size="sm">
+                            <FileText size={13} /> Add note
+                          </Button>
+                        )}
+                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                          <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
+                            <X size={13} /> Cancel visit
+                          </Button>
+                        )}
+                        {appt.status === 'cancelled' && (
+                          <Badge variant="amber">Cancelled</Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Block time modal ── */}
+      {blocking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !blockSubmitting && setBlocking(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Block schedule</h2>
+              <button onClick={() => setBlocking(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Single / Range toggle */}
+            <div className="flex gap-1 p-1 bg-[#F1EFE8] rounded-lg mb-4">
+              {(['single', 'range'] as const).map(mode => (
+                <button key={mode}
+                  onClick={() => setBlockForm(f => ({ ...f, mode, endDate: f.startDate }))}
+                  className={`flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all ${blockForm.mode === mode ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-[#555]'}`}>
+                  {mode === 'single' ? 'Single day' : 'Date range'}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3 mb-5">
+              {/* Date fields */}
+              <div className={blockForm.mode === 'range' ? 'grid grid-cols-2 gap-2' : ''}>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    {blockForm.mode === 'range' ? 'Start date' : 'Date'}
+                  </label>
+                  <input type="date" value={blockForm.startDate}
+                    onChange={e => setBlockForm(f => ({ ...f, startDate: e.target.value, endDate: f.mode === 'single' ? e.target.value : (f.endDate < e.target.value ? e.target.value : f.endDate) }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                {blockForm.mode === 'range' && (
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">End date</label>
+                    <input type="date" value={blockForm.endDate} min={blockForm.startDate}
+                      onChange={e => setBlockForm(f => ({ ...f, endDate: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                  </div>
+                )}
+              </div>
+
+              {/* All-day toggle */}
+              <div className="flex items-center justify-between py-1">
+                <span className="text-[13px] font-medium text-[#1A1A2E]">All day</span>
+                <button
+                  onClick={() => setBlockForm(f => ({ ...f, allDay: !f.allDay, startTime: '', endTime: '' }))}
+                  className={`w-10 h-6 rounded-full transition-colors relative flex-shrink-0 ${blockForm.allDay ? 'bg-[#7F77DD]' : 'bg-[#D0D0CC]'}`}>
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${blockForm.allDay ? 'translate-x-5' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* Specific hours */}
+              {!blockForm.allDay && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Start time</label>
+                    <select value={blockForm.startTime}
+                      onChange={e => setBlockForm(f => ({ ...f, startTime: e.target.value, endTime: '' }))}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                      <option value="">Select</option>
+                      {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">End time</label>
+                    <select value={blockForm.endTime}
+                      onChange={e => setBlockForm(f => ({ ...f, endTime: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white"
+                      disabled={!blockForm.startTime}>
+                      <option value="">Select</option>
+                      {endTimeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Reason */}
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                  Reason <span className="text-[#999] normal-case font-normal">(optional)</span>
+                </label>
+                <input type="text" value={blockForm.reason}
+                  placeholder="e.g. Personal time off, School event, Family obligation"
+                  onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setBlocking(false)}>Cancel</Button>
+              <Button variant="primary" className="flex-1"
+                disabled={!blockForm.startDate || (!blockForm.allDay && (!blockForm.startTime || !blockForm.endTime))}
+                loading={blockSubmitting}
+                onClick={submitBlock}>
+                <Ban size={14} /> Block time
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark complete modal ── */}
+      {doneTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !doneSubmitting && setDoneTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#E1F5EE] flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 size={18} className="text-[#1D9E75]" />
+              </div>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Mark visit complete</h2>
+            </div>
+
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
+              <div className="font-medium text-[#1A1A2E]">{doneTarget.visit_type}</div>
+              <div className="text-[#999]">{doneTarget.zone}</div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">
+                After-visit instructions <span className="text-[#999] normal-case font-normal">(optional)</span>
+              </label>
+              <textarea rows={4}
+                placeholder="e.g. Rest and fluids for 48 hours. Recheck temperature in the morning. Call if fever returns above 102°F."
+                value={doneInstructions}
+                onChange={e => setDoneInstructions(e.target.value)}
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none" />
+              <p className="text-[11px] text-[#999] mt-1">If provided, the family will see this in their app under past visits.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setDoneTarget(null)} disabled={doneSubmitting}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={doneSubmitting} onClick={submitDone}>
+                <CheckCircle2 size={14} /> Mark complete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cancel appointment modal ── */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !cancelling && setCancelTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-[#FCEBEB] flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={18} className="text-[#791F1F]" />
+              </div>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Cancel this visit?</h2>
+            </div>
+
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-3 space-y-1">
+              <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
+              <div className="text-[#999]">
+                {format(new Date(cancelTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(cancelTarget.scheduled_time)}
+              </div>
+              <div className="text-[#999]">{cancelTarget.zone}</div>
+            </div>
+
+            <div className="p-3 bg-[#E1F5EE] border border-[#9FDECA] rounded-lg text-[12px] text-[#085041] mb-5 leading-relaxed">
+              Any families on the waitlist in the <strong>{cancelTarget.zone}</strong> area will automatically
+              receive an email and text letting them know this slot has opened up.
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setCancelTarget(null)} disabled={cancelling}>Keep visit</Button>
+              <Button variant="danger" className="flex-1" loading={cancelling} onClick={confirmCancel}>Cancel visit</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add appointment modal ── */}
+      {adding && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setAdding(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add appointment</h2>
+              <button onClick={() => setAdding(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5">
+
+              {allProviders.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Assign to provider</label>
+                  <select value={addForProviderId} onChange={e => setAddForProviderId(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    {allProviders.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Patient information</div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name</label>
+                <input type="text" placeholder="First and last name" value={addForm.patientName}
+                  onChange={e => setAddForm(f => ({ ...f, patientName: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
+                  <input type="text" placeholder="MM-DD-YYYY" value={addForm.dob}
+                    onChange={e => setAddForm(f => ({ ...f, dob: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Sex</label>
+                  <select value={addForm.gender} onChange={e => setAddForm(f => ({ ...f, gender: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                    <option value="">Select…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Phone</label>
+                  <input type="tel" placeholder="(704) 555-1234" value={addForm.phone}
+                    onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Email</label>
+                  <input type="email" placeholder="parent@email.com" value={addForm.email}
+                    onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+              </div>
+
+              <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Appointment details</div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={addForm.visitType}
+                  onChange={e => setAddForm(f => ({ ...f, visitType: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                  {VISIT_TYPE_OPTIONS.map(vt => <option key={vt} value={vt}>{vt}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address</label>
+                <input type="text" placeholder="123 Main St, Charlotte, NC" value={addForm.address}
+                  onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code</label>
+                  <input type="text" placeholder="28277" maxLength={5} value={addForm.zip}
+                    onChange={e => {
+                      const zip = e.target.value
+                      const detectedZone = zip.length === 5 ? (ZIP_TO_ZONE[zip] || '') : ''
+                      setAddForm(f => ({ ...f, zip, zone: detectedZone || f.zone }))
+                    }}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Zone {addForm.zip.length === 5 && ZIP_TO_ZONE[addForm.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
+                  </label>
+                  <input type="text" placeholder="e.g. SouthPark" value={addForm.zone}
+                    onChange={e => setAddForm(f => ({ ...f, zone: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
+                <input type="date" value={addForm.date}
+                  onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time</label>
+                <div className="grid grid-cols-4 gap-1.5 mb-1.5">
+                  {TIME_SLOTS.map(slot => (
+                    <button key={slot} type="button" onClick={() => { setAddForm(f => ({ ...f, time: slot })); setAddCustomTime('') }}
+                      className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${addForm.time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'}`}>
+                      {slot}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setAddForm(f => ({ ...f, time: '__custom__' }))}
+                    className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans col-span-2 ${addForm.time === '__custom__' ? 'bg-[#7F77DD] border-[#7F77DD] text-white' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'}`}>
+                    Custom time…
+                  </button>
+                </div>
+                {addForm.time === '__custom__' && (
+                  <input type="text" autoFocus value={addCustomTime} onChange={e => setAddCustomTime(e.target.value)}
+                    placeholder="e.g. 6:30 PM"
+                    className="w-full px-3 py-2 border border-[#7F77DD] rounded-lg text-[14px] font-sans outline-none mt-1" />
+                )}
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Notes <span className="text-[#999] normal-case font-normal">(optional)</span></label>
+                <textarea rows={2} placeholder="e.g. Parent texted directly, 2 children" value={addForm.notes}
+                  onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] resize-none" />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button variant="teal" className="flex-1" disabled={!addForm.date || !(addForm.time === '__custom__' ? addCustomTime : addForm.time)} loading={addSubmitting} onClick={submitAdd}>
+                <CheckCircle2 size={14} /> Add to schedule
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
