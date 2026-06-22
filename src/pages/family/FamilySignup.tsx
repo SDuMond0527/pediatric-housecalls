@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 
 export function FamilySignup() {
   const { signUp } = useFamilyAuth()
-  const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '', confirm: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
