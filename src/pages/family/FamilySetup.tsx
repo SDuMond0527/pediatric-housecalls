@@ -33,6 +33,7 @@ export function FamilySetup() {
 
     try {
       await updateMyFamily({
+        email:        user!.email ?? null,
         display_name: displayName || null,
         state:        state || null,
         zip:          zip || null,

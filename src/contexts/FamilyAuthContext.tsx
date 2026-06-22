@@ -54,7 +54,9 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
   async function loadUser() {
     try {
       const cognitoUser = await getCurrentUser()
-      setUser({ id: cognitoUser.userId })
+      const session = await fetchAuthSession()
+      const email = session.tokens?.idToken?.payload?.email as string | undefined
+      setUser({ id: cognitoUser.userId, email })
       const data = await fetchFamilyData()
       if (data) {
         setFamily(data.family)

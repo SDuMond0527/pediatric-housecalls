@@ -19,11 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH') {
-    const { display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at } = req.body
+    const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at } = req.body
     const [row] = await sql`
-      INSERT INTO family_profiles (cognito_sub, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at)
+      INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at)
       VALUES (
+        gen_random_uuid(),
         ${sub},
+        ${email ?? ''},
         ${display_name ?? null},
         ${phone ?? null},
         ${address_line1 ?? null},
