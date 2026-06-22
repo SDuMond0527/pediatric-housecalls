@@ -21,7 +21,7 @@ export function FamilySignup() {
     setLoading(true)
     const { error } = await signUp(form.email, form.password)
     if (error) { setError(error.message); setLoading(false); return }
-    navigate('/family/setup')
+    window.location.href = '/family/setup'
   }
 
   return (
