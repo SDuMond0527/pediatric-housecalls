@@ -1,5 +1,6 @@
 import '../lib/amplify'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { getFamilyAccessToken } from '../contexts/FamilyAuthContext'
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await fetchAuthSession()
@@ -7,8 +8,23 @@ async function authHeaders(): Promise<Record<string, string>> {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 }
 
+async function familyAuthHeaders(): Promise<Record<string, string>> {
+  const token = await getFamilyAccessToken()
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders()
+  const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? res.statusText)
+  }
+  return res.json()
+}
+
+async function familyApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = await familyAuthHeaders()
   const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
@@ -115,10 +131,10 @@ export const updateSlotOffer = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/slot-offers/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
 // ── Families ──────────────────────────────────────────────────
-export const getMyFamily = () => apiFetch<any>('/api/families/me')
+export const getMyFamily = () => familyApiFetch<any>('/api/families/me')
 
 export const updateMyFamily = (body: Record<string, unknown>) =>
-  apiFetch<any>('/api/families/me', { method: 'PATCH', body: JSON.stringify(body) })
+  familyApiFetch<any>('/api/families/me', { method: 'PATCH', body: JSON.stringify(body) })
 
 export const getFamilyById = (id: string) => apiFetch<any>(`/api/families/${id}`)
 
@@ -127,7 +143,7 @@ export const getFamiliesByIds = (ids: string[]) =>
 
 // ── Children ──────────────────────────────────────────────────
 export const createChild = (body: Record<string, unknown>) =>
-  apiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
+  familyApiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
 
 export const updateChild = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
