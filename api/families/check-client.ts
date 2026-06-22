@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       UserPoolId: userPoolId,
       ClientId: clientId,
       ClientName: c.ClientName,
-      ExplicitAuthFlows: ['ALLOW_USER_SRP_AUTH', 'ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
+      ExplicitAuthFlows: ['ALLOW_USER_SRP_AUTH', 'ALLOW_USER_PASSWORD_AUTH', 'ALLOW_ADMIN_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
       SupportedIdentityProviders: c.SupportedIdentityProviders,
       CallbackURLs: c.CallbackURLs,
       LogoutURLs: c.LogoutURLs,
