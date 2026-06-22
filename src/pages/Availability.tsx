@@ -4,7 +4,12 @@ import {
   format, isPast, parseISO, startOfMonth, endOfMonth,
   eachDayOfInterval, getDay, addMonths, subMonths, isToday, isBefore, startOfDay,
 } from 'date-fns'
-import { supabase } from '../lib/supabase'
+import {
+  getAvailability, saveAvailabilityDays, upsertAvailabilityOverride, deleteAvailabilityOverride,
+  createZoneRestriction, deleteZoneRestriction,
+  createTimeBlock, deleteTimeBlock,
+  upsertVisitTypeAvailability,
+} from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -83,8 +88,8 @@ export function Availability() {
   const { provider } = useAuth()
   const [avail, setAvail] = useState<Availability[]>([])
   const [visitTypeAvail, setVisitTypeAvail] = useState<VisitTypeAvail[]>([])
-  const [zones, setZones] = useState<ZoneRestriction[]>([])
-  const [blocks, setBlocks] = useState<TimeBlock[]>([])
+  const [zoneRestrictions, setZoneRestrictions] = useState<ZoneRestriction[]>([])
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
   const [overrides, setOverrides] = useState<AvailabilityOverride[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -105,17 +110,11 @@ export function Availability() {
 
   useEffect(() => {
     if (!provider) return
-    Promise.all([
-      supabase.from('availability').select('*').eq('provider_id', provider.id).order('day_of_week'),
-      supabase.from('visit_type_availability').select('*').eq('provider_id', provider.id),
-      supabase.from('zone_restrictions').select('*').eq('provider_id', provider.id),
-      supabase.from('time_blocks').select('*').eq('provider_id', provider.id),
-      supabase.from('availability_overrides').select('*').eq('provider_id', provider.id).order('date'),
-    ]).then(([a, vta, z, b, o]) => {
-      if (a.data && a.data.length > 0) setAvail(a.data as Availability[])
+    getAvailability(provider.id).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes }) => {
+      if (days && days.length > 0) setAvail(days as Availability[])
       else setAvail(DEFAULT_AVAILABILITY.map(d => ({ ...d, id: '', provider_id: provider.id })))
 
-      const saved = (vta.data ?? []) as VisitTypeAvail[]
+      const saved = (visitTypes ?? []) as VisitTypeAvail[]
       const defaults = defaultVisitTypeAvail(provider.id)
       // Merge saved rows with defaults so all 6 types always appear
       const merged = defaults.map(def => {
@@ -124,9 +123,9 @@ export function Availability() {
       })
       setVisitTypeAvail(merged)
 
-      setZones((z.data ?? []) as ZoneRestriction[])
-      setBlocks((b.data ?? []) as TimeBlock[])
-      setOverrides((o.data ?? []) as AvailabilityOverride[])
+      setZoneRestrictions((zr ?? []) as ZoneRestriction[])
+      setTimeBlocks((tb ?? []) as TimeBlock[])
+      setOverrides((ov ?? []) as AvailabilityOverride[])
     })
   }, [provider])
 
@@ -155,10 +154,7 @@ export function Availability() {
     setSaving(true)
 
     // Save weekly availability
-    for (const a of avail) {
-      if (a.id) await supabase.from('availability').update(a).eq('id', a.id)
-      else await supabase.from('availability').insert({ ...a, provider_id: provider.id })
-    }
+    await saveAvailabilityDays(provider.id, avail)
 
     // Upsert visit type availability
     const rows = visitTypeAvail.map(v => ({
@@ -169,10 +165,7 @@ export function Availability() {
       start_time: v.start_time,
       end_time: v.end_time,
     }))
-    const { data: upserted } = await supabase
-      .from('visit_type_availability')
-      .upsert(rows, { onConflict: 'provider_id,visit_type' })
-      .select()
+    const upserted = await upsertVisitTypeAvailability(provider.id, rows)
     if (upserted) {
       setVisitTypeAvail(prev => prev.map(v => {
         const fresh = (upserted as VisitTypeAvail[]).find(u => u.visit_type === v.visit_type)
@@ -187,46 +180,43 @@ export function Availability() {
 
   async function addZoneRestriction() {
     if (!provider || !newZone.zone) return
-    const { data } = await supabase.from('zone_restrictions').insert({
+    const data = await createZoneRestriction({
       provider_id: provider.id, zone: newZone.zone,
       start_time: fmt12to24(newZone.start), end_time: fmt12to24(newZone.end),
-    }).select().single()
-    if (data) setZones(prev => [...prev, data as ZoneRestriction])
+    })
+    if (data) setZoneRestrictions(prev => [...prev, data as ZoneRestriction])
     setZoneModal(false)
     setNewZone({ zone: '', start: '8:00 AM', end: '12:00 PM' })
   }
 
   async function removeZone(id: string) {
-    await supabase.from('zone_restrictions').delete().eq('id', id)
-    setZones(prev => prev.filter(z => z.id !== id))
+    await deleteZoneRestriction(id)
+    setZoneRestrictions(prev => prev.filter(z => z.id !== id))
   }
 
   async function addTimeBlock() {
     if (!provider || !newBlock.label) return
-    const { data } = await supabase.from('time_blocks').insert({ provider_id: provider.id, ...newBlock }).select().single()
-    if (data) setBlocks(prev => [...prev, data as TimeBlock])
+    const data = await createTimeBlock({ provider_id: provider.id, ...newBlock })
+    if (data) setTimeBlocks(prev => [...prev, data as TimeBlock])
     setBlockModal(false)
     setNewBlock({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
   }
 
   async function removeBlock(id: string) {
-    await supabase.from('time_blocks').delete().eq('id', id)
-    setBlocks(prev => prev.filter(b => b.id !== id))
+    await deleteTimeBlock(id)
+    setTimeBlocks(prev => prev.filter(b => b.id !== id))
   }
 
   async function addOverride() {
     if (!provider || !newOverride.date) return
     const payload = {
-      provider_id: provider.id,
       date: newOverride.date,
       is_available: newOverride.is_available,
       start_time: newOverride.is_available ? fmt12to24(newOverride.start) : null,
       end_time: newOverride.is_available ? fmt12to24(newOverride.end) : null,
       note: newOverride.note || null,
     }
-    const { data } = await supabase.from('availability_overrides')
-      .upsert(payload, { onConflict: 'provider_id,date' })
-      .select().single()
+    const data = await upsertAvailabilityOverride(provider.id, payload)
     if (data) {
       setOverrides(prev => {
         const filtered = prev.filter(o => o.date !== newOverride.date)
@@ -238,7 +228,7 @@ export function Availability() {
   }
 
   async function removeOverride(id: string) {
-    await supabase.from('availability_overrides').delete().eq('id', id)
+    await deleteAvailabilityOverride(id)
     setOverrides(prev => prev.filter(o => o.id !== id))
   }
 
@@ -362,7 +352,7 @@ export function Availability() {
           <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Zone-hour customizations</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Restrict hours you're available within specific zones.</p>
           <div className="space-y-2">
-            {zones.map(z => (
+            {zoneRestrictions.map(z => (
               <div key={z.id} className="flex items-center gap-2 p-3 bg-[#FAFAF8] rounded-lg flex-wrap">
                 <span className="bg-[#EEEDFE] text-[#3C3489] text-[11px] font-medium px-2.5 py-1 rounded-full">{z.zone}</span>
                 <span className="text-[12px] text-[#555]">only</span>
@@ -381,7 +371,7 @@ export function Availability() {
           <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Time blocks</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Block specific times that should never be bookable (e.g. school pickup, recurring appointments).</p>
           <div className="space-y-2">
-            {blocks.map(b => (
+            {timeBlocks.map(b => (
               <div key={b.id} className="flex items-center justify-between bg-[#FCEBEB] border border-[#F09595] rounded-lg px-3 py-2.5">
                 <span className="text-[12px] text-[#791F1F]"><strong>{b.label}</strong> · {b.days} · {b.time_range}</span>
                 <button onClick={() => removeBlock(b.id)} className="p-1 rounded hover:bg-[#F09595]/20 text-[#791F1F]"><X size={13} /></button>

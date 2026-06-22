@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { KeyRound, CheckCircle2, Phone } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { updatePassword } from 'aws-amplify/auth'
+import { updateProvider } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -35,22 +36,30 @@ export function Settings() {
     if (!provider) return
     setPhoneSaving(true)
     setPhoneError('')
-    const { error } = await supabase.from('providers').update({ phone: phone || null } as any).eq('id', provider.id)
-    setPhoneSaving(false)
-    if (error) { setPhoneError(error.message); return }
-    setPhoneSaved(true)
-    setTimeout(() => setPhoneSaved(false), 2500)
+    try {
+      await updateProvider(provider.id, { phone: phone || null })
+      setPhoneSaved(true)
+      setTimeout(() => setPhoneSaved(false), 2500)
+    } catch (e: any) {
+      setPhoneError(e.message ?? 'Failed to save')
+    } finally {
+      setPhoneSaving(false)
+    }
   }
 
   async function saveSecureText() {
     if (!provider) return
     setSecureTextSaving(true)
     setSecureTextError('')
-    const { error } = await supabase.from('providers').update({ secure_text_number: secureText || null } as any).eq('id', provider.id)
-    setSecureTextSaving(false)
-    if (error) { setSecureTextError(error.message); return }
-    setSecureTextSaved(true)
-    setTimeout(() => setSecureTextSaved(false), 2500)
+    try {
+      await updateProvider(provider.id, { secure_text_number: secureText || null })
+      setSecureTextSaved(true)
+      setTimeout(() => setSecureTextSaved(false), 2500)
+    } catch (e: any) {
+      setSecureTextError(e.message ?? 'Failed to save')
+    } finally {
+      setSecureTextSaving(false)
+    }
   }
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -59,11 +68,14 @@ export function Settings() {
 
   async function onSubmit(data: FormData) {
     setServerError('')
-    const { error } = await supabase.auth.updateUser({ password: data.new_password })
-    if (error) { setServerError(error.message); return }
-    setSuccess(true)
-    reset()
-    setTimeout(() => setSuccess(false), 4000)
+    try {
+      await updatePassword({ oldPassword: data.current_password, newPassword: data.new_password })
+      setSuccess(true)
+      reset()
+      setTimeout(() => setSuccess(false), 4000)
+    } catch (e: any) {
+      setServerError(e.message ?? 'Failed to update password')
+    }
   }
 
   return (

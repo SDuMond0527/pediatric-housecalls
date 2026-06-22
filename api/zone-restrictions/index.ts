@@ -1,0 +1,20 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { verifyToken } from '../_lib/verifyToken'
+import sql from '../_lib/db'
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    await verifyToken(req.headers.authorization)
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  const { provider_id, zone, start_time, end_time } = req.body
+  const [row] = await sql`
+    INSERT INTO zone_restrictions (provider_id, zone, start_time, end_time)
+    VALUES (${provider_id}::uuid, ${zone}, ${start_time}, ${end_time})
+    RETURNING *`
+  res.json(row)
+}

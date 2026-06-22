@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Clock, AlertCircle, Plus, X, AlertTriangle } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import {
+  getBroadcasts, createBroadcast, updateBroadcast,
+  createAppointment, invokeNotifications,
+} from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -46,12 +49,7 @@ export function Broadcasts() {
   const [acceptTime, setAcceptTime] = useState(defaultAcceptTime)
 
   async function fetchBroadcasts() {
-    const { data } = await supabase
-      .from('broadcasts')
-      .select('*')
-      .eq('is_open', true)
-      .order('is_urgent', { ascending: false })
-      .order('created_at', { ascending: true })
+    const data = await getBroadcasts({ open_only: 'true' })
     setBroadcasts((data ?? []) as Broadcast[])
     setLoading(false)
   }
@@ -62,7 +60,7 @@ export function Broadcasts() {
     if (!provider || !form.patient_first_name || !form.patient_last_name || !form.request_type || !form.complaint) return
     setSubmitting(true)
 
-    const { data: bc } = await supabase.from('broadcasts').insert({
+    const bc = await createBroadcast({
       patient_first_name: form.patient_first_name,
       patient_last_name: form.patient_last_name,
       patient_dob: form.patient_dob || null,
@@ -76,12 +74,10 @@ export function Broadcasts() {
       is_open: true,
       created_by: provider.id,
       created_by_name: provider.name,
-    }).select().single()
+    })
 
     if (bc) {
-      supabase.functions.invoke('send-notifications', {
-        body: { type: 'broadcast', broadcastId: bc.id },
-      }).catch(() => {})
+      invokeNotifications({ type: 'broadcast', broadcastId: bc.id }).catch(() => {})
     }
 
     setSubmitting(false)
@@ -108,7 +104,7 @@ export function Broadcasts() {
     if (bc.complaint) noteParts.push(`CC:${bc.complaint}`)
     noteParts.push(`Request: ${bc.request_type}`)
 
-    await supabase.from('appointments').insert({
+    await createAppointment({
       provider_id: provider.id,
       visit_type: bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine',
       zone: bc.patient_address || (bc as any).zone || 'Broadcast',
@@ -118,17 +114,15 @@ export function Broadcasts() {
       notes: noteParts.join('|'),
     })
 
-    await supabase.from('broadcasts').update({ is_open: false }).eq('id', bc.id)
+    await updateBroadcast(bc.id, { is_open: false })
 
-    supabase.functions.invoke('send-notifications', {
-      body: {
-        type: 'broadcast_accepted',
-        broadcastId: bc.id,
-        acceptedByName: provider.name,
-        acceptedById: provider.id,
-        acceptedDate: acceptDate,
-        acceptedTime: acceptTime,
-      },
+    invokeNotifications({
+      type: 'broadcast_accepted',
+      broadcastId: bc.id,
+      acceptedByName: provider.name,
+      acceptedById: provider.id,
+      acceptedDate: acceptDate,
+      acceptedTime: acceptTime,
     }).catch(() => {})
 
     setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
@@ -137,7 +131,7 @@ export function Broadcasts() {
 
   async function pass(id: string) {
     setActing(id)
-    await supabase.from('broadcasts').update({ is_open: false }).eq('id', id)
+    await updateBroadcast(id, { is_open: false })
     setBroadcasts(prev => prev.filter(b => b.id !== id))
     setActing(null)
   }

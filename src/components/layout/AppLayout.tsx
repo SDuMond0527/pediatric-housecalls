@@ -3,25 +3,22 @@ import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { useAuth } from '../../contexts/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { getBroadcasts } from '../../lib/api'
 
 export function AppLayout() {
-  const { user, provider, loading } = useAuth()
+  const { user, loading } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [broadcastCount, setBroadcastCount] = useState(0)
 
   useEffect(() => {
-    if (!loading && (!user || !provider)) navigate('/login')
-  }, [user, provider, loading])
-  useEffect(() => {
-    if (!loading && provider?.role === 'admin') navigate('/admin/analytics', { replace: true })
-  }, [provider, loading])
+    if (!loading && !user) navigate('/login')
+  }, [user, loading])
 
   useEffect(() => {
     if (!user) return
-    supabase.from('broadcasts').select('id', { count: 'exact' }).eq('is_open', true)
-      .then(({ count }) => setBroadcastCount(count ?? 0))
+    getBroadcasts({ open_only: 'true' })
+      .then((data) => setBroadcastCount(Array.isArray(data) ? data.length : 0))
   }, [user])
 
   if (loading) {

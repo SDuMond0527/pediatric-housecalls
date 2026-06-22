@@ -1,63 +1,118 @@
+import { configureForProviders } from '../lib/amplify'
+configureForProviders()
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import {
+  getCurrentUser,
+  signIn as cognitoSignIn,
+  signOut as cognitoSignOut,
+  confirmSignIn,
+  fetchAuthSession,
+} from 'aws-amplify/auth'
+import { Hub } from 'aws-amplify/utils'
 import type { Provider } from '../types'
 
+interface CognitoUser {
+  id: string
+  email?: string
+}
+
 interface AuthContextType {
-  user: User | null
-  session: Session | null
+  user: CognitoUser | null
   provider: Provider | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; needsNewPassword: boolean }>
+  confirmNewPassword: (newPassword: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+async function getAccessToken(): Promise<string> {
+  const session = await fetchAuthSession()
+  return session.tokens?.accessToken?.toString() ?? ''
+}
+
+async function fetchProvider(): Promise<Provider | null> {
+  const token = await getAccessToken()
+  const res = await fetch('/api/providers/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<CognitoUser | null>(null)
   const [provider, setProvider] = useState<Provider | null>(null)
   const [loading, setLoading] = useState(true)
 
-  async function fetchProvider(userId: string) {
-    const { data } = await supabase.from('providers').select('*').eq('id', userId).limit(1)
-    if (data && data.length > 0) setProvider(data[0] as Provider)
+  async function loadUser() {
+    try {
+      const cognitoUser = await getCurrentUser()
+      setUser({ id: cognitoUser.userId })
+      // Provider fetch failure should not clear the authenticated user
+      try {
+        const p = await fetchProvider()
+        setProvider(p)
+      } catch {
+        setProvider(null)
+      }
+    } catch {
+      // Not authenticated
+      setUser(null)
+      setProvider(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) await fetchProvider(session.user.id)
-      setLoading(false)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        setLoading(true)
-        fetchProvider(session.user.id).finally(() => setLoading(false))
-      } else {
+    loadUser()
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signedIn') loadUser()
+      if (payload.event === 'signedOut') {
+        setUser(null)
         setProvider(null)
-        setLoading(false)
       }
     })
-    return () => subscription.unsubscribe()
+    return unsubscribe
   }, [])
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error as Error | null }
+    try {
+      const result = await cognitoSignIn({ username: email, password })
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        return { error: null, needsNewPassword: true }
+      }
+      await loadUser()
+      return { error: null, needsNewPassword: false }
+    } catch (e: unknown) {
+      // Already signed in (e.g. after confirmSignIn) — just load the user
+      if ((e as { name?: string }).name === 'UserAlreadyAuthenticatedException') {
+        await loadUser()
+        return { error: null, needsNewPassword: false }
+      }
+      return { error: e as Error, needsNewPassword: false }
+    }
+  }
+
+  async function confirmNewPassword(newPassword: string) {
+    try {
+      await confirmSignIn({ challengeResponse: newPassword })
+      await loadUser()
+      return { error: null }
+    } catch (e) {
+      return { error: e as Error }
+    }
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    await cognitoSignOut()
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, provider, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, provider, loading, signIn, confirmNewPassword, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -68,3 +123,5 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }
+
+export { getAccessToken }

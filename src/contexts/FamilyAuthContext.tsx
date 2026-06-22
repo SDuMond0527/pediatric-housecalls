@@ -1,12 +1,24 @@
+import { configureForFamilies } from '../lib/amplify'
+configureForFamilies()
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import {
+  getCurrentUser,
+  signIn as cognitoSignIn,
+  signOut as cognitoSignOut,
+  signUp as cognitoSignUp,
+  fetchAuthSession,
+} from 'aws-amplify/auth'
+import { Hub } from 'aws-amplify/utils'
 import type { FamilyProfile, Child } from '../types/family'
 
+interface CognitoUser {
+  id: string      // Cognito sub
+  email?: string
+}
+
 interface FamilyAuthContextType {
-  user: User | null
-  session: Session | null
+  user: CognitoUser | null
   family: FamilyProfile | null
   children: Child[]
   loading: boolean
@@ -18,73 +30,108 @@ interface FamilyAuthContextType {
 
 const FamilyAuthContext = createContext<FamilyAuthContextType | null>(null)
 
+async function getFamilyAccessToken(): Promise<string> {
+  const session = await fetchAuthSession()
+  return session.tokens?.accessToken?.toString() ?? ''
+}
+
+async function fetchFamilyData(): Promise<{ family: FamilyProfile; children: Child[] } | null> {
+  const token = await getFamilyAccessToken()
+  const res = await fetch('/api/families/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) return null
+  return res.json()
+}
+
 export function FamilyAuthProvider({ children: contextChildren }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<CognitoUser | null>(null)
   const [family, setFamily] = useState<FamilyProfile | null>(null)
   const [children, setChildren] = useState<Child[]>([])
   const [loading, setLoading] = useState(true)
 
-  async function fetchFamily(userId: string) {
-    const [{ data: profileRows }, { data: kids }] = await Promise.all([
-      supabase.from('family_profiles').select('*').eq('id', userId).limit(1),
-      supabase.from('children').select('*').eq('family_id', userId).order('created_at'),
-    ])
-    if (profileRows && profileRows.length > 0) setFamily(profileRows[0] as FamilyProfile)
-    setChildren((kids ?? []) as Child[])
+  async function loadUser() {
+    try {
+      const cognitoUser = await getCurrentUser()
+      setUser({ id: cognitoUser.userId })
+      const data = await fetchFamilyData()
+      if (data) {
+        setFamily(data.family)
+        setChildren(data.children)
+      }
+    } catch {
+      setUser(null)
+      setFamily(null)
+      setChildren([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function refreshFamily() {
-    if (user) await fetchFamily(user.id)
+    const data = await fetchFamilyData()
+    if (data) {
+      setFamily(data.family)
+      setChildren(data.children)
+    }
   }
 
   useEffect(() => {
-    // Wait for fetchFamily to complete before clearing loading
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) await fetchFamily(session.user.id)
-      setLoading(false)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        setLoading(true)
-        fetchFamily(session.user.id).finally(() => setLoading(false))
-      } else {
+    loadUser()
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signedIn') loadUser()
+      if (payload.event === 'signedOut') {
+        setUser(null)
         setFamily(null)
         setChildren([])
-        setLoading(false)
       }
     })
-    return () => subscription.unsubscribe()
+    return unsubscribe
   }, [])
 
   async function signUp(email: string, password: string) {
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (!error && data.user) {
-      await supabase.from('family_profiles').upsert({
-        id: data.user.id,
-        email: data.user.email ?? '',
+    try {
+      const result = await cognitoSignUp({
+        username: email,
+        password,
+        options: { userAttributes: { email } },
       })
+      if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+        // Auto-confirm via server so families don't need email verification
+        const confirmRes = await fetch('/api/families/confirm-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: email }),
+        })
+        if (!confirmRes.ok) {
+          const { error } = await confirmRes.json()
+          return { error: new Error(error || 'Could not confirm account'), needsConfirmation: false }
+        }
+        await cognitoSignIn({ username: email, password })
+        await loadUser()
+      }
+      return { error: null, needsConfirmation: false }
+    } catch (e) {
+      return { error: e as Error, needsConfirmation: false }
     }
-    // session is null when Supabase requires email confirmation
-    const needsConfirmation = !error && !data.session
-    return { error: error as Error | null, needsConfirmation }
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error as Error | null }
+    try {
+      await cognitoSignIn({ username: email, password })
+      return { error: null }
+    } catch (e) {
+      return { error: e as Error }
+    }
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    await cognitoSignOut()
   }
 
   return (
-    <FamilyAuthContext.Provider value={{ user, session, family, children, loading, signUp, signIn, signOut, refreshFamily }}>
+    <FamilyAuthContext.Provider value={{ user, family, children, loading, signUp, signIn, signOut, refreshFamily }}>
       {contextChildren}
     </FamilyAuthContext.Provider>
   )
@@ -95,3 +142,5 @@ export function useFamilyAuth() {
   if (!ctx) throw new Error('useFamilyAuth must be used within FamilyAuthProvider')
   return ctx
 }
+
+export { getFamilyAccessToken }

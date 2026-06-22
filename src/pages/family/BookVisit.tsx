@@ -1,7 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, Plus, User, Upload, X } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import {
+  getProviderByName,
+  getProvidersByRole,
+  getProvidersByNamesWithSecureText,
+  getSchedulingData,
+  createAppointment,
+  createBookingRequest,
+  createWaitlistEntry,
+  createChild,
+  updateMyFamily,
+  updateChild,
+  invokeNotifications,
+  invokeCharmAppointment,
+} from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -39,6 +52,7 @@ interface ChildIntake {
   preferredPharmacy: string
   pcp: string
   vaccinationStatus: string
+  phiSharingConsent: boolean
   // Per-appointment (every booking)
   chiefComplaint: string
   additionalInfo: string
@@ -256,6 +270,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     allergies: 'NKDA', currentMedications: 'None',
     medicalHistory: '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', vaccinationStatus: 'fully_vaccinated',
+    phiSharingConsent: false,
     chiefComplaint: '', additionalInfo: '',
   }
 }
@@ -353,11 +368,14 @@ export function BookVisit() {
     setConvFeeLoading(true)
     void (async () => {
       try {
-        const { data: prov } = await supabase.from('providers').select('id').eq('name', resolvedProvider).single()
+        const prov = await getProviderByName(resolvedProvider)
         if (!prov) { setConvFeeLoading(false); return }
-        const { data } = await supabase.functions.invoke('calculate-convenience-fee', {
-          body: { providerId: prov.id, appointmentAddress: booking.visitAddress, date: booking.date, time: to24hr(booking.time), visitType: booking.visitType },
+        const res = await fetch('/api/convenience-fee', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerId: prov.id, appointmentAddress: booking.visitAddress, date: booking.date, time: to24hr(booking.time), visitType: booking.visitType }),
         })
+        const data = res.ok ? await res.json() : null
         if (data?.ok) setConvFee({ fee: data.fee, code: data.code, basis: data.basis })
       } catch { /* silent */ }
       setConvFeeLoading(false)
@@ -390,9 +408,7 @@ export function BookVisit() {
 
   async function addNewChild() {
     if (!newChildLabel.trim() || !family) return
-    const { data } = await supabase.from('children')
-      .insert({ display_label: newChildLabel.trim(), family_id: family.id })
-      .select().single()
+    const data = await createChild({ display_label: newChildLabel.trim(), family_id: family.id }).catch(() => null)
     if (data) {
       await refreshFamily()
       toggleChild(data.id, data.display_label, false)
@@ -419,12 +435,9 @@ export function BookVisit() {
   // Checks day-of-week availability and date-specific overrides.
   async function getProviderDayWindow(providerId: string, date: string): Promise<{ start: string; end: string } | null> {
     const dayOfWeek = new Date(date + 'T12:00:00').getDay()
-    const [{ data: dayAvail }, { data: override }] = await Promise.all([
-      supabase.from('availability').select('is_active, start_time, end_time')
-        .eq('provider_id', providerId).eq('day_of_week', dayOfWeek).maybeSingle(),
-      supabase.from('availability_overrides').select('is_available, start_time, end_time')
-        .eq('provider_id', providerId).eq('date', date).maybeSingle(),
-    ])
+    const sched = await getSchedulingData(providerId, { date })
+    const dayAvail = sched?.availability
+    const override = sched?.override
     if (override) {
       if (!override.is_available) return null
       return { start: override.start_time || dayAvail?.start_time || '08:00', end: override.end_time || dayAvail?.end_time || '17:00' }
@@ -440,7 +453,7 @@ export function BookVisit() {
   async function loadBookedTimes(providerName: string, date: string) {
     if (!providerName || !date) { setBookedTimes([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
     setSlotsChecking(true)
-    const { data: provRow } = await supabase.from('providers').select('id').eq('name', providerName).single()
+    const provRow = await getProviderByName(providerName)
     if (!provRow) { setBookedTimes([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
 
     // Check day-of-week / override availability first
@@ -450,26 +463,16 @@ export function BookVisit() {
       return
     }
 
-    // Fetch this provider's allowed hours for the selected visit type
-    const { data: vtaRow } = await supabase
-      .from('visit_type_availability')
-      .select('is_active, start_time, end_time')
-      .eq('provider_id', provRow.id)
-      .eq('visit_type', booking.visitType)
-      .maybeSingle()
+    // Fetch this provider's scheduling data for the selected visit type (includes visitTypeAvail + bookedTimes)
+    const sched = await getSchedulingData(provRow.id, { date, visit_type: booking.visitType })
+    const vtaRow = sched?.visitTypeAvail
     // Visit type window takes precedence over day window; fall back to day window if no vta record
     const window = vtaRow && vtaRow.is_active
       ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
       : dayWindow
     setVisitTypeWindow(window)
 
-    const { data: appts } = await supabase
-      .from('appointments')
-      .select('scheduled_time')
-      .eq('provider_id', provRow.id)
-      .eq('scheduled_date', date)
-      .neq('status', 'cancelled')
-    const bookedTimesList = (appts ?? []).map((a: any) => a.scheduled_time)
+    const bookedTimesList: string[] = sched?.bookedTimes ?? []
     setBookedTimes(bookedTimesList)
 
     const leadTimeSlots = getAvailableSlots(booking.visitType, date)
@@ -510,11 +513,7 @@ export function BookVisit() {
         ? (IV_FLUID_ZONE_PROVIDERS[zone] || [])
         : (ZONE_PROVIDERS[zone] || []).map(p => p.name)
       if (providerNames.length > 0) {
-        const { data } = await supabase
-          .from('providers')
-          .select('name, role, secure_text_number')
-          .in('name', providerNames)
-          .not('secure_text_number', 'is', null)
+        const data = await getProvidersByNamesWithSecureText(providerNames).catch(() => [])
         setSecureTextProviders((data ?? []).filter((p: any) => p.secure_text_number) as any)
       }
     }
@@ -541,18 +540,14 @@ export function BookVisit() {
     }
 
     const results = await Promise.all(providers.map(async p => {
-      const { data: provRow } = await supabase.from('providers').select('id').eq('name', p.name).single()
+      const provRow = await getProviderByName(p.name)
       if (!provRow) return null
       const dayWindow = await getProviderDayWindow(provRow.id, date)
       if (!dayWindow) return null
-      const [{ data: vtaRow }, { data: appts }] = await Promise.all([
-        supabase.from('visit_type_availability').select('is_active, start_time, end_time')
-          .eq('provider_id', provRow.id).eq('visit_type', booking.visitType).maybeSingle(),
-        supabase.from('appointments').select('scheduled_time')
-          .eq('provider_id', provRow.id).eq('scheduled_date', date).neq('status', 'cancelled'),
-      ])
+      const sched = await getSchedulingData(provRow.id, { date, visit_type: booking.visitType })
+      const vtaRow = sched?.visitTypeAvail
       const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
-      const bookedList = (appts ?? []).map((a: any) => a.scheduled_time)
+      const bookedList: string[] = sched?.bookedTimes ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
@@ -583,12 +578,7 @@ export function BookVisit() {
   async function findCmaAvailability(date: string, zone: string) {
     if (!date || !zone) return
     // Query CMAs from DB whose zones include this zone
-    const { data: cmaRows } = await supabase
-      .from('providers')
-      .select('id, name')
-      .eq('role', 'CMA')
-      .eq('is_active', true)
-      .contains('zones', [zone])
+    const cmaRows = await getProvidersByRole({ role: 'CMA', is_active: 'true', zone }).catch(() => [])
     const cmaNames = (cmaRows ?? []).map((r: any) => r.name as string)
     if (cmaNames.length === 0) return
 
@@ -609,18 +599,14 @@ export function BookVisit() {
     }
 
     const results = await Promise.all(cmaNames.map(async name => {
-      const { data: provRow } = await supabase.from('providers').select('id').eq('name', name).single()
+      const provRow = await getProviderByName(name)
       if (!provRow) return null
       const dayWindow = await getProviderDayWindow(provRow.id, date)
       if (!dayWindow) return null
-      const [{ data: vtaRow }, { data: appts }] = await Promise.all([
-        supabase.from('visit_type_availability').select('is_active, start_time, end_time')
-          .eq('provider_id', provRow.id).eq('visit_type', 'CMA + telemedicine').maybeSingle(),
-        supabase.from('appointments').select('scheduled_time')
-          .eq('provider_id', provRow.id).eq('scheduled_date', date).neq('status', 'cancelled'),
-      ])
+      const sched = await getSchedulingData(provRow.id, { date, visit_type: 'CMA + telemedicine' })
+      const vtaRow = sched?.visitTypeAvail
       const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
-      const bookedList = (appts ?? []).map((a: any) => a.scheduled_time)
+      const bookedList: string[] = sched?.bookedTimes ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
@@ -667,7 +653,7 @@ export function BookVisit() {
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
 
-    const { data: entry } = await supabase.from('waitlist_entries').insert({
+    const entry = await createWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
@@ -675,13 +661,11 @@ export function BookVisit() {
       preferred_time_window: waitlistTime || null,
       notes: noteParts.join(' | '),
       status: 'waiting',
-    }).select().single()
+    }).catch(() => null)
 
     // Notify all providers in the same state
-    if (entry) {
-      supabase.functions.invoke('send-notifications', {
-        body: { type: 'waitlist', waitlistEntryId: entry.id },
-      }).catch(() => {})
+    if (entry?.id) {
+      invokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(() => {})
     }
 
     setWaitlistSubmitting(false)
@@ -730,8 +714,7 @@ export function BookVisit() {
 
     if (isCpr) {
       // CPR class booking — simplified flow, always Melissa Jesse
-      const { data: melissaRow } = await supabase
-        .from('providers').select('id').eq('name', 'Melissa Jesse').single()
+      const melissaRow = await getProviderByName('Melissa Jesse')
       const melissaUid = melissaRow?.id || null
 
       const cprNotes = [
@@ -739,11 +722,11 @@ export function BookVisit() {
         `ADDR:${booking.visitAddress}`,
         `PARENTEMAIL:${family!.email}`,
         `PARTICIPANTS:${booking.participantCount}`,
-        booking.participantNames ? `NAMES:${booking.participantNames}` : '',
+        booking.participantNames ? `ATTENDEES:${booking.participantNames}` : '',
       ].filter(Boolean).join('|')
 
       if (melissaUid) {
-        await supabase.from('appointments').insert({
+        await createAppointment({
           provider_id: melissaUid,
           visit_type: booking.visitType,
           zone: 'CPR Class',
@@ -755,7 +738,7 @@ export function BookVisit() {
         })
       }
 
-      const { data: newBooking } = await supabase.from('booking_requests').insert({
+      const newBooking = await createBookingRequest({
         family_id: family!.id,
         child_ids: [],
         visit_type: booking.visitType,
@@ -768,19 +751,17 @@ export function BookVisit() {
         confirmed_provider_id: melissaUid,
         reference_code: ref,
         notes: cprNotes,
-      }).select().single()
+      }).catch(() => null)
 
       if (newBooking?.id) {
-        supabase.functions.invoke('send-notifications', {
-          body: { type: 'cpr_booking', bookingRequestId: newBooking.id },
-        }).catch(() => {})
+        invokeNotifications({ type: 'cpr_booking', bookingRequestId: newBooking.id }).catch(() => {})
       }
 
       if (needsAgreements) {
-        void supabase.from('family_profiles').update({ agreements_accepted_at: new Date().toISOString() }).eq('id', family!.id)
+        updateMyFamily({ agreements_accepted_at: new Date().toISOString() }).catch(() => {})
       }
       if (needsPaymentPolicy) {
-        void supabase.from('family_profiles').update({ payment_policy_accepted_at: new Date().toISOString() }).eq('id', family!.id)
+        updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
       }
 
       setSubmitting(false)
@@ -791,8 +772,7 @@ export function BookVisit() {
     const effectiveProvider = booking.provider === '__first_available__'
       ? (firstAvailResult?.provider || '')
       : booking.provider
-    const { data: providerRow } = await supabase
-      .from('providers').select('id').eq('name', effectiveProvider).single()
+    const providerRow = await getProviderByName(effectiveProvider)
     const providerUid = providerRow?.id || null
     let appointmentDbId: string | null = null
 
@@ -829,6 +809,7 @@ export function BookVisit() {
       }
       if (firstIntake.insuranceCardFrontUrl) noteParts.push(`CARDFRONT:${firstIntake.insuranceCardFrontUrl}`)
       if (firstIntake.insuranceCardBackUrl)  noteParts.push(`CARDBACK:${firstIntake.insuranceCardBackUrl}`)
+      if (!firstIntake.hasProfile) noteParts.push(`PHI_CONSENT:${firstIntake.phiSharingConsent ? 'yes' : 'no'}`)
 
       if (isIvFluids) {
         const iv = booking.ivFluidsIntake
@@ -851,7 +832,7 @@ export function BookVisit() {
           `Available: ${iv.availableTimes}`,
         ].filter(Boolean).join(' | '))
       }
-      const { data: apptRecord } = await supabase.from('appointments').insert({
+      const apptRecord = await createAppointment({
         provider_id: providerUid,
         visit_type: booking.visitType,
         zone: booking.zone,
@@ -860,11 +841,11 @@ export function BookVisit() {
         status: 'upcoming',
         notes: noteParts.join('|'),
         duration_minutes: 60 + (booking.selectedChildIds.length - 1) * 15,
-      }).select('id').single()
+      }).catch(() => null)
       appointmentDbId = apptRecord?.id || null
     }
 
-    const { data: newBooking } = await supabase.from('booking_requests').insert({
+    const newBooking = await createBookingRequest({
       family_id: family!.id,
       child_ids: booking.selectedChildIds,
       visit_type: booking.visitType,
@@ -877,37 +858,41 @@ export function BookVisit() {
       confirmed_provider_id: providerUid,
       reference_code: ref,
       ...(convFee ? { convenience_fee: convFee.fee } : {}),
-    }).select().single()
+    }).catch(() => null)
 
     if (newBooking?.id) {
       // Sync to Charm Health (non-blocking)
-      supabase.functions.invoke('charm-appointment', {
-        body: { bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId },
-      }).catch(() => {})
+      invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
 
       // Send confirmation email to parent + notification to provider (non-blocking)
-      supabase.functions.invoke('send-notifications', {
-        body: { bookingRequestId: newBooking.id },
-      }).catch(() => {})
+      invokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
+    }
+
+    // Save PHI consent for first-time patients
+    for (const childId of booking.selectedChildIds) {
+      const intake = booking.childIntakes[childId]
+      if (!intake?.hasProfile) {
+        updateChild(childId, { phi_sharing_consent: intake.phiSharingConsent }).catch(() => {})
+      }
     }
 
     if (referralSource.trim() && !(family as any)?.referral_source) {
-      void supabase.from('family_profiles').update({ referral_source: referralSource.trim() }).eq('id', family!.id)
+      updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
     }
     if (needsAgreements) {
-      void supabase.from('family_profiles').update({ agreements_accepted_at: new Date().toISOString() }).eq('id', family!.id)
+      updateMyFamily({ agreements_accepted_at: new Date().toISOString() }).catch(() => {})
     }
     if (needsPaymentPolicy) {
-      void supabase.from('family_profiles').update({ payment_policy_accepted_at: new Date().toISOString() }).eq('id', family!.id)
+      updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
     }
 
     // Save insurance card URLs to child records so they're on file for future bookings
     for (const [childId, intake] of Object.entries(booking.childIntakes)) {
       if (intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl) {
-        void supabase.from('children').update({
+        updateChild(childId, {
           insurance_card_front_url: intake.insuranceCardFrontUrl,
           insurance_card_back_url: intake.insuranceCardBackUrl,
-        }).eq('id', childId)
+        }).catch(() => {})
       }
     }
 
@@ -957,7 +942,13 @@ export function BookVisit() {
           </div>
         ) : (
           <div className="bg-[#E1F5EE] border border-[#5DCAA5] rounded-lg p-3 max-w-sm mx-auto text-[13px] text-[#085041] text-left mb-6">
-            <strong>What happens next:</strong> Your provider will arrive at your home at your scheduled time!
+            {booking.visitType === 'Video telemedicine' ? (
+              <span>Check your email for a confirmation with a link to our virtual visit room. Please log in at your scheduled time. Once you check in to the virtual waiting room, your provider will be notified and your video visit will begin shortly after that.</span>
+            ) : booking.visitType === 'Text visit' ? (
+              <span>Your provider will text you at your scheduled time.</span>
+            ) : (
+              <span><strong>What happens next:</strong> Your provider will arrive at your home at your scheduled time!</span>
+            )}
           </div>
         )}
         <div className="flex gap-2 justify-center">
@@ -1090,12 +1081,12 @@ export function BookVisit() {
 
             <div>
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                Attendee names <span className="text-[#999] normal-case font-normal">(optional — you can also email these to Melissa after booking)</span>
+                Attendee names and email addresses <span className="text-[#E74C3C]">*</span>
               </label>
               <textarea value={booking.participantNames}
                 onChange={e => setBooking(b => ({ ...b, participantNames: e.target.value }))}
-                placeholder="e.g. Jane Smith, John Smith, Emma Smith"
-                rows={3}
+                placeholder={"e.g.\nJane Smith, jane@email.com\nJohn Smith, john@email.com"}
+                rows={4}
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#E74C3C] bg-white" />
             </div>
 
@@ -1117,7 +1108,7 @@ export function BookVisit() {
 
           <NavButtons
             onBack={() => setStep(0)}
-            nextDisabled={!booking.visitAddress}
+            nextDisabled={!booking.visitAddress || !booking.participantNames.trim()}
             onNext={() => {
               setBooking(b => ({ ...b, provider: 'Melissa Jesse' }))
               loadBookedTimes('Melissa Jesse', booking.date)
@@ -1161,6 +1152,10 @@ export function BookVisit() {
                   key={c.id}
                   intake={intake}
                   onChange={(field, value) => setIntake(c.id, field, value)}
+                  onConsentChange={val => setBooking(b => ({
+                    ...b,
+                    childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], phiSharingConsent: val } },
+                  }))}
                 />
               )
             })
@@ -1885,21 +1880,20 @@ export function BookVisit() {
 
 // ─── Child intake form section ─────────────────────────────────────────────────
 
-function ChildIntakeFormSection({ intake, onChange }: {
+function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
   intake: ChildIntake
   onChange: (field: keyof ChildIntake, value: string) => void
+  onConsentChange: (val: boolean) => void
 }) {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState<'front' | 'back' | null>(null)
 
-  async function uploadCard(file: File, side: 'front' | 'back') {
+  async function uploadCard(_file: File, side: 'front' | 'back') {
     setUploading(side)
-    const ext = file.name.split('.').pop()
-    const path = `insurance-cards/${intake.childId}/${side}-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('insurance-cards').upload(path, file, { upsert: true })
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('insurance-cards').getPublicUrl(path)
+    // TODO: implement R2 file upload
+    const publicUrl = ''
+    if (publicUrl) {
       onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', publicUrl)
     }
     setUploading(null)
@@ -2115,6 +2109,22 @@ function ChildIntakeFormSection({ intake, onChange }: {
                 )
               })}
             </div>
+          </div>
+
+          {/* PHI sharing consent — first booking only */}
+          <div className="border-t border-[#E8E8E4] pt-4 mt-1">
+            <button
+              type="button"
+              onClick={() => onConsentChange(!intake.phiSharingConsent)}
+              className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${intake.phiSharingConsent ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+            >
+              <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.phiSharingConsent ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
+                {intake.phiSharingConsent && <Check size={11} className="text-white" strokeWidth={3} />}
+              </div>
+              <span className={`text-[13px] leading-relaxed ${intake.phiSharingConsent ? 'text-[#085041] font-medium' : 'text-[#555]'}`}>
+                I give Pediatric Housecalls permission to share this patient's health information with other doctors and providers involved in the patient's care.
+              </span>
+            </button>
           </div>
         </div>
       </div>

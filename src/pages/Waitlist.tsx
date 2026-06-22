@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Clock, CheckCircle2, X } from 'lucide-react'
 import { format } from 'date-fns'
-import { supabase } from '../lib/supabase'
+import {
+  getWaitlistEntries, updateWaitlistEntry,
+  createAppointment, invokeNotifications,
+} from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -39,17 +42,7 @@ export function Waitlist() {
   async function fetchEntries() {
     if (!provider) return
     setLoading(true)
-
-    let q = supabase.from('waitlist_entries')
-      .select('*')
-      .eq('status', 'waiting')
-      .order('created_at', { ascending: true })
-
-    if (provider.states?.length) {
-      q = q.or(`state.in.(${provider.states.join(',')}),state.is.null`)
-    }
-
-    const { data } = await q
+    const data = await getWaitlistEntries({ status: 'waiting' })
     setEntries((data ?? []) as WaitlistEntry[])
     setLoading(false)
   }
@@ -68,7 +61,7 @@ export function Waitlist() {
     const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
     // Create appointment
-    await supabase.from('appointments').insert({
+    await createAppointment({
       provider_id: provider.id,
       visit_type: accepting.visit_type || 'In-home sick visit',
       zone: accepting.zip,
@@ -79,20 +72,16 @@ export function Waitlist() {
     })
 
     // Mark waitlist entry as converted, recording which provider accepted it
-    await supabase.from('waitlist_entries')
-      .update({ status: 'converted', converted_provider_id: provider.id } as any)
-      .eq('id', accepting.id)
+    await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
     // Notify the family via edge function
-    supabase.functions.invoke('send-notifications', {
-      body: {
-        type: 'waitlist_accepted',
-        waitlistEntryId: accepting.id,
-        providerName: provider.name,
-        providerId: provider.id,
-        date,
-        time,
-      },
+    invokeNotifications({
+      type: 'waitlist_accepted',
+      waitlistEntryId: accepting.id,
+      providerName: provider.name,
+      providerId: provider.id,
+      date,
+      time,
     }).catch(() => {})
 
     setSubmitting(false)

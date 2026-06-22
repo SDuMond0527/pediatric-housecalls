@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns'
 import { ChevronLeft, ChevronRight, Trophy } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { getReports } from '../../lib/api'
 
 interface ApptRow {
   id: string
@@ -54,16 +54,9 @@ export function AdminReports() {
       const start = format(startOfMonth(month), 'yyyy-MM-dd')
       const end   = format(endOfMonth(month),   'yyyy-MM-dd')
 
-      const [{ data: a }, { data: p }] = await Promise.all([
-        supabase.from('appointments')
-          .select('id, provider_id, visit_type, scheduled_date, status, notes')
-          .gte('scheduled_date', start)
-          .lte('scheduled_date', end),
-        supabase.from('providers').select('id, name').neq('role', 'admin'),
-      ])
-
-      setAppts(a ?? [])
-      setProviders(p ?? [])
+      const result = await getReports({ start, end }).catch(() => null)
+      setAppts(result?.appointments ?? [])
+      setProviders(result?.providers ?? [])
       setLoading(false)
     }
     load()

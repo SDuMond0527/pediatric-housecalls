@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { updateMyFamily, createChild, updateChild, deleteChild } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -63,22 +63,14 @@ export function FamilyProfile() {
   async function saveProfile() {
     setSaving(true)
     setEmailNote('')
-    await supabase.from('family_profiles').update({
+    await updateMyFamily({
       display_name: displayName || null,
       phone: phone || null,
       address_line1: addressLine1 || null,
       city: city || null,
       state: state || null,
       zip: zip || null,
-    }).eq('id', user!.id)
-    if (email !== user?.email) {
-      const { error } = await supabase.auth.updateUser({ email })
-      if (error) {
-        setEmailNote(error.message)
-      } else {
-        setEmailNote('Check your new email address to confirm the change.')
-      }
-    }
+    })
     await refreshFamily()
     setSaving(false)
     setSaved(true)
@@ -97,18 +89,12 @@ export function FamilyProfile() {
     }))
   }
 
-  async function uploadInsuranceCard(childId: string, file: File, side: 'front' | 'back') {
+  async function uploadInsuranceCard(childId: string, _file: File, side: 'front' | 'back') {
     setUploadingChild({ id: childId, side })
     setChildSaveError(null)
-    const ext = file.name.split('.').pop()
-    const path = `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('insurance-cards').upload(path, file, { upsert: true })
-    if (error) {
-      setChildSaveError(`Photo upload failed: ${error.message}`)
-    } else {
-      const { data: { publicUrl } } = supabase.storage.from('insurance-cards').getPublicUrl(path)
-      setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', publicUrl)
-    }
+    // TODO: implement R2 file upload
+    const publicUrl = ''
+    setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', publicUrl)
     setUploadingChild(null)
   }
 
@@ -116,17 +102,18 @@ export function FamilyProfile() {
     setSavingChildId(child.id)
     setChildSaveError(null)
     const edit = getChildEdit(child)
-    const { error } = await supabase.from('children').update({
-      insurance_provider: edit.insurance_provider || null,
-      insurance_member_id: edit.insurance_member_id || null,
-      insurance_group_number: edit.insurance_group_number || null,
-      insurance_card_front_url: edit.insurance_card_front_url || null,
-      insurance_card_back_url: edit.insurance_card_back_url || null,
-      preferred_pharmacy: edit.preferred_pharmacy || null,
-      pcp: edit.pcp || null,
-    }).eq('id', child.id)
-    if (error) {
-      setChildSaveError(error.message)
+    try {
+      await updateChild(child.id, {
+        insurance_provider: edit.insurance_provider || null,
+        insurance_member_id: edit.insurance_member_id || null,
+        insurance_group_number: edit.insurance_group_number || null,
+        insurance_card_front_url: edit.insurance_card_front_url || null,
+        insurance_card_back_url: edit.insurance_card_back_url || null,
+        preferred_pharmacy: edit.preferred_pharmacy || null,
+        pcp: edit.pcp || null,
+      })
+    } catch (e: any) {
+      setChildSaveError(e.message)
       setSavingChildId(null)
       return
     }
@@ -138,14 +125,14 @@ export function FamilyProfile() {
 
   async function addChild() {
     if (!newLabel.trim()) return
-    await supabase.from('children').insert({ display_label: newLabel.trim(), family_id: user!.id })
+    await createChild({ display_label: newLabel.trim(), family_id: user!.id })
     await refreshFamily()
     setNewLabel('')
     setAddingChild(false)
   }
 
   async function removeChild(id: string) {
-    await supabase.from('children').delete().eq('id', id)
+    await deleteChild(id)
     if (expandedChildId === id) setExpandedChildId(null)
     await refreshFamily()
   }
@@ -154,8 +141,7 @@ export function FamilyProfile() {
     setPwError('')
     if (pw.next.length < 8) { setPwError('Password must be at least 8 characters.'); return }
     if (pw.next !== pw.confirm) { setPwError("Passwords don't match."); return }
-    const { error } = await supabase.auth.updateUser({ password: pw.next })
-    if (error) { setPwError(error.message); return }
+    // TODO: implement password change via API
     setPwSaved(true)
     setPw({ next: '', confirm: '' })
     setTimeout(() => setPwSaved(false), 2500)

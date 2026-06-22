@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Video, ChevronDown, FileText, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
-import { supabase } from '../lib/supabase'
+import {
+  getAppointments, createAppointment, updateAppointment,
+  getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
+  getProviders, updateBookingRequest, invokeNotifications,
+  getBookingRequests, getChildrenByIds, invokeCharmDetails,
+} from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -85,25 +90,14 @@ export function Today() {
 
   async function fetchAppts() {
     if (!provider) return
-    const { data } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('provider_id', provider.id)
-      .eq('scheduled_date', viewDate)
-      .order('scheduled_time')
+    const data = await getAppointments({ provider_id: provider.id, scheduled_date: viewDate })
     setAppts((data ?? []) as Appointment[])
     setLoading(false)
   }
 
   async function fetchBlocks() {
     if (!provider) return
-    const { data } = await supabase
-      .from('schedule_blocks')
-      .select('*')
-      .eq('provider_id', provider.id)
-      .lte('start_date', viewDate)
-      .gte('end_date', viewDate)
-      .order('start_time')
+    const data = await getScheduleBlocks({ provider_id: provider.id, date: viewDate })
     setBlocks((data ?? []) as ScheduleBlock[])
   }
 
@@ -111,8 +105,8 @@ export function Today() {
 
   useEffect(() => {
     if (!provider) return
-    supabase.from('providers').select('id, name').neq('role', 'admin').order('name')
-      .then(({ data }) => setAllProviders((data ?? []) as { id: string; name: string }[]))
+    getProviders({ exclude_admin: 'true' })
+      .then((data) => setAllProviders((data ?? []) as { id: string; name: string }[]))
   }, [provider])
 
   async function fetchCharmDetails(appt: Appointment) {
@@ -125,18 +119,12 @@ export function Today() {
     if (!charmPatientId && appt.notes) {
       const refMatch = appt.notes.match(/Ref: (PUC-\d+)/)
       if (refMatch) {
-        const { data: booking } = await supabase
-          .from('booking_requests')
-          .select('child_ids, charm_appointment_id')
-          .eq('reference_code', refMatch[1])
-          .single()
+        const bookings = await getBookingRequests({ reference_code: refMatch[1] })
+        const booking = bookings?.[0]
         if (booking?.child_ids?.length) {
-          const { data: child } = await supabase
-            .from('children')
-            .select('charm_patient_id')
-            .eq('id', booking.child_ids[0])
-            .single()
-          charmPatientId = (child as any)?.charm_patient_id || null
+          const kids = await getChildrenByIds([booking.child_ids[0]])
+          const child = kids?.[0]
+          charmPatientId = child?.charm_patient_id || null
           charmAppointmentId = booking.charm_appointment_id || null
         }
       }
@@ -147,9 +135,7 @@ export function Today() {
       return
     }
 
-    const { data } = await supabase.functions.invoke('get-charm-details', {
-      body: { charm_patient_id: charmPatientId, charm_appointment_id: charmAppointmentId },
-    })
+    const data = await invokeCharmDetails({ charm_patient_id: charmPatientId, charm_appointment_id: charmAppointmentId }).catch(() => null)
     if (data?.ok) setCharmDetails(prev => ({ ...prev, [appt.id]: data }))
     else setCharmDetails(prev => ({ ...prev, [appt.id]: { notFound: true } }))
   }
@@ -159,20 +145,14 @@ export function Today() {
     setDoneSubmitting(true)
     const instructions = doneInstructions.trim() || null
     // Update status separately so it always succeeds even if after_visit_instructions column is missing
-    await supabase.from('appointments')
-      .update({ status: 'done' } as any)
-      .eq('id', doneTarget.id)
+    await updateAppointment(doneTarget.id, { status: 'done' })
     if (instructions) {
-      void supabase.from('appointments')
-        .update({ after_visit_instructions: instructions } as any)
-        .eq('id', doneTarget.id)
+      void updateAppointment(doneTarget.id, { after_visit_instructions: instructions })
     }
     if (instructions && doneTarget.charm_appointment_id) {
-      void supabase.from('booking_requests')
-        .update({ after_visit_instructions: instructions } as any)
-        .eq('charm_appointment_id', doneTarget.charm_appointment_id)
+      void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void supabase.functions.invoke('send-notifications', { body: { type: 'post_visit_email', appointmentId: doneTarget.id } })
+    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
     setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')
@@ -208,7 +188,7 @@ export function Today() {
     const providerId = addForProviderId || provider.id
     const assignedProvider = allProviders.find(p => p.id === providerId)
 
-    await supabase.from('appointments').insert({
+    await createAppointment({
       provider_id: providerId,
       visit_type: addForm.visitType,
       zone: addForm.zone || addForm.address || 'Unspecified',
@@ -222,16 +202,14 @@ export function Today() {
     setAdding(false)
     fetchAppts()
 
-    supabase.functions.invoke('send-notifications', {
-      body: {
-        type: 'appointment_added',
-        providerName: assignedProvider?.name || provider.name,
-        visitType: addForm.visitType,
-        zone: addForm.zone || addForm.address || 'Unspecified',
-        date: addForm.date,
-        time: effectiveTime,
-        parentEmail: addForm.email || null,
-      },
+    invokeNotifications({
+      type: 'appointment_added',
+      providerName: assignedProvider?.name || provider.name,
+      visitType: addForm.visitType,
+      zone: addForm.zone || addForm.address || 'Unspecified',
+      date: addForm.date,
+      time: effectiveTime,
+      parentEmail: addForm.email || null,
     }).catch(() => {})
   }
 
@@ -239,9 +217,7 @@ export function Today() {
     if (!cancelTarget || !provider) return
     setCancelling(true)
 
-    await supabase.from('appointments')
-      .update({ status: 'cancelled' })
-      .eq('id', cancelTarget.id)
+    await updateAppointment(cancelTarget.id, { status: 'cancelled' })
 
     setAppts(prev => prev.map(a => a.id === cancelTarget.id ? { ...a, status: 'cancelled' } : a))
 
@@ -250,17 +226,15 @@ export function Today() {
       .map(([zip]) => zip)
 
     if (matchingZips.length > 0) {
-      supabase.functions.invoke('send-notifications', {
-        body: {
-          type: 'slot_opened',
-          providerId: provider.id,
-          providerName: provider.name,
-          zone: cancelTarget.zone,
-          visitType: cancelTarget.visit_type,
-          date: cancelTarget.scheduled_date,
-          time: to12h(cancelTarget.scheduled_time),
-          matchingZips,
-        },
+      invokeNotifications({
+        type: 'slot_opened',
+        providerId: provider.id,
+        providerName: provider.name,
+        zone: cancelTarget.zone,
+        visitType: cancelTarget.visit_type,
+        date: cancelTarget.scheduled_date,
+        time: to12h(cancelTarget.scheduled_time),
+        matchingZips,
       }).catch(() => {})
     }
 
@@ -278,7 +252,7 @@ export function Today() {
     if (!blockForm.allDay && (!blockForm.startTime || !blockForm.endTime)) return
     setBlockSubmitting(true)
 
-    await supabase.from('schedule_blocks').insert({
+    await createScheduleBlock({
       provider_id: provider.id,
       start_date: blockForm.startDate,
       end_date: blockForm.mode === 'range' ? blockForm.endDate : blockForm.startDate,
@@ -294,7 +268,7 @@ export function Today() {
   }
 
   async function deleteBlock(id: string) {
-    await supabase.from('schedule_blocks').delete().eq('id', id)
+    await deleteScheduleBlock(id)
     setBlocks(prev => prev.filter(b => b.id !== id))
   }
 

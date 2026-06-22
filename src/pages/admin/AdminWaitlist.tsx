@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Clock, CheckCircle2, Phone, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
-import { supabase } from '../../lib/supabase'
+import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 
@@ -35,21 +35,23 @@ export function AdminWaitlist() {
 
   async function fetchEntries() {
     setLoading(true)
-    let q = supabase.from('waitlist_entries').select('*').order('created_at', { ascending: false })
-    if (filter === 'waiting') q = q.eq('status', 'waiting')
+    const params: Record<string, string> = {}
+    if (filter === 'waiting') params.status = 'waiting'
 
-    const { data: entries } = await q
+    const entries = await getWaitlistEntries(params).catch(() => null)
     if (!entries) { setLoading(false); return }
 
     const familyIds = [...new Set(entries.map(e => e.family_id))]
-    const [{ data: families }, { data: kids }] = await Promise.all([
-      supabase.from('family_profiles').select('id, email, display_name, phone').in('id', familyIds),
-      supabase.from('children').select('family_id, display_label').in('family_id', familyIds),
+    const [families, kids] = await Promise.all([
+      familyIds.length ? getFamiliesByIds(familyIds).catch(() => []) : Promise.resolve([]),
+      familyIds.length
+        ? fetch(`/api/children?family_ids=${familyIds.join(',')}`).then(r => r.json()).catch(() => [])
+        : Promise.resolve([]),
     ])
 
     const enriched = entries.map(e => {
-      const fam = families?.find(f => f.id === e.family_id)
-      const childNames = kids?.filter(k => k.family_id === e.family_id).map(k => k.display_label) || []
+      const fam = (families as any[]).find(f => f.id === e.family_id)
+      const childNames = (kids as any[]).filter(k => k.family_id === e.family_id).map((k: any) => k.display_label) || []
       return {
         ...e,
         family_email: fam?.email,
@@ -66,7 +68,7 @@ export function AdminWaitlist() {
   useEffect(() => { fetchEntries() }, [filter])
 
   async function updateStatus(id: string, status: WaitlistEntry['status']) {
-    await supabase.from('waitlist_entries').update({ status }).eq('id', id)
+    await updateWaitlistEntry(id, { status })
     fetchEntries()
   }
 

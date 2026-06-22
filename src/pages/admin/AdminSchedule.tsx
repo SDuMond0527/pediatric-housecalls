@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation } from 'lucide-react'
 import { format } from 'date-fns'
-import { supabase } from '../../lib/supabase'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -36,15 +36,14 @@ export function AdminSchedule() {
   })
 
   useEffect(() => {
-    supabase.from('providers').select('*').neq('role', 'admin').order('name')
-      .then(({ data }) => setProviders((data ?? []) as Provider[]))
+    getProviders().then(data => setProviders((data ?? []) as Provider[])).catch(() => {})
   }, [])
 
   async function fetchAppointments() {
     setLoading(true)
-    let q = supabase.from('appointments').select('*').eq('scheduled_date', filterDate).order('scheduled_time')
-    if (filterProvider) q = q.eq('provider_id', filterProvider)
-    const { data } = await q
+    const params: Record<string, string> = { scheduled_date: filterDate }
+    if (filterProvider) params.provider_id = filterProvider
+    const data = await getAppointments(params).catch(() => [])
     setAppointments((data ?? []) as Appointment[])
     setLoading(false)
   }
@@ -56,20 +55,14 @@ export function AdminSchedule() {
     setDoneSubmitting(true)
     const instructions = doneInstructions.trim() || null
     // Update status separately so it always succeeds even if after_visit_instructions column is missing
-    await supabase.from('appointments')
-      .update({ status: 'done' } as any)
-      .eq('id', doneTarget.id)
+    await updateAppointment(doneTarget.id, { status: 'done' })
     if (instructions) {
-      void supabase.from('appointments')
-        .update({ after_visit_instructions: instructions } as any)
-        .eq('id', doneTarget.id)
+      void updateAppointment(doneTarget.id, { after_visit_instructions: instructions })
     }
     if (instructions && doneTarget.charm_appointment_id) {
-      void supabase.from('booking_requests')
-        .update({ after_visit_instructions: instructions } as any)
-        .eq('charm_appointment_id', doneTarget.charm_appointment_id)
+      void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void supabase.functions.invoke('send-notifications', { body: { type: 'post_visit_email', appointmentId: doneTarget.id } })
+    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
     setAppointments(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')
@@ -88,7 +81,7 @@ export function AdminSchedule() {
     if (form.email) noteParts.push(`PARENTEMAIL:${form.email}`)
     if (form.phone) noteParts.push(`PARENTPHONE:${form.phone}`)
 
-    await supabase.from('appointments').insert({
+    await createAppointment({
       provider_id: form.provider_id,
       visit_type: form.visit_type,
       zone: form.zone || form.address || 'Unspecified',

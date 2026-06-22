@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CreditCard, Lock } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 
@@ -97,10 +96,13 @@ export function FamilyAddCard() {
       return
     }
 
-    const { data, error } = await supabase.functions.invoke('save-payment-method', {
-      body: { familyId: user!.id, nonce: result.token },
+    const resp = await fetch('/api/save-payment-method', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familyId: user!.id, nonce: result.token }),
     })
-    if (error || !data?.ok) {
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok || !data?.ok) {
       setCardError(data?.error || 'Could not save your card. Please try again.')
       setCardSaving(false)
       return

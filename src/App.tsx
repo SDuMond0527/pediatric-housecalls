@@ -28,10 +28,11 @@ import { FamilyProfile } from './pages/family/FamilyProfile'
 import { useAuth } from './contexts/AuthContext'
 
 function RootRedirect() {
-  const { provider, loading } = useAuth()
+  const { user, provider, loading } = useAuth()
   if (loading) return null
-  if (!provider) return <Navigate to="/login" replace />
-  if (provider.role === 'admin') return <Navigate to="/admin/analytics" replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (!provider) return <div className="min-h-screen flex items-center justify-center text-[#555] text-sm">No provider record found for this account. Contact your administrator.</div>
+  if (provider.is_admin) return <Navigate to="/admin/analytics" replace />
   return <Navigate to="/today" replace />
 }
 

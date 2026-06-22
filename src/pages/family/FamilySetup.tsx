@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { updateMyFamily, createChild } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -32,21 +32,14 @@ export function FamilySetup() {
     setError('')
 
     try {
-      const { error: profError } = await supabase.from('family_profiles').upsert({
-        id:           user!.id,
-        email:        user!.email ?? '',
+      await updateMyFamily({
         display_name: displayName || null,
         state:        state || null,
         zip:          zip || null,
       })
-      if (profError) { setError(profError.message); setSaving(false); return }
 
       for (const label of validLabels) {
-        const { error: childError } = await supabase.from('children').insert({
-          display_label: label.trim(),
-          family_id: user!.id,
-        })
-        if (childError) { setError(childError.message); setSaving(false); return }
+        await createChild({ display_label: label.trim() })
       }
 
       await refreshFamily()

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format, subWeeks, startOfWeek } from 'date-fns'
-import { supabase } from '../../lib/supabase'
+import { getAnalytics } from '../../lib/api'
 
 interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null }
 interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string }
@@ -54,26 +54,14 @@ export function AdminAnalytics() {
 
   useEffect(() => {
     async function load() {
-      const [
-        { data: a },
-        { data: b },
-        { data: w },
-        { data: f },
-        { data: p },
-      ] = await Promise.all([
-        supabase.from('appointments').select('id, status, visit_type, scheduled_date, provider_id, notes'),
-        supabase.from('booking_requests').select('id, status, visit_type, state, created_at'),
-        supabase.from('waitlist_entries').select('id, status, state, family_id, converted_provider_id'),
-        supabase.from('family_profiles').select('id'),
-        supabase.from('providers').select('id, name, role'),
-      ])
-      setAppts(a ?? [])
-      setBookings(b ?? [])
-      setWaitlist(w ?? [])
-      setFamilyCount(f?.length ?? 0)
-      setProviders(p ?? [])
-
-
+      const result = await getAnalytics().catch(() => null)
+      if (result) {
+        setAppts(result.appointments ?? [])
+        setBookings(result.bookingRequests ?? [])
+        setWaitlist(result.waitlistEntries ?? [])
+        setFamilyCount(result.familyProfiles?.length ?? 0)
+        setProviders(result.providers ?? [])
+      }
       setLoading(false)
     }
     load()

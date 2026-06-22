@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { XCircle, Clock, ChevronDown } from 'lucide-react'
 import { format } from 'date-fns'
-import { supabase } from '../../lib/supabase'
+import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import type { BookingRequest, FamilyProfile } from '../../types/family'
@@ -19,23 +19,23 @@ export function AdminBookings() {
 
   async function fetchBookings() {
     setLoading(true)
-    let q = supabase.from('booking_requests').select('*').order('created_at', { ascending: false })
-    if (filter !== 'all') q = q.eq('status', filter)
-    const { data: bData } = await q
+    const params: Record<string, string> = {}
+    if (filter !== 'all') params.status = filter
+    const bData = await getBookingRequests(params).catch(() => null)
     if (!bData) { setLoading(false); return }
 
     const familyIds = [...new Set(bData.map(b => b.family_id))]
-    const childIdsFlat = [...new Set(bData.flatMap(b => b.child_ids))]
+    const childIdsFlat = [...new Set(bData.flatMap(b => b.child_ids ?? []))]
 
-    const [{ data: families }, { data: kids }] = await Promise.all([
-      supabase.from('family_profiles').select('*').in('id', familyIds),
-      supabase.from('children').select('*').in('id', childIdsFlat),
+    const [families, kids] = await Promise.all([
+      familyIds.length ? getFamiliesByIds(familyIds).catch(() => []) : Promise.resolve([]),
+      childIdsFlat.length ? getChildrenByIds(childIdsFlat).catch(() => []) : Promise.resolve([]),
     ])
 
     const enriched: EnrichedBooking[] = bData.map(b => ({
       ...b,
-      family: families?.find(f => f.id === b.family_id),
-      childNames: kids?.filter(c => b.child_ids.includes(c.id)).map(c => c.first_name) || [],
+      family: (families as FamilyProfile[]).find(f => f.id === b.family_id),
+      childNames: (kids as any[]).filter(c => (b.child_ids ?? []).includes(c.id)).map(c => c.first_name) || [],
     }))
 
     setBookings(enriched)
@@ -45,7 +45,7 @@ export function AdminBookings() {
   useEffect(() => { fetchBookings() }, [filter])
 
   async function cancelBooking(id: string) {
-    await supabase.from('booking_requests').update({ status: 'cancelled' }).eq('id', id)
+    await updateBookingRequest(id, { status: 'cancelled' })
     fetchBookings()
   }
 

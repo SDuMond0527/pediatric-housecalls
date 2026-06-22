@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarPlus, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
-import { supabase } from '../../lib/supabase'
+import { getWaitlistEntries, getSlotOffers, updateSlotOffer, getBookingRequests, updateBookingRequest, invokeNotifications } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { VISIT_TYPE_INFO, ZIP_TO_ZONE } from '../../lib/zipData'
@@ -31,31 +31,17 @@ export function FamilyDashboard() {
 
   async function fetchOffers() {
     if (!family) return
-    const { data: waitlistIds } = await supabase
-      .from('waitlist_entries')
-      .select('id')
-      .eq('family_id', family.id)
-      .eq('status', 'waiting')
-
-    const ids = (waitlistIds ?? []).map((w: { id: string }) => w.id)
+    const waitlistEntries = await getWaitlistEntries({ family_id: family.id, status: 'waiting' }).catch(() => [])
+    const ids = waitlistEntries.map((w: { id: string }) => w.id)
     if (!ids.length) { setOffers([]); return }
 
-    const { data } = await supabase
-      .from('slot_offers')
-      .select('*')
-      .in('waitlist_entry_id', ids)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-
+    const data = await getSlotOffers({ waitlist_entry_ids: ids.join(',') }).catch(() => [])
     setOffers((data ?? []) as SlotOffer[])
   }
 
   async function fetchBookings() {
     if (!family) return
-    const { data } = await supabase.from('booking_requests').select('*')
-      .eq('family_id', family.id)
-      .order('preferred_date', { ascending: false }).limit(20)
+    const data = await getBookingRequests({ family_id: family.id }).catch(() => [])
     setBookings((data ?? []) as BookingRequest[])
     setLoading(false)
   }
@@ -64,15 +50,13 @@ export function FamilyDashboard() {
 
   async function acceptOffer(offer: SlotOffer) {
     setAcceptingOffer(offer.id)
-    await supabase.functions.invoke('send-notifications', {
-      body: { type: 'slot_offer_accepted', offerId: offer.id },
-    })
+    await invokeNotifications({ type: 'slot_offer_accepted', offerId: offer.id }).catch(() => {})
     setAcceptingOffer(null)
     await Promise.all([fetchOffers(), fetchBookings()])
   }
 
   async function declineOffer(offerId: string) {
-    await supabase.from('slot_offers').update({ status: 'declined' }).eq('id', offerId)
+    await updateSlotOffer(offerId, { status: 'declined' })
     fetchOffers()
   }
 
@@ -80,49 +64,36 @@ export function FamilyDashboard() {
     if (!cancelTarget) return
     setCancelling(true)
 
-    await supabase.from('booking_requests')
-      .update({ status: 'cancelled' })
-      .eq('id', cancelTarget.id)
+    await updateBookingRequest(cancelTarget.id, { status: 'cancelled' })
 
-    // Also cancel the matching appointment in the provider's schedule
-    if (cancelTarget.confirmed_provider_id) {
-      await supabase.from('appointments')
-        .update({ status: 'cancelled' } as any)
-        .eq('provider_id', cancelTarget.confirmed_provider_id)
-        .eq('scheduled_date', cancelTarget.preferred_date)
-        .eq('visit_type', cancelTarget.visit_type)
-
-      // Notify waitlist families in the same zone that this slot opened up
-      if (cancelTarget.zone) {
-        const matchingZips = Object.entries(ZIP_TO_ZONE)
-          .filter(([, z]) => z === cancelTarget.zone)
-          .map(([zip]) => zip)
-        if (matchingZips.length > 0) {
-          supabase.functions.invoke('send-notifications', {
-            body: {
-              type: 'slot_opened',
-              providerId: cancelTarget.confirmed_provider_id,
-              zone: cancelTarget.zone,
-              visitType: cancelTarget.visit_type,
-              date: cancelTarget.preferred_date,
-              time: cancelTarget.preferred_time,
-              matchingZips,
-            },
-          }).catch(() => {})
-        }
-      }
-
-      // Notify provider + admins of the cancellation
-      supabase.functions.invoke('send-notifications', {
-        body: {
-          type: 'booking_cancelled',
+    // Notify waitlist families in the same zone that this slot opened up
+    if (cancelTarget.confirmed_provider_id && cancelTarget.zone) {
+      const matchingZips = Object.entries(ZIP_TO_ZONE)
+        .filter(([, z]) => z === cancelTarget.zone)
+        .map(([zip]) => zip)
+      if (matchingZips.length > 0) {
+        invokeNotifications({
+          type: 'slot_opened',
           providerId: cancelTarget.confirmed_provider_id,
+          zone: cancelTarget.zone,
           visitType: cancelTarget.visit_type,
           date: cancelTarget.preferred_date,
           time: cancelTarget.preferred_time,
-          zone: cancelTarget.zone || '',
-          familyName: family?.display_name || family?.email || 'A family',
-        },
+          matchingZips,
+        }).catch(() => {})
+      }
+    }
+
+    // Notify provider + admins of the cancellation
+    if (cancelTarget.confirmed_provider_id) {
+      invokeNotifications({
+        type: 'booking_cancelled',
+        providerId: cancelTarget.confirmed_provider_id,
+        visitType: cancelTarget.visit_type,
+        date: cancelTarget.preferred_date,
+        time: cancelTarget.preferred_time,
+        zone: cancelTarget.zone || '',
+        familyName: family?.display_name || family?.email || 'A family',
       }).catch(() => {})
     }
 

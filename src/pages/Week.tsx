@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { startOfWeek, addDays, format, isToday } from 'date-fns'
-import { supabase } from '../lib/supabase'
+import { getAppointments } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { VISIT_TYPES } from '../lib/constants'
@@ -21,11 +21,8 @@ export function Week() {
     if (!provider) return
     const from = format(weekStart, 'yyyy-MM-dd')
     const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
-    supabase.from('appointments').select('*')
-      .eq('provider_id', provider.id)
-      .gte('scheduled_date', from)
-      .lte('scheduled_date', to)
-      .then(({ data }) => { setAppts((data ?? []) as Appointment[]); setLoading(false) })
+    getAppointments({ provider_id: provider.id, from, to })
+      .then((data) => { setAppts((data ?? []) as Appointment[]); setLoading(false) })
   }, [provider])
 
   function getApptForCell(day: Date, hour: number) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Phone, Mail, AlertCircle } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { getProviders } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import type { Provider } from '../../types'
 
@@ -19,7 +19,7 @@ export function AdminProviders() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('providers').select('*').order('role').order('name')
+      const data = await getProviders().catch(() => null)
       if (!data) return
       setProviders(data as ProviderWithContact[])
     }

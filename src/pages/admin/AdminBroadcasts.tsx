@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MapPin, Trash2 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { getBroadcasts, updateBroadcast, deleteBroadcast } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { format } from 'date-fns'
@@ -12,7 +12,7 @@ export function AdminBroadcasts() {
   const [loading, setLoading] = useState(true)
 
   async function fetchBroadcasts() {
-    const { data } = await supabase.from('broadcasts').select('*').order('is_urgent', { ascending: false }).order('created_at')
+    const data = await getBroadcasts().catch(() => null)
     setBroadcasts((data ?? []) as Broadcast[])
     setLoading(false)
   }
@@ -20,12 +20,12 @@ export function AdminBroadcasts() {
   useEffect(() => { fetchBroadcasts() }, [])
 
   async function remove(id: string) {
-    await supabase.from('broadcasts').delete().eq('id', id)
+    await deleteBroadcast(id)
     setBroadcasts(prev => prev.filter(b => b.id !== id))
   }
 
   async function toggleOpen(b: Broadcast) {
-    await supabase.from('broadcasts').update({ is_open: !b.is_open }).eq('id', b.id)
+    await updateBroadcast(b.id, { is_open: !b.is_open })
     setBroadcasts(prev => prev.map(bc => bc.id === b.id ? { ...bc, is_open: !bc.is_open } : bc))
   }
 

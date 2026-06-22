@@ -19,10 +19,9 @@ export function FamilySignup() {
     if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (form.password !== form.confirm) { setError("Passwords don't match."); return }
     setLoading(true)
-    const { error, needsConfirmation } = await signUp(form.email, form.password)
-    if (error) { setError(error.message); setLoading(false) }
-    else if (needsConfirmation) { setError('Please check your email and click the confirmation link before continuing.'); setLoading(false) }
-    else navigate('/family/setup')
+    const { error } = await signUp(form.email, form.password)
+    if (error) { setError(error.message); setLoading(false); return }
+    navigate('/family/setup')
   }
 
   return (
