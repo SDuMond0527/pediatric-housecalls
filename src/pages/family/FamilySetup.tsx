@@ -47,7 +47,7 @@ export function FamilySetup() {
       // FamilyLayout will redirect to /family/add-card since square_card_id is null
       navigate('/family/dashboard')
     } catch (e: any) {
-      setError(e.message || 'Something went wrong. Please try again.')
+      setError(e?.message ? e.message : `Error: ${String(e)}`)
       setSaving(false)
     }
   }
