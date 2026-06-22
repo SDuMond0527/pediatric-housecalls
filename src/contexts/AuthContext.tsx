@@ -1,5 +1,4 @@
 import { configureForProviders } from '../lib/amplify'
-configureForProviders()
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -43,6 +42,7 @@ async function fetchProvider(): Promise<Provider | null> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  configureForProviders()
   const [user, setUser] = useState<CognitoUser | null>(null)
   const [provider, setProvider] = useState<Provider | null>(null)
   const [loading, setLoading] = useState(true)

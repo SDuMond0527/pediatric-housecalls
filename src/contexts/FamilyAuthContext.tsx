@@ -1,5 +1,4 @@
 import { configureForFamilies } from '../lib/amplify'
-configureForFamilies()
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -46,6 +45,7 @@ async function fetchFamilyData(): Promise<{ family: FamilyProfile; children: Chi
 }
 
 export function FamilyAuthProvider({ children: contextChildren }: { children: ReactNode }) {
+  configureForFamilies()
   const [user, setUser] = useState<CognitoUser | null>(null)
   const [family, setFamily] = useState<FamilyProfile | null>(null)
   const [children, setChildren] = useState<Child[]>([])
