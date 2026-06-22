@@ -19,35 +19,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH') {
-    const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at } = req.body
-    const [row] = await sql`
-      INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at)
-      VALUES (
-        gen_random_uuid(),
-        ${sub},
-        ${email ?? ''},
-        ${display_name ?? null},
-        ${phone ?? null},
-        ${address_line1 ?? null},
-        ${city ?? null},
-        ${state ?? null},
-        ${zip ?? null},
-        ${referral_source ?? null},
-        ${agreements_accepted_at ?? null}::timestamptz,
-        ${payment_policy_accepted_at ?? null}::timestamptz
-      )
-      ON CONFLICT (cognito_sub) DO UPDATE SET
-        display_name = COALESCE(EXCLUDED.display_name, family_profiles.display_name),
-        phone = COALESCE(EXCLUDED.phone, family_profiles.phone),
-        address_line1 = COALESCE(EXCLUDED.address_line1, family_profiles.address_line1),
-        city = COALESCE(EXCLUDED.city, family_profiles.city),
-        state = COALESCE(EXCLUDED.state, family_profiles.state),
-        zip = COALESCE(EXCLUDED.zip, family_profiles.zip),
-        referral_source = COALESCE(EXCLUDED.referral_source, family_profiles.referral_source),
-        agreements_accepted_at = COALESCE(EXCLUDED.agreements_accepted_at, family_profiles.agreements_accepted_at),
-        payment_policy_accepted_at = COALESCE(EXCLUDED.payment_policy_accepted_at, family_profiles.payment_policy_accepted_at)
-      RETURNING *`
-    return res.json(row)
+    try {
+      const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at } = req.body
+      const [row] = await sql`
+        INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at)
+        VALUES (
+          gen_random_uuid(),
+          ${sub},
+          ${email ?? ''},
+          ${display_name ?? null},
+          ${phone ?? null},
+          ${address_line1 ?? null},
+          ${city ?? null},
+          ${state ?? null},
+          ${zip ?? null},
+          ${referral_source ?? null},
+          ${agreements_accepted_at ?? null}::timestamptz,
+          ${payment_policy_accepted_at ?? null}::timestamptz
+        )
+        ON CONFLICT (cognito_sub) DO UPDATE SET
+          display_name = COALESCE(EXCLUDED.display_name, family_profiles.display_name),
+          phone = COALESCE(EXCLUDED.phone, family_profiles.phone),
+          address_line1 = COALESCE(EXCLUDED.address_line1, family_profiles.address_line1),
+          city = COALESCE(EXCLUDED.city, family_profiles.city),
+          state = COALESCE(EXCLUDED.state, family_profiles.state),
+          zip = COALESCE(EXCLUDED.zip, family_profiles.zip),
+          referral_source = COALESCE(EXCLUDED.referral_source, family_profiles.referral_source),
+          agreements_accepted_at = COALESCE(EXCLUDED.agreements_accepted_at, family_profiles.agreements_accepted_at),
+          payment_policy_accepted_at = COALESCE(EXCLUDED.payment_policy_accepted_at, family_profiles.payment_policy_accepted_at)
+        RETURNING *`
+      return res.json(row)
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message ?? String(e) })
+    }
   }
 
   res.status(405).json({ error: 'Method not allowed' })
