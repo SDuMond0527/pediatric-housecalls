@@ -1,20 +1,42 @@
 import { configureForFamilies } from '../lib/amplify'
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import {
-  getCurrentUser,
-  signIn as cognitoSignIn,
-  signOut as cognitoSignOut,
-  signUp as cognitoSignUp,
-  fetchAuthSession,
-} from 'aws-amplify/auth'
-import { Hub } from 'aws-amplify/utils'
+import { signUp as cognitoSignUp } from 'aws-amplify/auth'
 import type { FamilyProfile, Child } from '../types/family'
 
-interface CognitoUser {
-  id: string      // Cognito sub
-  email?: string
+const TOKEN_KEY = 'family_auth'
+
+interface StoredTokens {
+  accessToken: string
+  idToken: string
+  refreshToken: string
+  email: string
+  sub: string
+  expiresAt: number
 }
+
+function parseJwt(token: string): Record<string, unknown> {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(base64))
+  } catch { return {} }
+}
+
+function getStoredTokens(): StoredTokens | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY)
+    if (!raw) return null
+    const tokens = JSON.parse(raw) as StoredTokens
+    if (Date.now() > tokens.expiresAt) { localStorage.removeItem(TOKEN_KEY); return null }
+    return tokens
+  } catch { return null }
+}
+
+export async function getFamilyAccessToken(): Promise<string> {
+  return getStoredTokens()?.accessToken ?? ''
+}
+
+interface CognitoUser { id: string; email?: string }
 
 interface FamilyAuthContextType {
   user: CognitoUser | null
@@ -29,17 +51,8 @@ interface FamilyAuthContextType {
 
 const FamilyAuthContext = createContext<FamilyAuthContextType | null>(null)
 
-async function getFamilyAccessToken(): Promise<string> {
-  const session = await fetchAuthSession()
-  return session.tokens?.accessToken?.toString() ?? ''
-}
-
-async function fetchFamilyData(): Promise<{ family: FamilyProfile; children: Child[] } | null> {
-  const token = await getFamilyAccessToken()
-  const res = await fetch('/api/families/me', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (res.status === 404) return null
+async function fetchFamilyData(accessToken: string): Promise<{ family: FamilyProfile; children: Child[] } | null> {
+  const res = await fetch('/api/families/me', { headers: { Authorization: `Bearer ${accessToken}` } })
   if (!res.ok) return null
   return res.json()
 }
@@ -52,55 +65,60 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
   const [loading, setLoading] = useState(true)
 
   async function loadUser() {
+    const tokens = getStoredTokens()
+    if (!tokens) { setUser(null); setFamily(null); setChildren([]); setLoading(false); return }
+    setUser({ id: tokens.sub, email: tokens.email })
     try {
-      const cognitoUser = await getCurrentUser()
-      const session = await fetchAuthSession()
-      const email = session.tokens?.idToken?.payload?.email as string | undefined
-      setUser({ id: cognitoUser.userId, email })
-      const data = await fetchFamilyData()
-      if (data) {
-        setFamily(data.family)
-        setChildren(data.children)
-      }
-    } catch {
-      setUser(null)
-      setFamily(null)
-      setChildren([])
-    } finally {
-      setLoading(false)
-    }
+      const data = await fetchFamilyData(tokens.accessToken)
+      if (data) { setFamily(data.family); setChildren(data.children) }
+    } catch { /* family fetch failure doesn't block auth */ }
+    setLoading(false)
   }
 
   async function refreshFamily() {
-    const data = await fetchFamilyData()
-    if (data) {
-      setFamily(data.family)
-      setChildren(data.children)
+    const tokens = getStoredTokens()
+    if (!tokens) return
+    const data = await fetchFamilyData(tokens.accessToken)
+    if (data) { setFamily(data.family); setChildren(data.children) }
+  }
+
+  useEffect(() => { loadUser() }, [])
+
+  async function signIn(email: string, password: string) {
+    try {
+      const res = await fetch('/api/families/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json()
+        return { error: new Error(error || 'Invalid email or password') }
+      }
+      const { accessToken, idToken, expiresIn } = await res.json()
+      const payload = parseJwt(accessToken)
+      const idPayload = parseJwt(idToken)
+      const tokens: StoredTokens = {
+        accessToken, idToken,
+        refreshToken: '',
+        sub: payload.sub as string,
+        email: idPayload.email as string ?? email,
+        expiresAt: Date.now() + (expiresIn as number) * 1000,
+      }
+      localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens))
+      setUser({ id: tokens.sub, email: tokens.email })
+      const data = await fetchFamilyData(accessToken)
+      if (data) { setFamily(data.family); setChildren(data.children) }
+      return { error: null }
+    } catch (e) {
+      return { error: e as Error }
     }
   }
 
-  useEffect(() => {
-    loadUser()
-    const unsubscribe = Hub.listen('auth', ({ payload }) => {
-      if (payload.event === 'signedIn') loadUser()
-      if (payload.event === 'signedOut') {
-        setUser(null)
-        setFamily(null)
-        setChildren([])
-      }
-    })
-    return unsubscribe
-  }, [])
-
   async function signUp(email: string, password: string) {
     try {
-      const result = await cognitoSignUp({
-        username: email,
-        password,
-        options: { userAttributes: { email } },
-      })
+      const result = await cognitoSignUp({ username: email, password, options: { userAttributes: { email } } })
       if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
-        // Auto-confirm via server so families don't need email verification
         const confirmRes = await fetch('/api/families/confirm-signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -110,26 +128,18 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
           const { error } = await confirmRes.json()
           return { error: new Error(error || 'Could not confirm account'), needsConfirmation: false }
         }
-        await cognitoSignIn({ username: email, password })
-        await loadUser()
       }
+      const { error } = await signIn(email, password)
+      if (error) return { error, needsConfirmation: false }
       return { error: null, needsConfirmation: false }
     } catch (e) {
       return { error: e as Error, needsConfirmation: false }
     }
   }
 
-  async function signIn(email: string, password: string) {
-    try {
-      await cognitoSignIn({ username: email, password })
-      return { error: null }
-    } catch (e) {
-      return { error: e as Error }
-    }
-  }
-
   async function signOut() {
-    await cognitoSignOut()
+    localStorage.removeItem(TOKEN_KEY)
+    setUser(null); setFamily(null); setChildren([])
   }
 
   return (
@@ -144,5 +154,3 @@ export function useFamilyAuth() {
   if (!ctx) throw new Error('useFamilyAuth must be used within FamilyAuthProvider')
   return ctx
 }
-
-export { getFamilyAccessToken }
