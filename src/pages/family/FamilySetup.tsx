@@ -38,16 +38,27 @@ export function FamilySetup() {
         state:        state || null,
         zip:          zip || null,
       })
+    } catch (e: any) {
+      setError('Profile save failed: ' + (e?.message || String(e)))
+      setSaving(false)
+      return
+    }
 
+    try {
       for (const label of validLabels) {
         await createChild({ display_label: label.trim() })
       }
+    } catch (e: any) {
+      setError('Child save failed: ' + (e?.message || String(e)))
+      setSaving(false)
+      return
+    }
 
+    try {
       await refreshFamily()
-      // FamilyLayout will redirect to /family/add-card since square_card_id is null
       navigate('/family/dashboard')
     } catch (e: any) {
-      setError(e?.message ? e.message : `Error: ${String(e)}`)
+      setError('Refresh failed: ' + (e?.message || String(e)))
       setSaving(false)
     }
   }
