@@ -30,7 +30,7 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
         </div>
         <div>
           <div className="text-[13px] font-medium text-white leading-snug">{provider.name}</div>
-          <div className="text-[11px] text-white/40 mt-0.5">{provider.role} · {provider.states.join(', ')}</div>
+          <div className="text-[11px] text-white/40 mt-0.5">{provider.role}{provider.states?.length ? ` · ${provider.states.join(', ')}` : ''}</div>
         </div>
       </div>
 

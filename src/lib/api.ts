@@ -13,6 +13,15 @@ async function familyAuthHeaders(): Promise<Record<string, string>> {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 }
 
+async function publicFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? res.statusText)
+  }
+  return res.json()
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders()
   const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
@@ -55,7 +64,7 @@ export const deleteScheduleBlock = (id: string) =>
 
 // ── Providers ─────────────────────────────────────────────────
 export const getProviders = (params?: Record<string, string>) =>
-  apiFetch<any[]>(`/api/providers${params ? '?' + new URLSearchParams(params) : ''}`)
+  publicFetch<any[]>(`/api/providers${params ? '?' + new URLSearchParams(params) : ''}`)
 
 export const getMyProvider = () => apiFetch<any>('/api/providers/me')
 
@@ -70,7 +79,7 @@ export const saveAvailabilityDays = (providerId: string, days: any[]) =>
   apiFetch<any[]>(`/api/availability/${providerId}`, { method: 'PUT', body: JSON.stringify(days) })
 
 export const upsertAvailabilityOverride = (providerId: string, body: Record<string, unknown>) =>
-  apiFetch<any>(`/api/availability/${providerId}/overrides`, { method: 'POST', body: JSON.stringify(body) })
+  apiFetch<any>(`/api/availability/overrides`, { method: 'POST', body: JSON.stringify({ ...body, provider_id: providerId }) })
 
 export const deleteAvailabilityOverride = (id: string) =>
   apiFetch<void>(`/api/availability/overrides/${id}`, { method: 'DELETE' })
@@ -146,13 +155,19 @@ export const createChild = (body: Record<string, unknown>) =>
   familyApiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
 
 export const updateChild = (id: string, body: Record<string, unknown>) =>
-  apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  familyApiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
 export const deleteChild = (id: string) =>
   apiFetch<void>(`/api/children/${id}`, { method: 'DELETE' })
 
 export const getChildrenByIds = (ids: string[]) =>
   apiFetch<any[]>(`/api/children?ids=${ids.join(',')}`)
+
+export const getChildrenByFamilyIds = (familyIds: string[]) =>
+  apiFetch<any[]>(`/api/children?family_ids=${familyIds.join(',')}`)
+
+export const searchChildren = (q: string) =>
+  apiFetch<any[]>(`/api/children?search=${encodeURIComponent(q)}`)
 
 // ── Analytics ─────────────────────────────────────────────────
 export const getAnalytics = () => apiFetch<any>('/api/analytics')
@@ -162,22 +177,50 @@ export const getReports = (params: Record<string, string>) =>
 
 // ── Scheduling (slot calculation) ────────────────────────────
 export const getSchedulingData = (providerId: string, params: Record<string, string>) =>
-  apiFetch<{ availability: any; override: any; visitTypeAvail: any; bookedTimes: string[] }>(
+  publicFetch<{ availability: any; override: any; visitTypeAvail: any; bookedTimes: string[] }>(
     `/api/scheduling/${providerId}?${new URLSearchParams(params)}`
   )
 
 export const getProviderByName = (name: string) =>
-  apiFetch<any | null>(`/api/providers?name=${encodeURIComponent(name)}`)
+  publicFetch<any | null>(`/api/providers?name=${encodeURIComponent(name)}`)
 
 export const getProvidersByRole = (params: Record<string, string>) =>
-  apiFetch<any[]>(`/api/providers?${new URLSearchParams(params)}`)
+  publicFetch<any[]>(`/api/providers?${new URLSearchParams(params)}`)
 
 export const getProvidersByNamesWithSecureText = (names: string[]) =>
-  apiFetch<any[]>(`/api/providers?names=${names.map(encodeURIComponent).join(',')}&has_secure_text=true`)
+  publicFetch<any[]>(`/api/providers?names=${names.map(encodeURIComponent).join(',')}&has_secure_text=true`)
+
+// ── Family-facing versions (use family JWT) ───────────────────
+export const familyGetBookingRequests = (params?: Record<string, string>) =>
+  familyApiFetch<any[]>(`/api/booking-requests${params ? '?' + new URLSearchParams(params) : ''}`)
+
+export const familyCreateBookingRequest = (body: Record<string, unknown>) =>
+  familyApiFetch<any>('/api/booking-requests', { method: 'POST', body: JSON.stringify(body) })
+
+export const familyUpdateBookingRequest = (id: string, body: Record<string, unknown>) =>
+  familyApiFetch<any>(`/api/booking-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const familyGetWaitlistEntries = (params?: Record<string, string>) =>
+  familyApiFetch<any[]>(`/api/waitlist-entries${params ? '?' + new URLSearchParams(params) : ''}`)
+
+export const familyCreateWaitlistEntry = (body: Record<string, unknown>) =>
+  familyApiFetch<any>('/api/waitlist-entries', { method: 'POST', body: JSON.stringify(body) })
+
+export const familyGetSlotOffers = (params: Record<string, string>) =>
+  familyApiFetch<any[]>(`/api/slot-offers?${new URLSearchParams(params)}`)
+
+export const familyUpdateSlotOffer = (id: string, body: Record<string, unknown>) =>
+  familyApiFetch<any>(`/api/slot-offers/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const familyInvokeNotifications = (body: Record<string, unknown>) =>
+  familyApiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })
+
+export const familyCreateAppointment = (body: Record<string, unknown>) =>
+  familyApiFetch<any>('/api/appointments', { method: 'POST', body: JSON.stringify(body) })
 
 // ── EHR proxy ────────────────────────────────────────────────
 export const invokeCharmAppointment = (body: Record<string, unknown>) =>
-  apiFetch<void>('/api/charm/appointment', { method: 'POST', body: JSON.stringify(body) })
+  familyApiFetch<void>('/api/charm/appointment', { method: 'POST', body: JSON.stringify(body) })
 
 export const invokeCharmDetails = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/charm/details', { method: 'POST', body: JSON.stringify(body) })

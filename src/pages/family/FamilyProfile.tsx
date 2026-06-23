@@ -7,22 +7,34 @@ import { Input } from '../../components/ui/Input'
 import type { Child } from '../../types/family'
 
 type ChildEdit = {
+  first_name: string
+  last_name: string
+  date_of_birth: string
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
   insurance_card_front_url: string
   insurance_card_back_url: string
+  allergies: string
+  current_medications: string
+  medical_history: string
   preferred_pharmacy: string
   pcp: string
 }
 
 function childEditFrom(c: Child): ChildEdit {
   return {
+    first_name: c.first_name || '',
+    last_name: c.last_name || '',
+    date_of_birth: c.date_of_birth || '',
     insurance_provider: c.insurance_provider || '',
     insurance_member_id: c.insurance_member_id || '',
     insurance_group_number: c.insurance_group_number || '',
     insurance_card_front_url: c.insurance_card_front_url || '',
     insurance_card_back_url: c.insurance_card_back_url || '',
+    allergies: c.allergies || '',
+    current_medications: c.current_medications || '',
+    medical_history: c.medical_history || '',
     preferred_pharmacy: c.preferred_pharmacy || '',
     pcp: c.pcp || '',
   }
@@ -104,11 +116,17 @@ export function FamilyProfile() {
     const edit = getChildEdit(child)
     try {
       await updateChild(child.id, {
+        first_name: edit.first_name || null,
+        last_name: edit.last_name || null,
+        date_of_birth: edit.date_of_birth || null,
         insurance_provider: edit.insurance_provider || null,
         insurance_member_id: edit.insurance_member_id || null,
         insurance_group_number: edit.insurance_group_number || null,
         insurance_card_front_url: edit.insurance_card_front_url || null,
         insurance_card_back_url: edit.insurance_card_back_url || null,
+        allergies: edit.allergies || null,
+        current_medications: edit.current_medications || null,
+        medical_history: edit.medical_history || null,
         preferred_pharmacy: edit.preferred_pharmacy || null,
         pcp: edit.pcp || null,
       })
@@ -238,6 +256,24 @@ export function FamilyProfile() {
                 {isExpanded && (
                   <div className="p-4 border-t border-[#E8E8E4] space-y-5">
 
+                    {/* Basic info */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Patient info</p>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input label="Legal first name" placeholder="Emma"
+                            value={edit.first_name}
+                            onChange={e => setChildField(c.id, 'first_name', e.target.value)} />
+                          <Input label="Legal last name" placeholder="Smith"
+                            value={edit.last_name}
+                            onChange={e => setChildField(c.id, 'last_name', e.target.value)} />
+                        </div>
+                        <Input label="Date of birth" type="date"
+                          value={edit.date_of_birth}
+                          onChange={e => setChildField(c.id, 'date_of_birth', e.target.value)} />
+                      </div>
+                    </div>
+
                     {/* Insurance text fields */}
                     <div>
                       <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Insurance</p>
@@ -298,6 +334,26 @@ export function FamilyProfile() {
                       </div>
                     </div>
 
+                    {/* Medical info */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Medical info</p>
+                      <div className="space-y-2">
+                        <Input label="Drug & food allergies" placeholder="e.g. Penicillin, peanuts — or NKDA"
+                          value={edit.allergies}
+                          onChange={e => setChildField(c.id, 'allergies', e.target.value)} />
+                        <Input label="Current medications" placeholder="e.g. Zyrtec 5mg daily — or None"
+                          value={edit.current_medications}
+                          onChange={e => setChildField(c.id, 'current_medications', e.target.value)} />
+                        <div>
+                          <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Medical history</label>
+                          <textarea rows={2} placeholder="e.g. Asthma, ADHD, prior surgeries..."
+                            value={edit.medical_history}
+                            onChange={e => setChildField(c.id, 'medical_history', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none bg-white" />
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Health providers */}
                     <div>
                       <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Health providers</p>
@@ -305,7 +361,7 @@ export function FamilyProfile() {
                         <Input label="Preferred pharmacy" placeholder="e.g. CVS on Providence Rd"
                           value={edit.preferred_pharmacy}
                           onChange={e => setChildField(c.id, 'preferred_pharmacy', e.target.value)} />
-                        <Input label="Primary care provider" placeholder="e.g. Dr. Jane Smith"
+                        <Input label="Primary care provider" placeholder="e.g. Dr. Jane Smith, Charlotte Pediatrics"
                           value={edit.pcp}
                           onChange={e => setChildField(c.id, 'pcp', e.target.value)} />
                       </div>

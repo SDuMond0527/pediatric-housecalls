@@ -2,8 +2,22 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/availability/overrides/([^/]+)", "dest": "/api/availability/overrides/[id]?id=$1" },
+    { "src": "/api/availability/([^/]+)", "dest": "/api/availability/[providerId]?providerId=$1" },
+    { "src": "/api/appointments/([^/]+)", "dest": "/api/appointments/[id]?id=$1" },
+    { "src": "/api/booking-requests/([^/]+)", "dest": "/api/booking-requests/[id]?id=$1" },
+    { "src": "/api/broadcasts/([^/]+)", "dest": "/api/broadcasts/[id]?id=$1" },
+    { "src": "/api/children/([^/]+)", "dest": "/api/children/[id]?id=$1" },
+    { "src": "/api/providers/([^/]+)", "dest": "/api/providers/[id]?id=$1" },
+    { "src": "/api/schedule-blocks/([^/]+)", "dest": "/api/schedule-blocks/[id]?id=$1" },
+    { "src": "/api/scheduling/([^/]+)", "dest": "/api/scheduling/[providerId]?providerId=$1" },
+    { "src": "/api/slot-offers/([^/]+)", "dest": "/api/slot-offers/[id]?id=$1" },
+    { "src": "/api/time-blocks/([^/]+)", "dest": "/api/time-blocks/[id]?id=$1" },
+    { "src": "/api/visit-type-availability/([^/]+)", "dest": "/api/visit-type-availability/[providerId]?providerId=$1" },
+    { "src": "/api/waitlist-entries/([^/]+)", "dest": "/api/waitlist-entries/[id]?id=$1" },
+    { "src": "/api/zone-restrictions/([^/]+)", "dest": "/api/zone-restrictions/[id]?id=$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

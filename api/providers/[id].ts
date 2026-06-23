@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { verifyToken } from '../_lib/verifyToken'
-import sql from '../_lib/db'
+import { neon } from '@neondatabase/serverless'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+async function verifyToken(authHeader: string | undefined): Promise<string> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
+  const token = authHeader.slice(7)
+  const region = process.env.VITE_AWS_REGION || 'us-east-2'
+  const userPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
+  const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
+  const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
+  if (!payload.sub) throw new Error('No sub in token')
+  return payload.sub
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -11,18 +22,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { id } = req.query as { id: string }
-  const { phone, secure_text_number } = req.body
+  const sql = neon(process.env.DATABASE_URL!)
 
-  let row: unknown
-  if (phone !== undefined && secure_text_number !== undefined) {
-    ;[row] = await sql`UPDATE providers SET phone=${phone}, secure_text_number=${secure_text_number} WHERE id=${id}::uuid RETURNING *`
-  } else if (phone !== undefined) {
-    ;[row] = await sql`UPDATE providers SET phone=${phone} WHERE id=${id}::uuid RETURNING *`
-  } else if (secure_text_number !== undefined) {
-    ;[row] = await sql`UPDATE providers SET secure_text_number=${secure_text_number} WHERE id=${id}::uuid RETURNING *`
-  } else {
-    return res.status(400).json({ error: 'No valid fields' })
-  }
+  const { id } = req.query as { id: string }
+  const b = req.body
+
+  const updates: string[] = []
+  if (b.phone !== undefined)               updates.push('phone')
+  if (b.secure_text_number !== undefined)  updates.push('secure_text_number')
+  if (b.home_address !== undefined)        updates.push('home_address')
+  if (b.email !== undefined)               updates.push('email')
+
+  if (!updates.length) return res.status(400).json({ error: 'No valid fields' })
+
+  const [row] = await sql`
+    UPDATE providers SET
+      phone              = CASE WHEN ${b.phone !== undefined} THEN ${b.phone ?? null}              ELSE phone              END,
+      secure_text_number = CASE WHEN ${b.secure_text_number !== undefined} THEN ${b.secure_text_number ?? null} ELSE secure_text_number END,
+      home_address       = CASE WHEN ${b.home_address !== undefined} THEN ${b.home_address ?? null} ELSE home_address       END,
+      email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END
+    WHERE id = ${id}::uuid
+    RETURNING *`
   res.json(row)
 }

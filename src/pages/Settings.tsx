@@ -20,7 +20,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export function Settings() {
-  const { provider } = useAuth()
+  const { provider, refreshProvider } = useAuth()
   const [success, setSuccess] = useState(false)
   const [serverError, setServerError] = useState('')
   const [phone, setPhone] = useState((provider as any)?.phone || '')
@@ -38,6 +38,7 @@ export function Settings() {
     setPhoneError('')
     try {
       await updateProvider(provider.id, { phone: phone || null })
+      await refreshProvider()
       setPhoneSaved(true)
       setTimeout(() => setPhoneSaved(false), 2500)
     } catch (e: any) {
@@ -53,6 +54,7 @@ export function Settings() {
     setSecureTextError('')
     try {
       await updateProvider(provider.id, { secure_text_number: secureText || null })
+      await refreshProvider()
       setSecureTextSaved(true)
       setTimeout(() => setSecureTextSaved(false), 2500)
     } catch (e: any) {

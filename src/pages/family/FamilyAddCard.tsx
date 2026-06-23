@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CreditCard, Lock } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
+import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 
 declare global {
@@ -26,9 +27,10 @@ function loadSquareScript(): Promise<void> {
     }
     const script = document.createElement('script')
     script.id = 'square-sdk'
-    script.src = import.meta.env.VITE_SQUARE_ENVIRONMENT === 'production'
-      ? 'https://web.squarecdn.com/v1/square.js'
-      : 'https://sandbox.web.squarecdn.com/v1/square.js'
+    const appId = import.meta.env.VITE_SQUARE_APP_ID || ''
+    script.src = appId.startsWith('sandbox-')
+      ? 'https://sandbox.web.squarecdn.com/v1/square.js'
+      : 'https://web.squarecdn.com/v1/square.js'
     script.onload  = () => resolve()
     script.onerror = () => reject(new Error('Failed to load payment SDK'))
     document.head.appendChild(script)
@@ -96,10 +98,11 @@ export function FamilyAddCard() {
       return
     }
 
+    const token = await getFamilyAccessToken()
     const resp = await fetch('/api/save-payment-method', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ familyId: user!.id, nonce: result.token }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nonce: result.token }),
     })
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok || !data?.ok) {

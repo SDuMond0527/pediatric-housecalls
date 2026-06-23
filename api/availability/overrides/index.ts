@@ -20,11 +20,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const sql = neon(process.env.DATABASE_URL!)
-
-  const { id } = req.query as { id: string }
-  await sql`DELETE FROM zone_restrictions WHERE id = ${id}::uuid`
-  res.status(204).end()
+  const { provider_id, date, is_available, start_time, end_time, note } = req.body
+  const [row] = await sql`
+    INSERT INTO availability_overrides (provider_id, date, is_available, start_time, end_time, note)
+    VALUES (${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})
+    ON CONFLICT (provider_id, date) DO UPDATE
+    SET is_available=EXCLUDED.is_available, start_time=EXCLUDED.start_time, end_time=EXCLUDED.end_time, note=EXCLUDED.note
+    RETURNING *`
+  res.json(row)
 }

@@ -93,6 +93,7 @@ export function Availability() {
   const [overrides, setOverrides] = useState<AvailabilityOverride[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [savingOverride, setSavingOverride] = useState(false)
   const [zoneModal, setZoneModal] = useState(false)
   const [blockModal, setBlockModal] = useState(false)
   const [overrideModal, setOverrideModal] = useState(false)
@@ -125,7 +126,7 @@ export function Availability() {
 
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
       setTimeBlocks((tb ?? []) as TimeBlock[])
-      setOverrides((ov ?? []) as AvailabilityOverride[])
+      setOverrides(((ov ?? []) as any[]).map(o => ({ ...o, date: (o.date as string).split('T')[0] })) as AvailabilityOverride[])
     })
   }, [provider])
 
@@ -152,41 +153,46 @@ export function Availability() {
   async function save() {
     if (!provider) return
     setSaving(true)
+    try {
+      await saveAvailabilityDays(provider.id, avail)
 
-    // Save weekly availability
-    await saveAvailabilityDays(provider.id, avail)
-
-    // Upsert visit type availability
-    const rows = visitTypeAvail.map(v => ({
-      id: v.id ?? undefined,
-      provider_id: provider.id,
-      visit_type: v.visit_type,
-      is_active: v.is_active,
-      start_time: v.start_time,
-      end_time: v.end_time,
-    }))
-    const upserted = await upsertVisitTypeAvailability(provider.id, rows)
-    if (upserted) {
-      setVisitTypeAvail(prev => prev.map(v => {
-        const fresh = (upserted as VisitTypeAvail[]).find(u => u.visit_type === v.visit_type)
-        return fresh ? fresh : v
+      const rows = visitTypeAvail.map(v => ({
+        id: v.id ?? undefined,
+        provider_id: provider.id,
+        visit_type: v.visit_type,
+        is_active: v.is_active,
+        start_time: v.start_time,
+        end_time: v.end_time,
       }))
+      const upserted = await upsertVisitTypeAvailability(provider.id, rows)
+      if (upserted) {
+        setVisitTypeAvail(prev => prev.map(v => {
+          const fresh = (upserted as VisitTypeAvail[]).find(u => u.visit_type === v.visit_type)
+          return fresh ? fresh : v
+        }))
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      alert('Save failed: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   async function addZoneRestriction() {
     if (!provider || !newZone.zone) return
-    const data = await createZoneRestriction({
-      provider_id: provider.id, zone: newZone.zone,
-      start_time: fmt12to24(newZone.start), end_time: fmt12to24(newZone.end),
-    })
-    if (data) setZoneRestrictions(prev => [...prev, data as ZoneRestriction])
-    setZoneModal(false)
-    setNewZone({ zone: '', start: '8:00 AM', end: '12:00 PM' })
+    try {
+      const data = await createZoneRestriction({
+        provider_id: provider.id, zone: newZone.zone,
+        start_time: fmt12to24(newZone.start), end_time: fmt12to24(newZone.end),
+      })
+      if (data) setZoneRestrictions(prev => [...prev, data as ZoneRestriction])
+      setZoneModal(false)
+      setNewZone({ zone: '', start: '8:00 AM', end: '12:00 PM' })
+    } catch (e) {
+      alert('Failed to save zone restriction: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    }
   }
 
   async function removeZone(id: string) {
@@ -196,10 +202,14 @@ export function Availability() {
 
   async function addTimeBlock() {
     if (!provider || !newBlock.label) return
-    const data = await createTimeBlock({ provider_id: provider.id, ...newBlock })
-    if (data) setTimeBlocks(prev => [...prev, data as TimeBlock])
-    setBlockModal(false)
-    setNewBlock({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
+    try {
+      const data = await createTimeBlock({ provider_id: provider.id, ...newBlock })
+      if (data) setTimeBlocks(prev => [...prev, data as TimeBlock])
+      setBlockModal(false)
+      setNewBlock({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
+    } catch (e) {
+      alert('Failed to save time block: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    }
   }
 
   async function removeBlock(id: string) {
@@ -209,22 +219,34 @@ export function Availability() {
 
   async function addOverride() {
     if (!provider || !newOverride.date) return
-    const payload = {
-      date: newOverride.date,
-      is_available: newOverride.is_available,
-      start_time: newOverride.is_available ? fmt12to24(newOverride.start) : null,
-      end_time: newOverride.is_available ? fmt12to24(newOverride.end) : null,
-      note: newOverride.note || null,
+    setSavingOverride(true)
+    const savedDate = newOverride.date
+    try {
+      const payload = {
+        date: savedDate,
+        is_available: newOverride.is_available,
+        start_time: newOverride.is_available ? fmt12to24(newOverride.start) : null,
+        end_time: newOverride.is_available ? fmt12to24(newOverride.end) : null,
+        note: newOverride.note || null,
+      }
+      await upsertAvailabilityOverride(provider.id, payload)
+      // Re-fetch from server; normalize date format (Neon may return full ISO timestamp)
+      const fresh = await getAvailability(provider.id)
+      const normalized = (fresh.overrides ?? []).map((o: any) => ({
+        ...o,
+        date: (o.date as string).split('T')[0],
+      }))
+      setOverrides(normalized as AvailabilityOverride[])
+      // Navigate calendar to show the saved date's month
+      setCalMonth(new Date(savedDate + 'T12:00:00'))
+      setOverrideDateView('calendar')
+      setOverrideModal(false)
+      setNewOverride({ date: '', is_available: true, start: '8:00 AM', end: '5:00 PM', note: '' })
+    } catch (e) {
+      alert('Failed to save: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    } finally {
+      setSavingOverride(false)
     }
-    const data = await upsertAvailabilityOverride(provider.id, payload)
-    if (data) {
-      setOverrides(prev => {
-        const filtered = prev.filter(o => o.date !== newOverride.date)
-        return [...filtered, data as AvailabilityOverride].sort((a, b) => a.date.localeCompare(b.date))
-      })
-    }
-    setOverrideModal(false)
-    setNewOverride({ date: '', is_available: true, start: '8:00 AM', end: '5:00 PM', note: '' })
   }
 
   async function removeOverride(id: string) {
@@ -708,7 +730,7 @@ export function Availability() {
 
           <div className="flex gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => setOverrideModal(false)}>Cancel</Button>
-            <Button variant="primary" size="sm" disabled={!newOverride.date} onClick={addOverride}>
+            <Button variant="primary" size="sm" disabled={!newOverride.date} loading={savingOverride} onClick={addOverride}>
               <CheckCircle2 size={13} /> Save date
             </Button>
           </div>

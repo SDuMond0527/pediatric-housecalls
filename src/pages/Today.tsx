@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
-import { CheckCircle2, Video, ChevronDown, FileText, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
-  getBookingRequests, getChildrenByIds, invokeCharmDetails,
+  getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -63,6 +63,13 @@ export function Today() {
   const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
   const [addForProviderId, setAddForProviderId] = useState('')
 
+  // Patient search
+  const [patientSearch, setPatientSearch] = useState('')
+  const [patientResults, setPatientResults] = useState<any[]>([])
+  const [patientSearching, setPatientSearching] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null)
+  const patientSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Cancel appointment
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [cancelling, setCancelling] = useState(false)
@@ -71,6 +78,24 @@ export function Today() {
   const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
   const [doneInstructions, setDoneInstructions] = useState('')
   const [doneSubmitting, setDoneSubmitting] = useState(false)
+
+  // Send note to parent
+  const [noteTarget, setNoteTarget] = useState<Appointment | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [noteSending, setNoteSending] = useState(false)
+  const [noteSent, setNoteSent] = useState(false)
+
+  async function submitNote() {
+    if (!noteTarget || !noteText.trim()) return
+    setNoteSending(true)
+    try {
+      await invokeNotifications({ type: 'provider_note', appointmentId: noteTarget.id, message: noteText.trim() })
+      setNoteSent(true)
+      setTimeout(() => { setNoteTarget(null); setNoteText(''); setNoteSent(false) }, 1500)
+    } finally {
+      setNoteSending(false)
+    }
+  }
 
   // Schedule blocks
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
@@ -144,15 +169,14 @@ export function Today() {
     if (!doneTarget) return
     setDoneSubmitting(true)
     const instructions = doneInstructions.trim() || null
-    // Update status separately so it always succeeds even if after_visit_instructions column is missing
     await updateAppointment(doneTarget.id, { status: 'done' })
     if (instructions) {
-      void updateAppointment(doneTarget.id, { after_visit_instructions: instructions })
+      await updateAppointment(doneTarget.id, { after_visit_instructions: instructions }).catch(() => {})
     }
     if (instructions && doneTarget.charm_appointment_id) {
       void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
+    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions: instructions || null })
     setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')
@@ -163,7 +187,44 @@ export function Today() {
     setAddForProviderId(provider?.id || '')
     setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', date: viewDate, time: '', notes: '' })
     setAddCustomTime('')
+    setPatientSearch('')
+    setPatientResults([])
+    setSelectedPatient(null)
     setAdding(true)
+  }
+
+  function onPatientSearchChange(q: string) {
+    setPatientSearch(q)
+    setSelectedPatient(null)
+    if (patientSearchTimer.current) clearTimeout(patientSearchTimer.current)
+    if (!q.trim()) { setPatientResults([]); return }
+    patientSearchTimer.current = setTimeout(async () => {
+      setPatientSearching(true)
+      const results = await searchChildren(q).catch(() => [])
+      setPatientResults(results)
+      setPatientSearching(false)
+    }, 300)
+  }
+
+  function selectPatient(child: any) {
+    setSelectedPatient(child)
+    setPatientSearch('')
+    setPatientResults([])
+    const dob = child.date_of_birth
+      ? (child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : String(child.date_of_birth)).split('T')[0]
+      : ''
+    const zip = child.family_zip || ''
+    setAddForm(f => ({
+      ...f,
+      patientName: [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || '',
+      dob,
+      gender: child.gender || '',
+      phone: child.family_phone || '',
+      email: child.family_email || '',
+      address: child.family_address || '',
+      zip,
+      zone: zip ? (ZIP_TO_ZONE[zip] || '') : '',
+    }))
   }
 
   async function submitAdd() {
@@ -220,6 +281,11 @@ export function Today() {
     await updateAppointment(cancelTarget.id, { status: 'cancelled' })
 
     setAppts(prev => prev.map(a => a.id === cancelTarget.id ? { ...a, status: 'cancelled' } : a))
+
+    invokeNotifications({
+      type: 'appointment_cancelled',
+      appointmentId: cancelTarget.id,
+    }).catch(() => {})
 
     const matchingZips = Object.entries(ZIP_TO_ZONE)
       .filter(([, z]) => z === cancelTarget.zone)
@@ -386,7 +452,7 @@ export function Today() {
             {appts.map(appt => {
               const vt = VISIT_TYPES[appt.visit_type]
               const isExpanded = expanded === appt.id
-              const isVirtual = appt.visit_type === 'Video telemedicine' || appt.visit_type === 'Text visit'
+
 
               return (
                 <div key={appt.id}
@@ -407,8 +473,27 @@ export function Today() {
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-[#AFA9EC]/40 pt-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex gap-2 flex-wrap mb-3">
+                        {appt.status !== 'done' && appt.status !== 'cancelled' ? (
+                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                            <CheckCircle2 size={13} /> Mark complete
+                          </Button>
+                        ) : appt.status === 'done' ? (
+                          <Badge variant="teal">Visit completed</Badge>
+                        ) : null}
+                        <Button variant="secondary" size="sm" onClick={() => { setNoteTarget(appt); setNoteText((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : ''); setNoteSent(false) }}>
+                          Send note
+                        </Button>
+                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                          <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
+                            <X size={13} /> Cancel visit
+                          </Button>
+                        )}
+                        {appt.status === 'cancelled' && <Badge variant="amber">Cancelled</Badge>}
+                      </div>
                       {(() => {
                         const NOTE_LABELS: Record<string, string> = {
+                          PATIENT: 'Patient name', DOB: 'Date of birth',
                           CC: 'Chief complaint', NOTES: 'Additional notes',
                           ALLERGY: 'Allergies', MEDS: 'Medications', PMH: 'Medical history',
                           VAX: 'Vaccination status', PCP: 'Primary care physician',
@@ -445,8 +530,16 @@ export function Today() {
                                 {cd.allergies && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Allergies </span>{cd.allergies}</div>}
                               </div>
                             )}
+                            {/* Fallback: show patient info from notes when Charm hasn't synced */}
+                            {cd?.notFound && noteMap.PATIENT && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
+                                <div className="text-[13px]"><span className="text-[#999] text-[11px]">Name </span><strong>{noteMap.PATIENT}</strong></div>
+                                {noteMap.DOB && <div className="text-[13px]"><span className="text-[#999] text-[11px]">DOB </span>{noteMap.DOB}</div>}
+                              </div>
+                            )}
                             {!cd && (
-                              <div className="p-2 text-[11px] text-[#999] italic">Loading patient name from Charm…</div>
+                              <div className="p-2 text-[11px] text-[#999] italic">Loading patient info…</div>
                             )}
 
                             {noteMap.PARENTPHONE && (
@@ -513,33 +606,6 @@ export function Today() {
                             </div>
                           ) : null
                         })()}
-                      </div>
-                      <div className="flex gap-2 flex-wrap">
-                        {appt.status !== 'done' && appt.status !== 'cancelled' ? (
-                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
-                            <CheckCircle2 size={13} /> Mark complete
-                          </Button>
-                        ) : appt.status === 'done' ? (
-                          <Badge variant="teal">Visit completed</Badge>
-                        ) : null}
-                        {isVirtual && appt.status !== 'cancelled' && (
-                          <Button variant="secondary" size="sm">
-                            <Video size={13} /> Join video call
-                          </Button>
-                        )}
-                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
-                          <Button variant="secondary" size="sm">
-                            <FileText size={13} /> Add note
-                          </Button>
-                        )}
-                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
-                          <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
-                            <X size={13} /> Cancel visit
-                          </Button>
-                        )}
-                        {appt.status === 'cancelled' && (
-                          <Badge variant="amber">Cancelled</Badge>
-                        )}
                       </div>
                     </div>
                   )}
@@ -693,6 +759,35 @@ export function Today() {
         </div>
       )}
 
+      {/* ── Send note modal ── */}
+      {noteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !noteSending && setNoteTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h2 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">Send a note to parent</h2>
+            <p className="text-[12px] text-[#999] mb-4">{noteTarget.visit_type} · {format(new Date(noteTarget.scheduled_date + 'T12:00:00'), 'MMM d')} at {to12h(noteTarget.scheduled_time)}</p>
+            {noteSent ? (
+              <div className="text-center py-4 text-[#1D9E75] font-medium">Note sent!</div>
+            ) : (
+              <>
+                <textarea
+                  className="w-full border border-[#E8E8E4] rounded-lg p-3 text-[13px] text-[#1A1A2E] placeholder:text-[#bbb] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/30 focus:border-[#1D9E75]"
+                  rows={5}
+                  placeholder="Type your message to the parent here..."
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex gap-2 mt-3">
+                  <Button variant="secondary" className="flex-1" onClick={() => setNoteTarget(null)} disabled={noteSending}>Cancel</Button>
+                  <Button variant="primary" className="flex-1" loading={noteSending} onClick={submitNote} disabled={!noteText.trim()}>Send note</Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Cancel appointment modal ── */}
       {cancelTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -751,6 +846,53 @@ export function Today() {
               )}
 
               <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Patient information</div>
+
+              {/* Patient search */}
+              <div className="relative">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Search existing patient</label>
+                {selectedPatient ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] rounded-lg bg-[#F0FAF6]">
+                    <div>
+                      <div className="text-[13px] font-medium text-[#1A1A2E]">
+                        {[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}
+                      </div>
+                      {selectedPatient.family_display_name && (
+                        <div className="text-[11px] text-[#999]">{selectedPatient.family_display_name}</div>
+                      )}
+                    </div>
+                    <button onClick={() => { setSelectedPatient(null); setAddForm(f => ({ ...f, patientName: '', dob: '', gender: '', phone: '', email: '', address: '', zip: '', zone: '' })) }}
+                      className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-2">× Clear</button>
+                  </div>
+                ) : (
+                  <>
+                    <input type="text" placeholder="Type a child's name…" value={patientSearch}
+                      onChange={e => onPatientSearchChange(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                    {patientSearching && (
+                      <div className="mt-1 px-3 py-2 text-[12px] text-[#999]">Searching…</div>
+                    )}
+                    {!patientSearching && patientSearch.trim() && patientResults.length === 0 && (
+                      <div className="mt-1 px-3 py-2 text-[12px] text-[#999]">No patients found</div>
+                    )}
+                    {!patientSearching && patientResults.length > 0 && (
+                      <div className="mt-1 border border-[#E8E8E4] rounded-xl overflow-hidden">
+                        {patientResults.map(child => (
+                          <button key={child.id} onClick={() => selectPatient(child)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
+                            <div className="text-[13px] font-medium text-[#1A1A2E]">
+                              {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
+                            </div>
+                            <div className="text-[11px] text-[#999]">
+                              {child.family_display_name || child.family_email || ''}
+                              {child.date_of_birth ? ` · DOB ${String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0]}` : ''}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
 
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name</label>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarPlus, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
-import { getWaitlistEntries, getSlotOffers, updateSlotOffer, getBookingRequests, updateBookingRequest, invokeNotifications } from '../../lib/api'
+import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { VISIT_TYPE_INFO, ZIP_TO_ZONE } from '../../lib/zipData'
@@ -31,17 +31,17 @@ export function FamilyDashboard() {
 
   async function fetchOffers() {
     if (!family) return
-    const waitlistEntries = await getWaitlistEntries({ family_id: family.id, status: 'waiting' }).catch(() => [])
+    const waitlistEntries = await familyGetWaitlistEntries({ family_id: family.id, status: 'waiting' }).catch(() => [])
     const ids = waitlistEntries.map((w: { id: string }) => w.id)
     if (!ids.length) { setOffers([]); return }
 
-    const data = await getSlotOffers({ waitlist_entry_ids: ids.join(',') }).catch(() => [])
+    const data = await familyGetSlotOffers({ waitlist_entry_ids: ids.join(',') }).catch(() => [])
     setOffers((data ?? []) as SlotOffer[])
   }
 
   async function fetchBookings() {
     if (!family) return
-    const data = await getBookingRequests({ family_id: family.id }).catch(() => [])
+    const data = await familyGetBookingRequests({ family_id: family.id }).catch(() => [])
     setBookings((data ?? []) as BookingRequest[])
     setLoading(false)
   }
@@ -50,13 +50,13 @@ export function FamilyDashboard() {
 
   async function acceptOffer(offer: SlotOffer) {
     setAcceptingOffer(offer.id)
-    await invokeNotifications({ type: 'slot_offer_accepted', offerId: offer.id }).catch(() => {})
+    await familyInvokeNotifications({ type: 'slot_offer_accepted', offerId: offer.id }).catch(() => {})
     setAcceptingOffer(null)
     await Promise.all([fetchOffers(), fetchBookings()])
   }
 
   async function declineOffer(offerId: string) {
-    await updateSlotOffer(offerId, { status: 'declined' })
+    await familyUpdateSlotOffer(offerId, { status: 'declined' })
     fetchOffers()
   }
 
@@ -64,7 +64,7 @@ export function FamilyDashboard() {
     if (!cancelTarget) return
     setCancelling(true)
 
-    await updateBookingRequest(cancelTarget.id, { status: 'cancelled' })
+    await familyUpdateBookingRequest(cancelTarget.id, { status: 'cancelled' })
 
     // Notify waitlist families in the same zone that this slot opened up
     if (cancelTarget.confirmed_provider_id && cancelTarget.zone) {
@@ -72,7 +72,7 @@ export function FamilyDashboard() {
         .filter(([, z]) => z === cancelTarget.zone)
         .map(([zip]) => zip)
       if (matchingZips.length > 0) {
-        invokeNotifications({
+        familyInvokeNotifications({
           type: 'slot_opened',
           providerId: cancelTarget.confirmed_provider_id,
           zone: cancelTarget.zone,
@@ -86,7 +86,7 @@ export function FamilyDashboard() {
 
     // Notify provider + admins of the cancellation
     if (cancelTarget.confirmed_provider_id) {
-      invokeNotifications({
+      familyInvokeNotifications({
         type: 'booking_cancelled',
         providerId: cancelTarget.confirmed_provider_id,
         visitType: cancelTarget.visit_type,

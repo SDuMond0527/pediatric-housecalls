@@ -23,6 +23,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null; needsNewPassword: boolean }>
   confirmNewPassword: (newPassword: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  refreshProvider: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -111,8 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await cognitoSignOut()
   }
 
+  async function refreshProvider() {
+    const p = await fetchProvider().catch(() => null)
+    setProvider(p)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, provider, loading, signIn, confirmNewPassword, signOut }}>
+    <AuthContext.Provider value={{ user, provider, loading, signIn, confirmNewPassword, signOut, refreshProvider }}>
       {children}
     </AuthContext.Provider>
   )

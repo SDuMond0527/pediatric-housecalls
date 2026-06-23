@@ -19,11 +19,17 @@ export interface Child {
   family_id: string
   display_label: string
   charm_patient_id: string | null
+  first_name: string | null
+  last_name: string | null
+  date_of_birth: string | null
   insurance_provider: string | null
   insurance_member_id: string | null
   insurance_group_number: string | null
   insurance_card_front_url: string | null
   insurance_card_back_url: string | null
+  allergies: string | null
+  current_medications: string | null
+  medical_history: string | null
   preferred_pharmacy: string | null
   pcp: string | null
   created_at: string

@@ -27,7 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sql = neon(dbUrl)
     const rows = await sql`SELECT * FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
     if (rows.length === 0) return res.status(404).json({ error: 'Provider not found', sub })
-    res.json(rows[0])
+    const row = rows[0]
+    row.zones = row.zones ?? []
+    row.states = row.states ?? []
+    res.json(row)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
     res.status(500).json({ error: msg })

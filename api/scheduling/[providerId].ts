@@ -1,18 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { verifyToken } from '../_lib/verifyToken'
-import sql from '../_lib/db'
+import { neon } from '@neondatabase/serverless'
 
-// Returns all data needed to calculate available slots for a provider on a date:
-// availability (day-of-week record), override (date-specific), visitTypeAvail, bookedTimes
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    await verifyToken(req.headers.authorization)
-  } catch {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
+  const sql = neon(process.env.DATABASE_URL!)
   const { providerId } = req.query as { providerId: string }
   const { date, visit_type } = req.query as Record<string, string>
 

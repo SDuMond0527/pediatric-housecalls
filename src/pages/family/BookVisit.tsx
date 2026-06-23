@@ -6,16 +6,17 @@ import {
   getProvidersByRole,
   getProvidersByNamesWithSecureText,
   getSchedulingData,
-  createAppointment,
-  createBookingRequest,
-  createWaitlistEntry,
+  familyCreateAppointment,
+  familyCreateBookingRequest,
+  familyCreateWaitlistEntry,
   createChild,
   updateMyFamily,
   updateChild,
-  invokeNotifications,
+  familyInvokeNotifications,
   invokeCharmAppointment,
 } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
+import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { VISIT_TYPE_INFO, ZIP_TO_STATE, ZIP_TO_ZONE, TIME_SLOTS, WAITLIST_ZONES } from '../../lib/zipData'
@@ -260,15 +261,15 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
   return {
     childId, displayLabel, hasProfile,
     cardOnFile: !!(child?.insurance_card_front_url && child?.insurance_card_back_url),
-    firstName: '', lastName: '', dateOfBirth: '', gender: '',
+    firstName: child?.first_name || '', lastName: child?.last_name || '', dateOfBirth: child?.date_of_birth || '', gender: '',
     insuranceProvider: child?.insurance_provider || '',
     insuranceMemberId: child?.insurance_member_id || '',
     insuranceGroupNumber: child?.insurance_group_number || '',
     insuranceSubscriberName: '', insuranceSubscriberDob: '', insuranceSubscriberGender: '',
     insuranceCardFrontUrl: child?.insurance_card_front_url || '',
     insuranceCardBackUrl: child?.insurance_card_back_url || '',
-    allergies: 'NKDA', currentMedications: 'None',
-    medicalHistory: '', preferredPharmacy: child?.preferred_pharmacy || '',
+    allergies: child?.allergies || 'NKDA', currentMedications: child?.current_medications || 'None',
+    medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', vaccinationStatus: 'fully_vaccinated',
     phiSharingConsent: false,
     chiefComplaint: '', additionalInfo: '',
@@ -653,7 +654,7 @@ export function BookVisit() {
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
 
-    const entry = await createWaitlistEntry({
+    const entry = await familyCreateWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
@@ -665,7 +666,7 @@ export function BookVisit() {
 
     // Notify all providers in the same state
     if (entry?.id) {
-      invokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(() => {})
+      familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(() => {})
     }
 
     setWaitlistSubmitting(false)
@@ -726,7 +727,7 @@ export function BookVisit() {
       ].filter(Boolean).join('|')
 
       if (melissaUid) {
-        await createAppointment({
+        await familyCreateAppointment({
           provider_id: melissaUid,
           visit_type: booking.visitType,
           zone: 'CPR Class',
@@ -738,7 +739,7 @@ export function BookVisit() {
         })
       }
 
-      const newBooking = await createBookingRequest({
+      const newBooking = await familyCreateBookingRequest({
         family_id: family!.id,
         child_ids: [],
         visit_type: booking.visitType,
@@ -754,7 +755,7 @@ export function BookVisit() {
       }).catch(() => null)
 
       if (newBooking?.id) {
-        invokeNotifications({ type: 'cpr_booking', bookingRequestId: newBooking.id }).catch(() => {})
+        familyInvokeNotifications({ type: 'cpr_booking', bookingRequestId: newBooking.id }).catch(() => {})
       }
 
       if (needsAgreements) {
@@ -832,7 +833,7 @@ export function BookVisit() {
           `Available: ${iv.availableTimes}`,
         ].filter(Boolean).join(' | '))
       }
-      const apptRecord = await createAppointment({
+      const apptRecord = await familyCreateAppointment({
         provider_id: providerUid,
         visit_type: booking.visitType,
         zone: booking.zone,
@@ -845,7 +846,7 @@ export function BookVisit() {
       appointmentDbId = apptRecord?.id || null
     }
 
-    const newBooking = await createBookingRequest({
+    const newBooking = await familyCreateBookingRequest({
       family_id: family!.id,
       child_ids: booking.selectedChildIds,
       visit_type: booking.visitType,
@@ -865,16 +866,43 @@ export function BookVisit() {
       invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
 
       // Send confirmation email to parent + notification to provider (non-blocking)
-      invokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
+      familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
     }
 
-    // Save PHI consent for first-time patients
-    for (const childId of booking.selectedChildIds) {
-      const intake = booking.childIntakes[childId]
-      if (!intake?.hasProfile) {
-        updateChild(childId, { phi_sharing_consent: intake.phiSharingConsent }).catch(() => {})
-      }
-    }
+    // Save profile data so it's pre-filled on future bookings
+    await Promise.allSettled([
+      ...booking.selectedChildIds.map(childId => {
+        const intake = booking.childIntakes[childId]
+        if (!intake?.hasProfile) {
+          return updateChild(childId, {
+            phi_sharing_consent: intake.phiSharingConsent,
+            first_name: intake.firstName || null,
+            last_name: intake.lastName || null,
+            date_of_birth: intake.dateOfBirth || null,
+            gender: intake.gender || null,
+            insurance_provider: intake.insuranceProvider || null,
+            insurance_member_id: intake.insuranceMemberId || null,
+            insurance_group_number: intake.insuranceGroupNumber || null,
+            insurance_subscriber_name: intake.insuranceSubscriberName || null,
+            insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
+            insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
+            allergies: intake.allergies || null,
+            current_medications: intake.currentMedications || null,
+            medical_history: intake.medicalHistory || null,
+            preferred_pharmacy: intake.preferredPharmacy || null,
+            pcp: intake.pcp || null,
+          })
+        }
+        return Promise.resolve()
+      }),
+      ...Object.entries(booking.childIntakes)
+        .filter(([, intake]) => intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl)
+        .map(([childId, intake]) => updateChild(childId, {
+          insurance_card_front_url: intake.insuranceCardFrontUrl,
+          insurance_card_back_url: intake.insuranceCardBackUrl,
+        })),
+    ])
+    await refreshFamily()
 
     if (referralSource.trim() && !(family as any)?.referral_source) {
       updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
@@ -884,16 +912,6 @@ export function BookVisit() {
     }
     if (needsPaymentPolicy) {
       updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
-    }
-
-    // Save insurance card URLs to child records so they're on file for future bookings
-    for (const [childId, intake] of Object.entries(booking.childIntakes)) {
-      if (intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl) {
-        updateChild(childId, {
-          insurance_card_front_url: intake.insuranceCardFrontUrl,
-          insurance_card_back_url: intake.insuranceCardBackUrl,
-        }).catch(() => {})
-      }
     }
 
     setSubmitting(false)
@@ -1007,7 +1025,7 @@ export function BookVisit() {
             )}
             {children.map(c => {
               const selected = booking.selectedChildIds.includes(c.id)
-              const hasProfile = !!c.charm_patient_id
+              const hasProfile = !!(c.charm_patient_id || c.first_name)
               return (
                 <button key={c.id} onClick={() => toggleChild(c.id, c.display_label, hasProfile)}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${selected ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
@@ -1888,15 +1906,31 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState<'front' | 'back' | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
-  async function uploadCard(_file: File, side: 'front' | 'back') {
+  async function uploadCard(file: File, side: 'front' | 'back') {
     setUploading(side)
-    // TODO: implement R2 file upload
-    const publicUrl = ''
-    if (publicUrl) {
-      onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', publicUrl)
+    setUploadError(null)
+    try {
+      const token = await getFamilyAccessToken()
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${intake.childId || 'unknown'}/${side}-${Date.now()}.${ext}`
+      const form = new FormData()
+      form.append('file', file)
+      form.append('path', path)
+      const res = await fetch('/api/upload-insurance-card', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Upload failed')
+      onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', json.publicUrl)
+    } catch (e: any) {
+      setUploadError(e?.message || 'Upload failed')
+    } finally {
+      setUploading(null)
     }
-    setUploading(null)
   }
 
   return (
@@ -1948,50 +1982,6 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
                   <option value="Female">Female</option>
                 </select>
               </div>
-            </div>
-
-            {/* Insurance card upload */}
-            <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">
-              Insurance card photos — front & back{' '}
-              {intake.cardOnFile
-                ? <span className="normal-case font-normal text-[#1D9E75]">on file — tap to update</span>
-                : intake.hasProfile
-                  ? <span className="normal-case font-normal text-[#999]">optional</span>
-                  : <span className="text-[#ff3b30]">*</span>}
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {(['front', 'back'] as const).map(side => {
-                const url = side === 'front' ? intake.insuranceCardFrontUrl : intake.insuranceCardBackUrl
-                const ref = side === 'front' ? frontRef : backRef
-                return (
-                  <div key={side}>
-                    <input ref={ref} type="file" accept="image/*" className="hidden"
-                      onChange={e => { if (e.target.files?.[0]) uploadCard(e.target.files[0], side) }} />
-                    {url ? (
-                      <div className="relative rounded-lg overflow-hidden border border-[#E8E8E4] aspect-[1.6/1]">
-                        <img src={url} alt={`Insurance card ${side}`} className="w-full h-full object-cover" />
-                        <button onClick={() => onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', '')}
-                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
-                          <X size={12} />
-                        </button>
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] text-center py-1 capitalize">{side}</div>
-                      </div>
-                    ) : (
-                      <button onClick={() => ref.current?.click()}
-                        className="w-full aspect-[1.6/1] border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#999] hover:text-[#7F77DD]">
-                        {uploading === side ? (
-                          <div className="text-[12px]">Uploading...</div>
-                        ) : (
-                          <>
-                            <Upload size={16} />
-                            <div className="text-[12px] font-medium capitalize">{side} of card</div>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
             </div>
           </div>
 
@@ -2109,6 +2099,9 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
                 )
               })}
             </div>
+            {uploadError && (
+              <p className="text-[12px] text-[#791F1F] mt-2">{uploadError}</p>
+            )}
           </div>
 
           {/* PHI sharing consent — first booking only */}
