@@ -169,14 +169,11 @@ export function Today() {
     if (!doneTarget) return
     setDoneSubmitting(true)
     const instructions = doneInstructions.trim() || null
-    await updateAppointment(doneTarget.id, { status: 'done' })
-    if (instructions) {
-      await updateAppointment(doneTarget.id, { after_visit_instructions: instructions }).catch(() => {})
-    }
+    await updateAppointment(doneTarget.id, { status: 'done', after_visit_instructions: instructions })
     if (instructions && doneTarget.charm_appointment_id) {
       void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions: instructions || null })
+    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions })
     setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')

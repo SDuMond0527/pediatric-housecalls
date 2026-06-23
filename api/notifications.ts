@@ -936,6 +936,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { appointmentId } = body
       const [appt] = await sql`SELECT * FROM appointments WHERE id = ${appointmentId}::uuid`
       if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
+      console.log('[post_visit_email] body.instructions:', JSON.stringify(body.instructions), '| db:', JSON.stringify(appt.after_visit_instructions))
       const instructions: string | null = body.instructions || appt.after_visit_instructions || null
 
       const [prov] = await sql`SELECT name FROM providers WHERE id = ${appt.provider_id}::uuid`
