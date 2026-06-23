@@ -472,7 +472,7 @@ export function Today() {
                     <div className="px-4 pb-4 border-t border-[#AFA9EC]/40 pt-3" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-2 flex-wrap mb-3">
                         {appt.status !== 'done' && appt.status !== 'cancelled' ? (
-                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : '') }}>
                             <CheckCircle2 size={13} /> Mark complete
                           </Button>
                         ) : appt.status === 'done' ? (
