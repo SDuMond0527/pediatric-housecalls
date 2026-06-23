@@ -936,8 +936,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { appointmentId } = body
       const [appt] = await sql`SELECT * FROM appointments WHERE id = ${appointmentId}::uuid`
       if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
-      console.log('[post_visit_email] body.instructions:', JSON.stringify(body.instructions), '| db:', JSON.stringify(appt.after_visit_instructions))
-      const instructions: string | null = body.instructions || appt.after_visit_instructions || null
+      let instructions: string | null = body.instructions || appt.after_visit_instructions || null
+      if (!instructions) {
+        // Race condition guard: a concurrent PATCH may still be writing instructions — wait and retry
+        await new Promise(r => setTimeout(r, 800))
+        const [refreshed] = await sql`SELECT after_visit_instructions FROM appointments WHERE id = ${appointmentId}::uuid`
+        instructions = refreshed?.after_visit_instructions || null
+      }
+      console.log('[post_visit_email] instructions:', instructions ? instructions.substring(0, 60) : 'NULL')
 
       const [prov] = await sql`SELECT name FROM providers WHERE id = ${appt.provider_id}::uuid`
 
