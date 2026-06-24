@@ -300,6 +300,7 @@ export function BookVisit() {
   const STEP_LOCATION = isIvFluids ? 3 : 2
   const STEP_CONFIRM  = isIvFluids ? 4 : 3
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [referralSource, setReferralSource] = useState('')
   const [agreementsAccepted, setAgreementsAccepted] = useState(false)
@@ -861,13 +862,17 @@ export function BookVisit() {
       ...(convFee ? { convenience_fee: convFee.fee } : {}),
     }).catch(() => null)
 
-    if (newBooking?.id) {
-      // Sync to Charm Health (non-blocking)
-      invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
-
-      // Send confirmation email to parent + notification to provider (non-blocking)
-      familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
+    if (!newBooking?.id) {
+      setSubmitError('Something went wrong submitting your booking. Please try again or call us directly.')
+      setSubmitting(false)
+      return
     }
+
+    // Sync to Charm Health (non-blocking)
+    invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
+
+    // Send confirmation email to parent + notification to provider (non-blocking)
+    familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
 
     // Save profile data so it's pre-filled on future bookings
     await Promise.allSettled([
@@ -1741,12 +1746,15 @@ export function BookVisit() {
             </div>
           )}
 
+          {submitError && (
+            <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F] mb-3">{submitError}</div>
+          )}
           <NavButtons
             onBack={() => setStep(STEP_LOCATION)}
             nextLabel="Confirm appointment"
             loading={submitting}
             nextDisabled={(needsAgreements && !agreementsAccepted) || (needsPaymentPolicy && !paymentPolicyAccepted)}
-            onNext={submit}
+            onNext={() => { setSubmitError(null); submit() }}
           />
         </Step>
       )}

@@ -225,6 +225,9 @@ export const invokeCharmAppointment = (body: Record<string, unknown>) =>
 export const invokeCharmDetails = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/charm/details', { method: 'POST', body: JSON.stringify(body) })
 
+export const familyChangePassword = (currentPassword: string, newPassword: string) =>
+  familyApiFetch<void>('/api/families/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) })
+
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>
   apiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })

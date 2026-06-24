@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
-import { updateMyFamily, createChild, updateChild, deleteChild } from '../../lib/api'
+import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -69,8 +69,9 @@ export function FamilyProfile() {
   const backRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // Password
-  const [pw, setPw] = useState({ next: '', confirm: '' })
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
   const [pwSaved, setPwSaved] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
   const [pwError, setPwError] = useState('')
 
   async function saveProfile() {
@@ -172,12 +173,20 @@ export function FamilyProfile() {
 
   async function changePassword() {
     setPwError('')
-    if (pw.next.length < 8) { setPwError('Password must be at least 8 characters.'); return }
+    if (!pw.current) { setPwError('Current password is required.'); return }
+    if (pw.next.length < 8) { setPwError('New password must be at least 8 characters.'); return }
     if (pw.next !== pw.confirm) { setPwError("Passwords don't match."); return }
-    // TODO: implement password change via API
-    setPwSaved(true)
-    setPw({ next: '', confirm: '' })
-    setTimeout(() => setPwSaved(false), 2500)
+    setPwSaving(true)
+    try {
+      await familyChangePassword(pw.current, pw.next)
+      setPwSaved(true)
+      setPw({ current: '', next: '', confirm: '' })
+      setTimeout(() => setPwSaved(false), 2500)
+    } catch (e: any) {
+      setPwError(e.message ?? 'Password change failed')
+    } finally {
+      setPwSaving(false)
+    }
   }
 
   return (
@@ -415,13 +424,15 @@ export function FamilyProfile() {
           <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Change password</h2>
         </div>
         <div className="space-y-3 max-w-sm">
+          <Input label="Current password" type="password" placeholder="••••••••"
+            value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} />
           <Input label="New password" type="password" placeholder="8+ characters"
             value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} />
           <Input label="Confirm new password" type="password" placeholder="••••••••"
             value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} />
           {pwError && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{pwError}</div>}
           {pwSaved && <div className="flex items-center gap-2 text-[13px] text-[#085041]"><CheckCircle2 size={14} /> Password updated!</div>}
-          <Button size="sm" onClick={changePassword}>Update password</Button>
+          <Button size="sm" loading={pwSaving} onClick={changePassword}>Update password</Button>
         </div>
       </div>
     </div>
