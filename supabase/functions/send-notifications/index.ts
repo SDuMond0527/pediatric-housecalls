@@ -99,7 +99,7 @@ function parentConfirmationEmail(data: {
       <span style="font-size:12px;color:#5550A0;">Or copy this link: https://doxy.me/v2/check-in/pediatrichousecalls/</span>
     </div>` : isVirtual ? `
     <div style="background:#EEEDFE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#3C3489;">
-      <strong>Virtual visit:</strong> Your provider will reach out to you at your scheduled time.
+      <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time.
     </div>` : `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
       <strong>In-home visit:</strong> Your provider will arrive within 15 minutes of your scheduled time. Please be available at your address.

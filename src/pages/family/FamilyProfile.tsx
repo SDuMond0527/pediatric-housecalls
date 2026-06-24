@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
+import { upload } from '@vercel/blob/client'
 import { updateMyFamily, createChild, updateChild, deleteChild } from '../../lib/api'
-import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
+import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import type { Child } from '../../types/family'
@@ -101,13 +102,27 @@ export function FamilyProfile() {
     }))
   }
 
-  async function uploadInsuranceCard(childId: string, _file: File, side: 'front' | 'back') {
+  async function uploadInsuranceCard(childId: string, file: File, side: 'front' | 'back') {
     setUploadingChild({ id: childId, side })
     setChildSaveError(null)
-    // TODO: implement R2 file upload
-    const publicUrl = ''
-    setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', publicUrl)
-    setUploadingChild(null)
+    try {
+      const token = await getFamilyAccessToken()
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const blob = await upload(
+        `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`,
+        file,
+        {
+          access: 'public',
+          handleUploadUrl: '/api/upload-insurance-card',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+      setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', blob.url)
+    } catch (e: any) {
+      setChildSaveError(e.message ?? 'Upload failed')
+    } finally {
+      setUploadingChild(null)
+    }
   }
 
   async function saveChild(child: Child) {
