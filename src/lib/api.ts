@@ -177,7 +177,7 @@ export const getReports = (params: Record<string, string>) =>
 
 // ── Scheduling (slot calculation) ────────────────────────────
 export const getSchedulingData = (providerId: string, params: Record<string, string>) =>
-  publicFetch<{ availability: any; override: any; visitTypeAvail: any; bookedTimes: string[] }>(
+  publicFetch<{ availability: any; override: any; visitTypeAvail: any; bookedSlots: { time: string; duration: number }[] }>(
     `/api/scheduling/${providerId}?${new URLSearchParams(params)}`
   )
 

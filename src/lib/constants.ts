@@ -17,7 +17,7 @@ export const VISIT_DURATIONS: Record<string, number> = {
   'Sports physical':                60,
   'CMA + telemedicine':             60,
   'In-home IV fluids':              90,
-  'Video telemedicine':             15,
+  'Video telemedicine':             30,
   'Text visit':                     15,
   'In-home CPR class (Heartsaver)': 180,
   'In-home CPR class (BLS)':        180,

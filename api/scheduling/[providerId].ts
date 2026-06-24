@@ -18,13 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     visit_type
       ? sql`SELECT is_active, start_time, end_time FROM visit_type_availability WHERE provider_id = ${providerId}::uuid AND visit_type = ${visit_type} LIMIT 1`
       : Promise.resolve([]),
-    sql`SELECT scheduled_time FROM appointments WHERE provider_id = ${providerId}::uuid AND scheduled_date = ${date}::date AND status != 'cancelled'`,
+    sql`SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes FROM appointments WHERE provider_id = ${providerId}::uuid AND scheduled_date = ${date}::date AND status != 'cancelled'`,
   ])
 
   res.json({
     availability: availRows[0] ?? null,
     override: overrideRows[0] ?? null,
     visitTypeAvail: visitTypeRows[0] ?? null,
-    bookedTimes: (bookedRows as Array<{ scheduled_time: string }>).map(r => r.scheduled_time),
+    bookedSlots: (bookedRows as Array<{ scheduled_time: string; duration_minutes: number }>).map(r => ({ time: r.scheduled_time, duration: r.duration_minutes })),
   })
 }

@@ -20,7 +20,7 @@ import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { VISIT_TYPE_INFO, ZIP_TO_STATE, ZIP_TO_ZONE, TIME_SLOTS, WAITLIST_ZONES } from '../../lib/zipData'
-import { LEAD_MINUTES } from '../../lib/constants'
+import { LEAD_MINUTES, VISIT_DURATIONS } from '../../lib/constants'
 import { format } from 'date-fns'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -329,7 +329,7 @@ export function BookVisit() {
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
   const [secureTextProviders, setSecureTextProviders] = useState<{name: string; role: string; secure_text_number: string}[]>([])
   const [addingChild, setAddingChild] = useState(false)
-  const [bookedTimes, setBookedTimes] = useState<string[]>([])
+  const [bookedSlots, setBookedSlots] = useState<{ time: string; duration: number }[]>([])
   const [allSlotsBooked, setAllSlotsBooked] = useState(false)
   const [slotsChecking, setSlotsChecking] = useState(false)
   const [visitTypeWindow, setVisitTypeWindow] = useState<{ start: string; end: string } | null>(null)
@@ -452,15 +452,15 @@ export function BookVisit() {
   }
 
   async function loadBookedTimes(providerName: string, date: string) {
-    if (!providerName || !date) { setBookedTimes([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
+    if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
     setSlotsChecking(true)
     const provRow = await getProviderByName(providerName)
-    if (!provRow) { setBookedTimes([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
+    if (!provRow) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
 
     // Check day-of-week / override availability first
     const dayWindow = await getProviderDayWindow(provRow.id, date)
     if (!dayWindow) {
-      setBookedTimes([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null)
+      setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null)
       return
     }
 
@@ -473,8 +473,8 @@ export function BookVisit() {
       : dayWindow
     setVisitTypeWindow(window)
 
-    const bookedTimesList: string[] = sched?.bookedTimes ?? []
-    setBookedTimes(bookedTimesList)
+    const bookedSlotsList = sched?.bookedSlots ?? []
+    setBookedSlots(bookedSlotsList)
 
     const leadTimeSlots = getAvailableSlots(booking.visitType, date)
     const freeSlots = leadTimeSlots.filter(slot => {
@@ -486,10 +486,10 @@ export function BookVisit() {
       const [wsh, wsm] = window.start.split(':').map(Number)
       const [weh, wem] = window.end.split(':').map(Number)
       if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
-      return !bookedTimesList.some(bt => {
+      return !bookedSlotsList.some(({ time: bt, duration }) => {
         const [bh, bm] = bt.split(':').map(Number)
         const bookedMin = bh * 60 + bm
-        return slotMin >= bookedMin && slotMin < bookedMin + 60
+        return slotMin >= bookedMin && slotMin < bookedMin + duration
       })
     })
     setAllSlotsBooked(freeSlots.length === 0)
@@ -548,16 +548,16 @@ export function BookVisit() {
       const sched = await getSchedulingData(provRow.id, { date, visit_type: booking.visitType })
       const vtaRow = sched?.visitTypeAvail
       const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
-      const bookedList: string[] = sched?.bookedTimes ?? []
+      const bookedList = sched?.bookedSlots ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
         const [weh, wem] = window.end.split(':').map(Number)
         if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
-        return !bookedList.some(bt => {
+        return !bookedList.some(({ time: bt, duration }) => {
           const [bh, bm] = bt.split(':').map(Number)
           const bm2 = bh * 60 + bm
-          return sm >= bm2 && sm < bm2 + 60
+          return sm >= bm2 && sm < bm2 + duration
         })
       })
       return free.length > 0 ? { name: p.name, firstSlot: free[0] } : null
@@ -607,16 +607,16 @@ export function BookVisit() {
       const sched = await getSchedulingData(provRow.id, { date, visit_type: 'CMA + telemedicine' })
       const vtaRow = sched?.visitTypeAvail
       const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
-      const bookedList: string[] = sched?.bookedTimes ?? []
+      const bookedList = sched?.bookedSlots ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
         const [weh, wem] = window.end.split(':').map(Number)
         if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
-        return !bookedList.some(bt => {
+        return !bookedList.some(({ time: bt, duration }) => {
           const [bh, bm] = bt.split(':').map(Number)
           const bm2 = bh * 60 + bm
-          return sm >= bm2 && sm < bm2 + 60
+          return sm >= bm2 && sm < bm2 + duration
         })
       })
       return free.length > 0 ? { name, firstSlot: free[0] } : null
@@ -841,7 +841,7 @@ export function BookVisit() {
         scheduled_date: booking.date,
         status: 'upcoming',
         notes: noteParts.join('|'),
-        duration_minutes: 60 + (booking.selectedChildIds.length - 1) * 15,
+        duration_minutes: (VISIT_DURATIONS[booking.visitType] ?? 60) + (['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids'].includes(booking.visitType) ? (booking.selectedChildIds.length - 1) * 15 : 0),
       }).catch(() => null)
       appointmentDbId = apptRecord?.id || null
     }
@@ -1355,10 +1355,10 @@ export function BookVisit() {
                 if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
               }
               // Check if any booked appointment overlaps this slot
-              return !bookedTimes.some(bt => {
+              return !bookedSlots.some(({ time: bt, duration }) => {
                 const [bh, bm] = bt.split(':').map(Number)
                 const bookedMin = bh * 60 + bm
-                return slotMin >= bookedMin && slotMin < bookedMin + 60
+                return slotMin >= bookedMin && slotMin < bookedMin + duration
               })
             })
             return (
