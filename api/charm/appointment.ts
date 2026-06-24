@@ -2,6 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+const VISIT_DURATIONS: Record<string, number> = {
+  'In-home sick visit': 60, 'Sports physical': 60, 'CMA + telemedicine': 60,
+  'In-home IV fluids': 90, 'Video telemedicine': 30, 'Text visit': 15,
+  'In-home CPR class (Heartsaver)': 180, 'In-home CPR class (BLS)': 180,
+}
+
 async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
@@ -22,27 +28,33 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
 
 // ── Charm auth (Zoho refresh token flow) ─────────────────────────────────────
 
-const CHARM_TOKEN_URL   = 'https://accounts.charmtracker.com/oauth/v2/token'
-const CHARM_BASE_URL    = process.env.CHARM_BASE_URL     || 'https://ehr.charmtracker.com/api/ehr/v1'
-const CHARM_CLIENT_ID   = process.env.CHARM_CLIENT_ID    || ''
+const CHARM_BASE_URL      = process.env.CHARM_BASE_URL      || 'https://ehr.charmtracker.com/api/ehr/v1'
+const CHARM_CLIENT_ID     = process.env.CHARM_CLIENT_ID     || ''
 const CHARM_CLIENT_SECRET = process.env.CHARM_CLIENT_SECRET || ''
 const CHARM_REFRESH_TOKEN = process.env.CHARM_REFRESH_TOKEN || ''
-const CHARM_API_KEY     = process.env.CHARM_API_KEY      || ''
+const CHARM_API_KEY       = process.env.CHARM_API_KEY       || ''
 
 async function getCharmToken(): Promise<string> {
-  const res = await fetch(CHARM_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type:    'refresh_token',
-      refresh_token: CHARM_REFRESH_TOKEN,
-      client_id:     CHARM_CLIENT_ID,
-      client_secret: CHARM_CLIENT_SECRET,
-    }),
+  const tokenUrls = [
+    'https://accounts.charmtracker.com/oauth/v2/token',
+    'https://accounts106.charmtracker.com/oauth/v2/token',
+  ]
+  const params = new URLSearchParams({
+    grant_type:    'refresh_token',
+    refresh_token: CHARM_REFRESH_TOKEN,
+    client_id:     CHARM_CLIENT_ID,
+    client_secret: CHARM_CLIENT_SECRET,
   })
-  const data = await res.json()
-  if (!data.access_token) throw new Error(`Charm auth failed: ${JSON.stringify(data)}`)
-  return data.access_token
+  let lastError = ''
+  for (const url of tokenUrls) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params })
+      const data = await res.json()
+      if (data.access_token) return data.access_token
+      lastError = JSON.stringify(data)
+    } catch (e: any) { lastError = e.message }
+  }
+  throw new Error(`Charm auth failed: ${lastError}`)
 }
 
 async function charmFetch(path: string, options: RequestInit = {}, token: string): Promise<any> {
@@ -232,7 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         repetition:          'Single Date',
         start_date:          booking.preferred_date,
         start_time:          startTime,
-        duration_in_minutes: 60 + (children.length - 1) * 15,
+        duration_in_minutes: (VISIT_DURATIONS[booking.visit_type] ?? 60) + (['In-home sick visit','Sports physical','CMA + telemedicine','In-home IV fluids'].includes(booking.visit_type) ? (children.length - 1) * 15 : 0),
         reason:              complaint,
       }
 
