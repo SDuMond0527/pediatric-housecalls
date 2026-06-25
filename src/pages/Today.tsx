@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
+  chargeCard,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -79,11 +80,40 @@ export function Today() {
   const [doneInstructions, setDoneInstructions] = useState('')
   const [doneSubmitting, setDoneSubmitting] = useState(false)
 
+  // Charge card
+  const [chargeTarget, setChargeTarget] = useState<Appointment | null>(null)
+  const [chargeAmountStr, setChargeAmountStr] = useState('')
+  const [chargeSubmitting, setChargeSubmitting] = useState(false)
+  const [chargeError, setChargeError] = useState<string | null>(null)
+  const [chargeSuccess, setChargeSuccess] = useState<{ amount: number; last4?: string } | null>(null)
+
   // Send note to parent
   const [noteTarget, setNoteTarget] = useState<Appointment | null>(null)
   const [noteText, setNoteText] = useState('')
   const [noteSending, setNoteSending] = useState(false)
   const [noteSent, setNoteSent] = useState(false)
+
+  async function submitCharge() {
+    if (!chargeTarget || !chargeAmountStr) return
+    const dollars = parseFloat(chargeAmountStr)
+    if (isNaN(dollars) || dollars < 0.5) { setChargeError('Minimum charge is $0.50'); return }
+    const amountCents = Math.round(dollars * 100)
+    setChargeSubmitting(true)
+    setChargeError(null)
+    try {
+      const result = await chargeCard(chargeTarget.id, amountCents)
+      setChargeSuccess({ amount: amountCents, last4: result.last4 })
+      setAppts(prev => prev.map(a => a.id === chargeTarget!.id
+        ? { ...a, notes: (a.notes || '') + `|CHARGE_ID:${result.paymentId}|CHARGED_CENTS:${amountCents}` }
+        : a
+      ))
+      setTimeout(() => { setChargeTarget(null); setChargeAmountStr(''); setChargeSuccess(null) }, 2500)
+    } catch (e: any) {
+      setChargeError(e.message ?? 'Payment failed')
+    } finally {
+      setChargeSubmitting(false)
+    }
+  }
 
   async function submitNote() {
     if (!noteTarget || !noteText.trim()) return
@@ -470,24 +500,41 @@ export function Today() {
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-[#AFA9EC]/40 pt-3" onClick={e => e.stopPropagation()}>
-                      <div className="flex gap-2 flex-wrap mb-3">
-                        {appt.status !== 'done' && appt.status !== 'cancelled' ? (
-                          <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
-                            <CheckCircle2 size={13} /> Mark complete
-                          </Button>
-                        ) : appt.status === 'done' ? (
-                          <Badge variant="teal">Visit completed</Badge>
-                        ) : null}
-                        <Button variant="secondary" size="sm" onClick={() => { setNoteTarget(appt); setNoteText((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : ''); setNoteSent(false) }}>
-                          Send note
-                        </Button>
-                        {appt.status !== 'cancelled' && appt.status !== 'done' && (
-                          <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
-                            <X size={13} /> Cancel visit
-                          </Button>
-                        )}
-                        {appt.status === 'cancelled' && <Badge variant="amber">Cancelled</Badge>}
-                      </div>
+                      {(() => {
+                        const chargedCentsMatch = appt.notes?.match(/CHARGED_CENTS:(\d+)/)
+                        const chargedCents = chargedCentsMatch ? parseInt(chargedCentsMatch[1]) : null
+                        return (
+                          <div className="flex gap-2 flex-wrap mb-3">
+                            {appt.status !== 'done' && appt.status !== 'cancelled' ? (
+                              <Button variant="teal" size="sm" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                                <CheckCircle2 size={13} /> Mark complete
+                              </Button>
+                            ) : appt.status === 'done' ? (
+                              <Badge variant="teal">Visit completed</Badge>
+                            ) : null}
+                            <Button variant="secondary" size="sm" onClick={() => { setNoteTarget(appt); setNoteText((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : ''); setNoteSent(false) }}>
+                              Send note
+                            </Button>
+                            {appt.status !== 'cancelled' && (
+                              chargedCents != null ? (
+                                <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#E1F5EE] text-[#1D9E75] text-[12px] font-medium border border-[#1D9E75]/20">
+                                  <CreditCard size={12} /> Charged ${(chargedCents / 100).toFixed(2)}
+                                </span>
+                              ) : (
+                                <Button variant="secondary" size="sm" onClick={() => { setChargeTarget(appt); setChargeAmountStr(''); setChargeError(null); setChargeSuccess(null) }}>
+                                  <CreditCard size={13} /> Charge card
+                                </Button>
+                              )
+                            )}
+                            {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                              <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
+                                <X size={13} /> Cancel visit
+                              </Button>
+                            )}
+                            {appt.status === 'cancelled' && <Badge variant="amber">Cancelled</Badge>}
+                          </div>
+                        )
+                      })()}
                       {(() => {
                         const NOTE_LABELS: Record<string, string> = {
                           PATIENT: 'Patient name', DOB: 'Date of birth',
@@ -1013,6 +1060,65 @@ export function Today() {
                 <CheckCircle2 size={14} /> Add to schedule
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── Charge card modal ── */}
+      {chargeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !chargeSubmitting && setChargeTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#EEEDFE] flex items-center justify-center flex-shrink-0">
+                <CreditCard size={18} className="text-[#7F77DD]" />
+              </div>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Charge card on file</h2>
+            </div>
+
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
+              <div className="font-medium text-[#1A1A2E]">{chargeTarget.visit_type}</div>
+              <div className="text-[#999]">{chargeTarget.zone}</div>
+            </div>
+
+            {chargeSuccess ? (
+              <div className="text-center py-4">
+                <div className="text-[#1D9E75] font-medium text-[15px]">Payment successful!</div>
+                <div className="text-[13px] text-[#999] mt-1">
+                  ${(chargeSuccess.amount / 100).toFixed(2)} charged{chargeSuccess.last4 ? ` to card ending in ${chargeSuccess.last4}` : ''}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">Amount to charge</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-[15px]">$</span>
+                    <input
+                      type="number"
+                      min="0.50"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={chargeAmountStr}
+                      onChange={e => { setChargeAmountStr(e.target.value); setChargeError(null) }}
+                      className="w-full pl-7 pr-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[16px] font-sans outline-none focus:border-[#7F77DD]"
+                      autoFocus
+                    />
+                  </div>
+                  {chargeError && (
+                    <p className="text-[12px] text-red-500 mt-1">{chargeError}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => setChargeTarget(null)} disabled={chargeSubmitting}>Cancel</Button>
+                  <Button variant="primary" className="flex-1" loading={chargeSubmitting}
+                    disabled={!chargeAmountStr || parseFloat(chargeAmountStr) < 0.5}
+                    onClick={submitCharge}>
+                    <CreditCard size={14} /> Charge ${chargeAmountStr ? parseFloat(chargeAmountStr).toFixed(2) : '0.00'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

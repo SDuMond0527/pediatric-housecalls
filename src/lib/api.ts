@@ -231,3 +231,9 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>
   apiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })
+
+// ── Payments ──────────────────────────────────────────────────
+export const chargeCard = (appointmentId: string, amountCents: number) =>
+  apiFetch<{ ok: boolean; paymentId: string; amountCents: number; cardBrand?: string; last4?: string }>(
+    '/api/charge-card', { method: 'POST', body: JSON.stringify({ appointmentId, amountCents }) }
+  )
