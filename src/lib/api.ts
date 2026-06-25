@@ -237,3 +237,25 @@ export const chargeCard = (appointmentId: string, amountCents: number) =>
   apiFetch<{ ok: boolean; paymentId: string; amountCents: number; cardBrand?: string; last4?: string }>(
     '/api/charge-card', { method: 'POST', body: JSON.stringify({ appointmentId, amountCents }) }
   )
+
+// ── EMR ──────────────────────────────────────────────────────
+export const getEncounterNote = (params: Record<string, string>) =>
+  apiFetch<any>(`/api/encounter-notes?${new URLSearchParams(params)}`)
+
+export const getEncounterNotes = (params: Record<string, string>) =>
+  apiFetch<any[]>(`/api/encounter-notes?${new URLSearchParams(params)}`)
+
+export const createEncounterNote = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/encounter-notes', { method: 'POST', body: JSON.stringify(body) })
+
+export const updateEncounterNote = (id: string, body: Record<string, unknown>) =>
+  apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+
+export const getVitals = (params: Record<string, string>) =>
+  apiFetch<any>(`/api/vitals?${new URLSearchParams(params)}`)
+
+export const getVitalsList = (params: Record<string, string>) =>
+  apiFetch<any[]>(`/api/vitals?${new URLSearchParams(params)}`)
+
+export const saveVitals = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/vitals', { method: 'POST', body: JSON.stringify(body) })

@@ -1,10 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2 } from 'lucide-react'
+import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const NAV = [
   { to: '/today',        icon: CalendarDays,  label: "Today's schedule" },
   { to: '/week',         icon: LayoutGrid,    label: 'Week view' },
+  { to: '/patients',     icon: Users,         label: 'Patients' },
   { to: '/availability', icon: Clock,         label: 'Availability' },
   { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true },
   { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist' },

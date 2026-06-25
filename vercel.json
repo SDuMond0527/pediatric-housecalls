@@ -4,6 +4,8 @@
   "framework": null,
   "routes": [
     { "handle": "filesystem" },
+    { "src": "/api/encounter-notes/([^/]+)", "dest": "/api/encounter-notes/[id]?id=$1" },
+    { "src": "/api/vitals/([^/]+)", "dest": "/api/vitals/[id]?id=$1" },
     { "src": "/api/availability/overrides/([^/]+)", "dest": "/api/availability/overrides/[id]?id=$1" },
     { "src": "/api/availability/([^/]+)", "dest": "/api/availability/[providerId]?providerId=$1" },
     { "src": "/api/appointments/([^/]+)", "dest": "/api/appointments/[id]?id=$1" },

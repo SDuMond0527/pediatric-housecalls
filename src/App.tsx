@@ -14,6 +14,8 @@ import { Settings } from './pages/Settings'
 import { AdminSchedule } from './pages/admin/AdminSchedule'
 import { AdminBroadcasts } from './pages/admin/AdminBroadcasts'
 import { AdminProviders } from './pages/admin/AdminProviders'
+import { PatientChart } from './pages/PatientChart'
+import { Patients } from './pages/Patients'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminReports } from './pages/admin/AdminReports'
 import { AdminBookings } from './pages/admin/AdminBookings'
@@ -66,6 +68,8 @@ export default function App() {
                 <Route index element={<RootRedirect />} />
                 <Route path="today"          element={<Today />} />
                 <Route path="week"           element={<Week />} />
+                <Route path="patients"       element={<Patients />} />
+                <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="availability"   element={<Availability />} />
                 <Route path="broadcasts"     element={<Broadcasts />} />
                 <Route path="waitlist"       element={<Waitlist />} />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
@@ -8,6 +8,7 @@ import {
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
   chargeCard,
 } from '../lib/api'
+import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -93,6 +94,10 @@ export function Today() {
   const [noteSending, setNoteSending] = useState(false)
   const [noteSent, setNoteSent] = useState(false)
 
+  // Chart note (EMR)
+  const [noteModalAppt, setNoteModalAppt] = useState<Appointment | null>(null)
+  const [noteModalChildId, setNoteModalChildId] = useState<string | null>(null)
+
   async function submitCharge() {
     if (!chargeTarget || !chargeAmountStr) return
     const dollars = parseFloat(chargeAmountStr)
@@ -125,6 +130,20 @@ export function Today() {
     } finally {
       setNoteSending(false)
     }
+  }
+
+  async function openChartNote(appt: Appointment) {
+    let childId: string | null = null
+    if (appt.notes) {
+      const refMatch = appt.notes.match(/Ref: (PUC-\d+)/)
+      if (refMatch) {
+        const bookings = await getBookingRequests({ reference_code: refMatch[1] }).catch(() => [] as any[])
+        const booking = bookings?.[0]
+        childId = booking?.child_ids?.[0] ?? null
+      }
+    }
+    setNoteModalChildId(childId)
+    setNoteModalAppt(appt)
   }
 
   // Schedule blocks
@@ -514,6 +533,9 @@ export function Today() {
                             ) : null}
                             <Button variant="secondary" size="sm" onClick={() => { setNoteTarget(appt); setNoteText((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : ''); setNoteSent(false) }}>
                               Send note
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={() => openChartNote(appt)}>
+                              <FileText size={13} /> Chart note
                             </Button>
                             {appt.status !== 'cancelled' && (
                               chargedCents != null ? (
@@ -1063,6 +1085,16 @@ export function Today() {
           </div>
         </div>
       )}
+      {/* ── Chart note modal ── */}
+      {noteModalAppt && (
+        <EncounterNoteModal
+          appointment={noteModalAppt}
+          childId={noteModalChildId}
+          providerId={provider.id}
+          onClose={() => setNoteModalAppt(null)}
+        />
+      )}
+
       {/* ── Charge card modal ── */}
       {chargeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
