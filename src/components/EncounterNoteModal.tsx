@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Search } from 'lucide-react'
+import { X, Search, UserRound } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren } from '../lib/api'
 import type { Appointment } from '../types'
 
 interface Diagnosis {
@@ -46,6 +46,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [signing, setSigning] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // Linked patient (may be null for manually-added appointments)
+  const [linkedChildId, setLinkedChildId] = useState<string | null>(childId)
+  const [linkedChildName, setLinkedChildName] = useState<string | null>(null)
+  const [patientQuery, setPatientQuery] = useState('')
+  const [patientResults, setPatientResults] = useState<any[]>([])
+  const [patientSearching, setPatientSearching] = useState(false)
+  const patientTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Note fields
   const [chiefComplaint, setChiefComplaint] = useState('')
   const [subjective, setSubjective] = useState('')
@@ -63,6 +71,26 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [icdSearching, setIcdSearching] = useState(false)
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  function onPatientQueryChange(q: string) {
+    setPatientQuery(q)
+    if (patientTimer.current) clearTimeout(patientTimer.current)
+    if (!q.trim()) { setPatientResults([]); return }
+    patientTimer.current = setTimeout(async () => {
+      setPatientSearching(true)
+      const results = await searchChildren(q).catch(() => [])
+      setPatientResults(results)
+      setPatientSearching(false)
+    }, 300)
+  }
+
+  function selectPatient(child: any) {
+    const name = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label
+    setLinkedChildId(child.id)
+    setLinkedChildName(name)
+    setPatientQuery('')
+    setPatientResults([])
+  }
+
   useEffect(() => {
     async function load() {
       setLoading(true)
@@ -79,6 +107,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setAssessment(note.assessment ?? '')
         setPlan(note.plan ?? '')
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
+        if (note.child_id && !childId) {
+          setLinkedChildId(note.child_id)
+          if (note.child_first_name || note.child_last_name) {
+            setLinkedChildName([note.child_first_name, note.child_last_name].filter(Boolean).join(' '))
+          }
+        }
       }
       if (vitalsData) {
         setVitals({
@@ -131,7 +165,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   function buildNoteBody() {
     return {
       appointment_id: appointment.id,
-      child_id: childId,
+      child_id: linkedChildId,
       provider_id: providerId,
       chief_complaint: chiefComplaint || null,
       subjective: subjective || null,
@@ -147,7 +181,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     const toInt = (s: string) => s.trim() !== '' ? parseInt(s, 10) : null
     return {
       appointment_id: appointment.id,
-      child_id: childId,
+      child_id: linkedChildId,
       temperature_f: toNum(vitals.temperature_f),
       heart_rate: toInt(vitals.heart_rate),
       respiratory_rate: toInt(vitals.respiratory_rate),
@@ -240,6 +274,61 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           <div className="flex-1 flex items-center justify-center text-[#999] text-[13px]">Loading…</div>
         ) : (
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+            {/* Patient link — shown for manually-added appointments */}
+            {!childId && (
+              <section>
+                <div className={sectionHeader}>Patient</div>
+                {linkedChildId && linkedChildName ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] rounded-lg bg-[#F0FAF6]">
+                    <div className="flex items-center gap-2">
+                      <UserRound size={15} className="text-[#1D9E75] flex-shrink-0" />
+                      <span className="text-[14px] font-medium text-[#1A1A2E]">{linkedChildName}</span>
+                      <span className="text-[11px] text-[#999]">— note will appear in their chart</span>
+                    </div>
+                    {!readOnly && (
+                      <button onClick={() => { setLinkedChildId(null); setLinkedChildName(null) }}
+                        className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-3 flex-shrink-0">
+                        × Unlink
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+                      <input type="text" placeholder="Search patient name to link to chart (optional)…"
+                        value={patientQuery}
+                        onChange={e => onPatientQueryChange(e.target.value)}
+                        disabled={readOnly}
+                        className="w-full pl-8 pr-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans disabled:bg-[#F8F8F6] disabled:text-[#999]" />
+                    </div>
+                    {(patientSearching || patientResults.length > 0) && (
+                      <div className="absolute z-10 w-full mt-1 border border-[#E8E8E4] rounded-xl bg-white shadow-lg overflow-hidden">
+                        {patientSearching && (
+                          <div className="px-3 py-2 text-[12px] text-[#999]">Searching…</div>
+                        )}
+                        {!patientSearching && patientResults.map((child: any) => {
+                          const name = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label
+                          return (
+                            <button key={child.id} onClick={() => selectPatient(child)}
+                              className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0 transition-colors">
+                              <div className="text-[13px] font-medium text-[#1A1A2E]">{name}</div>
+                              {child.family_display_name && (
+                                <div className="text-[11px] text-[#999]">{child.family_display_name}</div>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {!readOnly && !patientQuery && (
+                      <p className="text-[11px] text-[#999] mt-1">Leave blank to save without linking to a patient chart.</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* Vitals */}
             <section>
