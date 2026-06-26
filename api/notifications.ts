@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { neon } from '@neondatabase/serverless'
+import sql from './_lib/db'
+import { getProviderContext } from './_lib/auth'
 
 const RESEND_API_KEY    = process.env.RESEND_API_KEY || ''
 const TWILIO_SID        = process.env.TWILIO_ACCOUNT_SID || ''
@@ -552,8 +553,8 @@ function waitlistProviderEmail(data: {
 
 // ── Admin helpers ─────────────────────────────────────────────────────────────
 
-async function notifyAdmins(sql: any, smsBody: string) {
-  const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+async function notifyAdmins(practiceId: string, smsBody: string) {
+  const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}`
   for (const admin of admins) {
     if (admin.email) await sendEmail(admin.email, '[PHC Admin] ' + smsBody, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${smsBody}</p>`)
     if (admin.phone) await sendSMS(admin.phone, smsBody)
@@ -561,13 +562,13 @@ async function notifyAdmins(sql: any, smsBody: string) {
 }
 
 async function notifyAllProviders(
-  sql: any,
+  practiceId: string,
   smsBody: string,
   emailSubject: string,
   makeHtml: (providerName: string) => string,
   excludeId?: string | null,
 ) {
-  const providers = await sql`SELECT id, name, phone, email FROM providers WHERE is_active = true OR role = 'admin'`
+  const providers = await sql`SELECT id, name, phone, email FROM providers WHERE (is_active = true OR role = 'admin') AND practice_id = ${practiceId}`
   for (const prov of providers) {
     if (excludeId && prov.id === excludeId) continue
     if (prov.email) await sendEmail(prov.email, emailSubject, makeHtml(prov.name))
@@ -580,20 +581,26 @@ async function notifyAllProviders(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const sql = neon(process.env.DATABASE_URL!)
+  let practiceId: string
+  try {
+    const ctx = await getProviderContext(req.headers.authorization)
+    practiceId = ctx.practiceId
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   try {
     const body = req.body
 
     // ── Waitlist notification ──────────────────────────────────────────────────
     if (body.type === 'waitlist') {
-      const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
+      const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid AND practice_id = ${practiceId}`
       if (!entry) throw new Error('Waitlist entry not found')
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
       const smsBody = `PediatricHousecalls: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
 
-      const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true`
+      const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true AND practice_id = ${practiceId}`
       for (const prov of stateProviders) {
         if (prov.email) {
           await sendEmail(
@@ -611,7 +618,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (prov.phone) await sendSMS(prov.phone, smsBody)
       }
 
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' }))
         if (admin.phone) await sendSMS(admin.phone, smsBody)
@@ -622,10 +629,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Waitlist accepted notification ────────────────────────────────────────
     if (body.type === 'waitlist_accepted') {
-      const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
+      const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid AND practice_id = ${practiceId}`
       if (!entry) throw new Error('Entry not found')
 
-      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid AND practice_id = ${practiceId}`
 
       const greeting = family?.display_name ? `Hi ${family.display_name.split(' ')[0]},` : 'Hi there,'
       const dateFormatted = new Date(body.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -657,12 +664,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html)
       }
 
-      await notifyAdmins(sql, `PediatricHousecalls: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`)
+      await notifyAdmins(practiceId, `PediatricHousecalls: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`)
 
       const pickupDesc = `a waitlist patient (zip ${entry.zip}${entry.state ? `, ${entry.state}` : ''})`
       const pickupSms = `PediatricHousecalls: A waitlist patient has been picked up. View: ${PORTAL_URL}/broadcasts`
       await notifyAllProviders(
-        sql,
+        practiceId,
         pickupSms,
         `[Pickup] ${body.providerName} accepted a waitlist patient — zip ${entry.zip}`,
         (name) => pickupNotificationEmail({ recipientName: name, acceptedBy: body.providerName, description: pickupDesc }),
@@ -677,7 +684,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { providerId, zone, visitType, date, time, matchingZips } = body
       let providerName: string = body.providerName || ''
       if (!providerName && providerId) {
-        const [prov] = await sql`SELECT name FROM providers WHERE id = ${providerId}::uuid`
+        const [prov] = await sql`SELECT name FROM providers WHERE id = ${providerId}::uuid AND practice_id = ${practiceId}`
         providerName = prov?.name || 'Your provider'
       }
 
@@ -687,7 +694,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const entries = await sql`
         SELECT id, family_id, zip FROM waitlist_entries
-        WHERE zip = ANY(${matchingZips}::text[]) AND status = 'waiting'`
+        WHERE zip = ANY(${matchingZips}::text[]) AND status = 'waiting' AND practice_id = ${practiceId}`
 
       if (!entries?.length) {
         return res.json({ ok: true, notified: 0 })
@@ -698,10 +705,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
       for (const entry of entries) {
-        await sql`INSERT INTO slot_offers (waitlist_entry_id, provider_id, provider_name, visit_type, offered_date, offered_time, zone, status, expires_at)
-          VALUES (${entry.id}::uuid, ${providerId}::uuid, ${providerName}, ${visitType}, ${date}, ${time}, ${zone}, 'pending', ${expiresAt}::timestamptz)`
+        await sql`INSERT INTO slot_offers (waitlist_entry_id, provider_id, provider_name, visit_type, offered_date, offered_time, zone, status, expires_at, practice_id)
+          VALUES (${entry.id}::uuid, ${providerId}::uuid, ${providerName}, ${visitType}, ${date}, ${time}, ${zone}, 'pending', ${expiresAt}::timestamptz, ${practiceId})`
 
-        const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+        const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid AND practice_id = ${practiceId}`
         if (!fam?.email) continue
 
         const greeting = fam.display_name ? `Hi ${fam.display_name.split(' ')[0]},` : 'Hi there,'
@@ -739,13 +746,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Slot offer accepted (family claims open slot) ─────────────────────────
     if (body.type === 'slot_offer_accepted') {
-      const [offer] = await sql`SELECT * FROM slot_offers WHERE id = ${body.offerId}::uuid`
+      const [offer] = await sql`SELECT * FROM slot_offers WHERE id = ${body.offerId}::uuid AND practice_id = ${practiceId}`
 
       if (!offer || offer.status !== 'pending') {
         return res.status(400).json({ ok: false, error: 'Offer not available' })
       }
 
-      const [entry] = await sql`SELECT family_id, zip FROM waitlist_entries WHERE id = ${offer.waitlist_entry_id}::uuid`
+      const [entry] = await sql`SELECT family_id, zip FROM waitlist_entries WHERE id = ${offer.waitlist_entry_id}::uuid AND practice_id = ${practiceId}`
 
       // Convert offered_time ("2:00 PM") to 24h
       const [t, ampm] = offer.offered_time.split(' ')
@@ -754,16 +761,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (ampm === 'AM' && h === 12) h = 0
       const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
-      await sql`INSERT INTO appointments (provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes)
-        VALUES (${offer.provider_id}::uuid, ${offer.visit_type || 'In-home sick visit'}, ${offer.zone || ''}, ${time24}, ${offer.offered_date}, 'upcoming', ${`From waitlist slot offer · Zip: ${entry?.zip || ''}`})`
+      await sql`INSERT INTO appointments (provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, practice_id)
+        VALUES (${offer.provider_id}::uuid, ${offer.visit_type || 'In-home sick visit'}, ${offer.zone || ''}, ${time24}, ${offer.offered_date}, 'upcoming', ${`From waitlist slot offer · Zip: ${entry?.zip || ''}`}, ${practiceId})`
 
-      await sql`INSERT INTO booking_requests (family_id, child_ids, visit_type, zone, preferred_date, preferred_time, status, confirmed_provider_id, reference_code)
-        VALUES (${entry?.family_id}::uuid, '{}', ${offer.visit_type || 'In-home sick visit'}, ${offer.zone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offer.id.slice(0, 8).toUpperCase()})`
+      await sql`INSERT INTO booking_requests (family_id, child_ids, visit_type, zone, preferred_date, preferred_time, status, confirmed_provider_id, reference_code, practice_id)
+        VALUES (${entry?.family_id}::uuid, '{}', ${offer.visit_type || 'In-home sick visit'}, ${offer.zone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offer.id.slice(0, 8).toUpperCase()}, ${practiceId})`
 
-      await sql`UPDATE slot_offers SET status = 'accepted' WHERE id = ${offer.id}::uuid`
-      await sql`UPDATE waitlist_entries SET status = 'converted' WHERE id = ${offer.waitlist_entry_id}::uuid`
+      await sql`UPDATE slot_offers SET status = 'accepted' WHERE id = ${offer.id}::uuid AND practice_id = ${practiceId}`
+      await sql`UPDATE waitlist_entries SET status = 'converted' WHERE id = ${offer.waitlist_entry_id}::uuid AND practice_id = ${practiceId}`
 
-      const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry?.family_id}::uuid`
+      const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry?.family_id}::uuid AND practice_id = ${practiceId}`
       const dateFormatted = formatDate(offer.offered_date)
 
       if (fam?.email) {
@@ -799,7 +806,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendEmail(fam.email, `Confirmed: ${offer.visit_type || 'Appointment'} on ${dateFormatted}`, html)
       }
 
-      const [offerProv] = await sql`SELECT email FROM providers WHERE id = ${offer.provider_id}::uuid`
+      const [offerProv] = await sql`SELECT email FROM providers WHERE id = ${offer.provider_id}::uuid AND practice_id = ${practiceId}`
       if (offerProv?.email) {
         await sendEmail(
           offerProv.email,
@@ -815,16 +822,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         )
       }
 
-      await notifyAdmins(sql, `PediatricHousecalls: Waitlist slot claimed. View: ${PORTAL_URL}/admin/schedule`)
+      await notifyAdmins(practiceId, `PediatricHousecalls: Waitlist slot claimed. View: ${PORTAL_URL}/admin/schedule`)
 
       return res.json({ ok: true })
     }
 
     // ── Manual appointment added by provider ──────────────────────────────────
     if (body.type === 'appointment_added') {
-      const { providerName, visitType, zone, date, time, parentEmail } = body
-      const dateFormatted = formatDate(date)
-      await notifyAdmins(sql, `PediatricHousecalls: Appointment added. View: ${PORTAL_URL}/admin/schedule`)
+      const { visitType, parentEmail } = body
+      await notifyAdmins(practiceId, `PediatricHousecalls: Appointment added. View: ${PORTAL_URL}/admin/schedule`)
 
       if (visitType === 'In-home IV fluids' && parentEmail) {
         await sendEmail(parentEmail, 'Your IV fluids request has been received — Pediatric Housecalls', ivFluidsEmailHtml())
@@ -835,13 +841,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Broadcast created — notify all providers + admins ─────────────────────
     if (body.type === 'broadcast') {
-      const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid`
+      const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid AND practice_id = ${practiceId}`
       if (!bc) throw new Error('Broadcast not found')
 
       const stateLabel = bc.state === 'NC' ? 'North Carolina' : bc.state === 'SC' ? 'South Carolina' : bc.state === 'VA' ? 'Virginia' : bc.state || 'your state'
       const smsBody = `PediatricHousecalls:${bc.is_urgent ? ' [URGENT]' : ''} New broadcast request. View: ${PORTAL_URL}/broadcasts`
 
-      const providers = await sql`SELECT id, name, phone, email FROM providers WHERE is_active = true OR role = 'admin'`
+      const providers = await sql`SELECT id, name, phone, email FROM providers WHERE (is_active = true OR role = 'admin') AND practice_id = ${practiceId}`
       for (const prov of providers) {
         const firstName = prov.name.split(' ').slice(-2)[0]
         if (prov.email) {
@@ -878,7 +884,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Broadcast accepted — notify all providers ─────────────────────────────
     if (body.type === 'broadcast_accepted') {
-      const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid`
+      const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid AND practice_id = ${practiceId}`
       if (!bc) return res.json({ ok: true })
 
       const acceptedBy = body.acceptedByName || 'A provider'
@@ -887,7 +893,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const smsBody = `PediatricHousecalls: A broadcast has been picked up. View: ${PORTAL_URL}/broadcasts`
 
       await notifyAllProviders(
-        sql,
+        practiceId,
         smsBody,
         `[Pickup] ${acceptedBy} accepted a broadcast — ${patientName}`,
         (name) => pickupNotificationEmail({ recipientName: name, acceptedBy, description: pickupDesc }),
@@ -934,18 +940,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Post-visit thank-you + Google review email ────────────────────────────
     if (body.type === 'post_visit_email') {
       const { appointmentId } = body
-      const [appt] = await sql`SELECT * FROM appointments WHERE id = ${appointmentId}::uuid`
+      const [appt] = await sql`SELECT * FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}`
       if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
       let instructions: string | null = body.instructions || appt.after_visit_instructions || null
       if (!instructions) {
         // Race condition guard: a concurrent PATCH may still be writing instructions — wait and retry
         await new Promise(r => setTimeout(r, 800))
-        const [refreshed] = await sql`SELECT after_visit_instructions FROM appointments WHERE id = ${appointmentId}::uuid`
+        const [refreshed] = await sql`SELECT after_visit_instructions FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}`
         instructions = refreshed?.after_visit_instructions || null
       }
       console.log('[post_visit_email] instructions:', instructions ? instructions.substring(0, 60) : 'NULL')
 
-      const [prov] = await sql`SELECT name FROM providers WHERE id = ${appt.provider_id}::uuid`
+      const [prov] = await sql`SELECT name FROM providers WHERE id = ${appt.provider_id}::uuid AND practice_id = ${practiceId}`
 
       const notes: string = appt.notes || ''
       const parentEmailMatch = notes.split('|').find((p: string) => p.startsWith('PARENTEMAIL:'))
@@ -964,7 +970,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const [br] = await sql`
             SELECT fp.email, fp.display_name FROM booking_requests br
             JOIN family_profiles fp ON fp.id = br.family_id
-            WHERE br.reference_code = ${refMatch[1]} LIMIT 1`
+            WHERE br.reference_code = ${refMatch[1]} AND br.practice_id = ${practiceId} LIMIT 1`
           familyEmail = br?.email || null
           familyDisplayName = br?.display_name || null
         }
@@ -973,9 +979,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Fall back to charm_appointment_id linkage
       if (!familyEmail && appt.charm_appointment_id) {
         const [br] = await sql`SELECT family_id FROM booking_requests
-          WHERE charm_appointment_id = ${appt.charm_appointment_id} LIMIT 1`
+          WHERE charm_appointment_id = ${appt.charm_appointment_id} AND practice_id = ${practiceId} LIMIT 1`
         if (br?.family_id) {
-          const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${br.family_id}::uuid`
+          const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId}`
           familyEmail = fam?.email || null
           familyDisplayName = fam?.display_name || null
         }
@@ -1004,10 +1010,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── CPR class booking ─────────────────────────────────────────────────────
     if (body.type === 'cpr_booking') {
       const { bookingRequestId } = body
-      const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
+      const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid AND practice_id = ${practiceId}`
       if (!booking) throw new Error('Booking not found')
 
-      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid AND practice_id = ${practiceId}`
 
       const dateFormatted = formatDate(booking.preferred_date)
 
@@ -1052,7 +1058,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       )
 
-      await notifyAdmins(sql, `PediatricHousecalls: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`)
+      await notifyAdmins(practiceId, `PediatricHousecalls: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`)
 
       return res.json({ ok: true })
     }
@@ -1064,7 +1070,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SELECT a.*, p.name AS provider_name, p.phone AS provider_phone, p.email AS provider_email
         FROM appointments a
         LEFT JOIN providers p ON p.id = a.provider_id
-        WHERE a.id = ${appointmentId}::uuid`
+        WHERE a.id = ${appointmentId}::uuid AND a.practice_id = ${practiceId}`
       if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
 
       const dateFormatted = formatDate(appt.scheduled_date)
@@ -1088,7 +1094,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const [br] = await sql`
           SELECT fp.display_name FROM booking_requests br
           JOIN family_profiles fp ON fp.id = br.family_id
-          WHERE br.reference_code = ${refMatch[1]} LIMIT 1`
+          WHERE br.reference_code = ${refMatch[1]} AND br.practice_id = ${practiceId} LIMIT 1`
         familyDisplayName = br?.display_name || null
       }
 
@@ -1102,7 +1108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Notify admins (Pam)
       const adminSms = `PediatricHousecalls: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
         if (admin.phone) await sendSMS(admin.phone, adminSms)
@@ -1119,13 +1125,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const smsText = `PediatricHousecalls: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
 
       if (providerId) {
-        const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid`
+        const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid AND practice_id = ${practiceId}`
         const providerName = prov?.name || 'Provider'
         if (prov?.email) await sendEmail(prov.email, subject, cancellationNotificationEmail({ recipientName: providerName, visitType, date: dateFormatted, time, zone: zone || '', familyName }))
         if (prov?.phone) await sendSMS(prov.phone, smsText)
       }
 
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] ${subject}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType, date: dateFormatted, time, zone: zone || '', familyName }))
         if (admin.phone) await sendSMS(admin.phone, smsText)
@@ -1134,14 +1140,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
+    // ── Provider note to parent ───────────────────────────────────────────────
+    if (body.type === 'provider_note') {
+      const { appointmentId, message } = body
+      if (!message?.trim()) return res.status(400).json({ ok: false, error: 'Message required' })
+
+      const [appt] = await sql`
+        SELECT a.*, p.name AS provider_name
+        FROM appointments a
+        LEFT JOIN providers p ON p.id = a.provider_id
+        WHERE a.id = ${appointmentId}::uuid AND a.practice_id = ${practiceId}`
+      if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
+
+      // Parse parent email from notes blob
+      const notes: string = appt.notes || ''
+      const noteMap: Record<string, string> = {}
+      notes.split('|').forEach((part: string) => {
+        const colon = part.indexOf(':')
+        if (colon > 0) noteMap[part.slice(0, colon).trim()] = part.slice(colon + 1).trim()
+      })
+      let parentEmail: string | null = noteMap['PARENTEMAIL'] || null
+
+      // Fall back to family_profiles via booking reference
+      if (!parentEmail) {
+        const refMatch = notes.match(/Ref: ([A-Z0-9-]+)/)
+        if (refMatch) {
+          const [br] = await sql`
+            SELECT fp.email FROM booking_requests br
+            JOIN family_profiles fp ON fp.id = br.family_id
+            WHERE br.reference_code = ${refMatch[1]} AND br.practice_id = ${practiceId} LIMIT 1`
+          parentEmail = br?.email || null
+        }
+      }
+
+      if (!parentEmail) return res.status(400).json({ ok: false, error: 'No parent email on file for this appointment' })
+
+      const dateFormatted = formatDate(appt.scheduled_date)
+      const providerName = appt.provider_name || 'Your provider'
+      const html = `
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1A1A2E;">
+          <h2 style="font-size:20px;font-weight:600;margin-bottom:4px;">A note from ${providerName}</h2>
+          <p style="color:#666;font-size:13px;margin-top:0;">Regarding your ${appt.visit_type} on ${dateFormatted}</p>
+          <div style="background:#F9F9F7;border:1px solid #E8E8E4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:15px;line-height:1.6;white-space:pre-wrap;">${message.trim()}</div>
+          <p style="font-size:13px;color:#999;">If you have questions, please reply to this email or contact us through the portal.</p>
+        </div>`
+      await sendEmail(parentEmail, `A note from ${providerName} — Pediatric Housecalls`, html)
+      return res.json({ ok: true })
+    }
+
     // ── Booking notification (default flow) ───────────────────────────────────
     const { bookingRequestId } = body
 
-    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
+    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid AND practice_id = ${practiceId}`
     if (!booking) throw new Error('Booking not found')
 
-    const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
-    const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
+    const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid AND practice_id = ${practiceId}`
+    const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid AND practice_id = ${practiceId}`
 
     // Temporary debug — remove after confirming notifications work
     if (body._debug) {
@@ -1170,54 +1224,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // ── Provider note to parent ───────────────────────────────────────────────
-    if (body.type === 'provider_note') {
-      const { appointmentId, message } = body
-      if (!message?.trim()) return res.status(400).json({ ok: false, error: 'Message required' })
-
-      const [appt] = await sql`
-        SELECT a.*, p.name AS provider_name
-        FROM appointments a
-        LEFT JOIN providers p ON p.id = a.provider_id
-        WHERE a.id = ${appointmentId}::uuid`
-      if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' })
-
-      // Parse parent email from notes blob
-      const notes: string = appt.notes || ''
-      const noteMap: Record<string, string> = {}
-      notes.split('|').forEach((part: string) => {
-        const colon = part.indexOf(':')
-        if (colon > 0) noteMap[part.slice(0, colon).trim()] = part.slice(colon + 1).trim()
-      })
-      let parentEmail: string | null = noteMap['PARENTEMAIL'] || null
-
-      // Fall back to family_profiles via booking reference
-      if (!parentEmail) {
-        const refMatch = notes.match(/Ref: ([A-Z0-9-]+)/)
-        if (refMatch) {
-          const [br] = await sql`
-            SELECT fp.email FROM booking_requests br
-            JOIN family_profiles fp ON fp.id = br.family_id
-            WHERE br.reference_code = ${refMatch[1]} LIMIT 1`
-          parentEmail = br?.email || null
-        }
-      }
-
-      if (!parentEmail) return res.status(400).json({ ok: false, error: 'No parent email on file for this appointment' })
-
-      const dateFormatted = formatDate(appt.scheduled_date)
-      const providerName = appt.provider_name || 'Your provider'
-      const html = `
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1A1A2E;">
-          <h2 style="font-size:20px;font-weight:600;margin-bottom:4px;">A note from ${providerName}</h2>
-          <p style="color:#666;font-size:13px;margin-top:0;">Regarding your ${appt.visit_type} on ${dateFormatted}</p>
-          <div style="background:#F9F9F7;border:1px solid #E8E8E4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:15px;line-height:1.6;white-space:pre-wrap;">${message.trim()}</div>
-          <p style="font-size:13px;color:#999;">If you have questions, please reply to this email or contact us through the portal.</p>
-        </div>`
-      await sendEmail(parentEmail, `A note from ${providerName} — Pediatric Housecalls`, html)
-      return res.json({ ok: true })
-    }
-
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`
     const notifHtml = providerNotificationEmail({
       visitType: booking.visit_type,
@@ -1234,7 +1240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (provider?.phone) await sendSMS(provider.phone, smsBody)
 
     // All admins (including Pam) — every booking, every provider
-    const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+    const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}`
     for (const admin of admins) {
       if (admin.id === provider?.id) continue  // don't double-notify if admin is also the assigned provider
       if (admin.email) await sendEmail(admin.email, notifSubject, notifHtml)

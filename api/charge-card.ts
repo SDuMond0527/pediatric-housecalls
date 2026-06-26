@@ -1,17 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { neon } from '@neondatabase/serverless'
-import { createRemoteJWKSet, jwtVerify } from 'jose'
-
-async function verifyToken(authHeader: string | undefined): Promise<string> {
-  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
-  const token = authHeader.slice(7)
-  const region = process.env.VITE_AWS_REGION || 'us-east-2'
-  const userPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
-  const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
-  const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
-  if (!payload.sub) throw new Error('No sub in token')
-  return payload.sub
-}
+import sql from './_lib/db'
+import { getProviderContext } from './_lib/auth'
 
 async function squarePost(path: string, body: unknown) {
   const token = process.env.SQUARE_ACCESS_TOKEN || ''
@@ -35,8 +24,10 @@ async function squarePost(path: string, body: unknown) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let practiceId: string
   try {
-    await verifyToken(req.headers.authorization)
+    const ctx = await getProviderContext(req.headers.authorization)
+    practiceId = ctx.practiceId
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -48,10 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'appointmentId and amountCents (min 50) required' })
   }
 
-  const sql = neon(process.env.DATABASE_URL!)
-
   // Load the appointment
-  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid LIMIT 1`
+  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId} LIMIT 1`
   if (!appt) return res.status(404).json({ error: 'Appointment not found' })
 
   // Prevent double-charging: check if already charged
@@ -64,16 +53,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const refMatch = (appt.notes as string | null)?.match(/Ref:\s*(PUC-\d+)/)
   if (refMatch) {
-    const [br] = await sql`SELECT family_id FROM booking_requests WHERE reference_code = ${refMatch[1]} LIMIT 1`
+    const [br] = await sql`SELECT family_id FROM booking_requests WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId} LIMIT 1`
     if (br) {
-      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid LIMIT 1`
+      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId} LIMIT 1`
     }
   }
 
   if (!family && appt.charm_appointment_id) {
-    const [br] = await sql`SELECT family_id FROM booking_requests WHERE charm_appointment_id = ${appt.charm_appointment_id} LIMIT 1`
+    const [br] = await sql`SELECT family_id FROM booking_requests WHERE charm_appointment_id = ${appt.charm_appointment_id} AND practice_id = ${practiceId} LIMIT 1`
     if (br) {
-      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid LIMIT 1`
+      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId} LIMIT 1`
     }
   }
 
@@ -98,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Append charge info to appointment notes
   const chargeTag = `|CHARGE_ID:${payment.id}|CHARGED_CENTS:${amountCents}`
-  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid`
+  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}`
 
   return res.json({
     ok: true,
