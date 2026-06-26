@@ -8,7 +8,7 @@ const VISIT_DURATIONS: Record<string, number> = {
   'In-home CPR class (Heartsaver)': 180, 'In-home CPR class (BLS)': 180,
 }
 
-async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
+async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
   const region = process.env.VITE_AWS_REGION || 'us-east-2'
@@ -17,13 +17,14 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
     try {
       const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${familyPoolId}/.well-known/jwks.json`))
       const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${familyPoolId}` })
-      if (payload.sub) return
+      if (payload.sub) return { sub: payload.sub, isFamily: true }
     } catch {}
   }
   const providerPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
   const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${providerPoolId}/.well-known/jwks.json`))
   const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${providerPoolId}` })
   if (!payload.sub) throw new Error('No sub in token')
+  return { sub: payload.sub, isFamily: false }
 }
 
 // ── Charm auth (Zoho refresh token flow) ─────────────────────────────────────
@@ -202,8 +203,9 @@ async function findOrCreatePatient(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true })
 
+  let auth: { sub: string; isFamily: boolean }
   try {
-    await verifyAnyToken(req.headers.authorization)
+    auth = await verifyAnyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -217,12 +219,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const sql = neon(process.env.DATABASE_URL!)
 
-    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid LIMIT 1`
+    const practiceRows = auth.isFamily
+      ? await sql`SELECT practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
+      : await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
+    if (!practiceRows.length) return res.status(200).json({ ok: false, error: 'User not found' })
+    const practiceId = practiceRows[0].practice_id as string
+
+    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
     if (!booking) return res.status(200).json({ ok: false, error: 'Booking not found' })
 
-    const [family] = await sql`SELECT * FROM family_profiles WHERE id = ${booking.family_id}::uuid LIMIT 1`
+    const [family] = await sql`SELECT * FROM family_profiles WHERE id = ${booking.family_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
     const children = booking.child_ids?.length
-      ? await sql`SELECT * FROM children WHERE id = ANY(${booking.child_ids}::uuid[])`
+      ? await sql`SELECT * FROM children WHERE id = ANY(${booking.child_ids}::uuid[]) AND practice_id = ${practiceId}::uuid`
       : []
 
     if (!family || !children.length) return res.status(200).json({ ok: false, error: 'Family or children not found' })
@@ -255,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await updatePatient(token, charmPatientId, intake, family.email)
       }
 
-      await sql`UPDATE children SET charm_patient_id = ${charmPatientId} WHERE id = ${child.id}::uuid`
+      await sql`UPDATE children SET charm_patient_id = ${charmPatientId} WHERE id = ${child.id}::uuid AND practice_id = ${practiceId}::uuid`
 
       const complaint = [
         intake.chiefComplaint,
@@ -295,15 +303,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (apptId) {
         charmAppointmentIds.push(String(apptId))
         if (appointmentDbId) {
-          await sql`UPDATE appointments SET charm_appointment_id = ${String(apptId)}, charm_patient_id = ${charmPatientId} WHERE id = ${appointmentDbId}::uuid`
+          await sql`UPDATE appointments SET charm_appointment_id = ${String(apptId)}, charm_patient_id = ${charmPatientId} WHERE id = ${appointmentDbId}::uuid AND practice_id = ${practiceId}::uuid`
         }
       }
     }
 
     if (charmAppointmentIds.length) {
-      await sql`UPDATE booking_requests SET charm_appointment_id = ${charmAppointmentIds.join(',')} WHERE id = ${bookingRequestId}::uuid`
+      await sql`UPDATE booking_requests SET charm_appointment_id = ${charmAppointmentIds.join(',')} WHERE id = ${bookingRequestId}::uuid AND practice_id = ${practiceId}::uuid`
     }
-    await sql`UPDATE family_profiles SET charm_synced_at = NOW() WHERE id = ${family.id}::uuid`
+    await sql`UPDATE family_profiles SET charm_synced_at = NOW() WHERE id = ${family.id}::uuid AND practice_id = ${practiceId}::uuid`
 
     return res.status(200).json({ ok: true, charmAppointmentIds })
   } catch (err: any) {

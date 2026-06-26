@@ -82,7 +82,8 @@ function parseEligibility(data: any) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  try { await verifyToken(req.headers.authorization) } catch {
+  let sub: string
+  try { sub = await verifyToken(req.headers.authorization) } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -91,19 +92,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { appointment_id } = req.body ?? {}
   if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   // Find child via encounter note first, then booking request fallback
   let child: any = null
 
   const [noteRow] = await sql`
     SELECT c.* FROM encounter_notes en
     JOIN children c ON c.id = en.child_id
-    WHERE en.appointment_id = ${appointment_id}::uuid
+    WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
     LIMIT 1`
   if (noteRow) {
     child = noteRow
   } else {
     // Try via booking request reference code in appointment notes
-    const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid`
+    const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
     const refMatch = (appt?.notes ?? '').match(/Ref: (PUC-\d+)/)
     if (refMatch) {
       const [booking] = await sql`SELECT child_ids FROM booking_requests WHERE reference_code = ${refMatch[1]} LIMIT 1`

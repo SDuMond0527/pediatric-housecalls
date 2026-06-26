@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const sql = neon(process.env.DATABASE_URL!)
 
-    const [provider] = await sql`SELECT name, role, home_address FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
+    const [provider] = await sql`SELECT name, role, home_address, practice_id FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
     if (!provider) return res.status(404).json({ ok: false, error: 'Provider not found' })
 
     // CMA and RN providers always have a flat $50 convenience fee
@@ -136,6 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const priorAppts = await sql`
       SELECT notes FROM appointments
       WHERE provider_id = ${providerId}::uuid
+        AND practice_id = ${provider.practice_id}::uuid
         AND scheduled_date = ${date}::date
         AND scheduled_time < ${time}
         AND status != 'cancelled'

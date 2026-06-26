@@ -38,9 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PATCH') {
     try {
-      const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at } = req.body
+      const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at, practice_id } = req.body
       const [row] = await sql`
-        INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at)
+        INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at, practice_id)
         VALUES (
           gen_random_uuid(),
           ${sub},
@@ -53,7 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${zip ?? null},
           ${referral_source ?? null},
           ${agreements_accepted_at ?? null}::timestamptz,
-          ${payment_policy_accepted_at ?? null}::timestamptz
+          ${payment_policy_accepted_at ?? null}::timestamptz,
+          ${practice_id ?? null}::uuid
         )
         ON CONFLICT (cognito_sub) DO UPDATE SET
           display_name = COALESCE(EXCLUDED.display_name, family_profiles.display_name),
@@ -64,7 +65,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           zip = COALESCE(EXCLUDED.zip, family_profiles.zip),
           referral_source = COALESCE(EXCLUDED.referral_source, family_profiles.referral_source),
           agreements_accepted_at = COALESCE(EXCLUDED.agreements_accepted_at, family_profiles.agreements_accepted_at),
-          payment_policy_accepted_at = COALESCE(EXCLUDED.payment_policy_accepted_at, family_profiles.payment_policy_accepted_at)
+          payment_policy_accepted_at = COALESCE(EXCLUDED.payment_policy_accepted_at, family_profiles.payment_policy_accepted_at),
+          practice_id = COALESCE(family_profiles.practice_id, EXCLUDED.practice_id)
         RETURNING *`
       return res.json(row)
     } catch (e: any) {

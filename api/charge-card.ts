@@ -35,8 +35,9 @@ async function squarePost(path: string, body: unknown) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -50,8 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   // Load the appointment
-  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid LIMIT 1`
+  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
   if (!appt) return res.status(404).json({ error: 'Appointment not found' })
 
   // Prevent double-charging: check if already charged
@@ -98,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Append charge info to appointment notes
   const chargeTag = `|CHARGE_ID:${payment.id}|CHARGED_CENTS:${amountCents}`
-  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid`
+  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}::uuid`
 
   return res.json({
     ok: true,
