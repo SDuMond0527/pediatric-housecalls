@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const results = await Promise.all(rows.map(async (r) => {
     const [row] = await sql`
       INSERT INTO visit_type_availability (provider_id, visit_type, is_active, start_time, end_time, practice_id)
-      VALUES (${providerId}::uuid, ${r.visit_type}, ${r.is_active}, ${r.start_time}, ${r.end_time}, ${practiceId})
+      VALUES (${providerId}::uuid, ${r.visit_type}, ${r.is_active}, ${r.start_time}, ${r.end_time}, ${practiceId}::uuid)
       ON CONFLICT (provider_id, visit_type) DO UPDATE
       SET is_active=EXCLUDED.is_active, start_time=EXCLUDED.start_time, end_time=EXCLUDED.end_time
       RETURNING *`

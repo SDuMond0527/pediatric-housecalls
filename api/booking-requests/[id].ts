@@ -18,11 +18,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let row: unknown
   if (after_visit_instructions !== undefined && charm_appointment_id !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE charm_appointment_id=${charm_appointment_id} AND practice_id = ${practiceId} RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE charm_appointment_id=${charm_appointment_id} AND practice_id = ${practiceId}::uuid RETURNING *`
   } else if (after_visit_instructions !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
   } else {
     return res.status(400).json({ error: 'No valid fields' })
   }

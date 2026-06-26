@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       secure_text_number = CASE WHEN ${b.secure_text_number !== undefined} THEN ${b.secure_text_number ?? null} ELSE secure_text_number END,
       home_address       = CASE WHEN ${b.home_address !== undefined} THEN ${b.home_address ?? null} ELSE home_address       END,
       email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END
-    WHERE id = ${id}::uuid AND practice_id = ${practiceId}
+    WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
     RETURNING *`
   res.json(row)
 }

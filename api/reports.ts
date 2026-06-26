@@ -15,8 +15,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { start, end } = req.query as Record<string, string>
   const [appointments, providers] = await Promise.all([
-    sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}`,
-    sql`SELECT id, name FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}`,
+    sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
+    sql`SELECT id, name FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
   ])
 
   res.json({ appointments, providers })

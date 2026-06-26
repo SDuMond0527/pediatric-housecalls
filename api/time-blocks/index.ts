@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { provider_id, label, days, time_range } = req.body
   const [row] = await sql`
     INSERT INTO time_blocks (provider_id, label, days, time_range, practice_id)
-    VALUES (${provider_id}::uuid, ${label}, ${days}, ${time_range}, ${practiceId})
+    VALUES (${provider_id}::uuid, ${label}, ${days}, ${time_range}, ${practiceId}::uuid)
     RETURNING *`
   res.json(row)
 }
