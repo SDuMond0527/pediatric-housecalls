@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const NAV = [
@@ -57,6 +57,19 @@ export function AdminLayout() {
               {label}
             </NavLink>
           ))}
+          {provider?.is_super_admin && (
+            <>
+              <div className="mx-5 my-2 border-t border-white/10" />
+              <NavLink to="/admin/provision"
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                  ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+                }>
+                <Building2 size={16} className="opacity-70" />
+                Practices
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="px-5 py-4 border-t border-white/8">
