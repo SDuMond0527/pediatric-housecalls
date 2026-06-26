@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { PracticeLogo, PRACTICE_NAME } from '../../lib/practice'
+import { PracticeLogo, PRACTICE_NAME, PRACTICE_TAGLINE } from '../../lib/practice'
 
 export function FamilyLogin() {
   const { signIn } = useFamilyAuth()
@@ -29,7 +29,7 @@ export function FamilyLogin() {
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
             <PracticeLogo />
           </div>
-          <div className="text-[13px] text-[#999]">Mobile pediatric urgent care · NC · SC · VA</div>
+          {PRACTICE_TAGLINE && <div className="text-[13px] text-[#999]">{PRACTICE_TAGLINE}</div>}
           <div className="flex justify-center gap-1.5 mt-3 flex-wrap">
             {[['#EEEDFE','#3C3489','In-home visits'],['#E1F5EE','#085041','Telemedicine'],['#FAEEDA','#633806','Sports physicals']].map(([bg,tc,label]) => (
               <span key={label} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: bg, color: tc }}>{label}</span>

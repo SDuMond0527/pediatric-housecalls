@@ -1,3 +1,5 @@
+import { VENMO_HANDLE } from './practice'
+
 export const ZIP_TO_STATE: Record<string, string> = {
   '28078':'NC','28036':'NC','28031':'NC','28025':'NC','28027':'NC','28081':'NC','28075':'NC',
   '28117':'NC','28115':'NC','28226':'NC','28270':'NC','28277':'NC','28203':'NC','28204':'NC',
@@ -78,12 +80,12 @@ export const VISIT_TYPE_INFO = {
   'In-home CPR class (Heartsaver)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '❤️',
     duration: '3 hours · up to 6 people · $80/person',
-    note: 'Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a Heartsaver e-learning link to complete before class. Payment via Venmo @Pediatric-Housecalls at $80 per person.',
+    note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a Heartsaver e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $80 per person.`,
   },
   'In-home CPR class (BLS)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '🫀',
     duration: '3 hours · up to 6 people · $80/person',
-    note: 'Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a BLS e-learning link to complete before class. Payment via Venmo @Pediatric-Housecalls at $80 per person.',
+    note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a BLS e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $80 per person.`,
   },
 }
 
