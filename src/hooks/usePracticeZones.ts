@@ -37,8 +37,8 @@ function load(): Promise<ZoneData> {
   if (cache) return Promise.resolve(cache)
   if (pending) return pending
   pending = fetch('/api/practice-zones')
-    .then(r => r.json())
-    .then(zones => { cache = build(zones); pending = null; return cache! })
+    .then(r => { if (!r.ok) throw new Error('zones fetch failed'); return r.json() })
+    .then(zones => { cache = build(Array.isArray(zones) ? zones : []); pending = null; return cache! })
     .catch(() => { pending = null; return build([]) })
   return pending
 }

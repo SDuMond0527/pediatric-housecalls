@@ -381,6 +381,7 @@ export function BookVisit() {
   async function loadBookedTimes(providerName: string, date: string) {
     if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
     setSlotsChecking(true)
+    try {
     const provRow = await getProviderByName(providerName)
     if (!provRow) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
 
@@ -421,6 +422,9 @@ export function BookVisit() {
     })
     setAllSlotsBooked(freeSlots.length === 0)
     setSlotsChecking(false)
+    } catch {
+      setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null)
+    }
   }
 
   async function onZipChange(zip: string) {
