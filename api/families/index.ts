@@ -14,8 +14,9 @@ async function verifyProviderToken(authHeader: string | undefined): Promise<stri
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyProviderToken(req.headers.authorization)
+    sub = await verifyProviderToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -23,9 +24,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   const sql = neon(process.env.DATABASE_URL!)
+
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   const { ids } = req.query as Record<string, string>
   if (!ids) return res.json([])
   const idList = ids.split(',').filter(Boolean)
-  const rows = await sql`SELECT * FROM family_profiles WHERE id = ANY(${idList}::uuid[])`
+  const rows = await sql`SELECT * FROM family_profiles WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}::uuid`
   res.json(rows)
 }

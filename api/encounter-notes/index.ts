@@ -14,19 +14,24 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   if (req.method === 'GET') {
     const { appointment_id, child_id } = req.query as Record<string, string>
 
     if (appointment_id) {
-      const rows = await sql`SELECT * FROM encounter_notes WHERE appointment_id = ${appointment_id}::uuid LIMIT 1`
+      const rows = await sql`SELECT * FROM encounter_notes WHERE appointment_id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       return res.json(rows[0] ?? null)
     }
 
@@ -36,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM encounter_notes en
         JOIN appointments a ON a.id = en.appointment_id
         LEFT JOIN providers p ON p.id = en.provider_id
-        WHERE en.child_id = ${child_id}::uuid
+        WHERE en.child_id = ${child_id}::uuid AND en.practice_id = ${practiceId}::uuid
         ORDER BY a.scheduled_date DESC`
       return res.json(rows)
     }
@@ -52,8 +57,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const photosVal = photos ?? []
 
     const [row] = await sql`
-      INSERT INTO encounter_notes (appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, photos)
+      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, photos)
       VALUES (
+        ${practiceId}::uuid,
         ${appointment_id}::uuid,
         ${child_id ?? null}::uuid,
         ${provider_id ?? null}::uuid,

@@ -14,8 +14,9 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -24,13 +25,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   if (req.method === 'GET') {
-    const rows = await sql`SELECT * FROM encounter_notes WHERE id = ${id}::uuid LIMIT 1`
+    const rows = await sql`SELECT * FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
     return res.json(rows[0] ?? null)
   }
 
   if (req.method === 'PUT') {
-    const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid LIMIT 1`
+    const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
     if (!existing) return res.status(404).json({ error: 'Note not found' })
 
     const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed } = req.body
@@ -54,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         is_signed       = ${signing},
         signed_at       = CASE WHEN ${signing} THEN now() WHEN ${unlocking} THEN NULL ELSE signed_at END,
         updated_at      = now()
-      WHERE id = ${id}::uuid
+      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`
     return res.json(row)
   }
