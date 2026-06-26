@@ -14,13 +14,19 @@ async function verifyFamilyToken(authHeader: string | undefined): Promise<string
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyFamilyToken(req.headers.authorization)
+    sub = await verifyFamilyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
+
+  const familyRows = await sql`SELECT practice_id FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!familyRows.length) return res.status(403).json({ error: 'Family not found' })
+  const practiceId = familyRows[0].practice_id as string
+
   const { id } = req.query as { id: string }
 
   if (req.method === 'PATCH') {
@@ -48,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
           phi_sharing_consent  = COALESCE(${b.phi_sharing_consent  ?? null}, phi_sharing_consent),
           charm_patient_id     = COALESCE(${b.charm_patient_id     || null}, charm_patient_id)
-        WHERE id = ${id}::uuid
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
       return res.json(row)
     } catch (err: any) {
@@ -57,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM children WHERE id = ${id}::uuid`
+    await sql`DELETE FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
     return res.status(204).end()
   }
 
