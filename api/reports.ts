@@ -14,8 +14,9 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -24,10 +25,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   const { start, end } = req.query as Record<string, string>
   const [appointments, providers] = await Promise.all([
-    sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date`,
-    sql`SELECT id, name FROM providers WHERE role != 'admin'`,
+    sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
+    sql`SELECT id, name FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
   ])
 
   res.json({ appointments, providers })
