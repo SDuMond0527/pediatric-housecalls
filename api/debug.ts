@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { createRemoteJWKSet } from 'jose'
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
+  void createRemoteJWKSet
   const checks: Record<string, unknown> = {
     DATABASE_URL: process.env.DATABASE_URL ? 'set ✓' : 'MISSING ✗',
     VITE_AWS_REGION: process.env.VITE_AWS_REGION || 'MISSING ✗',
