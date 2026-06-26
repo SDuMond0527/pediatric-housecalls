@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
           phi_sharing_consent  = COALESCE(${b.phi_sharing_consent  ?? null}, phi_sharing_consent),
           charm_patient_id     = COALESCE(${b.charm_patient_id     || null}, charm_patient_id)
-        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}
         RETURNING *`
       return res.json(row)
     } catch (err: any) {
@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    await sql`DELETE FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}`
     return res.status(204).end()
   }
 

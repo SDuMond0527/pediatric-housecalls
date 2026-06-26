@@ -15,12 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PATCH') {
     const { is_open } = req.body
-    const [row] = await sql`UPDATE broadcasts SET is_open=${is_open} WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+    const [row] = await sql`UPDATE broadcasts SET is_open=${is_open} WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
     return res.json(row)
   }
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM broadcasts WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    await sql`DELETE FROM broadcasts WHERE id = ${id}::uuid AND practice_id = ${practiceId}`
     return res.status(204).end()
   }
 

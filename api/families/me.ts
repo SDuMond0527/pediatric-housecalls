@@ -20,8 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Family not found' })
     }
     const [profiles, kids] = await Promise.all([
-      sql`SELECT * FROM family_profiles WHERE cognito_sub = ${sub} AND practice_id = ${ctx.practiceId}::uuid LIMIT 1`,
-      sql`SELECT * FROM children WHERE family_id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}::uuid ORDER BY created_at`,
+      sql`SELECT * FROM family_profiles WHERE cognito_sub = ${sub} AND practice_id = ${ctx.practiceId} LIMIT 1`,
+      sql`SELECT * FROM children WHERE family_id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId} ORDER BY created_at`,
     ])
     if (profiles.length === 0) return res.status(404).json({ error: 'Family not found' })
     return res.json({ family: profiles[0], children: kids })
@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${referral_source ?? null},
           ${agreements_accepted_at ?? null}::timestamptz,
           ${payment_policy_accepted_at ?? null}::timestamptz,
-          ${practiceId}::uuid
+          ${practiceId}
         )
         ON CONFLICT (cognito_sub) DO UPDATE SET
           display_name = COALESCE(EXCLUDED.display_name, family_profiles.display_name),

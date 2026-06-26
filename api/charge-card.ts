@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Load the appointment
-  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+  const [appt] = await sql`SELECT id, notes, charm_appointment_id FROM appointments WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId} LIMIT 1`
   if (!appt) return res.status(404).json({ error: 'Appointment not found' })
 
   // Prevent double-charging: check if already charged
@@ -53,16 +53,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const refMatch = (appt.notes as string | null)?.match(/Ref:\s*(PUC-\d+)/)
   if (refMatch) {
-    const [br] = await sql`SELECT family_id FROM booking_requests WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    const [br] = await sql`SELECT family_id FROM booking_requests WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId} LIMIT 1`
     if (br) {
-      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId} LIMIT 1`
     }
   }
 
   if (!family && appt.charm_appointment_id) {
-    const [br] = await sql`SELECT family_id FROM booking_requests WHERE charm_appointment_id = ${appt.charm_appointment_id} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    const [br] = await sql`SELECT family_id FROM booking_requests WHERE charm_appointment_id = ${appt.charm_appointment_id} AND practice_id = ${practiceId} LIMIT 1`
     if (br) {
-      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      ;[family] = await sql`SELECT square_customer_id, square_card_id FROM family_profiles WHERE id = ${br.family_id}::uuid AND practice_id = ${practiceId} LIMIT 1`
     }
   }
 
@@ -87,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Append charge info to appointment notes
   const chargeTag = `|CHARGE_ID:${payment.id}|CHARGED_CENTS:${amountCents}`
-  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}::uuid`
+  await sql`UPDATE appointments SET notes = COALESCE(notes, '') || ${chargeTag} WHERE id = ${appointmentId}::uuid AND practice_id = ${practiceId}`
 
   return res.json({
     ok: true,

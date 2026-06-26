@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [family] = await sql`
       SELECT id, email, display_name, square_customer_id
-      FROM family_profiles WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}::uuid LIMIT 1`
+      FROM family_profiles WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId} LIMIT 1`
     if (!family) return res.status(404).json({ error: 'Family not found' })
 
     let customerId = family.square_customer_id as string | null
@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`
       UPDATE family_profiles
       SET square_customer_id = ${customerId}, square_card_id = ${card.id as string}
-      WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}::uuid`
+      WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}`
 
     return res.json({ ok: true, cardBrand: card.card_brand, last4: card.last_4 })
   } catch (e: any) {

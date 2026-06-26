@@ -14,6 +14,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' })
 
   const { id } = req.query as { id: string }
-  await sql`DELETE FROM availability_overrides WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+  await sql`DELETE FROM availability_overrides WHERE id = ${id}::uuid AND practice_id = ${practiceId}`
   res.status(204).end()
 }

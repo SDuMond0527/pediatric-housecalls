@@ -89,19 +89,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [noteRow] = await sql`
       SELECT c.* FROM encounter_notes en
       JOIN children c ON c.id = en.child_id
-      WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
+      WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}
       LIMIT 1`
     if (noteRow) {
       child = noteRow
     } else {
       // Try via booking request reference code in appointment notes
-      const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+      const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}`
       const refMatch = (appt?.notes ?? '').match(/Ref: (PUC-\d+)/)
       if (refMatch) {
-        const [booking] = await sql`SELECT child_ids FROM booking_requests WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId}::uuid LIMIT 1`
+        const [booking] = await sql`SELECT child_ids FROM booking_requests WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId} LIMIT 1`
         const childId = booking?.child_ids?.[0]
         if (childId) {
-          const [c] = await sql`SELECT * FROM children WHERE id = ${childId}::uuid AND practice_id = ${practiceId}::uuid`
+          const [c] = await sql`SELECT * FROM children WHERE id = ${childId}::uuid AND practice_id = ${practiceId}`
           child = c ?? null
         }
       }

@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                fp.state        AS family_state
         FROM children c
         LEFT JOIN family_profiles fp ON fp.id = c.family_id
-        WHERE c.practice_id = ${practiceId}::uuid
+        WHERE c.practice_id = ${practiceId}
           AND (
             c.first_name ILIKE ${q}
             OR c.last_name  ILIKE ${q}
@@ -41,12 +41,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ids) {
       const idList = ids.split(',').filter(Boolean)
       if (!idList.length) return res.json([])
-      const rows = await sql`SELECT * FROM children WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}::uuid`
+      const rows = await sql`SELECT * FROM children WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}`
       return res.json(rows)
     }
     if (!family_ids) return res.json([])
     const famIds = family_ids.split(',').filter(Boolean)
-    const rows = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}::uuid`
+    const rows = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}`
     return res.json(rows)
   }
 
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { display_label, family_id } = req.body
       const [row] = await sql`
         INSERT INTO children (display_label, family_id, practice_id)
-        VALUES (${display_label}, ${family_id}::uuid, ${practiceId}::uuid)
+        VALUES (${display_label}, ${family_id}::uuid, ${practiceId})
         RETURNING *`
       return res.json(row)
     } catch (e: any) {

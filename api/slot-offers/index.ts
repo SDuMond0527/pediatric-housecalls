@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     WHERE waitlist_entry_id = ANY(${ids}::uuid[])
       AND status = 'pending'
       AND expires_at > ${now}::timestamptz
-      AND practice_id = ${practiceId}::uuid
+      AND practice_id = ${practiceId}
     ORDER BY created_at DESC`
   res.json(rows)
 }

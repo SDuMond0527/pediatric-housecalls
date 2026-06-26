@@ -11,8 +11,6 @@ export interface Provider {
   avatar_text_color: string
   is_active: boolean
   is_admin: boolean
-  is_super_admin: boolean
-  practice_id: string
   created_at: string
 }
 

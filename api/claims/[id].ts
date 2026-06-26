@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: 'id required' })
 
   if (req.method === 'GET') {
-    const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}`
     return res.json(claim ?? null)
   }
 
@@ -135,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Submit to Stedi
     if (action === 'submit') {
-      const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+      const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}`
       if (!claim) return res.status(404).json({ error: 'Claim not found' })
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
@@ -164,13 +164,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               stedi_response = ${JSON.stringify(stediData)}::jsonb,
               submission_error = ${JSON.stringify(stediData)},
               updated_at = now()
-            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+            WHERE id = ${id}::uuid AND practice_id = ${practiceId} RETURNING *`
           return res.status(422).json({ error: 'Stedi rejected the claim', details: stediData, claim: updated })
         }
       } catch (err: any) {
         const [updated] = await sql`
           UPDATE claims SET status = 'error', submission_error = ${err.message}, updated_at = now()
-          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId} RETURNING *`
         return res.status(500).json({ error: 'Failed to reach Stedi', claim: updated })
       }
 
@@ -183,7 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           submission_error = NULL,
           submitted_at = now(),
           updated_at = now()
-        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId} RETURNING *`
       return res.json(updated)
     }
 
@@ -217,7 +217,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
         status                     = COALESCE(${updates.status ?? null}, status),
         updated_at                 = now()
-      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+      WHERE id = ${id}::uuid AND practice_id = ${practiceId} RETURNING *`
     return res.json(updated)
   }
 

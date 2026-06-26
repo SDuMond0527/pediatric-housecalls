@@ -18,9 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let row: unknown
   if (converted_provider_id) {
-    ;[row] = await sql`UPDATE waitlist_entries SET status=${status}, converted_provider_id=${converted_provider_id}::uuid WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+    ;[row] = await sql`UPDATE waitlist_entries SET status=${status}, converted_provider_id=${converted_provider_id}::uuid WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
   } else {
-    ;[row] = await sql`UPDATE waitlist_entries SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+    ;[row] = await sql`UPDATE waitlist_entries SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
   }
   res.json(row)
 }

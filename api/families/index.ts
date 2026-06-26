@@ -16,6 +16,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ids } = req.query as Record<string, string>
   if (!ids) return res.json([])
   const idList = ids.split(',').filter(Boolean)
-  const rows = await sql`SELECT * FROM family_profiles WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}::uuid`
+  const rows = await sql`SELECT * FROM family_profiles WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}`
   res.json(rows)
 }

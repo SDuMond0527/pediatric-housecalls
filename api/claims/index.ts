@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         LEFT JOIN claims cl ON cl.encounter_note_id = en.id
         WHERE en.is_signed = true
           AND cl.id IS NULL
-          AND en.practice_id = ${practiceId}::uuid
+          AND en.practice_id = ${practiceId}
         ORDER BY a.scheduled_date DESC NULLS LAST`
       return res.json(rows)
     }
@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name
         FROM claims cl
         LEFT JOIN children c ON c.id = cl.child_id
-        WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
+        WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}
         ORDER BY cl.created_at DESC`
       return res.json(rows)
     }
@@ -89,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name
       FROM claims cl
       LEFT JOIN children c ON c.id = cl.child_id
-      WHERE cl.practice_id = ${practiceId}::uuid
+      WHERE cl.practice_id = ${practiceId}
       ORDER BY cl.created_at DESC`
     return res.json(rows)
   }
@@ -100,23 +100,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!encounter_note_id) return res.status(400).json({ error: 'encounter_note_id required' })
 
     // Check not already claimed
-    const [existing] = await sql`SELECT id FROM claims WHERE encounter_note_id = ${encounter_note_id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [existing] = await sql`SELECT id FROM claims WHERE encounter_note_id = ${encounter_note_id}::uuid AND practice_id = ${practiceId}`
     if (existing) return res.status(409).json({ error: 'Claim already exists for this note', claim_id: existing.id })
 
     // Load note + appointment + child + provider
-    const [note] = await sql`SELECT * FROM encounter_notes WHERE id = ${encounter_note_id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [note] = await sql`SELECT * FROM encounter_notes WHERE id = ${encounter_note_id}::uuid AND practice_id = ${practiceId}`
     if (!note) return res.status(404).json({ error: 'Note not found' })
     if (!note.is_signed) return res.status(400).json({ error: 'Note must be signed before generating a claim' })
 
-    const [appt] = await sql`SELECT * FROM appointments WHERE id = ${note.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [appt] = await sql`SELECT * FROM appointments WHERE id = ${note.appointment_id}::uuid AND practice_id = ${practiceId}`
     const [child] = note.child_id
-      ? await sql`SELECT * FROM children WHERE id = ${note.child_id}::uuid AND practice_id = ${practiceId}::uuid`
+      ? await sql`SELECT * FROM children WHERE id = ${note.child_id}::uuid AND practice_id = ${practiceId}`
       : [null]
     const [provider] = note.provider_id
-      ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid AND practice_id = ${practiceId}::uuid`
+      ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid AND practice_id = ${practiceId}`
       : [null]
     const [family] = child?.family_id
-      ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
+      ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}`
       : [null]
 
     const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
@@ -169,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${family?.city ?? null},
         ${family?.state ?? null},
         ${family?.zip ?? null},
-        ${practiceId}::uuid
+        ${practiceId}
       )
       RETURNING *`
     return res.status(201).json(claim)

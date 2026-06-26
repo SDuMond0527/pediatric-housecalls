@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { provider_id, date, is_available, start_time, end_time, note } = req.body
   const [row] = await sql`
     INSERT INTO availability_overrides (provider_id, date, is_available, start_time, end_time, note, practice_id)
-    VALUES (${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null}, ${practiceId}::uuid)
+    VALUES (${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null}, ${practiceId})
     ON CONFLICT (provider_id, date) DO UPDATE
     SET is_available=EXCLUDED.is_available, start_time=EXCLUDED.start_time, end_time=EXCLUDED.end_time, note=EXCLUDED.note
     RETURNING *`
