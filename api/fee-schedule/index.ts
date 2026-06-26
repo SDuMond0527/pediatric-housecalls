@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const rows = await sql`
     SELECT code, description, category, charge_amount, place_of_service
     FROM fee_schedule
-    WHERE is_active = true AND practice_id = ${practiceId}
+    WHERE is_active = true AND practice_id = ${practiceId}::uuid
     ORDER BY category, code
   `
   return res.json(rows.map(r => ({ ...r, charge_amount: parseFloat(r.charge_amount as string) })))

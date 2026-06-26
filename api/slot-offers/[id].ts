@@ -15,6 +15,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { id } = req.query as { id: string }
   const { status } = req.body
-  const [row] = await sql`UPDATE slot_offers SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId} RETURNING *`
+  const [row] = await sql`UPDATE slot_offers SET status=${status} WHERE id=${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
   res.json(row)
 }

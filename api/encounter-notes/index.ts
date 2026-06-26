@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { appointment_id, child_id } = req.query as Record<string, string>
 
     if (appointment_id) {
-      const rows = await sql`SELECT * FROM encounter_notes WHERE appointment_id = ${appointment_id}::uuid AND practice_id = ${practiceId} LIMIT 1`
+      const rows = await sql`SELECT * FROM encounter_notes WHERE appointment_id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       return res.json(rows[0] ?? null)
     }
 
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM encounter_notes en
         JOIN appointments a ON a.id = en.appointment_id
         LEFT JOIN providers p ON p.id = en.provider_id
-        WHERE en.child_id = ${child_id}::uuid AND en.practice_id = ${practiceId}
+        WHERE en.child_id = ${child_id}::uuid AND en.practice_id = ${practiceId}::uuid
         ORDER BY a.scheduled_date DESC`
       return res.json(rows)
     }
@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${plan ?? null},
         ${JSON.stringify(diagnosesVal)}::jsonb,
         ${JSON.stringify(photosVal)}::jsonb,
-        ${practiceId}
+        ${practiceId}::uuid
       )
       RETURNING *`
     return res.json(row)

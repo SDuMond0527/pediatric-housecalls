@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE provider_id = ${provider_id}::uuid
         AND start_date <= ${date}::date
         AND end_date >= ${date}::date
-        AND practice_id = ${practiceId}
+        AND practice_id = ${practiceId}::uuid
       ORDER BY start_time`
     return res.json(rows)
   }
@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { provider_id, start_date, end_date, all_day, start_time, end_time, reason } = req.body
     const [row] = await sql`
       INSERT INTO schedule_blocks (provider_id, start_date, end_date, all_day, start_time, end_time, reason, practice_id)
-      VALUES (${provider_id}::uuid, ${start_date}::date, ${end_date}::date, ${all_day ?? false}, ${start_time ?? null}, ${end_time ?? null}, ${reason ?? null}, ${practiceId})
+      VALUES (${provider_id}::uuid, ${start_date}::date, ${end_date}::date, ${all_day ?? false}, ${start_time ?? null}, ${end_time ?? null}, ${reason ?? null}, ${practiceId}::uuid)
       RETURNING *`
     return res.json(row)
   }

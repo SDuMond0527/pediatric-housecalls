@@ -16,14 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (name) {
     const [row] = practiceId
-      ? await sql`SELECT * FROM providers WHERE name = ${name} AND practice_id = ${practiceId} LIMIT 1`
+      ? await sql`SELECT * FROM providers WHERE name = ${name} AND practice_id = ${practiceId}::uuid LIMIT 1`
       : await sql`SELECT * FROM providers WHERE name = ${name} LIMIT 1`
     return res.json(row ?? null)
   }
 
   if (role && is_active && zone) {
     const rows = practiceId
-      ? await sql`SELECT * FROM providers WHERE role = ${role} AND is_active = true AND ${zone} = ANY(zones) AND practice_id = ${practiceId}`
+      ? await sql`SELECT * FROM providers WHERE role = ${role} AND is_active = true AND ${zone} = ANY(zones) AND practice_id = ${practiceId}::uuid`
       : await sql`SELECT * FROM providers WHERE role = ${role} AND is_active = true AND ${zone} = ANY(zones)`
     return res.json(rows)
   }
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (names && has_secure_text === 'true') {
     const nameList = names.split(',').filter(Boolean)
     const rows = practiceId
-      ? await sql`SELECT name, role, secure_text_number FROM providers WHERE name = ANY(${nameList}::text[]) AND secure_text_number IS NOT NULL AND practice_id = ${practiceId}`
+      ? await sql`SELECT name, role, secure_text_number FROM providers WHERE name = ANY(${nameList}::text[]) AND secure_text_number IS NOT NULL AND practice_id = ${practiceId}::uuid`
       : await sql`SELECT name, role, secure_text_number FROM providers WHERE name = ANY(${nameList}::text[]) AND secure_text_number IS NOT NULL`
     return res.json(rows)
   }
@@ -39,11 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let rows: unknown[]
   if (exclude_admin === 'true') {
     rows = practiceId
-      ? await sql`SELECT * FROM providers WHERE role != 'admin' AND practice_id = ${practiceId} ORDER BY name`
+      ? await sql`SELECT * FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid ORDER BY name`
       : await sql`SELECT * FROM providers WHERE role != 'admin' ORDER BY name`
   } else {
     rows = practiceId
-      ? await sql`SELECT * FROM providers WHERE practice_id = ${practiceId} ORDER BY role, name`
+      ? await sql`SELECT * FROM providers WHERE practice_id = ${practiceId}::uuid ORDER BY role, name`
       : await sql`SELECT * FROM providers ORDER BY role, name`
   }
   res.json(rows)
