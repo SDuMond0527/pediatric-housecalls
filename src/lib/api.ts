@@ -308,3 +308,6 @@ export const getPractices = () =>
 
 export const createPractice = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/practices', { method: 'POST', body: JSON.stringify(body) })
+
+export const createProviderForPractice = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/practices/providers', { method: 'POST', body: JSON.stringify(body) })
