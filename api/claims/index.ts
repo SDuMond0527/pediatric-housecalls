@@ -122,10 +122,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid`
       : [null]
 
-    const cptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+    const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+    const cptCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
     const total = cptCodes.reduce((s: number, c: any) => s + parseFloat(c.charge_amount ?? 0), 0)
 
-    // Determine place of service from CPT codes (use first code's POS, fallback to 12)
+    // Determine place of service from CPT codes (use first billable code's POS, fallback to 12)
     const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
 
     const payerName = child?.insurance_provider ?? null
