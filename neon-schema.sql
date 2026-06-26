@@ -14,6 +14,11 @@ create table if not exists providers (
   avatar_text_color text not null default '#3C3489',
   is_active boolean not null default true,
   is_admin boolean not null default false,
+  is_super_admin boolean not null default false,
+  phone text,
+  email text,
+  home_address text,
+  secure_text_number text,
   created_at timestamptz default now()
 );
 
