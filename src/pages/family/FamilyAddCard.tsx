@@ -4,6 +4,7 @@ import { CreditCard, Lock } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
+import { PRACTICE_NAME } from '../../lib/practice'
 
 declare global {
   interface Window { Square: any }
@@ -157,7 +158,7 @@ export function FamilyAddCard() {
           <div className="flex items-center gap-2 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg">
             <Lock size={13} className="text-[#999] flex-shrink-0" />
             <p className="text-[11px] text-[#999] leading-snug">
-              Your card is encrypted and stored securely by Square. Pediatric Housecalls never sees your full card number.
+              Your card is encrypted and stored securely by Square. {PRACTICE_NAME} never sees your full card number.
             </p>
           </div>
 

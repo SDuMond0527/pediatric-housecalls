@@ -16,20 +16,38 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  let sub: string
-  try {
-    sub = await verifyToken(req.headers.authorization)
-  } catch {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  const { exclude_admin, name, role, is_active, zone, names, has_secure_text } = req.query as Record<string, string>
+
+  // Determine if this is a family-portal public query (no auth required)
+  const isFamilyQuery =
+    (zone && !role && !name && !names) ||
+    (name && !role && !zone && !names) ||
+    (role && is_active && zone) ||
+    (names && has_secure_text === 'true')
 
   const sql = neon(process.env.DATABASE_URL!)
+  let practiceId: string
 
-  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
-  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
-
-  const { exclude_admin, name, role, is_active, zone, names, has_secure_text } = req.query as Record<string, string>
+  if (req.headers.authorization) {
+    // Authenticated path: verify token and look up practice_id from providers table
+    let sub: string
+    try {
+      sub = await verifyToken(req.headers.authorization)
+    } catch {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+    if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+    practiceId = providerRows[0].practice_id as string
+  } else if (isFamilyQuery) {
+    // Unauthenticated family portal queries: use env-var practice ID
+    const envPracticeId = process.env.VITE_PRACTICE_ID
+    if (!envPracticeId) return res.status(500).json({ error: 'Practice not configured' })
+    practiceId = envPracticeId
+  } else {
+    // List queries without auth are not allowed
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   if (name) {
     const [row] = await sql`SELECT * FROM providers WHERE name = ${name} AND practice_id = ${practiceId}::uuid LIMIT 1`

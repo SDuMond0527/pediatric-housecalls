@@ -24,6 +24,7 @@ import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { getProvidersByZone } from '../../lib/api'
 import { LEAD_MINUTES, VISIT_DURATIONS } from '../../lib/constants'
 import { format } from 'date-fns'
+import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,39 +145,6 @@ function emptyIvFluids(): IvFluidsIntake {
   }
 }
 
-// IV fluids can only be administered by these three RNs, with geographic restrictions
-const IV_FLUID_PROVIDERS = [
-  { name: 'Meghan Trimble', role: 'RN', initials: 'MT', color: '#E1F5EE', textColor: '#085041' },
-  { name: 'Cara Robinson',  role: 'RN', initials: 'CR', color: '#FAEEDA', textColor: '#633806' },
-  { name: 'Karen Hinkle',   role: 'RN', initials: 'KH', color: '#E6F1FB', textColor: '#0C447C' },
-]
-// Cara covers SC + Ballantyne + Waxhaw. Meghan & Karen cover all other NC (not Raleigh, not VA).
-const IV_FLUID_ZONE_PROVIDERS: Record<string, string[]> = {
-  'Huntersville / Davidson / Cornelius': ['Karen Hinkle', 'Meghan Trimble'],
-  'Concord':                             ['Karen Hinkle', 'Meghan Trimble'],
-  'Kannapolis':                          ['Karen Hinkle', 'Meghan Trimble'],
-  'Harrisburg':                          ['Karen Hinkle', 'Meghan Trimble'],
-  'Mooresville':                         ['Karen Hinkle', 'Meghan Trimble'],
-  'Cotswold / SouthPark':               ['Karen Hinkle', 'Meghan Trimble'],
-  'Ballantyne / Providence':            ['Karen Hinkle', 'Meghan Trimble', 'Cara Robinson'],
-  'Matthews':                            ['Karen Hinkle', 'Meghan Trimble'],
-  'Waxhaw / Weddington / Marvin':       ['Karen Hinkle', 'Meghan Trimble', 'Cara Robinson'],
-  'University':                          ['Karen Hinkle', 'Meghan Trimble'],
-  'Oakdale':                             ['Karen Hinkle', 'Meghan Trimble'],
-  'Denver':                              ['Karen Hinkle', 'Meghan Trimble'],
-  'York / Lake Wylie / Clover':         ['Cara Robinson'],
-  'Fort Mill':                           ['Cara Robinson'],
-  'Rock Hill':                           ['Cara Robinson'],
-  'Indianland':                          ['Cara Robinson'],
-  // Greater Raleigh and all Virginia zones intentionally omitted — IV fluids not available
-}
-
-// Display info for CMA providers — zones come from the DB (providers.zones column)
-const CMA_PROVIDERS = [
-  { name: 'Amber Taylor',        role: 'CMA', initials: 'AT', color: '#FAEEDA', textColor: '#633806' },
-  { name: 'Shondalyn Robertson', role: 'CMA', initials: 'SR', color: '#EEEDFE', textColor: '#3C3489' },
-  { name: 'Sonya Hampton',       role: 'CMA', initials: 'SH', color: '#E1F5EE', textColor: '#085041' },
-]
 
 const VAX_OPTIONS = [
   { value: 'fully_vaccinated', label: 'Fully vaccinated to date', desc: 'Following the CDC/AAP recommended schedule' },
@@ -273,19 +241,28 @@ export function BookVisit() {
   const [firstAvailResult, setFirstAvailResult] = useState<{ provider: string; time: string } | null>(null)
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
-  const [cmaProvidersForZone, setCmaProvidersForZone] = useState<typeof CMA_PROVIDERS>([])
+  const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
+  const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
 
   useEffect(() => {
     const isIv = booking.visitType === 'In-home IV fluids'
     const isCma = booking.visitType === 'CMA + telemedicine'
-    if (!booking.zone || isIv || isCma) { setRegularZoneProviders([]); return }
-    getProvidersByZone(booking.zone)
-      .then(providers => setRegularZoneProviders(providers.map((p: any) => ({
+    if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); return }
+    if (!isIv && !isCma) {
+      getProvidersByZone(booking.zone)
+        .then(providers => setRegularZoneProviders(providers.map((p: any) => ({
+          name: p.name, role: p.role, initials: p.initials,
+          color: p.avatar_color, textColor: p.avatar_text_color,
+        }))))
+        .catch(() => setRegularZoneProviders([]))
+    }
+    getProvidersByRole({ role: 'RN', is_active: 'true', zone: booking.zone })
+      .then(providers => setIvZoneProviders(providers.map((p: any) => ({
         name: p.name, role: p.role, initials: p.initials,
-        color: p.avatar_color, textColor: p.avatar_text_color,
+        color: p.avatar_color || '#E1F5EE', textColor: p.avatar_text_color || '#085041',
       }))))
-      .catch(() => setRegularZoneProviders([]))
+      .catch(() => setIvZoneProviders([]))
   }, [booking.zone, booking.visitType])
 
   useEffect(() => {
@@ -460,8 +437,11 @@ export function BookVisit() {
     if (zip.length === 5 && zone) {
       // Served zip — load secure text numbers for providers assigned to this zone
       // (IV fluids: show only the RNs who cover this specific zone)
+      const ivRows = booking.visitType === 'In-home IV fluids'
+        ? await getProvidersByRole({ role: 'RN', is_active: 'true', zone }).catch(() => [] as any[])
+        : []
       const providerNames = booking.visitType === 'In-home IV fluids'
-        ? (IV_FLUID_ZONE_PROVIDERS[zone] || [])
+        ? (ivRows as any[]).map((p: any) => p.name)
         : regularZoneProviders.map(p => p.name)
       if (providerNames.length > 0) {
         const data = await getProvidersByNamesWithSecureText(providerNames).catch(() => [])
@@ -472,9 +452,7 @@ export function BookVisit() {
   }
 
   async function findFirstAvailable(date: string) {
-    const providers = isIvFluids
-      ? ivZoneNames.map(name => IV_FLUID_PROVIDERS.find(p => p.name === name)).filter(Boolean) as typeof IV_FLUID_PROVIDERS
-      : regularZoneProviders
+    const providers = isIvFluids ? ivZoneProviders : regularZoneProviders
     if (!date || providers.length === 0) return
     setFindingFirstAvail(true)
     setFirstAvailResult(null)
@@ -530,13 +508,17 @@ export function BookVisit() {
     if (!date || !zone) return
     // Query CMAs from DB whose zones include this zone
     const cmaRows = await getProvidersByRole({ role: 'CMA', is_active: 'true', zone }).catch(() => [])
-    const cmaNames = (cmaRows ?? []).map((r: any) => r.name as string)
-    if (cmaNames.length === 0) return
+    if (!cmaRows?.length) return
 
-    // Update the display list for the provider picker
     setCmaProvidersForZone(
-      cmaNames.map(name => CMA_PROVIDERS.find(p => p.name === name) ?? { name, role: 'CMA', initials: name.split(' ').map((w: string) => w[0]).join('').slice(0, 2), color: '#EEEDFE', textColor: '#3C3489' })
+      (cmaRows ?? []).map((r: any) => ({
+        name: r.name, role: r.role,
+        initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
+        color: r.avatar_color || '#EEEDFE',
+        textColor: r.avatar_text_color || '#3C3489',
+      }))
     )
+    const cmaNames = (cmaRows ?? []).map((r: any) => r.name as string)
 
     const leadTimeSlots = getAvailableSlots('CMA + telemedicine', date)
     if (leadTimeSlots.length === 0) return
@@ -624,10 +606,9 @@ export function BookVisit() {
     setWaitlistDone(true)
   }
 
-  const ivZoneNames = isIvFluids ? (IV_FLUID_ZONE_PROVIDERS[booking.zone] || []) : []
   const isCmaVisit = booking.visitType === 'CMA + telemedicine'
   const zoneProviders = isIvFluids
-    ? ivZoneNames.map(name => IV_FLUID_PROVIDERS.find(p => p.name === name)).filter(Boolean) as typeof IV_FLUID_PROVIDERS
+    ? ivZoneProviders
     : isCmaVisit && cmaProvidersForZone.length > 0
       ? cmaProvidersForZone
       : regularZoneProviders
@@ -909,7 +890,7 @@ export function BookVisit() {
           <div className="bg-[#FDEDEC] border border-[#F5B7B1] rounded-lg p-3 max-w-sm mx-auto text-[13px] text-[#922B21] text-left mb-6 space-y-2">
             <div><strong>Next steps:</strong></div>
             <div>1. Check your email for the e-learning link — all attendees must complete it before class.</div>
-            <div>2. Send payment via Venmo <strong>@Pediatric-Housecalls</strong> (${booking.participantCount * 80}).</div>
+            <div>2. Send payment via Venmo <strong>@{VENMO_HANDLE}</strong> (${booking.participantCount * 80}).</div>
             <div>3. Email attendee names to <strong>deeringmel@me.com</strong>.</div>
           </div>
         ) : (
@@ -1255,7 +1236,7 @@ export function BookVisit() {
                 {booking.ivFluidsIntake.consentUnderstood && <Check size={11} className="text-white" strokeWidth={3} />}
               </div>
               <span className={`text-[13px] leading-relaxed ${booking.ivFluidsIntake.consentUnderstood ? 'text-[#085041] font-medium' : 'text-[#555]'}`}>
-                I understand that IV fluids will only be provided if medically necessary after a video visit with one of the Pediatric Housecalls providers.
+                I understand that IV fluids will only be provided if medically necessary after a video visit with one of the {PRACTICE_NAME} providers.
               </span>
             </button>
 
@@ -1611,7 +1592,7 @@ export function BookVisit() {
                 <strong>E-learning required:</strong> After booking, you'll receive an e-learning link by email. All participants must complete it before class day.
               </div>
               <div className="p-3.5 bg-[#E8F8F5] border border-[#A9DFBF] rounded-xl text-[13px] text-[#1E8449]">
-                <strong>Payment:</strong> Venmo <strong>@Pediatric-Housecalls</strong> — ${booking.participantCount * 80} total (${booking.participantCount} × $80).
+                <strong>Payment:</strong> Venmo <strong>@{VENMO_HANDLE}</strong> — ${booking.participantCount * 80} total (${booking.participantCount} × $80).
               </div>
               <div className="p-3.5 bg-[#EBF5FB] border border-[#AED6F1] rounded-xl text-[13px] text-[#1A5276]">
                 <strong>Attendee names:</strong> Please email the full names of all attendees to <strong>deeringmel@me.com</strong> so Melissa can prepare completion cards.
@@ -1665,7 +1646,7 @@ export function BookVisit() {
               <span className={`text-[13px] leading-relaxed ${agreementsAccepted ? 'text-[#3C3489] font-medium' : 'text-[#555]'}`}>
                 By checking, you accept our{' '}
                 <span className="underline">Terms of Service</span>, acknowledge that you have read and understood our{' '}
-                <span className="underline">Privacy Policy</span>, and consent to receive SMS communications about your appointments and/or waitlist availability from Pediatric Housecalls. Message frequency may vary. Message and data rates may apply. Reply HELP for help or STOP to opt-out.{' '}
+                <span className="underline">Privacy Policy</span>, and consent to receive SMS communications about your appointments and/or waitlist availability from {PRACTICE_NAME}. Message frequency may vary. Message and data rates may apply. Reply HELP for help or STOP to opt-out.{' '}
                 <span className="text-[#ff3b30]">*</span>
               </span>
             </button>
@@ -1676,7 +1657,7 @@ export function BookVisit() {
               <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-1.5">Payment Policy</div>
               <div className="max-h-48 overflow-y-auto border border-[#E8E8E4] rounded-xl bg-[#FAFAF8] p-4 text-[12px] text-[#555] leading-relaxed mb-3 space-y-3">
                 <p className="font-bold text-[#1A1A2E] uppercase">WE NOW REQUIRE ALL FAMILIES TO HAVE AN UPDATED CREDIT CARD SAVED ON FILE, EVEN IF YOU ONLY PLAN ON USING US ONE TIME.</p>
-                <p>Pediatric Housecalls requires a valid credit card number at the time of the appointment request but no charges will be made to the card at that time. A convenience fee will be charged to this credit card after the visit has been completed. This is a non-covered service, meaning that it is in addition to your copay, and is simply the cost to cover our time and travel to your home. If the provider assigned to your area is unavailable, we are often able to pull other providers from other areas, but there may be an added convenience fee to offset the extra distance/travel time. We will make every effort to accommodate an appointment with a provider in your area to help keep cost down, but please understand the constraints of travel time, particularly during busy times of year.</p>
+                <p>{PRACTICE_NAME} requires a valid credit card number at the time of the appointment request but no charges will be made to the card at that time. A convenience fee will be charged to this credit card after the visit has been completed. This is a non-covered service, meaning that it is in addition to your copay, and is simply the cost to cover our time and travel to your home. If the provider assigned to your area is unavailable, we are often able to pull other providers from other areas, but there may be an added convenience fee to offset the extra distance/travel time. We will make every effort to accommodate an appointment with a provider in your area to help keep cost down, but please understand the constraints of travel time, particularly during busy times of year.</p>
                 <p>If using insurance, we will file the claim for the visit with your insurance company for you, and it often takes the insurance company 90 days to process the claims. Once the claim has been processed, we will email a billing statement to you, to notify you if any portion of the cost of the visit was applied toward your deductible, leaving you responsible for the remaining (or full) amount. We will give you the choice of paying online through Bill Flash. If not paid online through Bill Flash within 2 weeks, your credit card on file will automatically be charged for the amount owed and an itemized receipt will automatically be emailed to you.</p>
                 <p>Many employee-sponsored health insurance plans have moved to high-deductible plans, leaving a large burden of the cost to the patient. Knowing whether or not you have met your annual deductible, and knowing your particular plan's policy regarding urgent care visits, will allow you to anticipate what percentage of the cost of a housecall visit you will be responsible for.</p>
                 <p>Your credit card information will always be fully protected and encrypted by our off-site, card-processing partner, and not on our computers, as required by industry standards (Payment Card Industry Data Security Standard – PCI-DSS).</p>
@@ -2092,7 +2073,7 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
                 {intake.phiSharingConsent && <Check size={11} className="text-white" strokeWidth={3} />}
               </div>
               <span className={`text-[13px] leading-relaxed ${intake.phiSharingConsent ? 'text-[#085041] font-medium' : 'text-[#555]'}`}>
-                I give Pediatric Housecalls permission to share this patient's health information with other doctors and providers involved in the patient's care.
+                I give {PRACTICE_NAME} permission to share this patient's health information with other doctors and providers involved in the patient's care.
               </span>
             </button>
           </div>

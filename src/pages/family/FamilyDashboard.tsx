@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { BookingRequest, SlotOffer } from '../../types/family'
+import { PRACTICE_NAME } from '../../lib/practice'
 
 const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids']
 
@@ -209,7 +210,7 @@ export function FamilyDashboard() {
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center shadow-sm">
           <CalendarPlus size={28} className="text-[#aeaeb2] mx-auto mb-3" />
           <h3 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">No appointments yet</h3>
-          <p className="text-[13px] text-[#999] mb-5">Book your first visit with Pediatric Housecalls.</p>
+          <p className="text-[13px] text-[#999] mb-5">Book your first visit with {PRACTICE_NAME}.</p>
           <Button onClick={() => navigate('/family/book')}>Book a visit</Button>
         </div>
       )}

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { PracticeLogo, PRACTICE_NAME } from '../../lib/practice'
 
 export function FamilyLogin() {
   const { signIn } = useFamilyAuth()
@@ -26,7 +27,7 @@ export function FamilyLogin() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
-            Pediatric<span style={{ color: '#7F77DD' }}>Housecalls</span>
+            <PracticeLogo />
           </div>
           <div className="text-[13px] text-[#999]">Mobile pediatric urgent care · NC · SC · VA</div>
           <div className="flex justify-center gap-1.5 mt-3 flex-wrap">
@@ -48,7 +49,7 @@ export function FamilyLogin() {
           </form>
 
           <p className="text-center text-[13px] text-[#999] mt-5">
-            New to Pediatric Housecalls?{' '}
+            New to {PRACTICE_NAME}?{' '}
             <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">Create account</Link>
           </p>
         </div>

@@ -5,6 +5,7 @@ import { updateMyFamily, createChild } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { PracticeLogo } from '../../lib/practice'
 
 const US_STATES: [string, string][] = [
   ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],
@@ -82,7 +83,7 @@ export function FamilySetup() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
-            Pediatric<span style={{ color: '#7F77DD' }}>Housecalls</span>
+            <PracticeLogo />
           </div>
           <p className="text-[13px] text-[#999] mt-1">Let's set up your family profile</p>
         </div>
