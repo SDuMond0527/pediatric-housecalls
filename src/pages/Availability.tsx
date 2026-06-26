@@ -13,7 +13,8 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
-import { DEFAULT_AVAILABILITY, DAYS_OF_WEEK, VISIT_TYPES } from '../lib/constants'
+import { DEFAULT_AVAILABILITY, DAYS_OF_WEEK } from '../lib/constants'
+import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import type { Availability, ZoneRestriction, TimeBlock } from '../types'
 
 interface AvailabilityOverride {
@@ -35,14 +36,6 @@ interface VisitTypeAvail {
   end_time: string
 }
 
-const VISIT_TYPE_ORDER = [
-  'In-home sick visit',
-  'Sports physical',
-  'Video telemedicine',
-  'Text visit',
-  'CMA + telemedicine',
-  'In-home IV fluids',
-] as const
 
 const ALL_TIMES: string[] = (() => {
   const times: string[] = []
@@ -73,8 +66,8 @@ function fmt12to24(t: string) {
   return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`
 }
 
-function defaultVisitTypeAvail(providerId: string): VisitTypeAvail[] {
-  return VISIT_TYPE_ORDER.map(vt => ({
+function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): VisitTypeAvail[] {
+  return visitTypeNames.map(vt => ({
     id: null,
     provider_id: providerId,
     visit_type: vt,
@@ -86,6 +79,7 @@ function defaultVisitTypeAvail(providerId: string): VisitTypeAvail[] {
 
 export function Availability() {
   const { provider } = useAuth()
+  const { visitTypes, byType } = usePracticeVisitTypes()
   const [avail, setAvail] = useState<Availability[]>([])
   const [visitTypeAvail, setVisitTypeAvail] = useState<VisitTypeAvail[]>([])
   const [zoneRestrictions, setZoneRestrictions] = useState<ZoneRestriction[]>([])
@@ -109,26 +103,30 @@ export function Availability() {
     note: '',
   })
 
+  const [savedVisitTypes, setSavedVisitTypes] = useState<VisitTypeAvail[]>([])
+
   useEffect(() => {
     if (!provider) return
-    getAvailability(provider.id).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes }) => {
+    getAvailability(provider.id).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
       if (days && days.length > 0) setAvail(days as Availability[])
       else setAvail(DEFAULT_AVAILABILITY.map(d => ({ ...d, id: '', provider_id: provider.id })))
-
-      const saved = (visitTypes ?? []) as VisitTypeAvail[]
-      const defaults = defaultVisitTypeAvail(provider.id)
-      // Merge saved rows with defaults so all 6 types always appear
-      const merged = defaults.map(def => {
-        const existing = saved.find(s => s.visit_type === def.visit_type)
-        return existing ? existing : def
-      })
-      setVisitTypeAvail(merged)
-
+      setSavedVisitTypes((saved ?? []) as VisitTypeAvail[])
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
       setTimeBlocks((tb ?? []) as TimeBlock[])
       setOverrides(((ov ?? []) as any[]).map(o => ({ ...o, date: (o.date as string).split('T')[0] })) as AvailabilityOverride[])
     })
   }, [provider])
+
+  // Re-merge whenever saved rows or practice visit types change
+  useEffect(() => {
+    if (!provider || visitTypes.length === 0) return
+    const defaults = defaultVisitTypeAvail(provider.id, visitTypes.map(v => v.visit_type))
+    const merged = defaults.map(def => {
+      const existing = savedVisitTypes.find(s => s.visit_type === def.visit_type)
+      return existing ?? def
+    })
+    setVisitTypeAvail(merged)
+  }, [provider, visitTypes, savedVisitTypes])
 
   function toggleDay(i: number) {
     setAvail(prev => prev.map((a, idx) => idx === i ? { ...a, is_active: !a.is_active } : a))
@@ -332,15 +330,15 @@ export function Availability() {
           </p>
           <div className="space-y-2">
             {visitTypeAvail.map(v => {
-              const config = VISIT_TYPES[v.visit_type as keyof typeof VISIT_TYPES]
+              const config = byType[v.visit_type]
               return (
                 <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span
                       className="text-[12px] font-medium px-2.5 py-1 rounded-full"
-                      style={{ background: config?.color ?? '#F0F0EE', color: config?.textColor ?? '#555' }}
+                      style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
                     >
-                      {config?.badge ?? v.visit_type}
+                      {config?.badge_label ?? v.visit_type}
                     </span>
                     <button onClick={() => toggleVisitType(v.visit_type)}
                       className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>

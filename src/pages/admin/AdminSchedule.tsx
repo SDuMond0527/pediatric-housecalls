@@ -5,11 +5,9 @@ import { getProviders, getAppointments, createAppointment, updateAppointment, up
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
-import { VISIT_TYPES } from '../../lib/constants'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
+import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import type { Appointment, Provider } from '../../types'
-
-const VISIT_TYPE_OPTIONS = Object.keys(VISIT_TYPES) as (keyof typeof VISIT_TYPES)[]
 
 function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: any; error: string | null } | undefined; onCheck: () => void }) {
   if (!state) {
@@ -119,6 +117,7 @@ function to12h(time24: string): string {
 
 export function AdminSchedule() {
   const { zipToZone } = usePracticeZones()
+  const { visitTypes, byType } = usePracticeVisitTypes()
   const [providers, setProviders] = useState<Provider[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [filterProvider, setFilterProvider] = useState('')
@@ -246,7 +245,7 @@ export function AdminSchedule() {
             </div>
             <div className="space-y-1.5 ml-9">
               {appts.map(appt => {
-                const vt = VISIT_TYPES[appt.visit_type]
+                const vt = byType[appt.visit_type]
                 const isExpanded = expanded === appt.id
                 return (
                   <div key={appt.id}
@@ -256,7 +255,7 @@ export function AdminSchedule() {
                       <span className="text-[12px] text-[#555] w-14 flex-shrink-0">{to12h(appt.scheduled_time)}</span>
                       <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{appt.visit_type}</span>
                       <span className="text-[12px] text-[#555] hidden sm:block">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</span>
-                      <Badge color={vt?.color} textColor={vt?.textColor}>{vt?.badge || appt.visit_type}</Badge>
+                      <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{vt?.badge_label || appt.visit_type}</Badge>
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
                       <ChevronDown size={13} className={`text-[#999] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
@@ -458,7 +457,7 @@ export function AdminSchedule() {
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
               <select value={form.visit_type} onChange={e => setForm(f => ({ ...f, visit_type: e.target.value }))}
                 className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans bg-white">
-                {VISIT_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                {visitTypes.map(vt => <option key={vt.visit_type} value={vt.visit_type}>{vt.visit_type}</option>)}
               </select>
             </div>
             <div>

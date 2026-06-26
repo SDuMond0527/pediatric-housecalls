@@ -321,5 +321,14 @@ export const upsertPracticeZone = (body: Record<string, unknown>) =>
 export const deletePracticeZone = (id: string) =>
   apiFetch<void>(`/api/practice-zones?id=${id}`, { method: 'DELETE' })
 
+export const getPracticeVisitTypes = (practiceId: string) =>
+  apiFetch<any[]>(`/api/admin/practice-visit-types?practice_id=${practiceId}`)
+
+export const upsertPracticeVisitType = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/admin/practice-visit-types', { method: 'POST', body: JSON.stringify(body) })
+
+export const deletePracticeVisitType = (id: string) =>
+  apiFetch<void>(`/api/admin/practice-visit-types?id=${id}`, { method: 'DELETE' })
+
 export const getProvidersByZone = (zone: string) =>
   publicFetch<any[]>(`/api/providers?zone=${encodeURIComponent(zone)}`)

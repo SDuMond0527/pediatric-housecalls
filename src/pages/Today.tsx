@@ -12,12 +12,10 @@ import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
-import { VISIT_TYPES } from '../lib/constants'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeZones } from '../hooks/usePracticeZones'
+import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import type { Appointment } from '../types'
-
-const VISIT_TYPE_OPTIONS = Object.keys(VISIT_TYPES) as (keyof typeof VISIT_TYPES)[]
 
 function to12h(time24: string): string {
   const [h, m] = time24.split(':').map(Number)
@@ -53,6 +51,7 @@ interface ScheduleBlock {
 export function Today() {
   const { provider } = useAuth()
   const { zipToZone } = usePracticeZones()
+  const { visitTypes, byType } = usePracticeVisitTypes()
   const [appts, setAppts] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -498,7 +497,7 @@ export function Today() {
         ) : (
           <div className="space-y-2">
             {appts.map(appt => {
-              const vt = VISIT_TYPES[appt.visit_type]
+              const vt = byType[appt.visit_type]
               const isExpanded = expanded === appt.id
 
 
@@ -513,7 +512,7 @@ export function Today() {
                       <div className={`font-display text-[15px] font-medium ${isExpanded ? 'text-[#3C3489]' : 'text-[#1A1A2E]'}`}>{appt.visit_type}</div>
                       <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
                     </div>
-                    <Badge color={vt?.color} textColor={vt?.textColor}>{vt?.badge || appt.visit_type}</Badge>
+                    <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{vt?.badge_label || appt.visit_type}</Badge>
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
                     <ChevronDown size={14} className={`text-[#999] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -1010,7 +1009,7 @@ export function Today() {
                 <select value={addForm.visitType}
                   onChange={e => setAddForm(f => ({ ...f, visitType: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
-                  {VISIT_TYPE_OPTIONS.map(vt => <option key={vt} value={vt}>{vt}</option>)}
+                  {visitTypes.map(vt => <option key={vt.visit_type} value={vt.visit_type}>{vt.visit_type}</option>)}
                 </select>
               </div>
 

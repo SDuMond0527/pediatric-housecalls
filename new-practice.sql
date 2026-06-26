@@ -22,20 +22,25 @@ RETURNING id, name, slug;
 
 -- ⚠️  Copy the `id` from the row above — you need it for VITE_PRACTICE_ID in Vercel.
 
--- Step 2: Seed the fee schedule (visit types and base prices for this practice)
+-- Step 2: Seed visit types for this practice.
 -- Replace <PRACTICE_ID> with the UUID returned above.
--- Adjust visit types and prices as needed for this practice.
-INSERT INTO fee_schedule (practice_id, visit_type, base_price, is_active)
+-- Customize visit_type names, prices, and flags for this practice.
+-- has_convenience_fee: true = distance-based fee charged after visit
+-- is_in_home: true = family must provide a visit address
+-- is_cpr: true = uses CPR booking flow (participants, not children)
+-- per_child_extra_minutes: minutes added per additional child (0 for most types)
+INSERT INTO practice_visit_types
+  (practice_id, visit_type, base_price, badge_label, badge_color, badge_text_color,
+   duration_minutes, lead_minutes, has_convenience_fee, per_child_extra_minutes,
+   is_in_home, is_cpr, is_active, sort_order)
 VALUES
-  ('<PRACTICE_ID>'::uuid, 'In-home sick visit',              150, true),
-  ('<PRACTICE_ID>'::uuid, 'Video telemedicine',               75, true),
-  ('<PRACTICE_ID>'::uuid, 'Sports physical',                 125, true),
-  ('<PRACTICE_ID>'::uuid, 'Text visit',                       50, true),
-  ('<PRACTICE_ID>'::uuid, 'CMA + telemedicine',              125, true),
-  ('<PRACTICE_ID>'::uuid, 'In-home IV fluids',               250, false), -- set true only if offered
-  ('<PRACTICE_ID>'::uuid, 'In-home CPR class (Heartsaver)',   80, false), -- set true only if offered
-  ('<PRACTICE_ID>'::uuid, 'In-home CPR class (BLS)',          80, false)  -- set true only if offered
-ON CONFLICT DO NOTHING;
+  ('<PRACTICE_ID>'::uuid, 'In-home sick visit',             150, 'Sick visit',      '#EEEDFE', '#3C3489', 60,  60,  true,  15, true,  false, true, 1),
+  ('<PRACTICE_ID>'::uuid, 'Video telemedicine',              75, 'Telemedicine',    '#E1F5EE', '#085041', 30,  30,  false,  0, false, false, true, 2),
+  ('<PRACTICE_ID>'::uuid, 'Sports physical',                125, 'Sports physical', '#FAEEDA', '#633806', 60,  60,  true,  15, true,  false, true, 3),
+  ('<PRACTICE_ID>'::uuid, 'Text visit',                      50, 'Text visit',      '#FBEAF0', '#993556', 15,  30,  false,  0, false, false, true, 4)
+  -- Add more rows as needed for this practice:
+  -- ('<PRACTICE_ID>'::uuid, 'CMA + telemedicine', 125, 'CMA + tele', '#E6F1FB', '#0C447C', 60, 60, true, 15, true, false, false, 5),
+ON CONFLICT (practice_id, visit_type) DO NOTHING;
 
 -- Step 3: Zones are managed via the AdminProvision UI after the first provider logs in.
 -- No SQL needed here — add zones through the web interface.

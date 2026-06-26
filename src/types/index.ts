@@ -31,15 +31,7 @@ export interface Appointment {
   created_at: string
 }
 
-export type VisitType =
-  | 'In-home sick visit'
-  | 'Video telemedicine'
-  | 'Sports physical'
-  | 'CMA + telemedicine'
-  | 'Text visit'
-  | 'In-home IV fluids'
-  | 'In-home CPR class (Heartsaver)'
-  | 'In-home CPR class (BLS)'
+export type VisitType = string
 
 export interface Availability {
   id: string

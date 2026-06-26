@@ -22,7 +22,7 @@ import { Input } from '../../components/ui/Input'
 import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { getProvidersByZone } from '../../lib/api'
-import { LEAD_MINUTES, VISIT_DURATIONS } from '../../lib/constants'
+import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { format } from 'date-fns'
 import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
 
@@ -62,11 +62,8 @@ interface ChildIntake {
   additionalInfo: string
 }
 
-const IN_HOME_TYPES = ['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids', 'In-home CPR class (Heartsaver)', 'In-home CPR class (BLS)']
-const CPR_TYPES = ['In-home CPR class (Heartsaver)', 'In-home CPR class (BLS)']
 
-function getAvailableSlots(visitType: string, date: string): string[] {
-  const leadMin = LEAD_MINUTES[visitType] ?? 60
+function getAvailableSlots(leadMin: number, date: string): string[] {
   const today = new Date().toISOString().split('T')[0]
   if (date !== today) return TIME_SLOTS
 
@@ -184,6 +181,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
 export function BookVisit() {
   const { family, children, refreshFamily } = useFamilyAuth()
   const { zipToZone, zipToState, waitlistZones } = usePracticeZones()
+  const { byType } = usePracticeVisitTypes()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [booking, setBooking] = useState<BookingState>({
@@ -195,7 +193,7 @@ export function BookVisit() {
   })
 
   const isIvFluids = booking.visitType === 'In-home IV fluids'
-  const isCpr = CPR_TYPES.includes(booking.visitType)
+  const isCpr = byType[booking.visitType]?.is_cpr ?? false
   const STEPS = isIvFluids ? STEPS_IV : isCpr ? STEPS_CPR : STEPS_DEFAULT
 
   // Logical step indices adjust when IV fluids step is inserted
@@ -281,7 +279,7 @@ export function BookVisit() {
   useEffect(() => {
     setCmaAvailResult(null)
     if (!booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
-    const noLeadSlots = getAvailableSlots(booking.visitType, booking.date).length === 0
+    const noLeadSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     if (noLeadSlots) findCmaAvailability(booking.date, booking.zone)
   }, [booking.date, booking.zone, booking.visitType])
 
@@ -292,8 +290,7 @@ export function BookVisit() {
 
   useEffect(() => {
     if (step !== STEP_CONFIRM) return
-    const noFeeTypes = ['Video telemedicine', 'Text visit', 'In-home CPR class (Heartsaver)', 'In-home CPR class (BLS)']
-    if (noFeeTypes.includes(booking.visitType)) return
+    if (!(byType[booking.visitType]?.has_convenience_fee ?? true)) return
     const resolvedProvider = booking.provider === '__first_available__' ? firstAvailResult?.provider : booking.provider
     if (!resolvedProvider || !booking.visitAddress || !booking.date || !booking.time) return
     setConvFee(null)
@@ -408,7 +405,7 @@ export function BookVisit() {
     const bookedSlotsList = sched?.bookedSlots ?? []
     setBookedSlots(bookedSlotsList)
 
-    const leadTimeSlots = getAvailableSlots(booking.visitType, date)
+    const leadTimeSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, date)
     const freeSlots = leadTimeSlots.filter(slot => {
       const [t, ampm] = slot.split(' ')
       let [h, m] = t.split(':').map(Number)
@@ -466,7 +463,7 @@ export function BookVisit() {
     setFirstAvailResult(null)
     setAllSlotsBooked(false)
 
-    const leadTimeSlots = getAvailableSlots(booking.visitType, date)
+    const leadTimeSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, date)
 
     const slotMin = (slot: string) => {
       const [t, ampm] = slot.split(' ')
@@ -528,7 +525,7 @@ export function BookVisit() {
     )
     const cmaNames = (cmaRows ?? []).map((r: any) => r.name as string)
 
-    const leadTimeSlots = getAvailableSlots('CMA + telemedicine', date)
+    const leadTimeSlots = getAvailableSlots(byType['CMA + telemedicine']?.lead_minutes ?? 60, date)
     if (leadTimeSlots.length === 0) return
 
     const slotMin = (slot: string) => {
@@ -621,7 +618,7 @@ export function BookVisit() {
       ? cmaProvidersForZone
       : regularZoneProviders
   const noAvailableSlots = booking.date
-    ? getAvailableSlots(booking.visitType, booking.date).length === 0
+    ? getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     : false
 
   // ─── Validation ──────────────────────────────────────────────────────────────
@@ -780,7 +777,7 @@ export function BookVisit() {
         scheduled_date: booking.date,
         status: 'upcoming',
         notes: noteParts.join('|'),
-        duration_minutes: (VISIT_DURATIONS[booking.visitType] ?? 60) + (['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids'].includes(booking.visitType) ? (booking.selectedChildIds.length - 1) * 15 : 0),
+        duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
       }).catch(() => null)
       appointmentDbId = apptRecord?.id || null
     }
@@ -1285,7 +1282,7 @@ export function BookVisit() {
           </div>
 
           {booking.date && (() => {
-            const availableSlots = (slotsChecking || allSlotsBooked) ? [] : getAvailableSlots(booking.visitType, booking.date).filter(slot => {
+            const availableSlots = (slotsChecking || allSlotsBooked) ? [] : getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).filter(slot => {
               const [t, ampm] = slot.split(' ')
               let [h, m] = t.split(':').map(Number)
               if (ampm === 'PM' && h !== 12) h += 12
@@ -1335,7 +1332,7 @@ export function BookVisit() {
           })()}
 
           {/* Address shown in location step only for non-CPR types (CPR collects it in participants step) */}
-          {!isCpr && IN_HOME_TYPES.includes(booking.visitType) && (
+          {!isCpr && (byType[booking.visitType]?.is_in_home ?? true) && (
             <div className="mb-5">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
                 Visit address <span className="text-[#ff3b30]">*</span>
@@ -1550,7 +1547,7 @@ export function BookVisit() {
                    zoneProviders.length === 0 ||
                    (!booking.provider && zoneProviders.length > 0) ||
                    (booking.provider === '__first_available__' && !firstAvailResult) ||
-                   (IN_HOME_TYPES.includes(booking.visitType) && !booking.visitAddress))
+                   ((byType[booking.visitType]?.is_in_home ?? true) && !booking.visitAddress))
             }
             onNext={() => setStep(STEP_CONFIRM)} />
         </Step>
@@ -1582,7 +1579,7 @@ export function BookVisit() {
                 <span className="font-medium text-[#1A1A2E] text-right max-w-[55%]">{value}</span>
               </div>
             ))}
-            {!isCpr && !['Video telemedicine', 'Text visit'].includes(booking.visitType) && (
+            {!isCpr && (byType[booking.visitType]?.has_convenience_fee ?? true) && (
               <div className="flex justify-between py-3 text-[14px]">
                 <span className="text-[#555]">Estimated convenience fee</span>
                 <span className="font-medium text-[#1A1A2E]">

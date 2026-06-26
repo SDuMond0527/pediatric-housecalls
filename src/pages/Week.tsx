@@ -3,7 +3,7 @@ import { startOfWeek, addDays, format, isToday } from 'date-fns'
 import { getAppointments } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
-import { VISIT_TYPES } from '../lib/constants'
+import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import type { Appointment } from '../types'
 
 const HOURS = ['8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM']
@@ -11,6 +11,7 @@ const HOUR_VALS = [8,9,10,11,12,13,14,15,16,17]
 
 export function Week() {
   const { provider } = useAuth()
+  const { byType } = usePracticeVisitTypes()
   const [appts, setAppts] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -71,10 +72,10 @@ export function Week() {
                       <div key={`${day.toISOString()}-${hour}`}
                         className="border-b border-r border-[#E8E8E4] last:border-r-0 min-h-[36px] p-1">
                         {cellAppts.map(a => {
-                          const vt = VISIT_TYPES[a.visit_type]
+                          const vt = byType[a.visit_type]
                           return (
                             <div key={a.id} className="rounded px-1.5 py-0.5 text-[10px] font-medium mb-0.5 leading-snug"
-                              style={{ background: vt?.color || '#EEEDFE', color: vt?.textColor || '#3C3489' }}>
+                              style={{ background: vt?.badge_color || '#EEEDFE', color: vt?.badge_text_color || '#3C3489' }}>
                               {a.visit_type.split(' ')[0]}
                             </div>
                           )
