@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getUnbilledNotes, getClaims, generateClaim, submitClaim, updateClaim } from '../../lib/api'
 
@@ -323,9 +323,19 @@ export function AdminClaims() {
                         )}
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
-                      <Icon size={11} /> {badge.label}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
+                        <Icon size={11} /> {badge.label}
+                      </span>
+                      <a
+                        href={`https://app.stedi.com/app/healthcare/claims${c.stedi_claim_id ? `?search=${encodeURIComponent(c.stedi_claim_id)}` : ''}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap"
+                      >
+                        View in Stedi <ExternalLink size={10} />
+                      </a>
+                    </div>
                   </div>
                 )
               })}
