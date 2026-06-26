@@ -1,19 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import sql from '../_lib/db'
-import { getProviderContext } from '../_lib/auth'
+import { verifyToken } from '../_lib/verifyToken'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    const ctx = await getProviderContext(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
-    const rows = await sql`SELECT * FROM providers WHERE cognito_sub = ${ctx.sub} AND practice_id = ${ctx.practiceId} LIMIT 1`
-    if (rows.length === 0) return res.status(404).json({ error: 'Provider not found', sub: ctx.sub })
-    const row = rows[0]
+  try {
+    const [row] = await sql`SELECT * FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+    if (!row) return res.status(404).json({ error: 'Provider not found', sub })
     row.zones = row.zones ?? []
     row.states = row.states ?? []
-    res.json(row)
+    return res.json(row)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
-    res.status(500).json({ error: msg })
+    return res.status(500).json({ error: msg })
   }
 }
