@@ -32,7 +32,16 @@ function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: 
     )
   }
   const d = state.data
-  if (!d) return null
+  if (!d) return (
+    <div className="flex items-start gap-2 p-3 bg-[#FEF3E8] border border-[#FAC775] rounded-lg">
+      <ShieldX size={14} className="text-[#c45c00] flex-shrink-0 mt-0.5" />
+      <div>
+        <p className="text-[12px] font-semibold text-[#633806]">Eligibility check failed</p>
+        <p className="text-[11px] text-[#633806] mt-0.5">No response from eligibility service. Check Vercel function logs for details.</p>
+        <button onClick={onCheck} className="text-[11px] text-[#633806] underline mt-1">Try again</button>
+      </div>
+    </div>
+  )
   const fmt$ = (n: number | null | undefined) => n != null ? `$${n.toFixed(2)}` : '—'
   const active: boolean = !!d.active
   return (
@@ -145,9 +154,9 @@ export function AdminSchedule() {
     setEligibility(prev => ({ ...prev, [apptId]: { loading: true, data: null, error: null } }))
     try {
       const data = await checkEligibility(apptId)
-      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data, error: null } }))
+      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data: data ?? null, error: null } }))
     } catch (err: any) {
-      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data: null, error: err.message ?? 'Eligibility check failed.' } }))
+      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data: null, error: err.message || 'Eligibility check failed.' } }))
     }
   }
 

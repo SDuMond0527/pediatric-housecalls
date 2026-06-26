@@ -86,6 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
+  try {
   const sql = neon(process.env.DATABASE_URL!)
   const { appointment_id } = req.body ?? {}
   if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
@@ -174,4 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     memberId: child.insurance_member_id,
     ...parseEligibility(stediData),
   })
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Eligibility check error.' })
+  }
 }
