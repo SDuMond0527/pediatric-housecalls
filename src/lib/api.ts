@@ -64,7 +64,7 @@ export const deleteScheduleBlock = (id: string) =>
 
 // ── Providers ─────────────────────────────────────────────────
 export const getProviders = (params?: Record<string, string>) =>
-  publicFetch<any[]>(`/api/providers${params ? '?' + new URLSearchParams(params) : ''}`)
+  apiFetch<any[]>(`/api/providers${params ? '?' + new URLSearchParams(params) : ''}`)
 
 export const getMyProvider = () => apiFetch<any>('/api/providers/me')
 
