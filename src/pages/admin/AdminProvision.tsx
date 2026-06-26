@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Building2, Plus, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getPractices, createPractice } from '../../lib/api'
@@ -50,7 +50,7 @@ export function AdminProvision() {
     })
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: FormEvent) {
     e.preventDefault()
     if (!form.name || !form.slug) return
     setSaving(true)
