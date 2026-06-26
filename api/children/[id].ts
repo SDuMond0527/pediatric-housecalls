@@ -1,16 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import sql from '../_lib/db'
-import { getProviderContext } from '../_lib/auth'
+import { neon } from '@neondatabase/serverless'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+async function verifyFamilyToken(authHeader: string | undefined): Promise<string> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
+  const token = authHeader.slice(7)
+  const region = process.env.VITE_AWS_REGION || 'us-east-2'
+  const userPoolId = process.env.VITE_FAMILY_USER_POOL_ID || ''
+  const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
+  const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
+  if (!payload.sub) throw new Error('No sub in token')
+  return payload.sub
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  let practiceId: string
   try {
-    const ctx = await getProviderContext(req.headers.authorization)
-    practiceId = ctx.practiceId
+    await verifyFamilyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
+  const sql = neon(process.env.DATABASE_URL!)
   const { id } = req.query as { id: string }
 
   if (req.method === 'PATCH') {
@@ -38,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
           phi_sharing_consent  = COALESCE(${b.phi_sharing_consent  ?? null}, phi_sharing_consent),
           charm_patient_id     = COALESCE(${b.charm_patient_id     || null}, charm_patient_id)
-        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        WHERE id = ${id}::uuid
         RETURNING *`
       return res.json(row)
     } catch (err: any) {
@@ -47,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
-    await sql`DELETE FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    await sql`DELETE FROM children WHERE id = ${id}::uuid`
     return res.status(204).end()
   }
 

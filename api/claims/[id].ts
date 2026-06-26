@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import sql from '../_lib/db'
-import { getProviderContext } from '../_lib/auth'
+import { neon } from '@neondatabase/serverless'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+async function verifyToken(authHeader: string | undefined): Promise<string> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
+  const token = authHeader.slice(7)
+  const region = process.env.VITE_AWS_REGION || 'us-east-2'
+  const userPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
+  const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
+  const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
+  if (!payload.sub) throw new Error('No sub in token')
+  return payload.sub
+}
 
 const PRACTICE_NAME = process.env.PRACTICE_NAME || 'Pediatric House Calls PLLC'
 const PRACTICE_NPI  = process.env.PRACTICE_NPI  || '1093250904'
@@ -114,19 +125,15 @@ function buildStediPayload(claim: any): object {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  let practiceId: string
-  try {
-    const ctx = await getProviderContext(req.headers.authorization)
-    practiceId = ctx.practiceId
-  } catch {
+  try { await verifyToken(req.headers.authorization) } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-
+  const sql = neon(process.env.DATABASE_URL!)
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
   if (req.method === 'GET') {
-    const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid`
     return res.json(claim ?? null)
   }
 
@@ -135,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Submit to Stedi
     if (action === 'submit') {
-      const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+      const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid`
       if (!claim) return res.status(404).json({ error: 'Claim not found' })
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
@@ -164,13 +171,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               stedi_response = ${JSON.stringify(stediData)}::jsonb,
               submission_error = ${JSON.stringify(stediData)},
               updated_at = now()
-            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+            WHERE id = ${id}::uuid RETURNING *`
           return res.status(422).json({ error: 'Stedi rejected the claim', details: stediData, claim: updated })
         }
       } catch (err: any) {
         const [updated] = await sql`
           UPDATE claims SET status = 'error', submission_error = ${err.message}, updated_at = now()
-          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+          WHERE id = ${id}::uuid RETURNING *`
         return res.status(500).json({ error: 'Failed to reach Stedi', claim: updated })
       }
 
@@ -183,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           submission_error = NULL,
           submitted_at = now(),
           updated_at = now()
-        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+        WHERE id = ${id}::uuid RETURNING *`
       return res.json(updated)
     }
 
@@ -217,7 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
         status                     = COALESCE(${updates.status ?? null}, status),
         updated_at                 = now()
-      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+      WHERE id = ${id}::uuid RETURNING *`
     return res.json(updated)
   }
 

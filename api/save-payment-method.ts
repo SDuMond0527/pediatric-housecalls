@@ -1,6 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import sql from './_lib/db'
-import { getFamilyContext } from './_lib/auth'
+import { neon } from '@neondatabase/serverless'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+async function verifyFamilyToken(authHeader: string | undefined): Promise<string> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
+  const token = authHeader.slice(7)
+  const region = process.env.VITE_AWS_REGION || 'us-east-2'
+  const userPoolId = process.env.VITE_FAMILY_USER_POOL_ID || ''
+  const JWKS = createRemoteJWKSet(
+    new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`)
+  )
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+  })
+  if (!payload.sub) throw new Error('No sub in token')
+  return payload.sub
+}
 
 async function squarePost(path: string, body: unknown) {
   const token = process.env.SQUARE_ACCESS_TOKEN || ''
@@ -26,9 +41,9 @@ async function squarePost(path: string, body: unknown) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  let ctx: { sub: string; practiceId: string; familyId: string }
+  let sub: string
   try {
-    ctx = await getFamilyContext(req.headers.authorization)
+    sub = await verifyFamilyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -37,9 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { nonce } = req.body
     if (!nonce) return res.status(400).json({ error: 'Missing nonce' })
 
+    const sql = neon(process.env.DATABASE_URL!)
     const [family] = await sql`
       SELECT id, email, display_name, square_customer_id
-      FROM family_profiles WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}::uuid LIMIT 1`
+      FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
     if (!family) return res.status(404).json({ error: 'Family not found' })
 
     let customerId = family.square_customer_id as string | null
@@ -63,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`
       UPDATE family_profiles
       SET square_customer_id = ${customerId}, square_card_id = ${card.id as string}
-      WHERE id = ${ctx.familyId}::uuid AND practice_id = ${ctx.practiceId}::uuid`
+      WHERE cognito_sub = ${sub}`
 
     return res.json({ ok: true, cardBrand: card.card_brand, last4: card.last_4 })
   } catch (e: any) {
