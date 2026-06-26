@@ -31,11 +31,14 @@ function buildStediPayload(claim: any): object {
     value: d.code,
   }))
 
+  const isTelehealth = (claim.place_of_service ?? '12') === '10'
+
   const serviceLines = cptCodes.map((c: any) => ({
     serviceDate: (claim.service_date ?? '').replace(/-/g, ''),
     professionalService: {
       procedureIdentifier: 'HC',
       procedureCode: c.code,
+      ...(isTelehealth ? { procedureModifiers: ['95'] } : {}),
       lineItemChargeAmount: parseFloat(c.charge_amount ?? 0).toFixed(2),
       measurementUnit: 'UN',
       serviceUnitCount: '1',
@@ -75,6 +78,14 @@ function buildStediPayload(claim: any): object {
       gender: claim.patient_gender === 'Female' ? 'F' : claim.patient_gender === 'Male' ? 'M' : 'U',
       dateOfBirth: (claim.patient_dob ?? '').replace(/-/g, ''),
       relationshipCode: '19',
+      ...(claim.patient_address ? {
+        address: {
+          address1: claim.patient_address,
+          ...(claim.patient_city ? { city: claim.patient_city } : {}),
+          state: claim.patient_state ?? '',
+          postalCode: (claim.patient_zip ?? '').replace(/\D/g, '').slice(0, 9),
+        },
+      } : {}),
     },
     providers: [
       {

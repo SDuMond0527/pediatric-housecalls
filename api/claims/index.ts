@@ -121,6 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [provider] = note.provider_id
       ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid`
       : [null]
+    const [family] = child?.family_id
+      ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid`
+      : [null]
 
     const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
     const cptCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
@@ -141,7 +144,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         service_date, place_of_service,
         diagnoses, cpt_codes, total_charge,
         rendering_provider_name, rendering_provider_npi, rendering_provider_taxonomy,
-        patient_first_name, patient_last_name, patient_dob, patient_gender
+        patient_first_name, patient_last_name, patient_dob, patient_gender,
+        patient_address, patient_city, patient_state, patient_zip
       ) VALUES (
         ${encounter_note_id}::uuid,
         ${note.appointment_id}::uuid,
@@ -165,7 +169,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${child?.first_name ?? null},
         ${child?.last_name ?? null},
         ${child?.date_of_birth ?? null},
-        ${child?.gender ?? null}
+        ${child?.gender ?? null},
+        ${family?.address ?? null},
+        ${family?.city ?? null},
+        ${family?.state ?? null},
+        ${family?.zip ?? null}
       )
       RETURNING *`
     return res.status(201).json(claim)
