@@ -244,7 +244,7 @@ export function AdminSchedule() {
                         })()}
                         {/* Insurance eligibility */}
                         <div className="mt-3">
-                          {(() => {
+                          {(() => { try {
                             const elig = eligibility[appt.id]
                             if (!elig) {
                               return (
@@ -255,7 +255,7 @@ export function AdminSchedule() {
                                 </button>
                               )
                             }
-                            if (elig.loading) {
+                            if (elig.loading || (!elig.data && !elig.error)) {
                               return <p className="text-[12px] text-[#999]">Checking eligibility…</p>
                             }
                             if (elig.error) {
@@ -270,7 +270,8 @@ export function AdminSchedule() {
                               )
                             }
                             const d = elig.data
-                            const fmt$ = (n: number | null) => n != null ? `$${n.toFixed(2)}` : '—'
+                            if (!d) return null
+                            const fmt$ = (n: number | null | undefined) => n != null ? `$${n.toFixed(2)}` : '—'
                             return (
                               <div className={`border rounded-lg overflow-hidden ${d.active ? 'border-[#1D9E75]' : 'border-[#e05252]'}`}>
                                 <div className={`flex items-center gap-2 px-3 py-2 ${d.active ? 'bg-[#E1F5EE]' : 'bg-[#FDEAEA]'}`}>
@@ -348,7 +349,7 @@ export function AdminSchedule() {
                                 </div>
                               </div>
                             )
-                          })()}
+                          } catch { return null } })()}
                         </div>
 
                         {appt.status !== 'done' && (
