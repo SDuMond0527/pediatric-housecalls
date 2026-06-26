@@ -14,24 +14,29 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   if (req.method === 'GET') {
     const { appointment_id, child_id } = req.query as Record<string, string>
 
     if (appointment_id) {
-      const rows = await sql`SELECT * FROM vitals WHERE appointment_id = ${appointment_id}::uuid LIMIT 1`
+      const rows = await sql`SELECT * FROM vitals WHERE appointment_id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       return res.json(rows[0] ?? null)
     }
 
     if (child_id) {
-      const rows = await sql`SELECT * FROM vitals WHERE child_id = ${child_id}::uuid ORDER BY recorded_at DESC`
+      const rows = await sql`SELECT * FROM vitals WHERE child_id = ${child_id}::uuid AND practice_id = ${practiceId}::uuid ORDER BY recorded_at DESC`
       return res.json(rows)
     }
 
@@ -47,8 +52,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
 
     const [row] = await sql`
-      INSERT INTO vitals (appointment_id, child_id, temperature_f, heart_rate, respiratory_rate, oxygen_saturation, weight_lbs, height_in, systolic_bp, diastolic_bp)
+      INSERT INTO vitals (practice_id, appointment_id, child_id, temperature_f, heart_rate, respiratory_rate, oxygen_saturation, weight_lbs, height_in, systolic_bp, diastolic_bp)
       VALUES (
+        ${practiceId}::uuid,
         ${appointment_id}::uuid,
         ${child_id ?? null}::uuid,
         ${temperature_f ?? null},
