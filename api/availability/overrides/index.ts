@@ -14,8 +14,9 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -23,10 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const sql = neon(process.env.DATABASE_URL!)
+
+  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+
   const { provider_id, date, is_available, start_time, end_time, note } = req.body
   const [row] = await sql`
-    INSERT INTO availability_overrides (provider_id, date, is_available, start_time, end_time, note)
-    VALUES (${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})
+    INSERT INTO availability_overrides (practice_id, provider_id, date, is_available, start_time, end_time, note)
+    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})
     ON CONFLICT (provider_id, date) DO UPDATE
     SET is_available=EXCLUDED.is_available, start_time=EXCLUDED.start_time, end_time=EXCLUDED.end_time, note=EXCLUDED.note
     RETURNING *`
