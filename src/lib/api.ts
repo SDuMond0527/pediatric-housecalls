@@ -279,6 +279,10 @@ export async function uploadNotePhoto(file: File): Promise<string> {
   return data.url
 }
 
+// ── Eligibility ───────────────────────────────────────────────
+export const checkEligibility = (appointmentId: string) =>
+  apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify({ appointment_id: appointmentId }) })
+
 // ── Claims ────────────────────────────────────────────────────
 export const getUnbilledNotes = () =>
   apiFetch<any[]>('/api/claims?unbilled=true')

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, CheckCircle2, Navigation } from 'lucide-react'
+import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion } from 'lucide-react'
 import { format } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -29,6 +29,7 @@ export function AdminSchedule() {
   const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
   const [doneInstructions, setDoneInstructions] = useState('')
   const [doneSubmitting, setDoneSubmitting] = useState(false)
+  const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
@@ -49,6 +50,16 @@ export function AdminSchedule() {
   }
 
   useEffect(() => { fetchAppointments() }, [filterDate, filterProvider])
+
+  async function runEligibilityCheck(apptId: string) {
+    setEligibility(prev => ({ ...prev, [apptId]: { loading: true, data: null, error: null } }))
+    try {
+      const data = await checkEligibility(apptId)
+      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data, error: null } }))
+    } catch (err: any) {
+      setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data: null, error: err.message ?? 'Eligibility check failed.' } }))
+    }
+  }
 
   async function submitDone() {
     if (!doneTarget) return
@@ -231,8 +242,117 @@ export function AdminSchedule() {
                             </div>
                           )
                         })()}
+                        {/* Insurance eligibility */}
+                        <div className="mt-3">
+                          {(() => {
+                            const elig = eligibility[appt.id]
+                            if (!elig) {
+                              return (
+                                <button
+                                  onClick={() => runEligibilityCheck(appt.id)}
+                                  className="flex items-center gap-1.5 text-[12px] font-medium text-[#7F77DD] hover:text-[#534AB7] transition-colors">
+                                  <ShieldQuestion size={13} /> Check insurance eligibility
+                                </button>
+                              )
+                            }
+                            if (elig.loading) {
+                              return <p className="text-[12px] text-[#999]">Checking eligibility…</p>
+                            }
+                            if (elig.error) {
+                              return (
+                                <div className="flex items-start gap-2 p-3 bg-[#FEF3E8] border border-[#FAC775] rounded-lg">
+                                  <ShieldX size={14} className="text-[#c45c00] flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-[12px] font-semibold text-[#633806]">Eligibility check failed</p>
+                                    <p className="text-[11px] text-[#633806] mt-0.5">{elig.error}</p>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            const d = elig.data
+                            const fmt$ = (n: number | null) => n != null ? `$${n.toFixed(2)}` : '—'
+                            return (
+                              <div className={`border rounded-lg overflow-hidden ${d.active ? 'border-[#1D9E75]' : 'border-[#e05252]'}`}>
+                                <div className={`flex items-center gap-2 px-3 py-2 ${d.active ? 'bg-[#E1F5EE]' : 'bg-[#FDEAEA]'}`}>
+                                  {d.active
+                                    ? <ShieldCheck size={14} className="text-[#085041]" />
+                                    : <ShieldX size={14} className="text-[#c00]" />}
+                                  <span className={`text-[12px] font-semibold ${d.active ? 'text-[#085041]' : 'text-[#c00]'}`}>
+                                    {d.active ? 'Coverage active' : 'Coverage inactive'}
+                                  </span>
+                                  {d.insuranceProvider && (
+                                    <span className="text-[11px] text-[#555] ml-auto">{d.insuranceProvider}</span>
+                                  )}
+                                </div>
+                                <div className="bg-white px-3 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                  {d.planName && (
+                                    <div className="col-span-2">
+                                      <span className="text-[10px] text-[#999] block">Plan</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">{d.planName}</span>
+                                    </div>
+                                  )}
+                                  {d.memberId && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Member ID</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">{d.memberId}</span>
+                                    </div>
+                                  )}
+                                  {d.groupNumber && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Group #</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">{d.groupNumber}</span>
+                                    </div>
+                                  )}
+                                  {d.deductible?.individual?.total != null && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Individual deductible</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">
+                                        {fmt$(d.deductible.individual.remaining)} remaining of {fmt$(d.deductible.individual.total)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {d.deductible?.family?.total != null && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Family deductible</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">
+                                        {fmt$(d.deductible.family.remaining)} remaining of {fmt$(d.deductible.family.total)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {d.outOfPocket?.individual?.total != null && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">OOP max (individual)</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">
+                                        {fmt$(d.outOfPocket.individual.remaining)} remaining of {fmt$(d.outOfPocket.individual.total)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {d.copay != null && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Copay</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">{fmt$(d.copay)}</span>
+                                    </div>
+                                  )}
+                                  {d.coinsurance != null && (
+                                    <div>
+                                      <span className="text-[10px] text-[#999] block">Coinsurance</span>
+                                      <span className="text-[12px] text-[#1A1A2E]">{d.coinsurance}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="px-3 py-1.5 border-t border-[#F1EFE8] bg-[#FAFAF8]">
+                                  <button onClick={() => runEligibilityCheck(appt.id)}
+                                    className="text-[11px] text-[#999] hover:text-[#7F77DD] transition-colors">
+                                    Re-check
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+
                         {appt.status !== 'done' && (
-                          <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                          <Button variant="teal" size="xs" className="mt-3" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
                             <CheckCircle2 size={12} /> Mark complete
                           </Button>
                         )}
