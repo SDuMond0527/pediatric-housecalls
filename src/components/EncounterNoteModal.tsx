@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds } from '../lib/api'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -220,6 +220,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   // Linked patient (may be null for manually-added appointments)
   const [linkedChildId, setLinkedChildId] = useState<string | null>(childId)
   const [linkedChildName, setLinkedChildName] = useState<string | null>(null)
+  const [linkedChildDob, setLinkedChildDob] = useState<string | null>(null)
   const [patientQuery, setPatientQuery] = useState('')
   const [patientResults, setPatientResults] = useState<any[]>([])
   const [patientSearching, setPatientSearching] = useState(false)
@@ -337,6 +338,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     const name = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label
     setLinkedChildId(child.id)
     setLinkedChildName(name)
+    if (child.date_of_birth) setLinkedChildDob(child.date_of_birth)
     setPatientQuery('')
     setPatientResults([])
   }
@@ -350,6 +352,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         getFeeSchedule().catch(() => []),
       ])
       setFeeSchedule(schedule)
+      let resolvedChildId = childId
       if (note) {
         setNoteId(note.id)
         setIsSigned(note.is_signed)
@@ -363,6 +366,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
         if (note.note_type && NOTE_TYPES.includes(note.note_type)) setNoteType(note.note_type as NoteType)
         if (note.child_id && !childId) {
+          resolvedChildId = note.child_id
           setLinkedChildId(note.child_id)
           if (note.child_first_name || note.child_last_name) {
             setLinkedChildName([note.child_first_name, note.child_last_name].filter(Boolean).join(' '))
@@ -387,6 +391,16 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           systolic_bp:      vitalsData.systolic_bp      != null ? String(vitalsData.systolic_bp)      : '',
           diastolic_bp:     vitalsData.diastolic_bp     != null ? String(vitalsData.diastolic_bp)     : '',
         })
+      }
+      if (resolvedChildId) {
+        const children = await getChildrenByIds([resolvedChildId]).catch(() => [])
+        const child = children?.[0]
+        if (child) {
+          if (!linkedChildName && (child.first_name || child.last_name)) {
+            setLinkedChildName([child.first_name, child.last_name].filter(Boolean).join(' '))
+          }
+          if (child.date_of_birth) setLinkedChildDob(child.date_of_birth)
+        }
       }
       setLoading(false)
     }
@@ -523,6 +537,18 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             <div className="text-[12px] text-[#999] mt-0.5">
               {appointment.visit_type} · {format(parseISO(appointment.scheduled_date), 'MMM d, yyyy')}
             </div>
+            {(linkedChildName || linkedChildDob) && (
+              <div className="mt-1.5 flex items-center gap-2">
+                {linkedChildName && (
+                  <span className="text-[14px] font-semibold text-[#1A1A2E]">{linkedChildName}</span>
+                )}
+                {linkedChildDob && (
+                  <span className="text-[12px] text-[#666]">
+                    DOB {format(parseISO(linkedChildDob), 'MM/dd/yyyy')}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {isSigned && (
