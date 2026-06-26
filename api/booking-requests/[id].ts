@@ -22,8 +22,9 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let auth: { sub: string; isFamily: boolean }
   try {
-    await verifyAnyToken(req.headers.authorization)
+    auth = await verifyAnyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -31,16 +32,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' })
 
   const sql = neon(process.env.DATABASE_URL!)
+
+  let practiceId: string
+  if (auth.isFamily) {
+    const rows = await sql`SELECT practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
+    if (!rows.length) return res.status(403).json({ error: 'Family not found' })
+    practiceId = rows[0].practice_id as string
+  } else {
+    const rows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
+    if (!rows.length) return res.status(403).json({ error: 'Provider not found' })
+    practiceId = rows[0].practice_id as string
+  }
+
   const { id } = req.query as { id: string }
   const { status, after_visit_instructions, charm_appointment_id } = req.body
 
   let row: unknown
   if (after_visit_instructions !== undefined && charm_appointment_id !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE charm_appointment_id=${charm_appointment_id} RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE charm_appointment_id=${charm_appointment_id} AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (after_visit_instructions !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
-    ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid RETURNING *`
+    ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else {
     return res.status(400).json({ error: 'No valid fields' })
   }
