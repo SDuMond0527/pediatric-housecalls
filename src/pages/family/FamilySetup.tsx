@@ -37,6 +37,7 @@ export function FamilySetup() {
         display_name: displayName || null,
         state:        state || null,
         zip:          zip || null,
+        practice_id:  import.meta.env.VITE_PRACTICE_ID || null,
       })
     } catch (e: any) {
       setError('Profile save failed: ' + (e?.message || String(e)))
