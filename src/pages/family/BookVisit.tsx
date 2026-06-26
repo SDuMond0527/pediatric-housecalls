@@ -19,7 +19,9 @@ import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { VISIT_TYPE_INFO, ZIP_TO_STATE, ZIP_TO_ZONE, TIME_SLOTS, WAITLIST_ZONES } from '../../lib/zipData'
+import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
+import { usePracticeZones } from '../../hooks/usePracticeZones'
+import { getProvidersByZone } from '../../lib/api'
 import { LEAD_MINUTES, VISIT_DURATIONS } from '../../lib/constants'
 import { format } from 'date-fns'
 
@@ -142,73 +144,6 @@ function emptyIvFluids(): IvFluidsIntake {
   }
 }
 
-const ZONE_PROVIDERS: Record<string, { name: string; role: string; initials: string; color: string; textColor: string }[]> = {
-  'Huntersville / Davidson / Cornelius': [
-    { name: 'Dr. Mary Garrison',  role: 'MD',  initials: 'MG', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Shaoleen Daly',  role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' },
-    { name: 'Megan Heilemann',    role: 'PNP', initials: 'MH', color: '#EEEDFE', textColor: '#534AB7' },
-  ],
-  'Concord': [
-    { name: 'Dr. Mary Garrison', role: 'MD', initials: 'MG', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Shaoleen Daly', role: 'MD', initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' },
-  ],
-  'Cotswold / SouthPark': [
-    { name: 'Melissa Jesse',       role: 'PNP', initials: 'MJ', color: '#E1F5EE', textColor: '#085041' },
-    { name: 'Becca Jones',         role: 'PNP', initials: 'BJ', color: '#FAEEDA', textColor: '#633806' },
-    { name: 'Samantha Casnettie',  role: 'PNP', initials: 'SC', color: '#E6F1FB', textColor: '#0C447C' },
-  ],
-  'Ballantyne / Providence': [
-    { name: 'Becca Jones',        role: 'PNP', initials: 'BJ', color: '#FAEEDA', textColor: '#633806' },
-    { name: 'Samantha Casnettie', role: 'PNP', initials: 'SC', color: '#E6F1FB', textColor: '#0C447C' },
-  ],
-  'Matthews': [
-    { name: 'Becca Jones',        role: 'PNP', initials: 'BJ', color: '#FAEEDA', textColor: '#633806' },
-    { name: 'Samantha Casnettie', role: 'PNP', initials: 'SC', color: '#E6F1FB', textColor: '#0C447C' },
-  ],
-  'Waxhaw / Weddington / Marvin': [{ name: 'Allison Berger',   role: 'PNP', initials: 'AB', color: '#E6F1FB', textColor: '#0C447C' }],
-  'York / Lake Wylie / Clover':   [{ name: 'Dr. Sara DuMond',  role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#3C3489' }],
-  'Fort Mill':                    [{ name: 'Dr. Sara DuMond',  role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#3C3489' }],
-  'Rock Hill':                    [{ name: 'Dr. Sara DuMond',  role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#3C3489' }],
-  'Indianland': [
-    { name: 'Allison Berger',    role: 'PNP', initials: 'AB', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Sara DuMond',  role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#3C3489' },
-  ],
-  'Leesburg area': [
-    { name: 'Dr. Rebecca Santos', role: 'MD', initials: 'RS', color: '#E1F5EE', textColor: '#085041' },
-    { name: 'Dr. Nina Niu',       role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' },
-  ],
-  'Reston': [
-    { name: 'Dr. Rebecca Santos', role: 'MD', initials: 'RS', color: '#E1F5EE', textColor: '#085041' },
-    { name: 'Dr. Nina Niu',       role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' },
-  ],
-  'Gainesville':          [{ name: 'Dr. Nina Niu',       role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' }],
-  'University': [
-    { name: 'Dr. Mary Garrison', role: 'MD',  initials: 'MG', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Shaoleen Daly', role: 'MD',  initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' },
-    { name: 'Megan Heilemann',   role: 'PNP', initials: 'MH', color: '#EEEDFE', textColor: '#534AB7' },
-  ],
-  'Mooresville':   [{ name: 'Megan Heilemann',      role: 'PNP', initials: 'MH', color: '#EEEDFE', textColor: '#534AB7' }],
-  'Harrisburg': [
-    { name: 'Dr. Mary Garrison', role: 'MD', initials: 'MG', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Shaoleen Daly', role: 'MD', initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' },
-  ],
-  'Greater Raleigh': [
-    { name: 'Shondalyn Robertson', role: 'CMA', initials: 'SR', color: '#EEEDFE', textColor: '#3C3489' },
-    { name: 'Sonya Hampton',       role: 'CMA', initials: 'SH', color: '#E1F5EE', textColor: '#085041' },
-  ],
-  'Oakdale':             [{ name: 'Dr. Shaoleen Daly', role: 'MD', initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' }],
-  'Kannapolis': [
-    { name: 'Dr. Mary Garrison', role: 'MD', initials: 'MG', color: '#E6F1FB', textColor: '#0C447C' },
-    { name: 'Dr. Shaoleen Daly', role: 'MD', initials: 'SD', color: '#EEEDFE', textColor: '#534AB7' },
-  ],
-  'Ashburn / Sterling':      [{ name: 'Dr. Nina Niu', role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' }],
-  'Chantilly / Centreville': [{ name: 'Dr. Nina Niu', role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' }],
-  'Great Falls': [
-    { name: 'Dr. Rebecca Santos', role: 'MD', initials: 'RS', color: '#E1F5EE', textColor: '#085041' },
-    { name: 'Dr. Nina Niu',       role: 'MD', initials: 'NN', color: '#FAEEDA', textColor: '#633806' },
-  ],
-}
-
 // IV fluids can only be administered by these three RNs, with geographic restrictions
 const IV_FLUID_PROVIDERS = [
   { name: 'Meghan Trimble', role: 'RN', initials: 'MT', color: '#E1F5EE', textColor: '#085041' },
@@ -280,13 +215,14 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
 
 export function BookVisit() {
   const { family, children, refreshFamily } = useFamilyAuth()
+  const { zipToZone, zipToState, waitlistZones } = usePracticeZones()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [booking, setBooking] = useState<BookingState>({
     visitType: '', selectedChildIds: [], childIntakes: {},
     activeChildTab: '', ivFluidsIntake: emptyIvFluids(),
-    zip: family?.zip || '', state: family?.state || ZIP_TO_STATE[family?.zip || ''] || '',
-    zone: ZIP_TO_ZONE[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '',
+    zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '',
+    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '',
     participantCount: 1, participantNames: '',
   })
 
@@ -338,6 +274,19 @@ export function BookVisit() {
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
   const [cmaProvidersForZone, setCmaProvidersForZone] = useState<typeof CMA_PROVIDERS>([])
+  const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
+
+  useEffect(() => {
+    const isIv = booking.visitType === 'In-home IV fluids'
+    const isCma = booking.visitType === 'CMA + telemedicine'
+    if (!booking.zone || isIv || isCma) { setRegularZoneProviders([]); return }
+    getProvidersByZone(booking.zone)
+      .then(providers => setRegularZoneProviders(providers.map((p: any) => ({
+        name: p.name, role: p.role, initials: p.initials,
+        color: p.avatar_color, textColor: p.avatar_text_color,
+      }))))
+      .catch(() => setRegularZoneProviders([]))
+  }, [booking.zone, booking.visitType])
 
   useEffect(() => {
     if (booking.provider === '__first_available__') {
@@ -498,8 +447,8 @@ export function BookVisit() {
   }
 
   async function onZipChange(zip: string) {
-    const st = ZIP_TO_STATE[zip] || ''
-    const zone = ZIP_TO_ZONE[zip] || ''
+    const st = zipToState[zip] || ''
+    const zone = zipToZone[zip] || ''
     setBooking(b => ({ ...b, zip, state: st, zone, provider: '' }))
     setWaitlistDone(false)
     setAllSlotsBooked(false)
@@ -513,7 +462,7 @@ export function BookVisit() {
       // (IV fluids: show only the RNs who cover this specific zone)
       const providerNames = booking.visitType === 'In-home IV fluids'
         ? (IV_FLUID_ZONE_PROVIDERS[zone] || [])
-        : (ZONE_PROVIDERS[zone] || []).map(p => p.name)
+        : regularZoneProviders.map(p => p.name)
       if (providerNames.length > 0) {
         const data = await getProvidersByNamesWithSecureText(providerNames).catch(() => [])
         setSecureTextProviders((data ?? []).filter((p: any) => p.secure_text_number) as any)
@@ -525,7 +474,7 @@ export function BookVisit() {
   async function findFirstAvailable(date: string) {
     const providers = isIvFluids
       ? ivZoneNames.map(name => IV_FLUID_PROVIDERS.find(p => p.name === name)).filter(Boolean) as typeof IV_FLUID_PROVIDERS
-      : (ZONE_PROVIDERS[booking.zone] || [])
+      : regularZoneProviders
     if (!date || providers.length === 0) return
     setFindingFirstAvail(true)
     setFirstAvailResult(null)
@@ -681,7 +630,7 @@ export function BookVisit() {
     ? ivZoneNames.map(name => IV_FLUID_PROVIDERS.find(p => p.name === name)).filter(Boolean) as typeof IV_FLUID_PROVIDERS
     : isCmaVisit && cmaProvidersForZone.length > 0
       ? cmaProvidersForZone
-      : (ZONE_PROVIDERS[booking.zone] || [])
+      : regularZoneProviders
   const noAvailableSlots = booking.date
     ? getAvailableSlots(booking.visitType, booking.date).length === 0
     : false
@@ -978,7 +927,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || ZIP_TO_STATE[family?.zip || ''] || '', zone: ZIP_TO_ZONE[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '', participantCount: 1, participantNames: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '', participantCount: 1, participantNames: '' })
           }}>Book another visit</Button>
         </div>
       </div>
@@ -1438,7 +1387,7 @@ export function BookVisit() {
           </div>
 
           {booking.zip.length === 5 && !waitlistDone &&
-           (!booking.zone || WAITLIST_ZONES.includes(booking.zone) || (ZONE_PROVIDERS[booking.zone] || []).length === 0) && (
+           (!booking.zone || waitlistZones.includes(booking.zone) || regularZoneProviders.length === 0) && (
             <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
               <div>
                 <p className="text-[14px] font-semibold text-[#633806]">We don't currently serve zip code {booking.zip}.</p>
@@ -1461,7 +1410,7 @@ export function BookVisit() {
             </div>
           )}
 
-          {booking.date && booking.zone && !WAITLIST_ZONES.includes(booking.zone) && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked) && !waitlistDone && (
+          {booking.date && booking.zone && !waitlistZones.includes(booking.zone) && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked) && !waitlistDone && (
             <div className="mb-4 space-y-2">
               <p className="text-[13px] font-semibold text-[#633806]">
                 {booking.provider && booking.provider !== '__first_available__' ? `No availability with ${booking.provider} on this date.` : 'No availability on this date.'}
@@ -1608,7 +1557,7 @@ export function BookVisit() {
               isCpr
                 ? (!booking.date || !booking.time)
                 : (!booking.date || !booking.time || !booking.zone ||
-                   WAITLIST_ZONES.includes(booking.zone) ||
+                   waitlistZones.includes(booking.zone) ||
                    zoneProviders.length === 0 ||
                    (!booking.provider && zoneProviders.length > 0) ||
                    (booking.provider === '__first_available__' && !firstAvailResult) ||

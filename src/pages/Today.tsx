@@ -13,7 +13,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { VISIT_TYPES } from '../lib/constants'
-import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
+import { TIME_SLOTS } from '../lib/zipData'
+import { usePracticeZones } from '../hooks/usePracticeZones'
 import type { Appointment } from '../types'
 
 const VISIT_TYPE_OPTIONS = Object.keys(VISIT_TYPES) as (keyof typeof VISIT_TYPES)[]
@@ -51,6 +52,7 @@ interface ScheduleBlock {
 
 export function Today() {
   const { provider } = useAuth()
+  const { zipToZone } = usePracticeZones()
   const [appts, setAppts] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -269,7 +271,7 @@ export function Today() {
       email: child.family_email || '',
       address: child.family_address || '',
       zip,
-      zone: zip ? (ZIP_TO_ZONE[zip] || '') : '',
+      zone: zip ? (zipToZone[zip] || '') : '',
     }))
   }
 
@@ -333,7 +335,7 @@ export function Today() {
       appointmentId: cancelTarget.id,
     }).catch(() => {})
 
-    const matchingZips = Object.entries(ZIP_TO_ZONE)
+    const matchingZips = Object.entries(zipToZone)
       .filter(([, z]) => z === cancelTarget.zone)
       .map(([zip]) => zip)
 
@@ -1025,14 +1027,14 @@ export function Today() {
                   <input type="text" placeholder="28277" maxLength={5} value={addForm.zip}
                     onChange={e => {
                       const zip = e.target.value
-                      const detectedZone = zip.length === 5 ? (ZIP_TO_ZONE[zip] || '') : ''
+                      const detectedZone = zip.length === 5 ? (zipToZone[zip] || '') : ''
                       setAddForm(f => ({ ...f, zip, zone: detectedZone || f.zone }))
                     }}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                 </div>
                 <div>
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                    Zone {addForm.zip.length === 5 && ZIP_TO_ZONE[addForm.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
+                    Zone {addForm.zip.length === 5 && zipToZone[addForm.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
                   </label>
                   <input type="text" placeholder="e.g. SouthPark" value={addForm.zone}
                     onChange={e => setAddForm(f => ({ ...f, zone: e.target.value }))}

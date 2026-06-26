@@ -311,3 +311,15 @@ export const createPractice = (body: Record<string, unknown>) =>
 
 export const createProviderForPractice = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/practices/providers', { method: 'POST', body: JSON.stringify(body) })
+
+export const getPracticeZones = (practiceId?: string) =>
+  fetch(`/api/practice-zones${practiceId ? `?practice_id=${practiceId}` : ''}`).then(r => r.json()) as Promise<any[]>
+
+export const upsertPracticeZone = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/practice-zones', { method: 'POST', body: JSON.stringify(body) })
+
+export const deletePracticeZone = (id: string) =>
+  apiFetch<void>(`/api/practice-zones?id=${id}`, { method: 'DELETE' })
+
+export const getProvidersByZone = (zone: string) =>
+  publicFetch<any[]>(`/api/providers?zone=${encodeURIComponent(zone)}`)

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Building2, Plus, CheckCircle2, AlertCircle, UserPlus, ChevronDown, ChevronUp } from 'lucide-react'
+import { Building2, Plus, CheckCircle2, AlertCircle, UserPlus, ChevronDown, ChevronUp, Map, Trash2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { getPractices, createPractice, createProviderForPractice } from '../../lib/api'
+import { getPractices, createPractice, createProviderForPractice, getPracticeZones, upsertPracticeZone, deletePracticeZone } from '../../lib/api'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 
@@ -101,6 +101,119 @@ function ProviderForm({ practiceId, onDone }: { practiceId: string; onDone: (pro
   )
 }
 
+function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceName: string }) {
+  const [zones, setZones] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState({ zone_name: '', state: '', zips: '', is_waitlist_only: false })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getPracticeZones(practiceId)
+      .then(setZones)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [practiceId])
+
+  async function handleAdd(e: FormEvent) {
+    e.preventDefault()
+    if (!form.zone_name) return
+    setSaving(true)
+    setError(null)
+    try {
+      const zips = form.zips.split(/[\s,]+/).map(z => z.trim()).filter(Boolean)
+      const zone = await upsertPracticeZone({
+        zone_name: form.zone_name,
+        state: form.state || null,
+        zips,
+        is_waitlist_only: form.is_waitlist_only,
+        practice_id: practiceId,
+      })
+      setZones(prev => {
+        const idx = prev.findIndex(z => z.id === zone.id)
+        return idx >= 0 ? prev.map((z, i) => i === idx ? zone : z) : [...prev, zone]
+      })
+      setForm({ zone_name: '', state: '', zips: '', is_waitlist_only: false })
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to save zone')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deletePracticeZone(id).catch(() => {})
+    setZones(prev => prev.filter(z => z.id !== id))
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-[#E8E8E4]">
+      <div className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">
+        Service zones — {practiceName}
+      </div>
+      {loading ? (
+        <div className="text-[12px] text-[#999]">Loading zones…</div>
+      ) : zones.length === 0 ? (
+        <div className="text-[12px] text-[#999] mb-3">No zones defined yet.</div>
+      ) : (
+        <div className="space-y-1.5 mb-3">
+          {zones.map(z => (
+            <div key={z.id} className="flex items-center gap-2 text-[13px] text-[#555] bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <span className="font-medium text-[#1A1A2E]">{z.zone_name}</span>
+                {z.state && <span className="text-[#999] ml-1.5">· {z.state}</span>}
+                <span className="text-[#bbb] ml-1.5">· {(z.zips || []).length} ZIP{(z.zips || []).length !== 1 ? 's' : ''}</span>
+                {z.is_waitlist_only && (
+                  <span className="ml-1.5 text-[10px] font-medium bg-[#FAEEDA] text-[#633806] px-1.5 py-0.5 rounded-full">waitlist</span>
+                )}
+              </div>
+              <button onClick={() => handleDelete(z.id)}
+                className="p-1 text-[#999] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleAdd} className="bg-[#F7F6FF] border border-[#AFA9EC] rounded-lg p-3 space-y-2">
+        <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Add / update zone</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="Zone name" value={form.zone_name}
+            onChange={e => setForm(f => ({ ...f, zone_name: e.target.value }))}
+            placeholder="e.g. SouthPark" required />
+          <Input label="State (2-char)" value={form.state} maxLength={2}
+            onChange={e => setForm(f => ({ ...f, state: e.target.value.toUpperCase() }))}
+            placeholder="NC" />
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">ZIP codes</label>
+          <textarea value={form.zips}
+            onChange={e => setForm(f => ({ ...f, zips: e.target.value }))}
+            placeholder="28078, 28036, 28031"
+            rows={2}
+            className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+        </div>
+        <label className="flex items-center gap-2 text-[13px] text-[#555] cursor-pointer">
+          <input type="checkbox" checked={form.is_waitlist_only}
+            onChange={e => setForm(f => ({ ...f, is_waitlist_only: e.target.checked }))}
+            className="w-4 h-4 accent-[#7F77DD]" />
+          Waitlist only
+        </label>
+        {error && (
+          <div className="flex items-center gap-2 text-[#791F1F] text-[12px] bg-[#FCEBEB] border border-[#F09595] rounded-lg px-3 py-2">
+            <AlertCircle size={13} />
+            {error}
+          </div>
+        )}
+        <div className="flex justify-end">
+          <Button type="submit" size="sm" loading={saving}>Save zone</Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export function AdminProvision() {
   const { provider } = useAuth()
   const [practices, setPractices] = useState<Practice[]>([])
@@ -110,6 +223,7 @@ export function AdminProvision() {
   const [savedId, setSavedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedProviderForm, setExpandedProviderForm] = useState<string | null>(null)
+  const [expandedZonePanel, setExpandedZonePanel] = useState<string | null>(null)
   const [savedProviders, setSavedProviders] = useState<Record<string, any[]>>({})
 
   const [form, setForm] = useState({
@@ -290,6 +404,14 @@ export function AdminProvision() {
                     </div>
                   </div>
                   <button
+                    onClick={() => setExpandedZonePanel(prev => prev === p.id ? null : p.id)}
+                    className="flex items-center gap-1.5 text-[12px] text-[#1D9E75] font-medium border border-[#1D9E75]/30 rounded-lg px-3 py-1.5 hover:bg-[#1D9E75]/8 transition-all"
+                  >
+                    <Map size={13} />
+                    Manage zones
+                    {expandedZonePanel === p.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                  <button
                     onClick={() => setExpandedProviderForm(prev => prev === p.id ? null : p.id)}
                     className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium border border-[#7F77DD]/30 rounded-lg px-3 py-1.5 hover:bg-[#7F77DD]/8 transition-all"
                   >
@@ -320,6 +442,10 @@ export function AdminProvision() {
                   practiceId={p.id}
                   onDone={newProvider => handleProviderCreated(p.id, newProvider)}
                 />
+              )}
+
+              {expandedZonePanel === p.id && (
+                <ZonePanel practiceId={p.id} practiceName={p.name} />
               )}
             </div>
           ))}

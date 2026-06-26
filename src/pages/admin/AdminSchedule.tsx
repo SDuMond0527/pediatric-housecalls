@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { VISIT_TYPES } from '../../lib/constants'
-import { ZIP_TO_ZONE } from '../../lib/zipData'
+import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { Appointment, Provider } from '../../types'
 
 const VISIT_TYPE_OPTIONS = Object.keys(VISIT_TYPES) as (keyof typeof VISIT_TYPES)[]
@@ -118,6 +118,7 @@ function to12h(time24: string): string {
 }
 
 export function AdminSchedule() {
+  const { zipToZone } = usePracticeZones()
   const [providers, setProviders] = useState<Provider[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [filterProvider, setFilterProvider] = useState('')
@@ -476,14 +477,14 @@ export function AdminSchedule() {
               <input type="text" placeholder="28277" maxLength={5} value={form.zip}
                 onChange={e => {
                   const zip = e.target.value
-                  const detectedZone = zip.length === 5 ? (ZIP_TO_ZONE[zip] || '') : ''
+                  const detectedZone = zip.length === 5 ? (zipToZone[zip] || '') : ''
                   setForm(f => ({ ...f, zip, zone: detectedZone || f.zone }))
                 }}
                 className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans" />
             </div>
             <div>
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                Zone {form.zip.length === 5 && ZIP_TO_ZONE[form.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
+                Zone {form.zip.length === 5 && zipToZone[form.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
               </label>
               <input type="text" placeholder="e.g. SouthPark" value={form.zone}
                 onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}

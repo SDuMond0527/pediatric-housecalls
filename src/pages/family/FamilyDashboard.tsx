@@ -5,7 +5,8 @@ import { format, isBefore, addHours } from 'date-fns'
 import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
-import { VISIT_TYPE_INFO, ZIP_TO_ZONE } from '../../lib/zipData'
+import { VISIT_TYPE_INFO } from '../../lib/zipData'
+import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { BookingRequest, SlotOffer } from '../../types/family'
 
 const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids']
@@ -21,6 +22,7 @@ function isWithin2Hours(booking: BookingRequest): boolean {
 
 export function FamilyDashboard() {
   const { family, children } = useFamilyAuth()
+  const { zipToZone } = usePracticeZones()
   const navigate = useNavigate()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +70,7 @@ export function FamilyDashboard() {
 
     // Notify waitlist families in the same zone that this slot opened up
     if (cancelTarget.confirmed_provider_id && cancelTarget.zone) {
-      const matchingZips = Object.entries(ZIP_TO_ZONE)
+      const matchingZips = Object.entries(zipToZone)
         .filter(([, z]) => z === cancelTarget.zone)
         .map(([zip]) => zip)
       if (matchingZips.length > 0) {

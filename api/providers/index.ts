@@ -47,6 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(rows)
   }
 
+  if (zone && !role && !name && !names) {
+    const rows = await sql`
+      SELECT * FROM providers
+      WHERE is_active = true AND role != 'admin' AND ${zone} = ANY(zones) AND practice_id = ${practiceId}::uuid
+      ORDER BY name`
+    return res.json(rows)
+  }
+
   let rows: unknown[]
   if (exclude_admin === 'true') {
     rows = await sql`SELECT * FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid ORDER BY name`
