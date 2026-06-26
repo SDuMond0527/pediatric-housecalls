@@ -539,7 +539,7 @@ Deno.serve(async (req) => {
       if (!entry) throw new Error('Waitlist entry not found')
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
-      const smsBody = `PediatricHousecalls: New waitlist entry in ${stateLabel} (zip ${entry.zip})${entry.visit_type ? ` — ${entry.visit_type}` : ''}. View: ${PORTAL_URL}/admin/waitlist`
+      const smsBody = `PediatricHousecalls: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
 
       // Get all active providers (excluding admins)
       const { data: stateProviders } = await supabase
@@ -858,7 +858,7 @@ Deno.serve(async (req) => {
       if (!bc) throw new Error('Broadcast not found')
 
       const stateLabel = bc.state === 'NC' ? 'North Carolina' : bc.state === 'SC' ? 'South Carolina' : bc.state === 'VA' ? 'Virginia' : bc.state || 'your state'
-      const smsBody = `PediatricHousecalls: Broadcast from ${bc.created_by_name}${bc.is_urgent ? ' [URGENT]' : ''} — ${bc.patient_first_name} ${bc.patient_last_name}, ${bc.request_type}. Complaint: ${bc.complaint}. View: ${PORTAL_URL}/broadcasts`
+      const smsBody = `PediatricHousecalls:${bc.is_urgent ? ' [URGENT]' : ''} New broadcast request. View: ${PORTAL_URL}/broadcasts`
 
       // Include all active providers AND all admins (admins may have is_active=false but still need to receive)
       const { data: providers } = await supabase
@@ -910,7 +910,7 @@ Deno.serve(async (req) => {
       const acceptedBy = body.acceptedByName || 'A provider'
       const patientName = `${bc.patient_first_name} ${bc.patient_last_name}`
       const pickupDesc = `the broadcast for ${patientName} (${bc.request_type})`
-      const smsBody = `PediatricHousecalls: ${acceptedBy} has picked up ${pickupDesc}.`
+      const smsBody = `PediatricHousecalls: A broadcast has been picked up. View: ${PORTAL_URL}/broadcasts`
 
       await notifyAllProviders(
         smsBody,
@@ -938,7 +938,7 @@ Deno.serve(async (req) => {
       const isVirtual = bc.request_type !== 'In-person house call'
 
       if (isVirtual) {
-        const parentSms = `PediatricHousecalls: ${acceptedBy} will evaluate your child by video telemedicine visit at ${timeFormatted} ${whenStr}. At that time, please log into the Pediatric Housecalls virtual waiting room and the provider will begin your video visit from there: https://doxy.me/v2/check-in/pediatrichousecalls/`
+        const parentSms = `PediatricHousecalls: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will evaluate your child by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>At that time, please log into the Pediatric Housecalls virtual waiting room and the provider will begin your video visit from there:</p>
@@ -947,7 +947,7 @@ Deno.serve(async (req) => {
         if (familyPhone) await sendSMS(familyPhone, parentSms)
         if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml)
       } else {
-        const parentSms = `PediatricHousecalls: ${acceptedBy} will come to your home for a house call visit at ${timeFormatted} ${whenStr}. Please have your child ready at that time.`
+        const parentSms = `PediatricHousecalls: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will come to your home for a house call visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>Please have your child ready at that time.</p>
@@ -1077,7 +1077,7 @@ Deno.serve(async (req) => {
       )
 
       // Notify admins
-      await notifyAdmins(`[PHC] CPR class booked: ${booking.visit_type} · ${dateFormatted} at ${booking.preferred_time} · ${participantCount} person(s). Ref: ${booking.reference_code}`)
+      await notifyAdmins(`PediatricHousecalls: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`)
 
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1089,7 +1089,7 @@ Deno.serve(async (req) => {
       const { providerId, visitType, date, time, zone, familyName } = body
       const dateFormatted = formatDate(date)
       const subject = `Appointment cancelled — ${visitType} on ${dateFormatted}`
-      const smsText = `PediatricHousecalls: ${familyName} cancelled their ${visitType} on ${dateFormatted} at ${time}${zone ? `, ${zone}` : ''}.`
+      const smsText = `PediatricHousecalls: An appointment has been cancelled. View: ${PORTAL_URL}/admin/schedule`
 
       // Email + SMS to assigned provider
       if (providerId) {
@@ -1160,14 +1160,14 @@ Deno.serve(async (req) => {
       ref: booking.reference_code,
       providerName: provider?.name || 'Provider',
     })
-    const smsBody = `PediatricHousecalls: New booking — ${booking.visit_type}, ${dateFormatted} at ${booking.preferred_time}, ${booking.zone}. Provider: ${provider?.name || '—'}. Ref: ${booking.reference_code}. View: ${PORTAL_URL}/admin/schedule`
+    const smsBody = `PediatricHousecalls: New appointment booked. View: ${PORTAL_URL}/admin/schedule`
 
     // ── Assigned provider email + SMS ──
     if (providerEmail) {
       await sendEmail(providerEmail, notifSubject, notifHtml)
     }
     if (provider?.phone) {
-      await sendSMS(provider.phone, smsBody.replace(`View: ${PORTAL_URL}/admin/schedule`, `View: ${PORTAL_URL}/today`))
+      await sendSMS(provider.phone, `PediatricHousecalls: New appointment booked. View: ${PORTAL_URL}/today`)
     }
 
     // ── Admin notifications — every booking, every provider ──

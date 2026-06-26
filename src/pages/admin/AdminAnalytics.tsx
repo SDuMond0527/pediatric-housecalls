@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { format, subWeeks, startOfWeek } from 'date-fns'
 import { getAnalytics } from '../../lib/api'
 
-interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null }
-interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string }
+interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null; zone: string | null }
+interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string; family_id: string }
 interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null }
 interface ProviderRow { id: string; name: string; role: string }
+interface BroadcastRow { id: string; status: string; created_at: string; is_urgent: boolean }
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -45,12 +46,13 @@ function HBar({ label, count, max, color }: { label: string; count: number; max:
 }
 
 export function AdminAnalytics() {
-  const [appts, setAppts]       = useState<ApptRow[]>([])
-  const [bookings, setBookings] = useState<BookingRow[]>([])
-  const [waitlist, setWaitlist] = useState<WaitlistRow[]>([])
-  const [providers, setProviders] = useState<ProviderRow[]>([])
+  const [appts, setAppts]           = useState<ApptRow[]>([])
+  const [bookings, setBookings]     = useState<BookingRow[]>([])
+  const [waitlist, setWaitlist]     = useState<WaitlistRow[]>([])
+  const [providers, setProviders]   = useState<ProviderRow[]>([])
+  const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([])
   const [familyCount, setFamilyCount] = useState(0)
-  const [loading, setLoading]   = useState(true)
+  const [loading, setLoading]       = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -61,6 +63,7 @@ export function AdminAnalytics() {
         setWaitlist(result.waitlistEntries ?? [])
         setFamilyCount(result.familyProfiles?.length ?? 0)
         setProviders(result.providers ?? [])
+        setBroadcasts(result.broadcasts ?? [])
       }
       setLoading(false)
     }
@@ -123,6 +126,33 @@ export function AdminAnalytics() {
   })
   const pickupsSorted = Object.entries(waitlistPickupsByProvider).sort((a, b) => b[1] - a[1])
   const maxPickups = pickupsSorted[0]?.[1] ?? 1
+
+  // New vs. returning families (by confirmed bookings)
+  const confirmedBookings = bookings
+    .filter(b => b.status === 'confirmed' && b.family_id)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const firstBookingByFamily: Record<string, string> = {}
+  confirmedBookings.forEach(b => {
+    if (!firstBookingByFamily[b.family_id]) firstBookingByFamily[b.family_id] = b.created_at
+  })
+  const newFamilies   = confirmedBookings.filter(b => firstBookingByFamily[b.family_id] === b.created_at).length
+  const returningVisits = confirmedBookings.length - newFamilies
+  const retentionPct  = confirmedBookings.length > 0 ? Math.round((returningVisits / confirmedBookings.length) * 100) : 0
+
+  // Broadcast pickup rate
+  const totalBroadcasts   = broadcasts.length
+  const pickedUp          = broadcasts.filter(b => b.status === 'picked_up' || b.status === 'accepted').length
+  const expiredBroadcasts = broadcasts.filter(b => b.status === 'expired').length
+  const pickupRate        = (pickedUp + expiredBroadcasts) > 0 ? Math.round((pickedUp / (pickedUp + expiredBroadcasts)) * 100) : 0
+
+  // Zone breakdown of completed visits
+  const zoneMap: Record<string, number> = {}
+  appts.filter(a => a.status === 'done' && a.zone).forEach(a => {
+    const z = a.zone!
+    zoneMap[z] = (zoneMap[z] ?? 0) + 1
+  })
+  const zoneSorted = Object.entries(zoneMap).sort((a, b) => b[1] - a[1])
+  const maxZone = zoneSorted[0]?.[1] ?? 1
 
   // Waitlist by state
   const wByState: Record<string, { waiting: number; converted: number }> = {}
@@ -366,6 +396,87 @@ export function AdminAnalytics() {
             )}
           </div>
         </div>
+
+        {/* New vs. returning families + Broadcast pickup rate */}
+        <div className="grid lg:grid-cols-2 gap-5">
+
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">New vs. returning families</h3>
+            <p className="text-[12px] text-[#999] mb-4">Based on confirmed bookings</p>
+            {confirmedBookings.length === 0 ? (
+              <p className="text-[13px] text-[#999]">No confirmed bookings yet.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
+                    <div className="font-display text-2xl font-semibold text-[#378ADD] mb-0.5">{newFamilies}</div>
+                    <div className="text-[11px] text-[#999]">First-time visits</div>
+                  </div>
+                  <div className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
+                    <div className="font-display text-2xl font-semibold text-[#1D9E75] mb-0.5">{returningVisits}</div>
+                    <div className="text-[11px] text-[#999]">Return visits</div>
+                  </div>
+                </div>
+                <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden mb-2 flex">
+                  <div className="h-full bg-[#378ADD] rounded-l-full" style={{ width: `${100 - retentionPct}%` }} />
+                  <div className="h-full bg-[#1D9E75]" style={{ width: `${retentionPct}%` }} />
+                </div>
+                <div className="flex justify-between text-[12px]">
+                  <span className="text-[#378ADD]">{100 - retentionPct}% new</span>
+                  <span className="text-[#1D9E75]">{retentionPct}% returning</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Broadcast pickup rate</h3>
+            <p className="text-[12px] text-[#999] mb-4">How often urgent/open requests get claimed</p>
+            {totalBroadcasts === 0 ? (
+              <p className="text-[13px] text-[#999]">No broadcasts sent yet.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { label: 'Total sent',  value: totalBroadcasts,   color: '#1A1A2E' },
+                    { label: 'Picked up',   value: pickedUp,          color: '#1D9E75' },
+                    { label: 'Expired',     value: expiredBroadcasts, color: '#C0392B' },
+                  ].map(s => (
+                    <div key={s.label} className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
+                      <div className="font-display text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
+                      <div className="text-[11px] text-[#999] leading-tight">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {(pickedUp + expiredBroadcasts) > 0 && (
+                  <>
+                    <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden mb-2">
+                      <div className="h-full bg-[#1D9E75] rounded-full" style={{ width: `${pickupRate}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[12px]">
+                      <span className="text-[#555]">Pickup rate</span>
+                      <span className="font-semibold text-[#1D9E75]">{pickupRate}%</span>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+        </div>
+
+        {/* Zone breakdown of completed visits */}
+        {zoneSorted.length > 0 && (
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by zone</h3>
+            <p className="text-[12px] text-[#999] mb-4">Geographic distribution of all completed appointments</p>
+            <div className="space-y-3">
+              {zoneSorted.map(([zone, count]) => (
+                <HBar key={zone} label={zone} count={count} max={maxZone} color="#7F77DD" />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Booking mix (from requests) */}
         {bVtSorted.length > 0 && (

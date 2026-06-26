@@ -259,3 +259,41 @@ export const getVitalsList = (params: Record<string, string>) =>
 
 export const saveVitals = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/vitals', { method: 'POST', body: JSON.stringify(body) })
+
+// ── Fee schedule ──────────────────────────────────────────────
+export const getFeeSchedule = () =>
+  apiFetch<any[]>('/api/fee-schedule')
+
+// ── Note photo upload ─────────────────────────────────────────
+export async function uploadNotePhoto(file: File): Promise<string> {
+  const { fetchAuthSession } = await import('aws-amplify/auth')
+  const session = await fetchAuthSession()
+  const token = session.tokens?.accessToken?.toString() ?? ''
+  const response = await fetch(`/api/upload-note-photo?filename=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type },
+    body: file,
+  })
+  if (!response.ok) throw new Error('Photo upload failed')
+  const data = await response.json()
+  return data.url
+}
+
+// ── Claims ────────────────────────────────────────────────────
+export const getUnbilledNotes = () =>
+  apiFetch<any[]>('/api/claims?unbilled=true')
+
+export const getClaims = (status?: string) =>
+  apiFetch<any[]>(status ? `/api/claims?status=${status}` : '/api/claims')
+
+export const generateClaim = (encounter_note_id: string) =>
+  apiFetch<any>('/api/claims', { method: 'POST', body: JSON.stringify({ encounter_note_id }) })
+
+export const getClaim = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`)
+
+export const updateClaim = (id: string, body: Record<string, unknown>) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+
+export const submitClaim = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'submit' }) })

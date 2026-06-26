@@ -45,23 +45,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { appointment_id, child_id, provider_id, chief_complaint, subjective, objective, assessment, plan, diagnoses } = req.body
+    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, photos } = req.body
     if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
 
     const diagnosesVal = diagnoses ?? []
+    const photosVal = photos ?? []
 
     const [row] = await sql`
-      INSERT INTO encounter_notes (appointment_id, child_id, provider_id, chief_complaint, subjective, objective, assessment, plan, diagnoses)
+      INSERT INTO encounter_notes (appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, photos)
       VALUES (
         ${appointment_id}::uuid,
         ${child_id ?? null}::uuid,
         ${provider_id ?? null}::uuid,
+        ${note_type ?? null},
         ${chief_complaint ?? null},
         ${subjective ?? null},
         ${objective ?? null},
         ${assessment ?? null},
         ${plan ?? null},
-        ${JSON.stringify(diagnosesVal)}::jsonb
+        ${JSON.stringify(diagnosesVal)}::jsonb,
+        ${JSON.stringify(photosVal)}::jsonb
       )
       RETURNING *`
     return res.json(row)

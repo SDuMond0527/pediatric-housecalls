@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
-import { upload } from '@vercel/blob/client'
 import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
@@ -39,6 +38,29 @@ function childEditFrom(c: Child): ChildEdit {
     preferred_pharmacy: c.preferred_pharmacy || '',
     pcp: c.pcp || '',
   }
+}
+
+function compressToJpeg(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const MAX = 1400
+      let w = img.width, h = img.height
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+        else { w = Math.round(w * MAX / h); h = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => reject(new Error('Failed to read image'))
+    img.src = objectUrl
+  })
 }
 
 export function FamilyProfile() {
@@ -108,17 +130,16 @@ export function FamilyProfile() {
     setChildSaveError(null)
     try {
       const token = await getFamilyAccessToken()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const blob = await upload(
-        `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`,
-        file,
-        {
-          access: 'public',
-          handleUploadUrl: '/api/upload-insurance-card',
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      )
-      setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', blob.url)
+      const data = await compressToJpeg(file)
+      const filename = `insurance-cards/${childId}/${side}-${Date.now()}.jpg`
+      const res = await fetch('/api/upload-insurance-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data, filename }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Upload failed')
+      setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', json.url)
     } catch (e: any) {
       setChildSaveError(e.message ?? 'Upload failed')
     } finally {

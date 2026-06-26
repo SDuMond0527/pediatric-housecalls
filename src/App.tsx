@@ -20,6 +20,7 @@ import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminReports } from './pages/admin/AdminReports'
 import { AdminBookings } from './pages/admin/AdminBookings'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
+import { AdminClaims } from './pages/admin/AdminClaims'
 import { FamilyLogin } from './pages/family/FamilyLogin'
 import { FamilySignup } from './pages/family/FamilySignup'
 import { FamilySetup } from './pages/family/FamilySetup'
@@ -83,6 +84,7 @@ export default function App() {
                 <Route path="schedule"   element={<AdminSchedule />} />
                 <Route path="waitlist"   element={<AdminWaitlist />} />
                 <Route path="broadcasts" element={<AdminBroadcasts />} />
+                <Route path="claims"     element={<AdminClaims />} />
                 <Route path="providers"  element={<AdminProviders />} />
                 <Route path="settings"   element={<Settings />} />
               </Route>

@@ -35,41 +35,61 @@ const CHARM_REFRESH_TOKEN = process.env.CHARM_REFRESH_TOKEN || ''
 const CHARM_API_KEY       = process.env.CHARM_API_KEY       || ''
 
 async function getCharmToken(): Promise<string> {
-  const tokenUrls = [
-    'https://accounts.charmtracker.com/oauth/v2/token',
-    'https://accounts106.charmtracker.com/oauth/v2/token',
-  ]
-  const params = new URLSearchParams({
-    grant_type:    'refresh_token',
-    refresh_token: CHARM_REFRESH_TOKEN,
-    client_id:     CHARM_CLIENT_ID,
-    client_secret: CHARM_CLIENT_SECRET,
-  })
+  const tokenUrl = 'https://accounts.charmtracker.com/oauth/v2/token'
   let lastError = ''
-  for (const url of tokenUrls) {
+
+  // Try client_credentials first (no refresh token needed, works if client_id + secret are valid)
+  if (CHARM_CLIENT_ID && CHARM_CLIENT_SECRET) {
     try {
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params })
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'client_credentials', client_id: CHARM_CLIENT_ID, client_secret: CHARM_CLIENT_SECRET, scope: 'openid' }),
+      })
       const data = await res.json()
       if (data.access_token) return data.access_token
-      lastError = JSON.stringify(data)
-    } catch (e: any) { lastError = e.message }
+      lastError = `client_credentials: ${JSON.stringify(data)}`
+    } catch (e: any) { lastError = `client_credentials: ${e.message}` }
   }
+
+  // Fall back to refresh_token flow
+  if (CHARM_REFRESH_TOKEN) {
+    for (const url of [tokenUrl, 'https://accounts106.charmtracker.com/oauth/v2/token']) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: CHARM_REFRESH_TOKEN, client_id: CHARM_CLIENT_ID, client_secret: CHARM_CLIENT_SECRET }),
+        })
+        const data = await res.json()
+        if (data.access_token) return data.access_token
+        lastError += ` | refresh_token (${url}): ${JSON.stringify(data)}`
+      } catch (e: any) { lastError += ` | ${e.message}` }
+    }
+  }
+
   throw new Error(`Charm auth failed: ${lastError}`)
 }
 
 async function charmFetch(path: string, options: RequestInit = {}, token: string): Promise<any> {
-  const res = await fetch(`${CHARM_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Authorization': `Zoho-oauthtoken ${token}`,
-      'api_key':       CHARM_API_KEY,
-      'Content-Type':  'application/json',
-      ...(options.headers ?? {}),
-    },
-  })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`Charm API ${res.status} on ${path}: ${text}`)
-  return JSON.parse(text)
+  const url = `${CHARM_BASE_URL}${path}`
+  const headers = {
+    'Authorization': `Zoho-oauthtoken ${token}`,
+    'api_key':       CHARM_API_KEY,
+    'Content-Type':  'application/json',
+    ...(options.headers ?? {}),
+  }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch(url, { ...options, headers })
+    const text = await res.text()
+    if (res.ok) return JSON.parse(text)
+    if ((res.status === 503 || res.status === 504) && attempt < 3) {
+      console.log(`Charm ${res.status} on ${path}, retry ${attempt}/3...`)
+      await new Promise(r => setTimeout(r, attempt * 2000))
+      continue
+    }
+    throw new Error(`Charm API ${res.status} on ${path}: ${text.slice(0, 200)}`)
+  }
 }
 
 // ── Charm helpers ─────────────────────────────────────────────────────────────
@@ -113,11 +133,23 @@ async function enrichPatient(token: string, patientId: string, intake: Record<st
   }
 }
 
+function toCharmGender(g: string): string {
+  const lower = g.toLowerCase()
+  if (lower === 'female') return 'female'
+  if (lower === 'male') return 'male'
+  return 'other'
+}
+
+function toCharmDob(dob: string): string {
+  // Charm expects YYYY-MM-DD (same as HTML date input format)
+  return dob
+}
+
 async function updatePatient(token: string, patientId: string, intake: Record<string, string>, email: string) {
   const body: Record<string, unknown> = { email }
   if (intake.firstName)         body.first_name     = intake.firstName
   if (intake.lastName)          body.last_name      = intake.lastName
-  if (intake.gender)            body.gender         = intake.gender === 'Female' ? 'female' : intake.gender === 'Male' ? 'male' : 'other'
+  if (intake.gender)            body.gender         = toCharmGender(intake.gender)
   if (intake.pcp)               body.custom_field_1 = intake.pcp
   if (intake.preferredPharmacy) body.custom_field_2 = intake.preferredPharmacy
   // Charm v1 rejects address_line1/state/zip_code as "Extra key found in JSON"
@@ -144,17 +176,20 @@ async function findOrCreatePatient(
     }
   }
 
+  if (!intake.dateOfBirth) throw new Error(`DOB required for patient creation`)
+
   const body: Record<string, unknown> = {
     first_name: intake.firstName || 'Unknown',
     last_name:  intake.lastName  || 'Unknown',
     email:      familyEmail,
-    gender:     intake.gender === 'Female' ? 'female' : intake.gender === 'Male' ? 'male' : 'other',
+    gender:     toCharmGender(intake.gender || ''),
+    dob:        toCharmDob(intake.dateOfBirth),
     facilities: [{ facility_id: facilityId }],
   }
-  if (!intake.dateOfBirth) throw new Error(`DOB required for patient creation`)
-  body.dob = intake.dateOfBirth
 
+  console.log('Charm: POST /patients body:', JSON.stringify(body))
   const created = await charmFetch('/patients', { method: 'POST', body: JSON.stringify(body) }, token)
+  console.log('Charm: POST /patients result:', JSON.stringify(created))
   const patientId = created.patient_id || created.data?.patient_id
   if (!patientId) throw new Error(`Patient creation failed: ${JSON.stringify(created)}`)
 
@@ -187,7 +222,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [family] = await sql`SELECT * FROM family_profiles WHERE id = ${booking.family_id}::uuid LIMIT 1`
     const children = booking.child_ids?.length
-      ? await sql`SELECT * FROM children WHERE id = ANY(${JSON.stringify(booking.child_ids)}::uuid[])`
+      ? await sql`SELECT * FROM children WHERE id = ANY(${booking.child_ids}::uuid[])`
       : []
 
     if (!family || !children.length) return res.status(200).json({ ok: false, error: 'Family or children not found' })
@@ -195,7 +230,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = await getCharmToken()
     const facilityId = process.env.CHARM_FACILITY_ID || await getFacilityId(token)
     const memberId = booking.preferred_provider
-      ? await findMemberId(token, booking.preferred_provider)
+      ? await findMemberId(token, booking.preferred_provider).catch(() => null)
       : null
 
     const visitAddress = (booking.notes ?? '').split('|').find((p: string) => p.trim().startsWith('ADDR:'))?.replace('ADDR:', '').trim() || ''
@@ -205,10 +240,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const intake = ((childIntakes ?? {})[child.id] ?? {}) as Record<string, string>
       let charmPatientId: string | null = child.charm_patient_id || null
 
+      console.log(`Charm: processing child ${child.id}, existing charm_patient_id=${charmPatientId}, intake keys=${Object.keys(intake).join(',')}`)
+
       if (!charmPatientId) {
         try {
           charmPatientId = await findOrCreatePatient(token, facilityId, intake, family.email)
-        } catch {
+          console.log(`Charm: patient found/created: ${charmPatientId}`)
+        } catch (patErr: any) {
+          console.error(`Charm: findOrCreatePatient failed for child ${child.id}:`, patErr?.message ?? patErr)
           charmPatientId = process.env.CHARM_TEST_PATIENT_ID || null
           if (!charmPatientId) continue
         }
@@ -248,7 +287,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reason:              complaint,
       }
 
+      console.log(`Charm: creating appointment`, JSON.stringify(apptBody))
       const apptResult = await charmFetch('/appointments', { method: 'POST', body: JSON.stringify(apptBody) }, token)
+      console.log(`Charm: appointment result`, JSON.stringify(apptResult))
       const apptId = apptResult.appointment_id || apptResult.data?.appointment_id
 
       if (apptId) {

@@ -12,7 +12,6 @@ async function verifyToken(authHeader: string | undefined): Promise<void> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try { await verifyToken(req.headers.authorization) } catch { return res.status(401).json({ error: 'Unauthorized' }) }
   if (req.method !== 'GET') return res.status(405).end()
 
   const clientId     = process.env.CHARM_CLIENT_ID     || ''
@@ -68,21 +67,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json({ ok: false, step: 'auth', envCheck, tokenUrl, error: tokenError })
   }
 
-  // Try to list facilities
+  const headers = { 'Authorization': `Zoho-oauthtoken ${token}`, 'api_key': apiKey, 'Content-Type': 'application/json' }
+
+  // Try facilities
   let facilitiesResult: any = null
   let facilitiesError: string | null = null
   try {
-    const r = await fetch(`${baseUrl}/facilities`, {
-      headers: { 'Authorization': `Zoho-oauthtoken ${token}`, 'api_key': apiKey, 'Content-Type': 'application/json' },
-    })
-    facilitiesResult = await r.json()
-    if (!r.ok) facilitiesError = `HTTP ${r.status}: ${JSON.stringify(facilitiesResult)}`
+    const r = await fetch(`${baseUrl}/facilities`, { headers })
+    const text = await r.text()
+    if (r.ok) facilitiesResult = JSON.parse(text)
+    else facilitiesError = `HTTP ${r.status}: ${text.slice(0, 300)}`
   } catch (e: any) { facilitiesError = e.message }
 
+  // Try members
+  let membersResult: any = null
+  let membersError: string | null = null
+  try {
+    const r = await fetch(`${baseUrl}/members`, { headers })
+    const text = await r.text()
+    if (r.ok) membersResult = JSON.parse(text)
+    else membersError = `HTTP ${r.status}: ${text.slice(0, 300)}`
+  } catch (e: any) { membersError = e.message }
+
+  // Try patient creation with a test payload
+  let patientResult: any = null
+  let patientError: string | null = null
+  const realFacilityId = facilitiesResult?.facilities?.[0]?.facility_id ?? facilityId
+  const testPatientBody = {
+    first_name: 'TestFirst',
+    last_name:  'TestLast',
+    email:      'test-delete-me@example.com',
+    gender:     'female',
+    dob:        '2015-01-01',
+    facilities: [{ facility_id: realFacilityId }],
+  }
+  try {
+    const r = await fetch(`${baseUrl}/patients`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(testPatientBody),
+    })
+    const text = await r.text()
+    if (r.ok) patientResult = JSON.parse(text)
+    else patientError = `HTTP ${r.status}: ${text.slice(0, 500)}`
+  } catch (e: any) { patientError = e.message }
+
   return res.json({
-    ok: !facilitiesError,
+    ok: !facilitiesError && !membersError && !patientError,
     envCheck,
     auth: { tokenUrl, tokenObtained: true },
     facilities: facilitiesError ? { error: facilitiesError } : facilitiesResult,
+    members: membersError ? { error: membersError } : membersResult,
+    patientCreation: patientError ? { error: patientError, sentBody: testPatientBody } : { success: true, result: patientResult },
   })
 }

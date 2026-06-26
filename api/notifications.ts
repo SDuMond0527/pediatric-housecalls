@@ -591,7 +591,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!entry) throw new Error('Waitlist entry not found')
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
-      const smsBody = `PediatricHousecalls: New waitlist entry in ${stateLabel} (zip ${entry.zip})${entry.visit_type ? ` — ${entry.visit_type}` : ''}. View: ${PORTAL_URL}/admin/waitlist`
+      const smsBody = `PediatricHousecalls: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
 
       const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true`
       for (const prov of stateProviders) {
@@ -657,10 +657,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html)
       }
 
-      await notifyAdmins(sql, `[PHC] Waitlist patient booked: ${body.providerName} · ${dateFormatted} at ${body.time}`)
+      await notifyAdmins(sql, `PediatricHousecalls: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`)
 
       const pickupDesc = `a waitlist patient (zip ${entry.zip}${entry.state ? `, ${entry.state}` : ''})`
-      const pickupSms = `PediatricHousecalls: ${body.providerName} has picked up ${pickupDesc}.`
+      const pickupSms = `PediatricHousecalls: A waitlist patient has been picked up. View: ${PORTAL_URL}/broadcasts`
       await notifyAllProviders(
         sql,
         pickupSms,
@@ -815,7 +815,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         )
       }
 
-      await notifyAdmins(sql, `[PHC] Waitlist slot claimed: ${offer.provider_name} · ${offer.visit_type || 'Visit'} · ${dateFormatted} at ${offer.offered_time} · ${offer.zone || ''}`)
+      await notifyAdmins(sql, `PediatricHousecalls: Waitlist slot claimed. View: ${PORTAL_URL}/admin/schedule`)
 
       return res.json({ ok: true })
     }
@@ -824,7 +824,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.type === 'appointment_added') {
       const { providerName, visitType, zone, date, time, parentEmail } = body
       const dateFormatted = formatDate(date)
-      await notifyAdmins(sql, `[PHC] Appointment added: ${providerName} · ${visitType} · ${dateFormatted} at ${time} · ${zone}`)
+      await notifyAdmins(sql, `PediatricHousecalls: Appointment added. View: ${PORTAL_URL}/admin/schedule`)
 
       if (visitType === 'In-home IV fluids' && parentEmail) {
         await sendEmail(parentEmail, 'Your IV fluids request has been received — Pediatric Housecalls', ivFluidsEmailHtml())
@@ -839,7 +839,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!bc) throw new Error('Broadcast not found')
 
       const stateLabel = bc.state === 'NC' ? 'North Carolina' : bc.state === 'SC' ? 'South Carolina' : bc.state === 'VA' ? 'Virginia' : bc.state || 'your state'
-      const smsBody = `PediatricHousecalls: Broadcast from ${bc.created_by_name}${bc.is_urgent ? ' [URGENT]' : ''} — ${bc.patient_first_name} ${bc.patient_last_name}, ${bc.request_type}. Complaint: ${bc.complaint}. View: ${PORTAL_URL}/broadcasts`
+      const smsBody = `PediatricHousecalls:${bc.is_urgent ? ' [URGENT]' : ''} New broadcast request. View: ${PORTAL_URL}/broadcasts`
 
       const providers = await sql`SELECT id, name, phone, email FROM providers WHERE is_active = true OR role = 'admin'`
       for (const prov of providers) {
@@ -884,7 +884,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const acceptedBy = body.acceptedByName || 'A provider'
       const patientName = `${bc.patient_first_name} ${bc.patient_last_name}`
       const pickupDesc = `the broadcast for ${patientName} (${bc.request_type})`
-      const smsBody = `PediatricHousecalls: ${acceptedBy} has picked up ${pickupDesc}.`
+      const smsBody = `PediatricHousecalls: A broadcast has been picked up. View: ${PORTAL_URL}/broadcasts`
 
       await notifyAllProviders(
         sql,
@@ -910,7 +910,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isVirtual = bc.request_type !== 'In-person house call'
 
       if (isVirtual) {
-        const parentSms = `PediatricHousecalls: ${acceptedBy} will evaluate your child by video telemedicine visit at ${timeFormatted} ${whenStr}. At that time, please log into the Pediatric Housecalls virtual waiting room and the provider will begin your video visit from there: https://doxy.me/v2/check-in/pediatrichousecalls/`
+        const parentSms = `PediatricHousecalls: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will evaluate your child by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>At that time, please log into the Pediatric Housecalls virtual waiting room and the provider will begin your video visit from there:</p>
@@ -919,7 +919,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (familyPhone) await sendSMS(familyPhone, parentSms)
         if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml)
       } else {
-        const parentSms = `PediatricHousecalls: ${acceptedBy} will come to your home for a house call visit at ${timeFormatted} ${whenStr}. Please have your child ready at that time.`
+        const parentSms = `PediatricHousecalls: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will come to your home for a house call visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>Please have your child ready at that time.</p>
@@ -1052,7 +1052,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       )
 
-      await notifyAdmins(sql, `[PHC] CPR class booked: ${booking.visit_type} · ${dateFormatted} at ${booking.preferred_time} · ${participantCount} person(s). Ref: ${booking.reference_code}`)
+      await notifyAdmins(sql, `PediatricHousecalls: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`)
 
       return res.json({ ok: true })
     }
@@ -1094,14 +1094,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const displayName = familyDisplayName || patientName
       const subject = `Your appointment has been cancelled — ${appt.visit_type} on ${dateFormatted}`
-      const smsToParent = `PediatricHousecalls: Your ${appt.visit_type} appointment on ${dateFormatted} at ${timeFormatted} has been cancelled. Please visit phcbooking.com to rebook.`
+      const smsToParent = `PediatricHousecalls: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`
 
       // Notify parent
       if (parentEmail) await sendEmail(parentEmail, subject, appointmentCancelledByProviderEmail({ displayName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '' }))
       if (parentPhone) await sendSMS(parentPhone, smsToParent)
 
       // Notify admins (Pam)
-      const adminSms = `PediatricHousecalls: ${appt.provider_name} cancelled: ${appt.visit_type} on ${dateFormatted} at ${timeFormatted}${appt.zone ? `, ${appt.zone}` : ''}.`
+      const adminSms = `PediatricHousecalls: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
@@ -1116,7 +1116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { providerId, visitType, date, time, zone, familyName } = body
       const dateFormatted = formatDate(date)
       const subject = `Appointment cancelled — ${visitType} on ${dateFormatted}`
-      const smsText = `PediatricHousecalls: ${familyName} cancelled their ${visitType} on ${dateFormatted} at ${time}${zone ? `, ${zone}` : ''}.`
+      const smsText = `PediatricHousecalls: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
 
       if (providerId) {
         const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid`
@@ -1227,7 +1227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ref: booking.reference_code,
       providerName: provider?.name || 'Provider',
     })
-    const smsBody = `PediatricHousecalls: New booking — ${booking.visit_type}, ${dateFormatted} at ${booking.preferred_time}, ${booking.zone}. Provider: ${provider?.name || '—'}. Ref: ${booking.reference_code}. View: ${PORTAL_URL}/today`
+    const smsBody = `PediatricHousecalls: New appointment booked. View: ${PORTAL_URL}/today`
 
     // Assigned provider
     if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml)

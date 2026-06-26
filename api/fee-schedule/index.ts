@@ -20,18 +20,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
 
   const sql = neon(process.env.DATABASE_URL!)
-
-  const [appointments, bookingRequests, waitlistEntries, familyProfiles, providers, broadcasts] = await Promise.all([
-    sql`SELECT id, status, visit_type, scheduled_date, provider_id, notes, zone FROM appointments`,
-    sql`SELECT id, status, visit_type, state, created_at, family_id FROM booking_requests`,
-    sql`SELECT id, status, state, family_id, converted_provider_id FROM waitlist_entries`,
-    sql`SELECT id FROM family_profiles`,
-    sql`SELECT id, name, role FROM providers`,
-    sql`SELECT id, status, created_at, is_urgent FROM broadcasts`,
-  ])
-
-  res.json({ appointments, bookingRequests, waitlistEntries, familyProfiles, providers, broadcasts })
+  const rows = await sql`
+    SELECT code, description, category, charge_amount, place_of_service
+    FROM fee_schedule
+    WHERE is_active = true
+    ORDER BY category, code
+  `
+  return res.json(rows.map(r => ({ ...r, charge_amount: parseFloat(r.charge_amount as string) })))
 }

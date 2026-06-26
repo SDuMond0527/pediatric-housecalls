@@ -1904,6 +1904,29 @@ export function BookVisit() {
   )
 }
 
+function compressToJpeg(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const MAX = 1400
+      let w = img.width, h = img.height
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+        else { w = Math.round(w * MAX / h); h = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => reject(new Error('Failed to read image'))
+    img.src = objectUrl
+  })
+}
+
 // ─── Child intake form section ─────────────────────────────────────────────────
 
 function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
@@ -1921,19 +1944,16 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
     setUploadError(null)
     try {
       const token = await getFamilyAccessToken()
-      const ext = file.name.split('.').pop() || 'jpg'
-      const path = `${intake.childId || 'unknown'}/${side}-${Date.now()}.${ext}`
-      const form = new FormData()
-      form.append('file', file)
-      form.append('path', path)
+      const data = await compressToJpeg(file)
+      const filename = `insurance-cards/${intake.childId || 'unknown'}/${side}-${Date.now()}.jpg`
       const res = await fetch('/api/upload-insurance-card', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data, filename }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Upload failed')
-      onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', json.publicUrl)
+      onChange(side === 'front' ? 'insuranceCardFrontUrl' : 'insuranceCardBackUrl', json.url)
     } catch (e: any) {
       setUploadError(e?.message || 'Upload failed')
     } finally {
