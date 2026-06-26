@@ -279,6 +279,13 @@ export async function uploadNotePhoto(file: File): Promise<string> {
   return data.url
 }
 
+// ── Practice provisioning (super-admin only) ──────────────────
+export const getPractices = () =>
+  apiFetch<any[]>('/api/practices')
+
+export const createPractice = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/practices', { method: 'POST', body: JSON.stringify(body) })
+
 // ── Eligibility ───────────────────────────────────────────────
 export const checkEligibility = (appointmentId: string) =>
   apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify({ appointment_id: appointmentId }) })
