@@ -9,6 +9,18 @@ const TWILIO_FROM       = process.env.TWILIO_FROM_NUMBER || ''
 const FROM_EMAIL        = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
 const PORTAL_URL        = process.env.PORTAL_URL || 'https://phcbooking.com'
 const PRACTICE_NAME     = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
+const TELEMEDICINE_URL  = process.env.TELEMEDICINE_URL || 'https://doxy.me/v2/check-in/pediatrichousecalls/'
+const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || 'https://g.page/r/CeBMcqioHWlQEBM/review'
+const VENMO_HANDLE      = process.env.VENMO_HANDLE || '@Pediatric-Housecalls'
+
+// Splits practice name into "first words" (white) + "last word" (accent color)
+function logo(accentColor: string): string {
+  const parts = PRACTICE_NAME.trim().split(/\s+/)
+  if (parts.length === 1) return `<span style="color:#fff;">${PRACTICE_NAME}</span>`
+  const last = parts[parts.length - 1]
+  const rest = parts.slice(0, -1).join(' ')
+  return `${rest}<span style="color:${accentColor};">${last}</span>`
+}
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
 
@@ -96,7 +108,7 @@ function parentConfirmationEmail(data: {
 
   <!-- Header -->
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#7F77DD;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#7F77DD')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Appointment confirmed</div>
   </td></tr>
 
@@ -118,9 +130,9 @@ function parentConfirmationEmail(data: {
 
     ${isVideoVisit ? `
     <div style="background:#EEEDFE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#3C3489;">
-      <strong>Video visit:</strong> When it is time for your scheduled video visit, please click on the following link to log into the secure Pediatric Housecalls telemedicine waiting room:<br><br>
-      <a href="https://doxy.me/v2/check-in/pediatrichousecalls/" style="display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Join telemedicine waiting room →</a><br><br>
-      <span style="font-size:12px;color:#5550A0;">Or copy this link: https://doxy.me/v2/check-in/pediatrichousecalls/</span>
+      <strong>Video visit:</strong> When it is time for your scheduled video visit, please click on the following link to log into the secure ${PRACTICE_NAME} telemedicine waiting room:<br><br>
+      <a href="${TELEMEDICINE_URL}" style="display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Join telemedicine waiting room →</a><br><br>
+      <span style="font-size:12px;color:#5550A0;">Or copy this link: ${TELEMEDICINE_URL}</span>
     </div>` : isVirtual ? `
     <div style="background:#EEEDFE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#3C3489;">
       <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time.
@@ -160,7 +172,7 @@ function providerNotificationEmail(data: {
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#7F77DD;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#7F77DD')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">New appointment</div>
   </td></tr>
 
@@ -202,7 +214,6 @@ function postVisitEmail(data: {
 }) {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const childPhrase = data.childName ? `${data.childName}'s` : "your child's"
-  const REVIEW_URL = 'https://g.page/r/CeBMcqioHWlQEBM/review'
 
   return `<!DOCTYPE html>
 <html>
@@ -213,14 +224,14 @@ function postVisitEmail(data: {
 
   <!-- Header -->
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#1D9E75')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Thank you for your visit</div>
   </td></tr>
 
   <!-- Body -->
   <tr><td style="padding:32px;">
     <p style="font-size:15px;margin:0 0 20px;line-height:1.65;">${greeting}<br><br>
-    Thank you so much for trusting Pediatric Housecalls with ${childPhrase} care${data.dateFormatted ? ` on ${data.dateFormatted}` : ' today'}. It is truly our honor to be there for your family right in the comfort of your own home.</p>
+    Thank you so much for trusting ${PRACTICE_NAME} with ${childPhrase} care${data.dateFormatted ? ` on ${data.dateFormatted}` : ' today'}. It is truly our honor to be there for your family right in the comfort of your own home.</p>
 
     ${data.instructions ? `
     <!-- After-visit instructions -->
@@ -234,13 +245,13 @@ function postVisitEmail(data: {
     <!-- Review button -->
     <table width="100%" style="margin-bottom:28px;">
       <tr><td>
-        <a href="${REVIEW_URL}" style="display:inline-block;background:#F9AB00;color:#1A1A2E;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;">
+        <a href="${GOOGLE_REVIEW_URL}" style="display:inline-block;background:#F9AB00;color:#1A1A2E;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;">
           ⭐&nbsp; Leave a Google Review
         </a>
       </td></tr>
     </table>
 
-    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">With gratitude,<br><strong style="color:#1A1A2E;">The Pediatric Housecalls Team</strong></p>
+    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">With gratitude,<br><strong style="color:#1A1A2E;">The ${PRACTICE_NAME} Team</strong></p>
   </td></tr>
 
   <!-- Footer -->
@@ -269,7 +280,7 @@ function cancellationNotificationEmail(data: {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#7F77DD;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#7F77DD')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Appointment cancelled</div>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -308,7 +319,7 @@ function appointmentCancelledByProviderEmail(data: {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#7F77DD;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#7F77DD')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Appointment cancelled</div>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -323,7 +334,7 @@ function appointmentCancelledByProviderEmail(data: {
       </td></tr>
     </table>
     <div style="background:#FBEAF0;border-radius:10px;padding:14px 16px;font-size:13px;color:#993556;">
-      To reschedule, please visit <a href="https://phcbooking.com/family/book" style="color:#993556;">phcbooking.com</a> or reply to this email.
+      To reschedule, please visit <a href="${PORTAL_URL}/family/book" style="color:#993556;">${PORTAL_URL}</a> or reply to this email.
     </div>
   </td></tr>
 </table>
@@ -358,7 +369,7 @@ function cprConfirmationEmail(data: {
 
   <!-- Header -->
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">Pediatric<span style="color:#E74C3C;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#E74C3C')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">CPR class confirmed</div>
   </td></tr>
 
@@ -395,7 +406,7 @@ function cprConfirmationEmail(data: {
     <div style="background:#E8F8F5;border-radius:12px;border:1px solid #A9DFBF;padding:18px 20px;margin-bottom:20px;">
       <div style="font-size:14px;font-weight:600;color:#1E8449;margin-bottom:8px;">💳 Payment</div>
       <p style="font-size:13px;color:#1E8449;margin:0;line-height:1.55;">
-        Please send <strong>$${totalCost}</strong> ($80 × ${data.participantCount} person${data.participantCount > 1 ? 's' : ''}) via Venmo to <strong>@Pediatric-Housecalls</strong> before your class.
+        Please send <strong>$${totalCost}</strong> ($80 × ${data.participantCount} person${data.participantCount > 1 ? 's' : ''}) via Venmo to <strong>${VENMO_HANDLE}</strong> before your class.
       </p>
     </div>
 
@@ -444,7 +455,7 @@ function cprMelissaEmail(data: {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#E74C3C;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#E74C3C')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">New CPR class booked</div>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -481,7 +492,7 @@ function pickupNotificationEmail(data: { recipientName: string; acceptedBy: stri
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#1D9E75')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Patient picked up</div>
 </td></tr>
 <tr><td style="padding:32px;">
@@ -502,12 +513,12 @@ function ivFluidsEmailHtml(): string {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#1D9E75')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">IV fluids request received</div>
 </td></tr>
 <tr><td style="padding:32px;">
   <p style="font-size:15px;margin:0 0 16px;line-height:1.6;">Your request for in-home IV fluids has been received.</p>
-  <p style="font-size:14px;margin:0 0 16px;line-height:1.7;color:#444;">One of our physicians or nurse practitioners will review the request and will schedule to consult with you via video telemedicine visit shortly. You will receive another email with the link to log into the Pediatric Housecalls virtual visit room.</p>
+  <p style="font-size:14px;margin:0 0 16px;line-height:1.7;color:#444;">One of our physicians or nurse practitioners will review the request and will schedule to consult with you via video telemedicine visit shortly. You will receive another email with the link to log into the ${PRACTICE_NAME} virtual visit room.</p>
   <p style="font-size:14px;margin:0;line-height:1.7;color:#444;">Once you've had a chance to meet with the physician or nurse practitioner via video and they confirm and agree that IV fluids are medically appropriate and indicated, the IV fluids nurse will reach out to you to let you know what time she will be arriving at your home to administer the IV fluids.</p>
 </td></tr>
 </table></td></tr></table></body></html>`
@@ -526,7 +537,7 @@ function waitlistProviderEmail(data: {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
-    <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#EF9F27;">Housecalls</span></div>
+    <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#EF9F27')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">New waitlist entry — ${stateLabel}</div>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -558,7 +569,7 @@ async function notifyAdmins(sql: any, smsBody: string, practiceId?: string) {
     ? await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}::uuid`
     : await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
   for (const admin of admins) {
-    if (admin.email) await sendEmail(admin.email, '[PHC Admin] ' + smsBody, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${smsBody}</p>`)
+    if (admin.email) await sendEmail(admin.email, `[${PRACTICE_NAME} Admin] ` + smsBody, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${smsBody}</p>`)
     if (admin.phone) await sendSMS(admin.phone, smsBody)
   }
 }
@@ -641,12 +652,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#1D9E75')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Good news — a provider has accepted your request</div>
 </td></tr>
 <tr><td style="padding:32px;">
   <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">${greeting}<br><br>
-  A Pediatric Housecalls provider has accepted your waitlist request and scheduled an appointment for you!</p>
+  A ${PRACTICE_NAME} provider has accepted your waitlist request and scheduled an appointment for you!</p>
   <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;"><tr><td style="padding:20px;">
     <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Provider</span><br><span style="font-size:14px;font-weight:500;">${body.providerName}</span></div>
     <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Date</span><br><span style="font-size:14px;font-weight:500;">${dateFormatted}</span></div>
@@ -726,7 +737,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#1D9E75')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">A slot has opened up for you</div>
 </td></tr>
 <tr><td style="padding:32px;">
@@ -795,7 +806,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#1D9E75;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#1D9E75')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Appointment confirmed</div>
 </td></tr>
 <tr><td style="padding:32px;">
@@ -844,12 +855,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Manual appointment added by provider ──────────────────────────────────
     if (body.type === 'appointment_added') {
-      const { providerName, visitType, zone, date, time, parentEmail } = body
-      const dateFormatted = formatDate(date)
+      const { visitType, parentEmail } = body
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added. View: ${PORTAL_URL}/admin/schedule`, undefined)
 
       if (visitType === 'In-home IV fluids' && parentEmail) {
-        await sendEmail(parentEmail, 'Your IV fluids request has been received — Pediatric Housecalls', ivFluidsEmailHtml())
+        await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())
       }
 
       return res.json({ ok: true })
@@ -872,7 +882,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 <tr><td style="background:#1A1A2E;padding:28px 32px;">
-  <div style="font-size:20px;font-weight:600;color:#fff;">Pediatric<span style="color:#7F77DD;">Housecalls</span></div>
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#7F77DD')}</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">
     ${bc.is_urgent ? '🚨 Urgent broadcast' : 'New broadcast'} — ${stateLabel}
   </div>
@@ -936,8 +946,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const parentSms = `${PRACTICE_NAME}: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will evaluate your child by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
-          <p>At that time, please log into the Pediatric Housecalls virtual waiting room and the provider will begin your video visit from there:</p>
-          <p><a href="https://doxy.me/v2/check-in/pediatrichousecalls/" style="color:#7F77DD;font-weight:600;">https://doxy.me/v2/check-in/pediatrichousecalls/</a></p>
+          <p>At that time, please log into the ${PRACTICE_NAME} virtual waiting room and the provider will begin your video visit from there:</p>
+          <p><a href="${TELEMEDICINE_URL}" style="color:#7F77DD;font-weight:600;">${TELEMEDICINE_URL}</a></p>
         </div>`
         if (familyPhone) await sendSMS(familyPhone, parentSms)
         if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml)
@@ -1011,7 +1021,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const dateFormatted = appt.scheduled_date ? formatDate(appt.scheduled_date) : ''
       await sendEmail(
         familyEmail,
-        'Thank you for choosing Pediatric Housecalls ⭐',
+        `Thank you for choosing ${PRACTICE_NAME} ⭐`,
         postVisitEmail({
           displayName: familyDisplayName,
           childName: childFirstName,
@@ -1123,7 +1133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (parentEmail) await sendEmail(parentEmail, subject, appointmentCancelledByProviderEmail({ displayName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '' }))
       if (parentPhone) await sendSMS(parentPhone, smsToParent)
 
-      // Notify admins (Pam)
+      // Notify admins
       const adminSms = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
       for (const admin of admins) {
@@ -1155,42 +1165,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.json({ ok: true })
-    }
-
-    // ── Booking notification (default flow) ───────────────────────────────────
-    const { bookingRequestId } = body
-
-    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
-    if (!booking) throw new Error('Booking not found')
-
-    const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
-    const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
-
-    // Temporary debug — remove after confirming notifications work
-    if (body._debug) {
-      return res.json({ hasResend: !!RESEND_API_KEY, hasTwilioSid: !!TWILIO_SID, hasTwilioKey: !!TWILIO_API_KEY, hasTwilioSecret: !!TWILIO_API_SECRET, hasFrom: !!TWILIO_FROM, familyEmail: family?.email || null, providerEmail: provider?.email || null })
-    }
-
-    const providerEmail = provider?.email || ''
-    const dateFormatted = formatDate(booking.preferred_date)
-
-    if (family?.email) {
-      await sendEmail(
-        family.email,
-        `Confirmed: ${booking.visit_type} on ${dateFormatted}`,
-        parentConfirmationEmail({
-          visitType: booking.visit_type,
-          date: dateFormatted,
-          time: booking.preferred_time,
-          provider: provider?.name || 'Your provider',
-          zone: booking.zone || '',
-          ref: booking.reference_code,
-          displayName: family.display_name,
-        })
-      )
-      if (booking.visit_type === 'In-home IV fluids') {
-        await sendEmail(family.email, 'Your IV fluids request has been received — Pediatric Housecalls', ivFluidsEmailHtml())
-      }
     }
 
     // ── Provider note to parent ───────────────────────────────────────────────
@@ -1237,8 +1211,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <div style="background:#F9F9F7;border:1px solid #E8E8E4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:15px;line-height:1.6;white-space:pre-wrap;">${message.trim()}</div>
           <p style="font-size:13px;color:#999;">If you have questions, please reply to this email or contact us through the portal.</p>
         </div>`
-      await sendEmail(parentEmail, `A note from ${providerName} — Pediatric Housecalls`, html)
+      await sendEmail(parentEmail, `A note from ${providerName} — ${PRACTICE_NAME}`, html)
       return res.json({ ok: true })
+    }
+
+    // ── Booking notification (default flow) ───────────────────────────────────
+    const { bookingRequestId } = body
+
+    const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
+    if (!booking) throw new Error('Booking not found')
+
+    const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+    const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
+
+    // Temporary debug — remove after confirming notifications work
+    if (body._debug) {
+      return res.json({ hasResend: !!RESEND_API_KEY, hasTwilioSid: !!TWILIO_SID, hasTwilioKey: !!TWILIO_API_KEY, hasTwilioSecret: !!TWILIO_API_SECRET, hasFrom: !!TWILIO_FROM, familyEmail: family?.email || null, providerEmail: provider?.email || null })
+    }
+
+    const providerEmail = provider?.email || ''
+    const dateFormatted = formatDate(booking.preferred_date)
+
+    if (family?.email) {
+      await sendEmail(
+        family.email,
+        `Confirmed: ${booking.visit_type} on ${dateFormatted}`,
+        parentConfirmationEmail({
+          visitType: booking.visit_type,
+          date: dateFormatted,
+          time: booking.preferred_time,
+          provider: provider?.name || 'Your provider',
+          zone: booking.zone || '',
+          ref: booking.reference_code,
+          displayName: family.display_name,
+        })
+      )
+      if (booking.visit_type === 'In-home IV fluids') {
+        await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())
+      }
     }
 
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`
@@ -1256,7 +1266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml)
     if (provider?.phone) await sendSMS(provider.phone, smsBody)
 
-    // All admins (including Pam) — every booking, every provider
+    // All admins — every booking, every provider
     const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
     for (const admin of admins) {
       if (admin.id === provider?.id) continue  // don't double-notify if admin is also the assigned provider
