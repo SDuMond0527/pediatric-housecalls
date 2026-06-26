@@ -251,10 +251,14 @@ export function BookVisit() {
     if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); return }
     if (!isIv && !isCma) {
       getProvidersByZone(booking.zone)
-        .then(providers => setRegularZoneProviders(providers.map((p: any) => ({
-          name: p.name, role: p.role, initials: p.initials,
-          color: p.avatar_color, textColor: p.avatar_text_color,
-        }))))
+        .then(providers => setRegularZoneProviders(
+          providers
+            .filter((p: any) => p.role !== 'RN' && p.role !== 'CMA')
+            .map((p: any) => ({
+              name: p.name, role: p.role, initials: p.initials,
+              color: p.avatar_color, textColor: p.avatar_text_color,
+            }))
+        ))
         .catch(() => setRegularZoneProviders([]))
     }
     getProvidersByRole({ role: 'RN', is_active: 'true', zone: booking.zone })
