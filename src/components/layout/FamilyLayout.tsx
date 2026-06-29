@@ -2,6 +2,8 @@ import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import { CalendarPlus, Home, User, LogOut } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
+import { DemoBanner } from '../DemoBanner'
+import { DEMO_MODE } from '../../lib/practice'
 
 export function FamilyLayout() {
   const { user, family, loading, signOut } = useFamilyAuth()
@@ -27,6 +29,7 @@ export function FamilyLayout() {
 
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
+      {DEMO_MODE && <DemoBanner />}
       <header className="bg-white border-b border-[#E8E8E4] sticky top-0 z-40">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="font-display text-lg font-medium text-[#1A1A2E]">

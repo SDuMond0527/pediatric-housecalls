@@ -2,6 +2,8 @@ import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { DemoBanner } from '../DemoBanner'
+import { DEMO_MODE } from '../../lib/practice'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -87,6 +89,7 @@ export function AdminLayout() {
       </aside>
 
       <div className="ml-[220px]">
+        {DEMO_MODE && <DemoBanner />}
         <Outlet />
       </div>
     </div>

@@ -4,6 +4,8 @@ import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { useAuth } from '../../contexts/AuthContext'
 import { getBroadcasts } from '../../lib/api'
+import { DemoBanner } from '../DemoBanner'
+import { DEMO_MODE } from '../../lib/practice'
 
 export function AppLayout() {
   const { user, loading } = useAuth()
@@ -45,6 +47,7 @@ export function AppLayout() {
       )}
 
       <div className="md:ml-[220px]">
+        {DEMO_MODE && <DemoBanner />}
         <div className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-[#E8E8E4]">
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-[#F1EFE8]">
             <Menu size={18} />
