@@ -83,10 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SELECT c.*,
                fp.display_name AS family_display_name,
                fp.email        AS family_email,
-               fp.phone        AS family_phone,
-               fp.address      AS family_address,
-               fp.zip          AS family_zip,
-               fp.state        AS family_state
+               fp.phone        AS family_phone
         FROM children c
         LEFT JOIN family_profiles fp ON fp.id = c.family_id
         WHERE c.practice_id = ${practiceId}::uuid
