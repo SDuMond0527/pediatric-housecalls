@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, Mail, MapPin, Stethoscope, Pill, Shield } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
