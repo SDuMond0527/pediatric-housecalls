@@ -11,13 +11,7 @@ export const DEMO_CREDS = {
 }
 
 export function PracticeLogo({ className }: { className?: string }) {
-  const parts = PRACTICE_NAME.trim().split(/\s+/)
-  if (parts.length === 1) return <span className={className}>{PRACTICE_NAME}</span>
-  const last = parts[parts.length - 1]
-  const rest = parts.slice(0, -1).join(' ')
   return (
-    <span className={className}>
-      {rest}<span style={{ color: ACCENT_COLOR }}>{last}</span>
-    </span>
+    <img src="/logo.png" alt={PRACTICE_NAME} className={className ?? 'h-24 w-auto mx-auto'} />
   )
 }
