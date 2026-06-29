@@ -29,6 +29,8 @@ import { FamilyAddCard } from './pages/family/FamilyAddCard'
 import { FamilyDashboard } from './pages/family/FamilyDashboard'
 import { BookVisit } from './pages/family/BookVisit'
 import { FamilyProfile } from './pages/family/FamilyProfile'
+import { GoRoamSignup } from './pages/GoRoamSignup'
+import { GoRoamSuccess } from './pages/GoRoamSuccess'
 import { useAuth } from './contexts/AuthContext'
 
 function RootRedirect() {
@@ -44,6 +46,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public GoRoam signup — no auth */}
+        <Route path="/signup" element={<GoRoamSignup />} />
+        <Route path="/signup/success" element={<GoRoamSuccess />} />
+
         {/* Family portal — own auth context */}
         <Route path="/family/*" element={
           <FamilyAuthProvider>
