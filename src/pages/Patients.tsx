@@ -29,6 +29,7 @@ export function Patients() {
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export function Patients() {
 
   function onQueryChange(q: string) {
     setQuery(q)
+    setSearchError('')
     if (searchTimer.current) clearTimeout(searchTimer.current)
     if (!q.trim()) {
       setSearchResults([])
@@ -57,8 +59,9 @@ export function Patients() {
       try {
         const rows = await searchChildren(q.trim())
         setSearchResults(rows ?? [])
-      } catch {
+      } catch (e: any) {
         setSearchResults([])
+        setSearchError(e?.message || 'Search failed')
       }
       setSearchLoading(false)
     }, 300)
@@ -106,6 +109,10 @@ export function Patients() {
           <div className="text-center py-16 text-[#999] text-[14px]">Loading patients…</div>
         ) : searchLoading ? (
           <div className="text-center py-16 text-[#999] text-[14px]">Searching…</div>
+        ) : searchError ? (
+          <div className="text-center py-16">
+            <div className="text-[#791F1F] text-[14px]">Search error: {searchError}</div>
+          </div>
         ) : displayed.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-[#999] text-[14px]">

@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2 } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE } from '../../lib/practice'
@@ -12,6 +12,7 @@ const NAV = [
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
   { to: '/admin/claims',     icon: Receipt,       label: 'Claims' },
+  { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',  icon: Users,         label: 'Providers' },
   { to: '/admin/settings',   icon: Settings,      label: 'Settings' },
 ]
