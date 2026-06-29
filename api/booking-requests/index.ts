@@ -62,10 +62,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   practiceId = providerRows[0].practice_id as string
 
   if (req.method === 'GET') {
-    const { status, family_id, reference_code } = req.query as Record<string, string>
+    const { status, family_id, reference_code, child_id } = req.query as Record<string, string>
     let rows: unknown[]
     if (reference_code) {
       rows = await sql`SELECT * FROM booking_requests WHERE reference_code = ${reference_code} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    } else if (child_id) {
+      rows = await sql`
+        SELECT br.*, p.name AS provider_name
+        FROM booking_requests br
+        LEFT JOIN providers p ON p.id = br.confirmed_provider_id
+        WHERE ${child_id}::uuid = ANY(br.child_ids)
+          AND br.practice_id = ${practiceId}::uuid
+        ORDER BY br.preferred_date DESC`
     } else if (family_id) {
       rows = await sql`SELECT * FROM booking_requests WHERE family_id = ${family_id}::uuid AND practice_id = ${practiceId}::uuid ORDER BY preferred_date DESC LIMIT 20`
     } else if (status) {

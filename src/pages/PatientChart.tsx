@@ -1,9 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, Mail, MapPin, Stethoscope, Pill, Shield } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
+
+interface NoteWithVisit {
+  id: string
+  appointment_id: string
+  child_id: string
+  chief_complaint: string | null
+  subjective: string | null
+  objective: string | null
+  assessment: string | null
+  plan: string | null
+  diagnoses: { code: string; name: string }[]
+  is_signed: boolean
+  signed_at: string | null
+  visit_type: string
+  scheduled_date: string
+  scheduled_time: string
+  zone: string
+  provider_name: string | null
+}
 
 function calcAge(dob: string): string {
   try {
@@ -31,32 +50,37 @@ function vitalChips(v: any): string {
   return parts.join(' · ')
 }
 
-interface NoteWithVisit {
-  id: string
-  appointment_id: string
-  child_id: string
-  chief_complaint: string | null
-  subjective: string | null
-  objective: string | null
-  assessment: string | null
-  plan: string | null
-  diagnoses: { code: string; name: string }[]
-  is_signed: boolean
-  signed_at: string | null
-  visit_type: string
-  scheduled_date: string
-  scheduled_time: string
-  zone: string
-  provider_name: string | null
+function statusColor(status: string): string {
+  const s = (status ?? '').toLowerCase()
+  if (s === 'pending') return 'bg-[#F1EFE8] text-[#777]'
+  if (s === 'confirmed' || s === 'accepted') return 'bg-[#EEF6FB] text-[#2D7BA6]'
+  if (s === 'completed') return 'bg-[#E6F6F2] text-[#1A7D5A]'
+  if (s === 'cancelled' || s === 'declined') return 'bg-[#FDEDED] text-[#991B1B]'
+  return 'bg-[#F1EFE8] text-[#777]'
+}
+
+function Field({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <div className="text-[11px] text-[#999]">{label}</div>
+      {value ? (
+        <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
+      ) : (
+        <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
+      )}
+    </div>
+  )
 }
 
 export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters'>('overview')
   const [child, setChild] = useState<any | null>(null)
   const [notes, setNotes] = useState<NoteWithVisit[]>([])
   const [vitalsByAppt, setVitalsByAppt] = useState<Record<string, any>>({})
+  const [bookingRequests, setBookingRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedNote, setExpandedNote] = useState<string | null>(null)
 
@@ -65,178 +89,432 @@ export function PatientChart() {
     const cid = childId
     async function load() {
       setLoading(true)
-      const [childrenRes, notesRes, vitalsRes] = await Promise.all([
+      const [childrenRes, notesRes, vitalsRes, bookingRes] = await Promise.all([
         getChildrenByIds([cid]).catch(() => [] as any[]),
         getEncounterNotes({ child_id: cid }).catch(() => [] as NoteWithVisit[]),
         getVitalsList({ child_id: cid }).catch(() => [] as any[]),
+        getBookingRequests({ child_id: cid }).catch(() => [] as any[]),
       ])
-      const childRes = childrenRes?.[0] ?? null
-      setChild(childRes)
+      setChild(childrenRes?.[0] ?? null)
       setNotes(notesRes ?? [])
       const byAppt: Record<string, any> = {}
       ;(vitalsRes ?? []).forEach((v: any) => { byAppt[v.appointment_id] = v })
       setVitalsByAppt(byAppt)
+      setBookingRequests(bookingRes ?? [])
       setLoading(false)
     }
     load()
   }, [childId])
 
+  const today = new Date().toISOString().slice(0, 10)
+  const upcomingRequests = bookingRequests.filter(br => {
+    const s = (br.status ?? '').toLowerCase()
+    return br.preferred_date >= today && s !== 'cancelled' && s !== 'declined'
+  })
+  const pastRequests = bookingRequests.filter(br => {
+    const s = (br.status ?? '').toLowerCase()
+    return br.preferred_date < today || s === 'cancelled' || s === 'declined'
+  })
+
   const name = child
     ? ([child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || 'Unknown patient')
     : 'Loading…'
 
+  const dob = child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : null
+
+  const tabs = [
+    { key: 'overview' as const, label: 'Overview', count: null },
+    { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
+    { key: 'encounters' as const, label: 'Encounters', count: notes.length },
+  ]
+
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
-      {/* Page header */}
-      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#555] transition-colors flex-shrink-0">
-          <ChevronLeft size={18} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="font-display text-[18px] font-medium text-[#1A1A2E]">{name}</div>
-          {child && (
-            <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
-              {child.date_of_birth && (
-                <span>DOB {formatDob(String(child.date_of_birth).split('T')[0])} ({calcAge(String(child.date_of_birth).split('T')[0])})</span>
-              )}
-              {child.allergies && <span className="text-[#791F1F] font-medium">Allergies: {child.allergies}</span>}
-              {child.current_medications && <span>Meds: {child.current_medications}</span>}
-            </div>
-          )}
+      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center gap-3 max-w-3xl mx-auto">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#555] transition-colors flex-shrink-0"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">{name}</div>
+            {child && (
+              <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
+                {dob && <span>DOB {formatDob(dob)} ({calcAge(dob)})</span>}
+                {child.allergies && (
+                  <span className="text-[#991B1B] font-medium bg-[#FDEDED] px-1.5 py-0.5 rounded">
+                    ⚠ Allergies
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <Badge variant="purple">{notes.length} {notes.length === 1 ? 'encounter' : 'encounters'}</Badge>
+        <div className="flex gap-2 mt-3 max-w-3xl mx-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
+                activeTab === tab.key
+                  ? 'bg-[#7F77DD] text-white'
+                  : 'bg-white text-[#555] border border-[#E8E8E4] hover:border-[#AFA9EC]'
+              }`}
+            >
+              {tab.label}
+              {tab.count !== null && (
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
+                  activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-[#F1EFE8] text-[#777]'
+                }`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
         {loading ? (
           <div className="text-center py-16 text-[#999] text-[14px]">Loading chart…</div>
-        ) : notes.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-[#999] text-[14px]">No encounter notes on file for this patient.</div>
-          </div>
         ) : (
-          <div className="space-y-3">
-            {notes.map(note => {
-              const vitals = vitalsByAppt[note.appointment_id]
-              const chips = vitals ? vitalChips(vitals) : ''
-              const isOpen = expandedNote === note.id
-
-              return (
-                <div key={note.id}
-                  className={`border rounded-xl bg-white overflow-hidden transition-all ${isOpen ? 'border-[#7F77DD]' : 'border-[#E8E8E4] hover:border-[#AFA9EC]'}`}>
-                  {/* Summary row */}
-                  <button
-                    className="w-full text-left px-5 py-4 flex items-start gap-3"
-                    onClick={() => setExpandedNote(isOpen ? null : note.id)}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                          {format(parseISO(note.scheduled_date), 'MMM d, yyyy')}
-                        </span>
-                        <Badge variant="purple">{note.visit_type}</Badge>
-                        {note.is_signed && <Badge variant="teal">Signed</Badge>}
+          <>
+            {activeTab === 'overview' && (
+              <div className="space-y-4">
+                <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Phone size={14} className="text-[#7F77DD]" />
+                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Contact & Family</div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field label="Family" value={child?.family_display_name} />
+                    <Field label="Phone" value={child?.family_phone} />
+                    <Field label="Email" value={child?.family_email} />
+                    <div>
+                      <div className="text-[11px] text-[#999] flex items-center gap-1">
+                        <MapPin size={11} />
+                        Address
                       </div>
-                      <div className="text-[12px] text-[#999] mb-1.5">
-                        {note.provider_name && <span>{note.provider_name} · </span>}
-                        {note.zone}
-                      </div>
-                      {chips && (
-                        <div className="text-[11px] font-medium text-[#555] bg-[#F1EFE8] px-2.5 py-1 rounded-full inline-block mb-2">
-                          {chips}
+                      {child?.family_address_line1 ? (
+                        <div className="text-[13px] text-[#1A1A2E] mt-0.5">
+                          {child.family_address_line1}
+                          {(child.family_city || child.family_state || child.family_zip) && (
+                            <>, {[child.family_city, child.family_state, child.family_zip].filter(Boolean).join(' ')}</>
+                          )}
                         </div>
-                      )}
-                      {note.chief_complaint && (
-                        <div className="text-[13px] text-[#1A1A2E]">
-                          <span className="text-[#999] text-[11px]">CC: </span>{note.chief_complaint}
-                        </div>
-                      )}
-                      {note.diagnoses?.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {note.diagnoses.map(dx => (
-                            <span key={dx.code} className="text-[11px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full">
-                              {dx.code} – {dx.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {note.plan && (
-                        <div className="text-[12px] text-[#555] mt-1.5 line-clamp-2">
-                          <span className="text-[#999]">Plan: </span>
-                          {note.plan.length > 120 ? note.plan.slice(0, 120) + '…' : note.plan}
-                        </div>
-                      )}
-                      {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (
-                        <div className="text-[12px] text-[#bbb] italic mt-1">No encounter note content</div>
+                      ) : (
+                        <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
                       )}
                     </div>
-                    <ChevronDown size={14} className={`text-[#999] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                  </button>
+                  </div>
+                </div>
 
-                  {/* Expanded full note */}
-                  {isOpen && (
-                    <div className="px-5 pb-5 border-t border-[#E8E8E4] pt-4 space-y-4">
-                      {/* Vitals expanded */}
-                      {vitals && (
-                        <div>
-                          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Vitals</div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {[
-                              { label: 'Temp', value: vitals.temperature_f != null ? `${vitals.temperature_f}°F` : null },
-                              { label: 'HR', value: vitals.heart_rate != null ? `${vitals.heart_rate} bpm` : null },
-                              { label: 'RR', value: vitals.respiratory_rate != null ? `${vitals.respiratory_rate} br/min` : null },
-                              { label: 'O2 sat', value: vitals.oxygen_saturation != null ? `${vitals.oxygen_saturation}%` : null },
-                              { label: 'Weight', value: vitals.weight_lbs != null ? `${vitals.weight_lbs} lbs` : null },
-                              { label: 'Height', value: vitals.height_in != null ? `${vitals.height_in} in` : null },
-                              { label: 'BP', value: vitals.systolic_bp != null && vitals.diastolic_bp != null ? `${vitals.systolic_bp}/${vitals.diastolic_bp}` : null },
-                            ].filter(d => d.value).map(d => (
-                              <div key={d.label} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
-                                <div className="text-[10px] text-[#999] font-medium uppercase tracking-wider">{d.label}</div>
-                                <div className="text-[13px] font-medium text-[#1A1A2E] mt-0.5">{d.value}</div>
-                              </div>
-                            ))}
-                          </div>
+                <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Stethoscope size={14} className="text-[#7F77DD]" />
+                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Medical Information</div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-[11px] text-[#999] flex items-center gap-1">
+                        <Pill size={11} />
+                        Drug &amp; food allergies
+                      </div>
+                      {child?.allergies ? (
+                        <div className="text-[13px] text-[#991B1B] bg-[#FDEDED] mt-0.5 px-2.5 py-1.5 rounded-lg">
+                          {child.allergies}
                         </div>
+                      ) : (
+                        <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
                       )}
-
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
-                        { label: 'Chief Complaint', value: note.chief_complaint },
-                        { label: 'Subjective', value: note.subjective },
-                        { label: 'Objective', value: note.objective },
-                        { label: 'Assessment', value: note.assessment },
-                        { label: 'Plan', value: note.plan },
-                      ].map(({ label, value }) => value ? (
+                        { label: 'Current medications', value: child?.current_medications },
+                        { label: 'Medical history', value: child?.medical_history },
+                        { label: 'Primary care provider', value: child?.pcp },
+                        { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
+                      ].map(({ label, value }) => (
                         <div key={label}>
-                          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">{label}</div>
-                          <div className="text-[13px] text-[#1A1A2E] whitespace-pre-line">{value}</div>
+                          <div className="text-[11px] text-[#999]">{label}</div>
+                          {value ? (
+                            <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
+                          ) : (
+                            <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                          )}
                         </div>
-                      ) : null)}
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-                      {note.diagnoses?.length > 0 && (
+                <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Shield size={14} className="text-[#7F77DD]" />
+                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</div>
+                  </div>
+                  {child?.insurance_provider || child?.insurance_member_id || child?.insurance_group_number ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Insurance plan" value={child?.insurance_provider} />
+                        <Field label="Member ID" value={child?.insurance_member_id} />
+                        <Field label="Group number" value={child?.insurance_group_number} />
+                        <Field label="Subscriber" value={child?.family_display_name} />
+                      </div>
+                      {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
                         <div>
-                          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Diagnoses</div>
-                          <div className="flex flex-wrap gap-2">
-                            {note.diagnoses.map(dx => (
-                              <span key={dx.code} className="text-[12px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2.5 py-1 rounded-full">
-                                {dx.code} – {dx.name}
-                              </span>
-                            ))}
+                          <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
+                          <div className="grid grid-cols-2 gap-3">
+                            {child?.insurance_card_front_url && (
+                              <div>
+                                <div className="text-[11px] text-[#999] mb-1">Front</div>
+                                <img
+                                  src={child.insurance_card_front_url}
+                                  alt="Insurance card front"
+                                  className="w-full rounded-lg border border-[#E8E8E4] object-cover"
+                                />
+                              </div>
+                            )}
+                            {child?.insurance_card_back_url && (
+                              <div>
+                                <div className="text-[11px] text-[#999] mb-1">Back</div>
+                                <img
+                                  src={child.insurance_card_back_url}
+                                  alt="Insurance card back"
+                                  className="w-full rounded-lg border border-[#E8E8E4] object-cover"
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
+                    </div>
+                  ) : (
+                    <div className="text-[13px] text-[#bbb] text-center py-4">No insurance information on file</div>
+                  )}
+                </div>
+              </div>
+            )}
 
-                      {note.is_signed && note.signed_at && (
-                        <div className="text-[11px] text-[#999] pt-2 border-t border-[#F1EFE8]">
-                          Signed {format(new Date(note.signed_at), 'MMM d, yyyy h:mm a')}
-                          {note.provider_name && ` by ${note.provider_name}`}
+            {activeTab === 'appointments' && (
+              <div className="space-y-6">
+                <div>
+                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">Upcoming</div>
+                  {upcomingRequests.length === 0 ? (
+                    <div className="text-[13px] text-[#bbb] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
+                      No upcoming appointments
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {upcomingRequests.map(br => (
+                        <div key={br.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
+                                  {br.preferred_date ? format(parseISO(br.preferred_date), 'MMM d, yyyy') : 'Date TBD'}
+                                </span>
+                                {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
+                              </div>
+                              <div className="text-[12px] text-[#999] mb-1">
+                                {br.zone && <span>{br.zone}</span>}
+                                {br.provider_name && <span> · {br.provider_name}</span>}
+                              </div>
+                              {br.notes && (
+                                <div className="text-[12px] text-[#555] mt-1">
+                                  {br.notes.length > 100 ? br.notes.slice(0, 100) + '…' : br.notes}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full flex-shrink-0 capitalize ${statusColor(br.status)}`}>
+                              {br.status ?? 'pending'}
+                            </span>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>
-              )
-            })}
-          </div>
+
+                <div>
+                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">Past</div>
+                  {pastRequests.length === 0 ? (
+                    <div className="text-[13px] text-[#bbb] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
+                      No past appointments
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pastRequests.map(br => (
+                        <div key={br.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm opacity-80">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
+                                  {br.preferred_date ? format(parseISO(br.preferred_date), 'MMM d, yyyy') : 'Date TBD'}
+                                </span>
+                                {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
+                              </div>
+                              <div className="text-[12px] text-[#999] mb-1">
+                                {br.zone && <span>{br.zone}</span>}
+                                {br.provider_name && <span> · {br.provider_name}</span>}
+                              </div>
+                              {br.notes && (
+                                <div className="text-[12px] text-[#555] mt-1">
+                                  {br.notes.length > 100 ? br.notes.slice(0, 100) + '…' : br.notes}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full flex-shrink-0 capitalize ${statusColor(br.status)}`}>
+                              {br.status ?? 'unknown'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'encounters' && (
+              <div>
+                {notes.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="text-[#999] text-[14px]">No encounter notes on file for this patient.</div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {notes.map(note => {
+                      const vitals = vitalsByAppt[note.appointment_id]
+                      const chips = vitals ? vitalChips(vitals) : ''
+                      const isOpen = expandedNote === note.id
+
+                      return (
+                        <div
+                          key={note.id}
+                          className={`border rounded-xl bg-white overflow-hidden transition-all ${
+                            isOpen ? 'border-[#7F77DD]' : 'border-[#E8E8E4] hover:border-[#AFA9EC]'
+                          }`}
+                        >
+                          <button
+                            className="w-full text-left px-5 py-4 flex items-start gap-3"
+                            onClick={() => setExpandedNote(isOpen ? null : note.id)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
+                                  {format(parseISO(note.scheduled_date), 'MMM d, yyyy')}
+                                </span>
+                                <Badge variant="purple">{note.visit_type}</Badge>
+                                {note.is_signed && <Badge variant="teal">Signed</Badge>}
+                              </div>
+                              <div className="text-[12px] text-[#999] mb-1.5">
+                                {note.provider_name && <span>{note.provider_name} · </span>}
+                                {note.zone}
+                              </div>
+                              {chips && (
+                                <div className="text-[11px] font-medium text-[#555] bg-[#F1EFE8] px-2.5 py-1 rounded-full inline-block mb-2">
+                                  {chips}
+                                </div>
+                              )}
+                              {note.chief_complaint && (
+                                <div className="text-[13px] text-[#1A1A2E]">
+                                  <span className="text-[#999] text-[11px]">CC: </span>{note.chief_complaint}
+                                </div>
+                              )}
+                              {note.diagnoses?.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {note.diagnoses.map(dx => (
+                                    <span key={dx.code} className="text-[11px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full">
+                                      {dx.code} – {dx.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {note.plan && (
+                                <div className="text-[12px] text-[#555] mt-1.5 line-clamp-2">
+                                  <span className="text-[#999]">Plan: </span>
+                                  {note.plan.length > 120 ? note.plan.slice(0, 120) + '…' : note.plan}
+                                </div>
+                              )}
+                              {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (
+                                <div className="text-[12px] text-[#bbb] italic mt-1">No encounter note content</div>
+                              )}
+                            </div>
+                            <ChevronDown
+                              size={14}
+                              className={`text-[#999] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+
+                          {isOpen && (
+                            <div className="px-5 pb-5 border-t border-[#E8E8E4] pt-4 space-y-4">
+                              {vitals && (
+                                <div>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Vitals</div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {[
+                                      { label: 'Temp', value: vitals.temperature_f != null ? `${vitals.temperature_f}°F` : null },
+                                      { label: 'HR', value: vitals.heart_rate != null ? `${vitals.heart_rate} bpm` : null },
+                                      { label: 'RR', value: vitals.respiratory_rate != null ? `${vitals.respiratory_rate} br/min` : null },
+                                      { label: 'O2 sat', value: vitals.oxygen_saturation != null ? `${vitals.oxygen_saturation}%` : null },
+                                      { label: 'Weight', value: vitals.weight_lbs != null ? `${vitals.weight_lbs} lbs` : null },
+                                      { label: 'Height', value: vitals.height_in != null ? `${vitals.height_in} in` : null },
+                                      { label: 'BP', value: vitals.systolic_bp != null && vitals.diastolic_bp != null ? `${vitals.systolic_bp}/${vitals.diastolic_bp}` : null },
+                                    ].filter(d => d.value).map(d => (
+                                      <div key={d.label} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
+                                        <div className="text-[10px] text-[#999] font-medium uppercase tracking-wider">{d.label}</div>
+                                        <div className="text-[13px] font-medium text-[#1A1A2E] mt-0.5">{d.value}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {[
+                                { label: 'Chief Complaint', value: note.chief_complaint },
+                                { label: 'Subjective', value: note.subjective },
+                                { label: 'Objective', value: note.objective },
+                                { label: 'Assessment', value: note.assessment },
+                                { label: 'Plan', value: note.plan },
+                              ].map(({ label, value }) => value ? (
+                                <div key={label}>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">{label}</div>
+                                  <div className="text-[13px] text-[#1A1A2E] whitespace-pre-line">{value}</div>
+                                </div>
+                              ) : null)}
+
+                              {note.diagnoses?.length > 0 && (
+                                <div>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Diagnoses</div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {note.diagnoses.map(dx => (
+                                      <span key={dx.code} className="text-[12px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2.5 py-1 rounded-full">
+                                        {dx.code} – {dx.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {note.is_signed && note.signed_at && (
+                                <div className="text-[11px] text-[#999] pt-2 border-t border-[#F1EFE8]">
+                                  Signed {format(new Date(note.signed_at), 'MMM d, yyyy h:mm a')}
+                                  {note.provider_name && ` by ${note.provider_name}`}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

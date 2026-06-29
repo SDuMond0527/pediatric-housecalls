@@ -86,8 +86,9 @@ export default function App() {
                 <Route path="waitlist"   element={<AdminWaitlist />} />
                 <Route path="broadcasts" element={<AdminBroadcasts />} />
                 <Route path="claims"     element={<AdminClaims />} />
-                <Route path="patients"   element={<Patients />} />
-                <Route path="providers"  element={<AdminProviders />} />
+                <Route path="patients"        element={<Patients />} />
+                <Route path="chart/:childId" element={<PatientChart />} />
+                <Route path="providers"      element={<AdminProviders />} />
                 <Route path="provision"  element={<AdminProvision />} />
                 <Route path="settings"   element={<Settings />} />
               </Route>

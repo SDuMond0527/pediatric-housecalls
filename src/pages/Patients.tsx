@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, ChevronRight } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { searchChildren } from '../lib/api'
@@ -24,6 +24,8 @@ function formatDob(raw: string): string {
 
 export function Patients() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const isAdmin = location.pathname.startsWith('/admin')
   const [allChildren, setAllChildren] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -129,7 +131,7 @@ export function Patients() {
               return (
                 <button
                   key={child.id}
-                  onClick={() => navigate(`/chart/${child.id}`)}
+                  onClick={() => navigate(isAdmin ? `/admin/chart/${child.id}` : `/chart/${child.id}`)}
                   className="w-full text-left flex items-center gap-4 px-5 py-4 bg-white border border-[#E8E8E4] rounded-xl hover:border-[#AFA9EC] hover:bg-[#FAFAF8] transition-all group">
                   <div className="w-9 h-9 rounded-full bg-[#EEEDFE] flex items-center justify-center flex-shrink-0">
                     <span className="text-[12px] font-semibold text-[#7F77DD]">{initials(child)}</span>
