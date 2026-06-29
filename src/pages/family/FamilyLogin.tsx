@@ -51,6 +51,7 @@ export function FamilyLogin() {
                   <span className="text-[11px] text-[#aaa] group-hover:text-[#7F77DD] transition-colors ml-auto">Click to pre-fill →</span>
                 </div>
                 <div className="text-[12px] text-[#777] mt-0.5">Book visits, view appointment history, manage your family profile</div>
+                <div className="text-[11px] text-[#aaa] mt-1.5 font-mono">{DEMO_CREDS.family.email} · {DEMO_CREDS.family.password}</div>
               </button>
             </div>
           )}

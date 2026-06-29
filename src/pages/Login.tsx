@@ -71,6 +71,7 @@ export function Login() {
                       <span className="text-[11px] text-[#aaa] group-hover:text-[#7F77DD] transition-colors ml-auto">Click to pre-fill →</span>
                     </div>
                     <div className="text-[12px] text-[#777] mt-0.5">{desc}</div>
+                    <div className="text-[11px] text-[#aaa] mt-1.5 font-mono">{creds.email} · {creds.password}</div>
                   </button>
                 ))}
               </div>
