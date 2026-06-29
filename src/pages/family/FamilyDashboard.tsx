@@ -116,7 +116,7 @@ export function FamilyDashboard() {
     && isWithin2Hours(cancelTarget)
 
   const greeting = family.display_name
-    ? `Welcome back, ${family.display_name.split(' ')[0]}!`
+    ? `Welcome back, ${family.display_name.replace(/^The\s+/i, '')}!`
     : 'Welcome back!'
 
   return (
