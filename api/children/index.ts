@@ -53,11 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       try {
-        const { display_label } = req.body
+        const { display_label, first_name, last_name } = req.body
         const familyId = rows[0].id as string
+        const label = display_label || [first_name, last_name].filter(Boolean).join(' ') || 'Child'
         const [row] = await sql`
-          INSERT INTO children (practice_id, display_label, family_id)
-          VALUES (${practiceId}::uuid, ${display_label}, ${familyId}::uuid)
+          INSERT INTO children (practice_id, display_label, first_name, last_name, family_id)
+          VALUES (${practiceId}::uuid, ${label}, ${first_name || null}, ${last_name || null}, ${familyId}::uuid)
           RETURNING *`
         return res.json(row)
       } catch (e: any) {
@@ -106,9 +107,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = await sql`SELECT * FROM children WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}::uuid`
       return res.json(rows)
     }
-    if (!family_ids) return res.json([])
-    const famIds = family_ids.split(',').filter(Boolean)
-    const rows = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}::uuid`
+    if (family_ids) {
+      const famIds = family_ids.split(',').filter(Boolean)
+      const rows = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}::uuid`
+      return res.json(rows)
+    }
+    // No filters — return all children for this practice
+    const rows = await sql`
+      SELECT c.*,
+             fp.display_name AS family_display_name,
+             fp.email        AS family_email,
+             fp.phone        AS family_phone
+      FROM children c
+      LEFT JOIN family_profiles fp ON fp.id = c.family_id
+      WHERE c.practice_id = ${practiceId}::uuid
+      ORDER BY c.first_name, c.last_name, c.display_label
+      LIMIT 200`
     return res.json(rows)
   }
 

@@ -167,7 +167,7 @@ export const getChildrenByFamilyIds = (familyIds: string[]) =>
   apiFetch<any[]>(`/api/children?family_ids=${familyIds.join(',')}`)
 
 export const searchChildren = (q: string) =>
-  apiFetch<any[]>(`/api/children?search=${encodeURIComponent(q)}`)
+  apiFetch<any[]>(q.trim() ? `/api/children?search=${encodeURIComponent(q)}` : '/api/children')
 
 // ── Analytics ─────────────────────────────────────────────────
 export const getAnalytics = () => apiFetch<any>('/api/analytics')

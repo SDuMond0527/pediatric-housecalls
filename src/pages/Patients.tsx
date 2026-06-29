@@ -36,7 +36,7 @@ export function Patients() {
       setLoading(true)
       try {
         // Load a broad initial set using the search endpoint
-        const rows = await searchChildren(' ').catch(() => [] as any[])
+        const rows = await searchChildren('').catch(() => [] as any[])
         setAllChildren(rows ?? [])
       } finally {
         setLoading(false)

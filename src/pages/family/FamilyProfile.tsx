@@ -80,7 +80,8 @@ export function FamilyProfile() {
 
   // Children
   const [addingChild, setAddingChild] = useState(false)
-  const [newLabel, setNewLabel] = useState('')
+  const [newFirst, setNewFirst] = useState('')
+  const [newLast, setNewLast] = useState('')
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null)
   const [childEdits, setChildEdits] = useState<Record<string, ChildEdit>>({})
   const [savingChildId, setSavingChildId] = useState<string | null>(null)
@@ -179,10 +180,11 @@ export function FamilyProfile() {
   }
 
   async function addChild() {
-    if (!newLabel.trim()) return
-    await createChild({ display_label: newLabel.trim(), family_id: user!.id })
+    if (!newFirst.trim() && !newLast.trim()) return
+    await createChild({ first_name: newFirst.trim(), last_name: newLast.trim(), family_id: user!.id })
     await refreshFamily()
-    setNewLabel('')
+    setNewFirst('')
+    setNewLast('')
     setAddingChild(false)
   }
 
@@ -426,12 +428,14 @@ export function FamilyProfile() {
 
         {addingChild && (
           <div className="mt-3 p-4 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8]">
-            <div className="mb-2">
-              <Input label="Name or label" placeholder="e.g. Emma, my son, Child 3"
-                value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <Input label="First name" placeholder="Emma"
+                value={newFirst} onChange={e => setNewFirst(e.target.value)} />
+              <Input label="Last name" placeholder="Smith"
+                value={newLast} onChange={e => setNewLast(e.target.value)} />
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setAddingChild(false)}>Cancel</Button>
+              <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast('') }}>Cancel</Button>
               <Button size="sm" onClick={addChild}>Add</Button>
             </div>
           </div>
