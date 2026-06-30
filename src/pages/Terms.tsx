@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom'
-import { PracticeLogo } from '../lib/practice'
 
 export function Terms() {
   return (
     <div className="min-h-screen bg-[#FAFAF8]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-5 text-center">
-        <PracticeLogo className="h-16 w-auto mx-auto mb-2" />
+        <div className="text-xl font-semibold text-[#1A1A2E] mb-1">GoRoam Health</div>
         <div className="text-[13px] text-[#999]">Provider Portal · <Link to="/login" className="text-[#7F77DD] hover:underline">Back to login</Link></div>
       </div>
 
