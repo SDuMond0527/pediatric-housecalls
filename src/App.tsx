@@ -29,6 +29,8 @@ import { FamilyAddCard } from './pages/family/FamilyAddCard'
 import { FamilyDashboard } from './pages/family/FamilyDashboard'
 import { BookVisit } from './pages/family/BookVisit'
 import { FamilyProfile } from './pages/family/FamilyProfile'
+import { Terms } from './pages/Terms'
+import { Privacy } from './pages/Privacy'
 import { useAuth } from './contexts/AuthContext'
 
 function RootRedirect() {
@@ -66,6 +68,8 @@ export default function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="today"          element={<Today />} />

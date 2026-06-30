@@ -109,6 +109,11 @@ export function Login() {
               : 'Contact your administrator if you need access.'
             }
           </p>
+          <p className="text-center text-[11px] text-[#bbb] mt-3">
+            <Link to="/terms" className="hover:text-[#7F77DD]">Terms of Service</Link>
+            {' · '}
+            <Link to="/privacy" className="hover:text-[#7F77DD]">Privacy Policy</Link>
+          </p>
         </div>
       </div>
     </div>
