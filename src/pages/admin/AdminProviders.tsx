@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check } from 'lucide-react'
-import { getProviders, updateProvider, apiFetch } from '../../lib/api'
+import { getProviders, updateProvider, apiFetch, getPracticeZones } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -20,6 +20,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function AdminProviders() {
   const [providers, setProviders] = useState<ProviderWithContact[]>([])
+  const [practiceZones, setPracticeZones] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, ProviderEdit>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -47,6 +48,7 @@ export function AdminProviders() {
 
   useEffect(() => {
     getProviders().then(data => setProviders((data ?? []) as ProviderWithContact[])).catch(() => {})
+    getPracticeZones().then(zones => setPracticeZones(zones.map((z: any) => z.zone_name))).catch(() => {})
   }, [])
 
   function getEdit(p: ProviderWithContact): ProviderEdit {
@@ -165,6 +167,29 @@ export function AdminProviders() {
                             </span>
                           )}
                         </div>
+
+                        {practiceZones.length > 0 && (
+                          <div className="border-t border-[#E8E8E4] pt-3">
+                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Service Zones</div>
+                            <div className="flex flex-wrap gap-2">
+                              {practiceZones.map(zone => {
+                                const checked = (p.zones ?? []).includes(zone)
+                                return (
+                                  <label key={zone} className="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" checked={checked} className="w-3.5 h-3.5 accent-[#7F77DD]"
+                                      onChange={async () => {
+                                        const current = p.zones ?? []
+                                        const next = checked ? current.filter(z => z !== zone) : [...current, zone]
+                                        await updateProvider(p.id, { zones: next }).catch(() => {})
+                                        setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, zones: next } : pr))
+                                      }} />
+                                    <span className="text-[12px] text-[#555]">{zone}</span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="border-t border-[#E8E8E4] pt-3">
                           <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Login Password</div>

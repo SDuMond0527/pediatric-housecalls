@@ -32,15 +32,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (b.secure_text_number !== undefined)  updates.push('secure_text_number')
   if (b.home_address !== undefined)        updates.push('home_address')
   if (b.email !== undefined)               updates.push('email')
+  if (b.zones !== undefined)               updates.push('zones')
+  if (b.states !== undefined)              updates.push('states')
 
   if (!updates.length) return res.status(400).json({ error: 'No valid fields' })
+
+  const zones  = b.zones  !== undefined ? JSON.stringify(b.zones)  : null
+  const states = b.states !== undefined ? JSON.stringify(b.states) : null
 
   const [row] = await sql`
     UPDATE providers SET
       phone              = CASE WHEN ${b.phone !== undefined} THEN ${b.phone ?? null}              ELSE phone              END,
       secure_text_number = CASE WHEN ${b.secure_text_number !== undefined} THEN ${b.secure_text_number ?? null} ELSE secure_text_number END,
       home_address       = CASE WHEN ${b.home_address !== undefined} THEN ${b.home_address ?? null} ELSE home_address       END,
-      email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END
+      email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END,
+      zones              = CASE WHEN ${b.zones !== undefined} THEN ${zones}::jsonb               ELSE zones              END,
+      states             = CASE WHEN ${b.states !== undefined} THEN ${states}::jsonb              ELSE states             END
     WHERE id = ${id}::uuid
     RETURNING *`
   res.json(row)
