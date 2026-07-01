@@ -318,6 +318,8 @@ export const getPracticeZones = (practiceId?: string) =>
 export const upsertPracticeZone = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/practice-zones', { method: 'POST', body: JSON.stringify(body) })
 
+export const updatePracticeZone = (id: string, body: Record<string, unknown>) =>
+  apiFetch<any>(`/api/practice-zones?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const deletePracticeZone = (id: string) =>
   apiFetch<void>(`/api/practice-zones?id=${id}`, { method: 'DELETE' })
 

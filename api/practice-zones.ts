@@ -73,6 +73,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(201).json(row)
   }
 
+  // ── PATCH: update a zone by id ────────────────────────────────────────────
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string | undefined
+    if (!id) return res.status(400).json({ error: 'id required' })
+
+    const [zone] = await sql`SELECT practice_id FROM practice_zones WHERE id = ${id}::uuid LIMIT 1`
+    if (!zone) return res.status(404).json({ error: 'Zone not found' })
+
+    if (!caller.is_super_admin && zone.practice_id !== caller.practice_id) {
+      return res.status(403).json({ error: 'Cannot manage zones for another practice' })
+    }
+
+    const { zone_name, state, zips, is_waitlist_only, sort_order } = req.body ?? {}
+    const [row] = await sql`
+      UPDATE practice_zones SET
+        zone_name        = COALESCE(${zone_name ?? null}, zone_name),
+        state            = ${state ?? null},
+        zips             = ${zips ?? []}::text[],
+        is_waitlist_only = ${is_waitlist_only ?? false},
+        sort_order       = COALESCE(${sort_order ?? null}, sort_order)
+      WHERE id = ${id}::uuid
+      RETURNING *`
+    return res.json(row)
+  }
+
   // ── DELETE: remove a zone ─────────────────────────────────────────────────
   if (req.method === 'DELETE') {
     const id = req.query.id as string | undefined

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Building2, Plus, CheckCircle2, AlertCircle, UserPlus, ChevronDown, ChevronUp, Map, Trash2, ListChecks } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { getPractices, createPractice, createProviderForPractice, getPracticeZones, upsertPracticeZone, deletePracticeZone, getPracticeVisitTypes, upsertPracticeVisitType, deletePracticeVisitType } from '../../lib/api'
+import { getPractices, createPractice, createProviderForPractice, getPracticeZones, upsertPracticeZone, updatePracticeZone, deletePracticeZone, getPracticeVisitTypes, upsertPracticeVisitType, deletePracticeVisitType } from '../../lib/api'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 
@@ -105,6 +105,7 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
   const [zones, setZones] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ zone_name: '', state: '', zips: '', is_waitlist_only: false })
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -115,24 +116,53 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
       .finally(() => setLoading(false))
   }, [practiceId])
 
-  async function handleAdd(e: FormEvent) {
+  function startEdit(zone: any) {
+    setEditingId(zone.id)
+    setForm({
+      zone_name: zone.zone_name,
+      state: zone.state || '',
+      zips: (zone.zips || []).join(', '),
+      is_waitlist_only: zone.is_waitlist_only || false,
+    })
+    setError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm({ zone_name: '', state: '', zips: '', is_waitlist_only: false })
+    setError(null)
+  }
+
+  async function handleSave(e: FormEvent) {
     e.preventDefault()
     if (!form.zone_name) return
     setSaving(true)
     setError(null)
     try {
       const zips = form.zips.split(/[\s,]+/).map(z => z.trim()).filter(Boolean)
-      const zone = await upsertPracticeZone({
-        zone_name: form.zone_name,
-        state: form.state || null,
-        zips,
-        is_waitlist_only: form.is_waitlist_only,
-        practice_id: practiceId,
-      })
-      setZones(prev => {
-        const idx = prev.findIndex(z => z.id === zone.id)
-        return idx >= 0 ? prev.map((z, i) => i === idx ? zone : z) : [...prev, zone]
-      })
+      let zone: any
+      if (editingId) {
+        zone = await updatePracticeZone(editingId, {
+          zone_name: form.zone_name,
+          state: form.state || null,
+          zips,
+          is_waitlist_only: form.is_waitlist_only,
+        })
+        setZones(prev => prev.map(z => z.id === editingId ? zone : z))
+        setEditingId(null)
+      } else {
+        zone = await upsertPracticeZone({
+          zone_name: form.zone_name,
+          state: form.state || null,
+          zips,
+          is_waitlist_only: form.is_waitlist_only,
+          practice_id: practiceId,
+        })
+        setZones(prev => {
+          const idx = prev.findIndex(z => z.id === zone.id)
+          return idx >= 0 ? prev.map((z, i) => i === idx ? zone : z) : [...prev, zone]
+        })
+      }
       setForm({ zone_name: '', state: '', zips: '', is_waitlist_only: false })
     } catch (err: any) {
       setError(err.message ?? 'Failed to save zone')
@@ -158,7 +188,7 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
       ) : (
         <div className="space-y-1.5 mb-3">
           {zones.map(z => (
-            <div key={z.id} className="flex items-center gap-2 text-[13px] text-[#555] bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
+            <div key={z.id} className={`flex items-center gap-2 text-[13px] text-[#555] border rounded-lg px-3 py-2 ${editingId === z.id ? 'bg-[#F7F6FF] border-[#7F77DD]' : 'bg-[#FAFAF8] border-[#E8E8E4]'}`}>
               <div className="flex-1 min-w-0">
                 <span className="font-medium text-[#1A1A2E]">{z.zone_name}</span>
                 {z.state && <span className="text-[#999] ml-1.5">· {z.state}</span>}
@@ -167,6 +197,10 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
                   <span className="ml-1.5 text-[10px] font-medium bg-[#FAEEDA] text-[#633806] px-1.5 py-0.5 rounded-full">waitlist</span>
                 )}
               </div>
+              <button onClick={() => editingId === z.id ? cancelEdit() : startEdit(z)}
+                className="p-1 text-[#999] hover:text-[#7F77DD] hover:bg-[#F0EFFE] rounded transition-colors flex-shrink-0 text-[11px] font-medium px-2">
+                {editingId === z.id ? 'Cancel' : 'Edit'}
+              </button>
               <button onClick={() => handleDelete(z.id)}
                 className="p-1 text-[#999] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
                 <Trash2 size={13} />
@@ -176,8 +210,8 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
         </div>
       )}
 
-      <form onSubmit={handleAdd} className="bg-[#F7F6FF] border border-[#AFA9EC] rounded-lg p-3 space-y-2">
-        <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Add / update zone</div>
+      <form onSubmit={handleSave} className="bg-[#F7F6FF] border border-[#AFA9EC] rounded-lg p-3 space-y-2">
+        <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">{editingId ? 'Edit zone' : 'Add zone'}</div>
         <div className="grid grid-cols-2 gap-2">
           <Input label="Zone name" value={form.zone_name}
             onChange={e => setForm(f => ({ ...f, zone_name: e.target.value }))}
@@ -206,8 +240,11 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
             {error}
           </div>
         )}
-        <div className="flex justify-end">
-          <Button type="submit" size="sm" loading={saving}>Save zone</Button>
+        <div className="flex justify-end gap-2">
+          {editingId && (
+            <Button type="button" size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+          )}
+          <Button type="submit" size="sm" loading={saving}>{editingId ? 'Update zone' : 'Save zone'}</Button>
         </div>
       </form>
     </div>
