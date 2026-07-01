@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react'
-import { getProviders, updateProvider } from '../../lib/api'
+import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check } from 'lucide-react'
+import { getProviders, updateProvider, apiFetch } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -24,6 +24,26 @@ export function AdminProviders() {
   const [edits, setEdits] = useState<Record<string, ProviderEdit>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [pwState, setPwState] = useState<Record<string, { loading: boolean; password?: string; error?: string; copied?: boolean }>>({})
+
+  async function resetPassword(providerId: string) {
+    setPwState(prev => ({ ...prev, [providerId]: { loading: true } }))
+    try {
+      const data = await apiFetch<{ password: string }>('/api/admin/reset-provider-password', {
+        method: 'POST',
+        body: JSON.stringify({ provider_id: providerId }),
+      })
+      setPwState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
+    } catch (err: any) {
+      setPwState(prev => ({ ...prev, [providerId]: { loading: false, error: err.message ?? 'Failed' } }))
+    }
+  }
+
+  function copyPassword(providerId: string, password: string) {
+    navigator.clipboard.writeText(password)
+    setPwState(prev => ({ ...prev, [providerId]: { ...prev[providerId], copied: true } }))
+    setTimeout(() => setPwState(prev => ({ ...prev, [providerId]: { ...prev[providerId], copied: false } })), 2000)
+  }
 
   useEffect(() => {
     getProviders().then(data => setProviders((data ?? []) as ProviderWithContact[])).catch(() => {})
@@ -143,6 +163,30 @@ export function AdminProviders() {
                             <span className="flex items-center gap-1 text-[13px] text-[#085041]">
                               <CheckCircle2 size={13} /> Saved
                             </span>
+                          )}
+                        </div>
+
+                        <div className="border-t border-[#E8E8E4] pt-3">
+                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Login Password</div>
+                          {pwState[p.id]?.password ? (
+                            <div className="flex items-center gap-2 bg-[#F0F0F8] rounded-lg px-3 py-2">
+                              <code className="text-[13px] text-[#3C3489] font-mono flex-1">{pwState[p.id].password}</code>
+                              <button onClick={() => copyPassword(p.id, pwState[p.id].password!)}
+                                className="text-[#7F77DD] hover:text-[#3C3489] transition-colors flex items-center gap-1 text-[12px]">
+                                {pwState[p.id].copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                              </button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="secondary" loading={pwState[p.id]?.loading}
+                              onClick={() => resetPassword(p.id)}>
+                              <KeyRound size={13} className="mr-1" /> Reset Password
+                            </Button>
+                          )}
+                          {pwState[p.id]?.error && (
+                            <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
+                          )}
+                          {pwState[p.id]?.password && (
+                            <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
                           )}
                         </div>
                       </div>

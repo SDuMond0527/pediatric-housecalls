@@ -22,7 +22,7 @@ async function publicFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders()
   const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
   if (!res.ok) {
