@@ -98,6 +98,7 @@ function parentConfirmationEmail(data: {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const isVirtual = ['Video telemedicine', 'Text visit'].includes(data.visitType)
   const isVideoVisit = data.visitType === 'Video telemedicine'
+  const isIVFluids = data.visitType.toLowerCase().includes('iv') || data.visitType.toLowerCase().includes('fluid')
 
   return `<!DOCTYPE html>
 <html>
@@ -136,6 +137,9 @@ function parentConfirmationEmail(data: {
     </div>` : isVirtual ? `
     <div style="background:#EEEDFE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#3C3489;">
       <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time.
+    </div>` : isIVFluids ? `
+    <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
+      <strong>IV fluids request received:</strong> One of our physicians or nurse practitioners will be reaching out to you shortly to arrange for a brief video telemedicine screening to determine that IV fluids are medically safe for your child in this scenario, and to determine the kind and volume of fluids that the nurse will administer. Once that video consult is completed, your nurse will reach back out to you to confirm her arrival time at your home.
     </div>` : `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
       <strong>In-home visit:</strong> Your provider will arrive within 15 minutes of your scheduled time. Please be available at your address.
