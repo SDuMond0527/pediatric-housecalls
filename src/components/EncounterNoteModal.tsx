@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2 } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate } from '../lib/api'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -230,6 +230,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [noteType, setNoteType] = useState<NoteType>(visitTypeToNoteType(appointment.visit_type))
   const [showTemplatePrompt, setShowTemplatePrompt] = useState(false)
 
+  // Custom templates
+  const [customTemplates, setCustomTemplates] = useState<any[]>([])
+  const [showCustomTemplateMenu, setShowCustomTemplateMenu] = useState(false)
+  const [showSaveForm, setShowSaveForm] = useState(false)
+  const [saveFormName, setSaveFormName] = useState('')
+  const [saveFormShare, setSaveFormShare] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
+
   // Sports physical questionnaire
   const [sportsHx, setSportsHx] = useState<SportsPxHx>(emptySportsHx())
   const [examFindings, setExamFindings] = useState<ExamFindings>(emptyExamFindings())
@@ -262,6 +271,64 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       }
       return next
     })
+  }
+
+  function applyCustomTemplate(t: any) {
+    setSubjective(t.subjective || '')
+    setObjective(t.objective || '')
+    setPlan(t.plan || '')
+    setShowCustomTemplateMenu(false)
+  }
+
+  async function saveAsTemplate() {
+    if (!saveFormName.trim()) return
+    setSavingTemplate(true)
+    try {
+      if (editingTemplateId) {
+        const updated = await updateNoteTemplate(editingTemplateId, {
+          name: saveFormName,
+          subjective,
+          objective,
+          plan,
+          is_shared: saveFormShare,
+        })
+        setCustomTemplates(prev => prev.map(t => t.id === editingTemplateId ? updated : t))
+      } else {
+        const created = await createNoteTemplate({
+          name: saveFormName,
+          subjective,
+          objective,
+          plan,
+          is_shared: saveFormShare,
+        })
+        setCustomTemplates(prev => [...prev, created])
+      }
+      setShowSaveForm(false)
+      setSaveFormName('')
+      setSaveFormShare(false)
+      setEditingTemplateId(null)
+    } catch { /* ignore */ } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  async function deleteCustomTemplate(id: string) {
+    await deleteNoteTemplate(id).catch(() => {})
+    setCustomTemplates(prev => prev.filter(t => t.id !== id))
+  }
+
+  function openSaveForm(template?: any) {
+    if (template) {
+      setEditingTemplateId(template.id)
+      setSaveFormName(template.name)
+      setSaveFormShare(template.is_shared)
+    } else {
+      setEditingTemplateId(null)
+      setSaveFormName('')
+      setSaveFormShare(false)
+    }
+    setShowSaveForm(true)
+    setShowCustomTemplateMenu(false)
   }
 
   function applyTemplate(type: NoteType) {
@@ -346,11 +413,13 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [note, vitalsData, schedule] = await Promise.all([
+      const [note, vitalsData, schedule, templates] = await Promise.all([
         getEncounterNote({ appointment_id: appointment.id }).catch(() => null),
         getVitals({ appointment_id: appointment.id }).catch(() => null),
         getFeeSchedule().catch(() => []),
+        getNoteTemplates().catch(() => []),
       ])
+      setCustomTemplates(templates)
       setFeeSchedule(schedule)
       let resolvedChildId = childId
       if (note) {
@@ -657,6 +726,92 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                     <button onClick={() => applyTemplate(noteType)}
                       className="text-[11px] font-semibold text-white bg-[#EF9F27] px-2.5 py-1 rounded-lg hover:bg-[#d98e20] transition-colors">Apply</button>
                   </div>
+                </div>
+              )}
+
+              {/* Custom templates */}
+              {!readOnly && (
+                <div className="mt-2 relative">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <button
+                        onClick={() => { setShowCustomTemplateMenu(v => !v); setShowSaveForm(false) }}
+                        className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium border border-[#7F77DD]/30 rounded-lg px-3 py-1.5 hover:bg-[#7F77DD]/8 transition-all w-full justify-between">
+                        <span>My Templates {customTemplates.length > 0 ? `(${customTemplates.length})` : ''}</span>
+                        <ChevronDown size={12} />
+                      </button>
+                      {showCustomTemplateMenu && (
+                        <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-[#E8E8E4] rounded-xl shadow-lg z-50 overflow-hidden">
+                          {customTemplates.length === 0 ? (
+                            <div className="px-4 py-3 text-[12px] text-[#999]">No saved templates yet.</div>
+                          ) : (
+                            <>
+                              {customTemplates.filter((t: any) => !t.is_shared).length > 0 && (
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#999] uppercase tracking-wider">My Templates</div>
+                              )}
+                              {customTemplates.filter((t: any) => !t.is_shared).map((t: any) => (
+                                <div key={t.id} className="flex items-center gap-1 px-3 py-1.5 hover:bg-[#FAFAF8] group">
+                                  <button onClick={() => applyCustomTemplate(t)} className="flex-1 text-left text-[13px] text-[#1A1A2E]">{t.name}</button>
+                                  <button onClick={() => openSaveForm(t)} className="text-[#999] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
+                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#999] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
+                                </div>
+                              ))}
+                              {customTemplates.filter((t: any) => t.is_shared).length > 0 && (
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#999] uppercase tracking-wider border-t border-[#E8E8E4] mt-1">Practice Templates</div>
+                              )}
+                              {customTemplates.filter((t: any) => t.is_shared).map((t: any) => (
+                                <div key={t.id} className="flex items-center gap-1 px-3 py-1.5 hover:bg-[#FAFAF8] group">
+                                  <button onClick={() => applyCustomTemplate(t)} className="flex-1 text-left text-[13px] text-[#1A1A2E]">{t.name}</button>
+                                  <button onClick={() => openSaveForm(t)} className="text-[#999] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
+                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#999] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                          <div className="border-t border-[#E8E8E4] px-3 py-2">
+                            <button onClick={() => openSaveForm()} className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium w-full">
+                              <BookmarkPlus size={13} /> Save current note as template
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => { openSaveForm(); setShowCustomTemplateMenu(false) }}
+                      className="flex items-center gap-1 text-[12px] text-[#7F77DD] font-medium border border-[#7F77DD]/30 rounded-lg px-3 py-1.5 hover:bg-[#7F77DD]/8 transition-all flex-shrink-0">
+                      <BookmarkPlus size={13} /> Save as template
+                    </button>
+                  </div>
+
+                  {showSaveForm && (
+                    <div className="mt-2 border border-[#7F77DD]/30 rounded-xl p-3 bg-[#F7F6FF]">
+                      <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">
+                        {editingTemplateId ? 'Edit template' : 'Save as template'}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Template name…"
+                        value={saveFormName}
+                        onChange={e => setSaveFormName(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white mb-2"
+                        autoFocus
+                      />
+                      <label className="flex items-center gap-2 text-[13px] text-[#555] cursor-pointer mb-3">
+                        <input type="checkbox" checked={saveFormShare} onChange={e => setSaveFormShare(e.target.checked)}
+                          className="w-4 h-4 accent-[#7F77DD]" />
+                        Share with entire practice
+                      </label>
+                      <div className="flex gap-2">
+                        <Button size="sm" loading={savingTemplate} onClick={saveAsTemplate}
+                          disabled={!saveFormName.trim()}>
+                          {editingTemplateId ? 'Update' : 'Save'}
+                        </Button>
+                        <Button size="sm" variant="secondary"
+                          onClick={() => { setShowSaveForm(false); setEditingTemplateId(null) }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </section>

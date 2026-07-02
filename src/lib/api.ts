@@ -334,3 +334,12 @@ export const deletePracticeVisitType = (id: string) =>
 
 export const getProvidersByZone = (zone: string) =>
   publicFetch<any[]>(`/api/providers?zone=${encodeURIComponent(zone)}`)
+
+export const getNoteTemplates = () =>
+  apiFetch<any[]>('/api/note-templates')
+export const createNoteTemplate = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/note-templates', { method: 'POST', body: JSON.stringify(body) })
+export const updateNoteTemplate = (id: string, body: Record<string, unknown>) =>
+  apiFetch<any>(`/api/note-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deleteNoteTemplate = (id: string) =>
+  apiFetch<void>(`/api/note-templates/${id}`, { method: 'DELETE' })
