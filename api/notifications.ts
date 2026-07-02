@@ -359,8 +359,8 @@ function cprConfirmationEmail(data: {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const isHeartsaver = data.visitType === 'In-home CPR class (Heartsaver)'
   const elearningUrl = isHeartsaver
-    ? 'https://elearning.heart.org/course/777'
-    : 'https://elearning.heart.org/course/437'
+    ? 'https://shopcpr.heart.org/courses/heartsaver-cpr-aed'
+    : 'https://shopcpr.heart.org/courses/bls'
   const courseLabel = isHeartsaver ? 'Heartsaver' : 'BLS'
   const totalCost = data.participantCount * 80
 
