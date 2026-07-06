@@ -550,7 +550,7 @@ export function Today() {
                               )
                             )}
                             {appt.visit_type === 'Video telemedicine' && appt.status !== 'cancelled' && (
-                              <Button variant="secondary" size="sm" onClick={() => window.open('https://doxy.me/v2/check-in/pediatrichousecalls/', '_blank')}>
+                              <Button variant="secondary" size="sm" onClick={() => window.open('https://doxy.me/v2/account/dashboard', '_blank')}>
                                 <Video size={13} /> Start video visit
                               </Button>
                             )}
