@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
@@ -548,6 +548,11 @@ export function Today() {
                                   <CreditCard size={13} /> Charge card
                                 </Button>
                               )
+                            )}
+                            {appt.visit_type === 'Video telemedicine' && appt.status !== 'cancelled' && (
+                              <Button variant="secondary" size="sm" onClick={() => window.open('https://doxy.me/v2/check-in/pediatrichousecalls/', '_blank')}>
+                                <Video size={13} /> Start video visit
+                              </Button>
                             )}
                             {appt.status !== 'cancelled' && appt.status !== 'done' && (
                               <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
