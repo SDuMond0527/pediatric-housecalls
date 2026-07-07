@@ -179,6 +179,7 @@ interface CptCode {
   description: string
   category: string
   charge_amount: number
+  modifier?: string
 }
 
 interface Props {
@@ -1167,14 +1168,28 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               {cptCodes.length > 0 && (
                 <div className="space-y-1.5 mb-3">
                   {cptCodes.map(c => (
-                    <div key={c.code} className="flex items-center justify-between px-3 py-2 bg-white border border-[#E8E8E4] rounded-lg">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div key={c.code} className="flex items-center justify-between px-3 py-2 bg-white border border-[#E8E8E4] rounded-lg gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${c.category === 'Procedure' ? 'bg-[#EEEDFE] text-[#3C3489]' : 'bg-[#FEF3E8] text-[#633806]'}`}>
                           {c.code}
                         </span>
                         <span className="text-[13px] text-[#1A1A2E] truncate">{c.description}</span>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {!readOnly ? (
+                          <div className="flex items-center gap-1">
+                            <label className="text-[10px] text-[#999] whitespace-nowrap">Modifier:</label>
+                            <input
+                              value={c.modifier ?? ''}
+                              maxLength={3}
+                              onChange={e => setCptCodes(prev => prev.map(x => x.code === c.code ? { ...x, modifier: e.target.value.toUpperCase() } : x))}
+                              placeholder="25"
+                              className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]"
+                            />
+                          </div>
+                        ) : c.modifier ? (
+                          <span className="text-[11px] text-[#F5943A] font-medium">mod {c.modifier}</span>
+                        ) : null}
                         <span className="text-[13px] font-medium text-[#1A1A2E]">${c.charge_amount.toFixed(2)}</span>
                         {!readOnly && (
                           <button onClick={() => setCptCodes(prev => prev.filter(x => x.code !== c.code))}

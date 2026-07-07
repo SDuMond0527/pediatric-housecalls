@@ -445,8 +445,6 @@ export function AdminSchedule() {
                             <div className="px-3 py-2 text-[12px] text-[#999]">Loading…</div>
                           ) : !notes[appt.id] ? (
                             <div className="px-3 py-2 text-[12px] text-[#999]">No encounter note on file.</div>
-                          ) : !notes[appt.id].is_signed ? (
-                            <div className="px-3 py-2 text-[12px] text-[#F59E0B] font-medium">Note is a draft — not yet signed by the provider.</div>
                           ) : (() => {
                             const n = notes[appt.id]
                             const v = vitals[appt.id]
@@ -461,6 +459,11 @@ export function AdminSchedule() {
                             ].filter(Boolean) : []
                             return (
                               <div className="px-3 py-3 space-y-3 text-[12px]">
+                                {!n.is_signed && (
+                                  <div className="flex items-center gap-2 px-2.5 py-2 bg-[#FEF9EC] border border-[#FAC775] rounded-lg text-[11px] text-[#92520A] font-medium">
+                                    Draft — unlocked for editing. Edit diagnoses and CPT codes below, then the provider can re-sign.
+                                  </div>
+                                )}
                                 {n.chief_complaint && (
                                   <div>
                                     <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Chief Complaint</div>
@@ -604,18 +607,45 @@ export function AdminSchedule() {
                                     {(n.cpt_codes ?? []).length === 0 ? (
                                       <div className="text-[#F59E0B] font-medium">No CPT codes on file — provider must unlock and re-sign note.</div>
                                     ) : (
-                                      <div className="space-y-1">
+                                      <div className="space-y-2">
                                         {n.cpt_codes.map((c: any, i: number) => (
-                                          <div key={i} className="flex items-baseline justify-between gap-2">
-                                            <div className="flex items-baseline gap-2 flex-wrap">
-                                              <span className="font-mono text-[#7F77DD] font-medium">{c.code}{c.modifier ? <span className="text-[#F5943A]">-{c.modifier}</span> : ''}</span>
-                                              <span className="text-[#555]">{c.description}</span>
-                                              {c.modifier && <span className="text-[10px] text-[#F5943A] font-medium">mod {c.modifier}</span>}
+                                          <div key={i} className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                              <span className="font-mono text-[#7F77DD] font-medium flex-shrink-0">{c.code}</span>
+                                              <span className="text-[#555] truncate">{c.description}</span>
                                               {c.category === 'Non-Covered Services' && (
-                                                <span className="text-[10px] text-[#999] italic">non-covered</span>
+                                                <span className="text-[10px] text-[#999] italic flex-shrink-0">non-covered</span>
                                               )}
                                             </div>
-                                            <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                              <div className="flex items-center gap-1">
+                                                <label className="text-[10px] text-[#999] whitespace-nowrap">Mod:</label>
+                                                <input
+                                                  value={c.modifier ?? ''}
+                                                  maxLength={3}
+                                                  onChange={e => {
+                                                    const val = e.target.value.toUpperCase()
+                                                    setNotes(prev => ({
+                                                      ...prev,
+                                                      [appt.id]: {
+                                                        ...prev[appt.id],
+                                                        cpt_codes: prev[appt.id].cpt_codes.map((x: any, j: number) => j === i ? { ...x, modifier: val } : x)
+                                                      }
+                                                    }))
+                                                  }}
+                                                  onBlur={async () => {
+                                                    const currentNote = notes[appt.id]
+                                                    if (!currentNote?.id) return
+                                                    try {
+                                                      await patchEncounterNote(currentNote.id, { cpt_codes: currentNote.cpt_codes })
+                                                    } catch { /* silent */ }
+                                                  }}
+                                                  placeholder="25"
+                                                  className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]"
+                                                />
+                                              </div>
+                                              <span className="text-[#1A1A2E] font-medium">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
