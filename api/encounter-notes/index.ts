@@ -75,6 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${JSON.stringify(photosVal)}::jsonb
       )
       RETURNING *`
+    if (child_id) {
+      await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+    }
     return res.json(row)
   }
 

@@ -62,6 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at      = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`
+    if (child_id && row?.appointment_id) {
+      await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${row.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+    }
     return res.json(row)
   }
 

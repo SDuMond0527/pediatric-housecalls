@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, apiFetch } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 
 interface NoteWithVisit {
@@ -100,18 +100,26 @@ export function PatientChart() {
     const cid = childId
     async function load() {
       setLoading(true)
-      const [childrenRes, notesRes, vitalsRes, bookingRes] = await Promise.all([
+      const [childrenRes, notesRes, vitalsRes, bookingRes, apptRes] = await Promise.all([
         getChildrenByIds([cid]).catch(() => [] as any[]),
         getEncounterNotes({ child_id: cid }).catch(() => [] as NoteWithVisit[]),
         getVitalsList({ child_id: cid }).catch(() => [] as any[]),
         getBookingRequests({ child_id: cid }).catch(() => [] as any[]),
+        getAppointments({ child_id: cid }).catch(() => [] as any[]),
       ])
       setChild(childrenRes?.[0] ?? null)
       setNotes(notesRes ?? [])
       const byAppt: Record<string, any> = {}
       ;(vitalsRes ?? []).forEach((v: any) => { byAppt[v.appointment_id] = v })
       setVitalsByAppt(byAppt)
-      setBookingRequests(bookingRes ?? [])
+      // Merge booking requests and direct appointments, deduplicate by appointment_id
+      const appts = apptRes ?? []
+      const apptIds = new Set(appts.map((a: any) => a.id))
+      const mergedBookings = [
+        ...appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })),
+        ...(bookingRes ?? []).filter((br: any) => !apptIds.has(br.appointment_id)),
+      ].sort((a, b) => (b.preferred_date ?? b.scheduled_date ?? '').localeCompare(a.preferred_date ?? a.scheduled_date ?? ''))
+      setBookingRequests(mergedBookings)
       setLoading(false)
     }
     load()
