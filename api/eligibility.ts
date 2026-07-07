@@ -165,7 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       firstName:                    child.first_name ?? '',
       lastName:                     child.last_name  ?? '',
       dateOfBirth:                  fmtDate8(child.date_of_birth),
-      relationshipToSubscriberCode: '19',
+      individualRelationshipCode: '19',
     }],
     encounter: { serviceTypeCodes: ['30'] },
   }
