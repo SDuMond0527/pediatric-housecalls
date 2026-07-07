@@ -14,12 +14,14 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 const PAYER_IDS: Record<string, string> = {
-  'bcbs': '560',
-  'bcbs of nc': '560',
-  'bcbs nc': '560',
-  'blue cross': '560',
-  'blue cross blue shield': '560',
-  'blue cross blue shield of nc': '560',
+  'bcbs': 'UPICO',
+  'bcbs of nc': 'UPICO',
+  'bcbs nc': 'UPICO',
+  'blue cross': 'UPICO',
+  'blue cross nc': 'UPICO',
+  'blue cross blue shield': 'UPICO',
+  'blue cross blue shield of nc': 'UPICO',
+  'blue cross blue shield nc': 'UPICO',
   'aetna': '60054',
   'cigna': '62308',
   'united healthcare': '87726',
