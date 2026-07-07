@@ -161,12 +161,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       lastName:    subscriberLast || subscriberFirst,
       dateOfBirth: fmtDate8(child.insurance_subscriber_dob),
     },
-    dependent: {
+    dependents: [{
       firstName:                    child.first_name ?? '',
       lastName:                     child.last_name  ?? '',
       dateOfBirth:                  fmtDate8(child.date_of_birth),
       relationshipToSubscriberCode: '19',
-    },
+    }],
     encounter: { serviceTypeCodes: ['30'] },
   }
 
