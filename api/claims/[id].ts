@@ -73,7 +73,6 @@ function buildStediPayload(claim: any, testMode = false): object {
       gender: claim.subscriber_gender === 'Female' ? 'F' : claim.subscriber_gender === 'Male' ? 'M' : 'U',
       dateOfBirth: fmtDate8(claim.subscriber_dob),
       groupNumber: claim.group_number ?? '',
-      claimFilingCode: 'CI',
     },
     dependent: {
       firstName: claim.patient_first_name ?? '',
