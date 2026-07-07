@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText } from 'lucide-react'
 import { format } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -130,6 +130,7 @@ export function AdminSchedule() {
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [notes, setNotes] = useState<Record<string, any>>({})
+  const [vitals, setVitals] = useState<Record<string, any>>({})
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
@@ -258,6 +259,9 @@ export function AdminSchedule() {
                         getEncounterNote({ appointment_id: next })
                           .then(n => setNotes(prev => ({ ...prev, [next]: n ?? false })))
                           .catch(() => setNotes(prev => ({ ...prev, [next]: false })))
+                        getVitals({ appointment_id: next })
+                          .then(v => setVitals(prev => ({ ...prev, [next]: v ?? false })))
+                          .catch(() => setVitals(prev => ({ ...prev, [next]: false })))
                       }
                     }}>
                     <div className="flex items-center gap-3 px-4 py-2.5">
@@ -365,60 +369,91 @@ export function AdminSchedule() {
                             <div className="px-3 py-2 text-[12px] text-[#999]">No encounter note on file.</div>
                           ) : !notes[appt.id].is_signed ? (
                             <div className="px-3 py-2 text-[12px] text-[#F59E0B] font-medium">Note is a draft — not yet signed by the provider.</div>
-                          ) : (
-                            <div className="px-3 py-3 space-y-3">
-                              {notes[appt.id].chief_complaint && (
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Chief complaint</div>
-                                  <div className="text-[13px] text-[#1A1A2E]">{notes[appt.id].chief_complaint}</div>
-                                </div>
-                              )}
-                              {(notes[appt.id].diagnoses ?? []).length > 0 && (
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Diagnoses</div>
-                                  <div className="space-y-1">
-                                    {notes[appt.id].diagnoses.map((d: any, i: number) => (
-                                      <div key={i} className="flex items-baseline gap-2 text-[12px]">
-                                        <span className="font-mono text-[#7F77DD] font-medium">{d.code}</span>
-                                        <span className="text-[#555]">{d.description}</span>
-                                      </div>
-                                    ))}
+                          ) : (() => {
+                            const n = notes[appt.id]
+                            const v = vitals[appt.id]
+                            const vitalItems = v ? [
+                              v.temperature_f   != null && `Temp ${v.temperature_f}°F`,
+                              v.heart_rate       != null && `HR ${v.heart_rate}`,
+                              v.respiratory_rate != null && `RR ${v.respiratory_rate}`,
+                              v.oxygen_saturation!= null && `O₂ ${v.oxygen_saturation}%`,
+                              v.weight_lbs       != null && `Wt ${v.weight_lbs} lbs`,
+                              v.height_in        != null && `Ht ${v.height_in} in`,
+                              v.systolic_bp      != null && v.diastolic_bp != null && `BP ${v.systolic_bp}/${v.diastolic_bp}`,
+                            ].filter(Boolean) : []
+                            return (
+                              <div className="px-3 py-3 space-y-3 text-[12px]">
+                                {n.chief_complaint && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Chief Complaint</div>
+                                    <div className="text-[#1A1A2E]">{n.chief_complaint}</div>
                                   </div>
-                                </div>
-                              )}
-                              {(notes[appt.id].cpt_codes ?? []).length > 0 && (
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT codes & charges</div>
-                                  <div className="space-y-1">
-                                    {notes[appt.id].cpt_codes.map((c: any, i: number) => (
-                                      <div key={i} className="flex items-baseline justify-between gap-2 text-[12px]">
-                                        <div className="flex items-baseline gap-2">
-                                          <span className="font-mono text-[#7F77DD] font-medium">{c.code}</span>
-                                          <span className="text-[#555]">{c.description}</span>
-                                          {c.category === 'Non-Covered Services' && (
-                                            <span className="text-[10px] text-[#999] italic">non-covered</span>
-                                          )}
+                                )}
+                                {vitalItems.length > 0 && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Vitals</div>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[#555]">{vitalItems.map((s, i) => <span key={i}>{s as string}</span>)}</div>
+                                  </div>
+                                )}
+                                {n.subjective && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Subjective (HPI)</div>
+                                    <div className="text-[#555] whitespace-pre-wrap">{n.subjective}</div>
+                                  </div>
+                                )}
+                                {n.objective && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Objective / Physical Exam</div>
+                                    <div className="text-[#555] whitespace-pre-wrap">{n.objective}</div>
+                                  </div>
+                                )}
+                                {(n.diagnoses ?? []).length > 0 && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Diagnoses</div>
+                                    <div className="space-y-1">
+                                      {n.diagnoses.map((d: any, i: number) => (
+                                        <div key={i} className="flex items-baseline gap-2">
+                                          <span className="font-mono text-[#7F77DD] font-medium">{d.code}</span>
+                                          <span className="text-[#555]">{d.description}</span>
                                         </div>
-                                        <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
-                                      </div>
-                                    ))}
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                              {notes[appt.id].assessment && (
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Assessment</div>
-                                  <div className="text-[12px] text-[#555] whitespace-pre-wrap">{notes[appt.id].assessment}</div>
-                                </div>
-                              )}
-                              {notes[appt.id].plan && (
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Plan</div>
-                                  <div className="text-[12px] text-[#555] whitespace-pre-wrap">{notes[appt.id].plan}</div>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                                )}
+                                {n.assessment && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Assessment</div>
+                                    <div className="text-[#555] whitespace-pre-wrap">{n.assessment}</div>
+                                  </div>
+                                )}
+                                {n.plan && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Plan</div>
+                                    <div className="text-[#555] whitespace-pre-wrap">{n.plan}</div>
+                                  </div>
+                                )}
+                                {(n.cpt_codes ?? []).length > 0 && (
+                                  <div>
+                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT Codes & Charges</div>
+                                    <div className="space-y-1">
+                                      {n.cpt_codes.map((c: any, i: number) => (
+                                        <div key={i} className="flex items-baseline justify-between gap-2">
+                                          <div className="flex items-baseline gap-2">
+                                            <span className="font-mono text-[#7F77DD] font-medium">{c.code}</span>
+                                            <span className="text-[#555]">{c.description}</span>
+                                            {c.category === 'Non-Covered Services' && (
+                                              <span className="text-[10px] text-[#999] italic">non-covered</span>
+                                            )}
+                                          </div>
+                                          <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
 
                         {/* Insurance eligibility */}
