@@ -215,6 +215,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [isSigned, setIsSigned] = useState(false)
   const [saving, setSaving] = useState(false)
   const [signing, setSigning] = useState(false)
+  const [signError, setSignError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Linked patient (may be null for manually-added appointments)
@@ -569,8 +570,9 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   async function signNote() {
     setSigning(true)
+    setSignError(null)
     try {
-      const vitalsPromise = saveVitals(buildVitalsBody())
+      const vitalsPromise = saveVitals(buildVitalsBody()).catch(() => {})
       let note: any
       if (noteId) {
         note = await updateEncounterNote(noteId, { ...buildNoteBody(), is_signed: true })
@@ -579,10 +581,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         note = await updateEncounterNote(draft.id, { is_signed: true })
         setNoteId(draft.id)
       }
-      await vitalsPromise
       setIsSigned(true)
       setCptOpen(false)
       if (!noteId) setNoteId(note.id)
+      await vitalsPromise
+    } catch (e: any) {
+      setSignError(e.message ?? 'Failed to sign note')
     } finally {
       setSigning(false)
     }
@@ -1263,13 +1267,18 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
         {/* Footer */}
         {!loading && !readOnly && (
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#E8E8E4] bg-white flex-shrink-0">
-            <Button variant="secondary" onClick={saveDraft} loading={saving} disabled={signing}>
-              Save draft
-            </Button>
-            <Button variant="teal" onClick={signNote} loading={signing} disabled={saving}>
-              Sign &amp; lock note
-            </Button>
+          <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-[#E8E8E4] bg-white flex-shrink-0">
+            <div className="flex-1">
+              {signError && <div className="text-[12px] text-[#DC2626]">{signError}</div>}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={saveDraft} loading={saving} disabled={signing}>
+                Save draft
+              </Button>
+              <Button variant="teal" onClick={signNote} loading={signing} disabled={saving}>
+                Sign &amp; lock note
+              </Button>
+            </div>
           </div>
         )}
       </div>
