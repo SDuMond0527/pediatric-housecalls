@@ -16,11 +16,12 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { exclude_admin, name, role, is_active, zone, names, has_secure_text } = req.query as Record<string, string>
+  const { exclude_admin, name, role, is_active, zone, state, names, has_secure_text } = req.query as Record<string, string>
 
   // Determine if this is a family-portal public query (no auth required)
   const isFamilyQuery =
     (zone && !role && !name && !names) ||
+    (state && !role && !name && !names) ||
     (name && !role && !zone && !names) ||
     (role && is_active && zone) ||
     (names && has_secure_text === 'true')
@@ -69,6 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rows = await sql`
       SELECT * FROM providers
       WHERE is_active = true AND role != 'admin' AND ${zone} = ANY(zones) AND practice_id = ${practiceId}::uuid
+      ORDER BY name`
+    return res.json(rows)
+  }
+
+  if (state && !role && !name && !names) {
+    const rows = await sql`
+      SELECT * FROM providers
+      WHERE is_active = true AND role IN ('MD', 'PNP') AND ${state} = ANY(states) AND practice_id = ${practiceId}::uuid
       ORDER BY name`
     return res.json(rows)
   }

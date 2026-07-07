@@ -21,7 +21,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
-import { getProvidersByZone } from '../../lib/api'
+import { getProvidersByZone, getProvidersByState } from '../../lib/api'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { format } from 'date-fns'
 import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
@@ -243,9 +243,24 @@ export function BookVisit() {
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
 
+  const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
+
   useEffect(() => {
     const isIv = booking.visitType === 'In-home IV fluids'
     const isCma = booking.visitType === 'CMA + telemedicine'
+    const isTele = isTelemedicine(booking.visitType)
+    if (isTele) {
+      if (!booking.state) { setRegularZoneProviders([]); return }
+      getProvidersByState(booking.state)
+        .then(providers => setRegularZoneProviders(
+          providers.map((p: any) => ({
+            name: p.name, role: p.role, initials: p.initials,
+            color: p.avatar_color, textColor: p.avatar_text_color,
+          }))
+        ))
+        .catch(() => setRegularZoneProviders([]))
+      return
+    }
     if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); return }
     if (!isIv && !isCma) {
       getProvidersByZone(booking.zone)
@@ -265,7 +280,7 @@ export function BookVisit() {
         color: p.avatar_color || '#E1F5EE', textColor: p.avatar_text_color || '#085041',
       }))))
       .catch(() => setIvZoneProviders([]))
-  }, [booking.zone, booking.visitType])
+  }, [booking.zone, booking.state, booking.visitType])
 
   useEffect(() => {
     if (booking.provider === '__first_available__') {
