@@ -142,6 +142,22 @@ export function Today() {
         const booking = bookings?.[0]
         childId = booking?.child_ids?.[0] ?? null
       }
+      // For manually-added appointments, look up patient by name
+      if (!childId) {
+        const patientMatch = appt.notes.match(/PATIENT:([^|]+)/)
+        if (patientMatch) {
+          const name = patientMatch[1].trim()
+          const results = await searchChildren(name).catch(() => [] as any[])
+          if (results?.length === 1) childId = results[0].id
+          else if (results?.length > 1) {
+            // If multiple matches, try to narrow by exact full name
+            const exact = results.find((r: any) =>
+              `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim().toLowerCase() === name.toLowerCase()
+            )
+            if (exact) childId = exact.id
+          }
+        }
+      }
     }
     setNoteModalChildId(childId)
     setNoteModalAppt(appt)
