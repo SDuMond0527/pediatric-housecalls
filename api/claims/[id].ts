@@ -174,6 +174,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         stediData = await stediRes.json()
 
         if (!stediRes.ok) {
+          // For test mode, return the full Stedi response as 200 so the UI can display the actual error
+          if (testMode) {
+            return res.json({ test: true, accepted: false, acknowledgment: stediData })
+          }
           const [updated] = await sql`
             UPDATE claims SET
               status = 'error',
@@ -184,6 +188,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(422).json({ error: 'Stedi rejected the claim', details: stediData, claim: updated })
         }
       } catch (err: any) {
+        if (testMode) {
+          return res.json({ test: true, accepted: false, acknowledgment: { error: err.message } })
+        }
         const [updated] = await sql`
           UPDATE claims SET status = 'error', submission_error = ${err.message}, updated_at = now()
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
@@ -193,8 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const claimId = stediData?.claimReference?.referenceNumber ?? stediData?.id ?? null
 
       if (testMode) {
-        // Don't change status for test submissions — just return the 277CA response
-        return res.json({ test: true, acknowledgment: stediData })
+        return res.json({ test: true, accepted: true, acknowledgment: stediData })
       }
 
       const [updated] = await sql`

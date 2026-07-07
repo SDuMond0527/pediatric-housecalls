@@ -88,7 +88,14 @@ export function AdminClaims() {
     try {
       const result = await testClaim(claimId)
       const ack = result.acknowledgment
-      const status = ack?.transactionSets?.[0]?.claimStatusInformation?.[0]?.claimStatus ?? ack?.status ?? null
+      // Stedi validation error (e.g. bad field) — ack has errors[] array
+      if (!result.accepted && ack?.errors?.length) {
+        const msgs = ack.errors.map((e: any) => e.message ?? e.description ?? JSON.stringify(e)).join('; ')
+        setTestResults(prev => ({ ...prev, [claimId]: { error: msgs } }))
+        return
+      }
+      // 277CA structured response
+      const status = ack?.transactionSets?.[0]?.claimStatusInformation?.[0]?.claimStatus ?? (result.accepted ? 'A' : null)
       const errors = ack?.transactionSets?.[0]?.claimStatusInformation?.[0]?.claimStatusDetails ?? []
       setTestResults(prev => ({ ...prev, [claimId]: { status, errors, raw: ack } }))
     } catch (e: any) {
@@ -463,11 +470,14 @@ export function AdminClaims() {
                         {testResults[c.id] && (
                           <div className={`rounded-lg px-3 py-2.5 text-[12px] border ${testResults[c.id].error ? 'bg-[#FEE2E2] border-[#FECACA] text-[#7F1D1D]' : testResults[c.id].status === 'A' ? 'bg-[#E1F5EE] border-[#A7F3D0] text-[#085041]' : 'bg-[#FEF3E8] border-[#FDE68A] text-[#633806]'}`}>
                             {testResults[c.id].error ? (
-                              <span><span className="font-semibold">Test error: </span>{testResults[c.id].error}</span>
+                              <>
+                                <span><span className="font-semibold">Rejected: </span>{testResults[c.id].error}</span>
+                                <button className="mt-1 ml-2 text-[11px] underline opacity-70" onClick={() => setTestResults(p => { const n={...p}; delete n[c.id]; return n })}>dismiss</button>
+                              </>
                             ) : (
                               <>
                                 <span className="font-semibold">
-                                  277CA: {testResults[c.id].status === 'A' ? 'Accepted ✓' : testResults[c.id].status === 'R' ? 'Rejected' : `Status: ${testResults[c.id].status ?? 'unknown'}`}
+                                  277CA: {testResults[c.id].status === 'A' ? 'Accepted ✓' : testResults[c.id].status === 'R' ? 'Rejected' : testResults[c.id].status ? `Status: ${testResults[c.id].status}` : 'Response received'}
                                 </span>
                                 {testResults[c.id].errors?.length > 0 && (
                                   <ul className="mt-1 ml-3 list-disc space-y-0.5">
@@ -475,6 +485,9 @@ export function AdminClaims() {
                                       <li key={i}>{e.statusCodeDescription ?? e.statusCode ?? JSON.stringify(e)}</li>
                                     ))}
                                   </ul>
+                                )}
+                                {!testResults[c.id].status && testResults[c.id].raw && (
+                                  <pre className="mt-1 text-[10px] whitespace-pre-wrap break-all opacity-80">{JSON.stringify(testResults[c.id].raw, null, 2)}</pre>
                                 )}
                                 <button className="mt-1 text-[11px] underline opacity-70" onClick={() => setTestResults(p => { const n={...p}; delete n[c.id]; return n })}>dismiss</button>
                               </>
