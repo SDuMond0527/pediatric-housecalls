@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 
 interface NoteWithVisit {
@@ -94,6 +94,13 @@ export function PatientChart() {
   const [contactEdit, setContactEdit] = useState({ parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+
+  // Add sibling
+  const [siblingOpen, setSiblingOpen] = useState(false)
+  const [siblingSubmitting, setSiblingSubmitting] = useState(false)
+  const [siblingError, setSiblingError] = useState<string | null>(null)
+  const [siblingDone, setSiblingDone] = useState(false)
+  const [sibling, setSibling] = useState({ first_name: '', last_name: '', date_of_birth: '', gender: '' })
 
   useEffect(() => {
     if (!childId) return
@@ -202,6 +209,43 @@ export function PatientChart() {
     }
   }
 
+  async function submitSibling() {
+    if (!sibling.first_name.trim() || !sibling.last_name.trim() || !sibling.date_of_birth || !sibling.gender) return
+    setSiblingSubmitting(true)
+    setSiblingError(null)
+    try {
+      await providerCreateChild({
+        first_name: sibling.first_name.trim(),
+        last_name: sibling.last_name.trim(),
+        date_of_birth: sibling.date_of_birth,
+        gender: sibling.gender,
+        family_id: child?.family_id || null,
+        parent_name: child?.parent_name || null,
+        parent_phone: child?.family_phone || child?.parent_phone || null,
+        parent_email: child?.family_email || child?.parent_email || null,
+        parent_address: child?.family_address_line1 || child?.parent_address || null,
+        parent_city: child?.family_city || child?.parent_city || null,
+        parent_state: child?.family_state || child?.parent_state || null,
+        parent_zip: child?.family_zip || child?.parent_zip || null,
+        pcp: child?.pcp || null,
+        preferred_pharmacy: child?.preferred_pharmacy || null,
+        insurance_provider: child?.insurance_provider || null,
+        insurance_member_id: child?.insurance_member_id || null,
+        insurance_group_number: child?.insurance_group_number || null,
+        insurance_subscriber_name: child?.insurance_subscriber_name || null,
+        insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : null,
+        insurance_subscriber_gender: child?.insurance_subscriber_gender || null,
+      })
+      setSiblingDone(true)
+      setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' })
+      setTimeout(() => { setSiblingOpen(false); setSiblingDone(false) }, 1500)
+    } catch (e: any) {
+      setSiblingError(e.message ?? 'Failed to add sibling')
+    } finally {
+      setSiblingSubmitting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
@@ -225,6 +269,13 @@ export function PatientChart() {
               </div>
             )}
           </div>
+          {child && (
+            <button
+              onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors flex-shrink-0">
+              <UserPlus size={13} /> Add sibling
+            </button>
+          )}
         </div>
         <div className="flex gap-2 mt-3 max-w-3xl mx-auto">
           {tabs.map(tab => (
@@ -786,6 +837,102 @@ export function PatientChart() {
           </>
         )}
       </div>
+
+      {/* Add sibling modal */}
+      {siblingOpen && child && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !siblingSubmitting && setSiblingOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8E4]">
+              <div className="flex items-center gap-2">
+                <UserPlus size={16} className="text-[#7F77DD]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Add sibling of {name}</h2>
+              </div>
+              <button onClick={() => setSiblingOpen(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* New child fields */}
+              <div>
+                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">New child — required</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">First name <span className="text-[#991B1B]">*</span></label>
+                    <input autoFocus className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                      value={sibling.first_name} onChange={e => setSibling(s => ({ ...s, first_name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Last name <span className="text-[#991B1B]">*</span></label>
+                    <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                      value={sibling.last_name} onChange={e => setSibling(s => ({ ...s, last_name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Date of birth <span className="text-[#991B1B]">*</span></label>
+                    <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                      value={sibling.date_of_birth} onChange={e => setSibling(s => ({ ...s, date_of_birth: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Sex <span className="text-[#991B1B]">*</span></label>
+                    <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                      value={sibling.gender} onChange={e => setSibling(s => ({ ...s, gender: e.target.value }))}>
+                      <option value="">Select…</option>
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pre-filled shared info (read-only preview) */}
+              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl p-4 space-y-3">
+                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Pre-filled from {name.split(' ')[0]}'s chart</div>
+                <div className="grid grid-cols-2 gap-3 text-[12px]">
+                  {[
+                    { label: 'Phone', value: child.family_phone || child.parent_phone },
+                    { label: 'Email', value: child.family_email || child.parent_email },
+                    { label: 'Address', value: [child.family_address_line1 || child.parent_address, child.family_city || child.parent_city, child.family_state || child.parent_state, child.family_zip || child.parent_zip].filter(Boolean).join(', ') },
+                    { label: 'PCP', value: child.pcp },
+                    { label: 'Pharmacy', value: child.preferred_pharmacy },
+                    { label: 'Insurance', value: child.insurance_provider },
+                    { label: 'Member ID', value: child.insurance_member_id },
+                    { label: 'Group #', value: child.insurance_group_number },
+                    { label: 'Subscriber', value: child.insurance_subscriber_name },
+                    { label: 'Sub. DOB', value: child.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null },
+                    { label: 'Sub. sex', value: child.insurance_subscriber_gender === 'M' ? 'Male' : child.insurance_subscriber_gender === 'F' ? 'Female' : child.insurance_subscriber_gender },
+                  ].map(({ label, value }) => value ? (
+                    <div key={label}>
+                      <div className="text-[10px] text-[#999]">{label}</div>
+                      <div className="text-[#1A1A2E] truncate">{value}</div>
+                    </div>
+                  ) : null)}
+                </div>
+                <p className="text-[10px] text-[#999] mt-1">These fields are copied automatically. You can edit them from the new patient's chart after saving.</p>
+              </div>
+
+              {siblingError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{siblingError}</div>}
+              {siblingDone && (
+                <div className="flex items-center gap-2 text-[13px] text-[#085041] bg-[#E1F5EE] px-3 py-2 rounded-lg">
+                  <CheckCircle2 size={14} /> Sibling added successfully!
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 px-6 pb-6">
+              <button onClick={() => setSiblingOpen(false)} disabled={siblingSubmitting}
+                className="flex-1 px-4 py-2.5 border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] hover:bg-[#F1EFE8] transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button
+                onClick={submitSibling}
+                disabled={siblingSubmitting || !sibling.first_name.trim() || !sibling.last_name.trim() || !sibling.date_of_birth || !sibling.gender}
+                className="flex-1 px-4 py-2.5 bg-[#7F77DD] text-white rounded-lg text-[13px] font-medium hover:bg-[#6C64C8] transition-colors disabled:opacity-50">
+                {siblingSubmitting ? 'Adding…' : 'Add sibling'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

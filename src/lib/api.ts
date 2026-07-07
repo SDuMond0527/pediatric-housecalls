@@ -157,6 +157,9 @@ export const createChild = (body: Record<string, unknown>) =>
 export const updateChild = (id: string, body: Record<string, unknown>) =>
   familyApiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
+export const providerCreateChild = (body: Record<string, unknown>) =>
+  apiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
+
 export const deleteChild = (id: string) =>
   apiFetch<void>(`/api/children/${id}`, { method: 'DELETE' })
 

@@ -157,6 +157,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const {
       first_name, last_name, date_of_birth, gender,
+      family_id,
+      parent_name, parent_phone, parent_email,
+      parent_address, parent_city, parent_state, parent_zip,
+      pcp, preferred_pharmacy,
       insurance_provider, insurance_member_id, insurance_group_number,
       insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
     } = req.body
@@ -165,6 +169,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [row] = await sql`
       INSERT INTO children (
         practice_id, display_label, first_name, last_name, date_of_birth, gender,
+        family_id,
+        parent_name, parent_phone, parent_email,
+        parent_address, parent_city, parent_state, parent_zip,
+        pcp, preferred_pharmacy,
         insurance_provider, insurance_member_id, insurance_group_number,
         insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender
       )
@@ -175,6 +183,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${last_name || null},
         ${date_of_birth || null},
         ${gender || null},
+        ${family_id || null},
+        ${parent_name || null},
+        ${parent_phone || null},
+        ${parent_email || null},
+        ${parent_address || null},
+        ${parent_city || null},
+        ${parent_state || null},
+        ${parent_zip || null},
+        ${pcp || null},
+        ${preferred_pharmacy || null},
         ${insurance_provider || null},
         ${insurance_member_id || null},
         ${insurance_group_number || null},
