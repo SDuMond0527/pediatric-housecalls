@@ -26,7 +26,30 @@ function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
 
-  const fmtDate8 = (d: any) => String(d ?? '').split('T')[0].replace(/-/g, '')
+  const fmtDate8 = (d: any) => {
+    if (!d) return ''
+    const s = d instanceof Date ? d.toISOString() : String(d)
+    return s.split('T')[0].replace(/-/g, '')
+  }
+
+  // Parse "Last, First" or "First Last" subscriber name formats
+  const parseSubName = (name: string) => {
+    if (!name?.trim()) return { first: '', last: '' }
+    if (name.includes(', ')) {
+      const [last, first] = name.split(', ')
+      return { first: first ?? '', last: last ?? '' }
+    }
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 1) return { first: '', last: parts[0] }
+    return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
+  }
+
+  // BCBS payers require BL; others use CI
+  const BCBS_PAYER_IDS = ['UPICO', 'BCSNC', 'NCBCBS', 'NCBLS', 'NCPNHP']
+  const claimFilingCode = BCBS_PAYER_IDS.includes(claim.payer_id ?? '') ? 'BL' : 'CI'
+
+  // Patient control number max 20 chars — use first 20 of UUID without dashes
+  const patientControlNumber = (claim.id ?? '').replace(/-/g, '').slice(0, 20)
 
   const healthCareCodeInformation = diagnoses.map((d: any, i: number) => ({
     diagnosisTypeCode: i === 0 ? 'ABK' : 'ABF',
@@ -63,9 +86,7 @@ function buildStediPayload(claim: any, testMode = false): object {
     },
   }))
 
-  const [subLast, subFirst] = (claim.subscriber_name ?? ' ').split(', ')
-  const subFirstName = subFirst || subLast
-  const subLastName  = subFirst ? subLast : ''
+  const { first: subFirstName, last: subLastName } = parseSubName(claim.subscriber_name ?? '')
 
   return {
     ...(testMode ? { usageIndicator: 'T' } : {}),
@@ -112,8 +133,8 @@ function buildStediPayload(claim: any, testMode = false): object {
       },
     },
     claimInformation: {
-      claimFilingCode: 'CI',
-      patientControlNumber: claim.id,
+      claimFilingCode,
+      patientControlNumber,
       claimChargeAmount: parseFloat(claim.total_charge ?? 0).toFixed(2),
       placeOfServiceCode: claim.place_of_service ?? '12',
       claimFrequencyCode: '1',
