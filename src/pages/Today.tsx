@@ -60,7 +60,7 @@ export function Today() {
 
   // Add appointment
   const [adding, setAdding] = useState(false)
-  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', date: '', time: '', notes: '' })
+  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', subscriberName: '', subscriberDob: '', subscriberGender: '', date: '', time: '', notes: '' })
   const [addCustomTime, setAddCustomTime] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
@@ -232,7 +232,7 @@ export function Today() {
 
   function openAdd() {
     setAddForProviderId(provider?.id || '')
-    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', date: viewDate, time: '', notes: '' })
+    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', subscriberName: '', subscriberDob: '', subscriberGender: '', date: viewDate, time: '', notes: '' })
     setAddCustomTime('')
     setPatientSearch('')
     setPatientResults([])
@@ -294,6 +294,9 @@ export function Today() {
     if (addForm.insurancePayer) noteParts.push(`INSURANCE:${addForm.insurancePayer}`)
     if (addForm.insuranceMemberId) noteParts.push(`MEMBERID:${addForm.insuranceMemberId}`)
     if (addForm.insuranceGroup) noteParts.push(`GROUPNUM:${addForm.insuranceGroup}`)
+    if (addForm.subscriberName) noteParts.push(`SUBSCRIBER:${addForm.subscriberName}`)
+    if (addForm.subscriberDob) noteParts.push(`SUBSCRIBERDOB:${addForm.subscriberDob}`)
+    if (addForm.subscriberGender) noteParts.push(`SUBSCRIBERGENDER:${addForm.subscriberGender}`)
     if (addForm.notes) noteParts.push(`NOTES:${addForm.notes}`)
 
     const providerId = addForProviderId || provider.id
@@ -574,6 +577,7 @@ export function Today() {
                           VAX: 'Vaccination status', PCP: 'Primary care physician',
                           PHARMACY: 'Preferred pharmacy', INSURANCE: 'Insurance',
                           MEMBERID: 'Member ID', GROUPNUM: 'Group #',
+                          SUBSCRIBER: 'Subscriber name', SUBSCRIBERDOB: 'Subscriber DOB', SUBSCRIBERGENDER: 'Subscriber sex',
                           CHILDREN: 'Children seen', PARENTEMAIL: 'Parent email',
                           PARENTPHONE: 'Parent phone', GENDER: 'Sex',
                           CARDFRONT: 'Insurance card front', CARDBACK: 'Insurance card back',
@@ -1032,6 +1036,32 @@ export function Today() {
                   <input type="text" placeholder="GRP001" value={addForm.insuranceGroup}
                     onChange={e => setAddForm(f => ({ ...f, insuranceGroup: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber name</label>
+                <input type="text" placeholder="John Smith" value={addForm.subscriberName}
+                  onChange={e => setAddForm(f => ({ ...f, subscriberName: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber DOB</label>
+                  <input type="date" value={addForm.subscriberDob}
+                    onChange={e => setAddForm(f => ({ ...f, subscriberDob: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex</label>
+                  <select value={addForm.subscriberGender} onChange={e => setAddForm(f => ({ ...f, subscriberGender: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                    <option value="">Select…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
               </div>
 
