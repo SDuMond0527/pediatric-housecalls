@@ -134,5 +134,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(rows)
   }
 
+  if (req.method === 'POST') {
+    const {
+      first_name, last_name, date_of_birth, gender,
+      insurance_provider, insurance_member_id, insurance_group_number,
+      insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
+    } = req.body
+    if (!first_name && !last_name) return res.status(400).json({ error: 'Name required' })
+    const label = [first_name, last_name].filter(Boolean).join(' ')
+    const [row] = await sql`
+      INSERT INTO children (
+        practice_id, display_label, first_name, last_name, date_of_birth, gender,
+        insurance_provider, insurance_member_id, insurance_group_number,
+        insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender
+      )
+      VALUES (
+        ${practiceId}::uuid,
+        ${label},
+        ${first_name || null},
+        ${last_name || null},
+        ${date_of_birth || null},
+        ${gender || null},
+        ${insurance_provider || null},
+        ${insurance_member_id || null},
+        ${insurance_group_number || null},
+        ${insurance_subscriber_name || null},
+        ${insurance_subscriber_dob || null},
+        ${insurance_subscriber_gender || null}
+      )
+      RETURNING *`
+    return res.json(row)
+  }
+
   res.status(405).json({ error: 'Method not allowed' })
 }

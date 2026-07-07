@@ -312,6 +312,27 @@ export function Today() {
       notes: noteParts.join('|') || null,
     })
 
+    // Save patient to children table so they appear in patient search
+    if (addForm.patientName) {
+      const [firstName, ...rest] = addForm.patientName.trim().split(' ')
+      const lastName = rest.join(' ')
+      apiFetch('/api/children', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: firstName || null,
+          last_name: lastName || null,
+          date_of_birth: addForm.dob || null,
+          gender: addForm.gender || null,
+          insurance_provider: addForm.insurancePayer || null,
+          insurance_member_id: addForm.insuranceMemberId || null,
+          insurance_group_number: addForm.insuranceGroup || null,
+          insurance_subscriber_name: addForm.subscriberName || null,
+          insurance_subscriber_dob: addForm.subscriberDob || null,
+          insurance_subscriber_gender: addForm.subscriberGender || null,
+        }),
+      }).catch(() => {})
+    }
+
     setAddSubmitting(false)
     setAdding(false)
     fetchAppts()
