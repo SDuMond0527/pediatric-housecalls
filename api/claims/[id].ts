@@ -26,9 +26,9 @@ function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
 
-  const diagnosisCodes = diagnoses.map((d: any, i: number) => ({
-    qualifierCode: i === 0 ? 'ABK' : 'ABF',
-    value: d.code,
+  const healthCareCodeInformation = diagnoses.map((d: any, i: number) => ({
+    diagnosisTypeCode: i === 0 ? 'ABK' : 'ABF',
+    diagnosisCode: d.code,
   }))
 
   const isTelehealth = (claim.place_of_service ?? '12') === '10'
@@ -111,7 +111,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       },
     ],
     claimInformation: {
-      claimFilingIndicatorCode: 'CI',
+      claimFilingCode: 'CI',
       patientControlNumber: claim.id,
       claimChargeAmount: parseFloat(claim.total_charge ?? 0).toFixed(2),
       placeOfServiceCode: claim.place_of_service ?? '12',
@@ -120,7 +120,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       planParticipationCode: 'A',
       benefitsAssignmentCertificationIndicator: 'Y',
       releaseInformationCode: 'Y',
-      diagnosisCodes,
+      healthCareCodeInformation,
       serviceLines,
     },
   }
