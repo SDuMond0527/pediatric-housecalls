@@ -26,6 +26,8 @@ function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
 
+  const fmtDate8 = (d: any) => String(d ?? '').split('T')[0].replace(/-/g, '')
+
   const healthCareCodeInformation = diagnoses.map((d: any, i: number) => ({
     diagnosisTypeCode: i === 0 ? 'ABK' : 'ABF',
     diagnosisCode: d.code,
@@ -33,7 +35,11 @@ function buildStediPayload(claim: any, testMode = false): object {
 
   const isTelehealth = (claim.place_of_service ?? '12') === '10'
 
-  const fmtDate8 = (d: any) => String(d ?? '').split('T')[0].replace(/-/g, '')
+  const providerParts = (claim.rendering_provider_name ?? '').split(' ')
+  const provFirst = providerParts[0] ?? ''
+  const provLast  = providerParts.slice(1).join(' ') || provFirst
+
+  const diagnosisPointers = diagnoses.map((_: any, i: number) => String(i + 1))
 
   const serviceLines = cptCodes.map((c: any) => ({
     serviceDate: fmtDate8(claim.service_date),
@@ -44,20 +50,22 @@ function buildStediPayload(claim: any, testMode = false): object {
       lineItemChargeAmount: parseFloat(c.charge_amount ?? 0).toFixed(2),
       measurementUnit: 'UN',
       serviceUnitCount: '1',
-      placeOfServiceCode: claim.place_of_service ?? '12',
       compositeDiagnosisCodePointers: {
-        pointers: diagnoses.map((_: any, i: number) => String(i + 1)),
+        diagnosisCodePointers: diagnosisPointers,
       },
+    },
+    renderingProvider: {
+      providerType: 'RenderingProvider',
+      npi: claim.rendering_provider_npi ?? '',
+      firstName: provFirst,
+      lastName: provLast,
+      taxonomyCode: claim.rendering_provider_taxonomy ?? '',
     },
   }))
 
   const [subLast, subFirst] = (claim.subscriber_name ?? ' ').split(', ')
   const subFirstName = subFirst || subLast
   const subLastName  = subFirst ? subLast : ''
-
-  const providerParts = (claim.rendering_provider_name ?? '').split(' ')
-  const provFirst = providerParts[0] ?? ''
-  const provLast  = providerParts.slice(1).join(' ') || provFirst
 
   return {
     ...(testMode ? { usageIndicator: 'T' } : {}),
@@ -91,27 +99,18 @@ function buildStediPayload(claim: any, testMode = false): object {
         },
       } : {}),
     },
-    providers: [
-      {
-        providerType: 'BillingProvider',
-        npi: PRACTICE_NPI,
-        employerId: PRACTICE_TAX,
-        organizationName: PRACTICE_NAME,
-        address: {
-          address1: PRACTICE_ADDR,
-          city: PRACTICE_CITY,
-          state: PRACTICE_STATE,
-          postalCode: PRACTICE_ZIP,
-        },
+    billing: {
+      providerType: 'BillingProvider',
+      npi: PRACTICE_NPI,
+      employerId: PRACTICE_TAX,
+      organizationName: PRACTICE_NAME,
+      address: {
+        address1: PRACTICE_ADDR,
+        city: PRACTICE_CITY,
+        state: PRACTICE_STATE,
+        postalCode: PRACTICE_ZIP,
       },
-      {
-        providerType: 'RenderingProvider',
-        npi: claim.rendering_provider_npi ?? '',
-        firstName: provFirst,
-        lastName: provLast,
-        taxonomyCode: claim.rendering_provider_taxonomy ?? '',
-      },
-    ],
+    },
     claimInformation: {
       claimFilingCode: 'CI',
       patientControlNumber: claim.id,
