@@ -45,8 +45,10 @@ function buildStediPayload(claim: any, testMode = false): object {
       measurementUnit: 'UN',
       serviceUnitCount: '1',
       placeOfServiceCode: claim.place_of_service ?? '12',
+      compositeDiagnosisCodePointers: {
+        pointers: diagnoses.map((_: any, i: number) => String(i + 1)),
+      },
     },
-    diagnosisCodePointers: { pointers: diagnoses.map((_: any, i: number) => String(i + 1)) },
   }))
 
   const [subLast, subFirst] = (claim.subscriber_name ?? ' ').split(', ')
