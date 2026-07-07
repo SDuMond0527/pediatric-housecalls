@@ -612,8 +612,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!entry) throw new Error('Waitlist entry not found')
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
-      const smsBody = `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
+      const providerSmsBody = `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/waitlist`
 
+      // Notify providers licensed in the patient's state
       const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true`
       for (const prov of stateProviders) {
         const provStates: string[] = (prov.states ?? []) as string[]
@@ -631,13 +632,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
           )
         }
-        if (prov.phone) await sendSMS(prov.phone, smsBody)
+        if (prov.phone) await sendSMS(prov.phone, providerSmsBody)
       }
 
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' }))
-        if (admin.phone) await sendSMS(admin.phone, smsBody)
+        if (admin.phone) await sendSMS(admin.phone, `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`)
+      }
+
+      // Confirm to the family that they've been added
+      if (entry.family_id) {
+        const [family] = await sql`SELECT email, phone, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+        const greeting = family?.display_name ? `Hi ${family.display_name.split(' ')[0]},` : 'Hi there,'
+        const familyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#EF9F27')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">You're on the waitlist</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 16px;line-height:1.6;">${greeting}<br><br>
+  You've been added to the ${PRACTICE_NAME} waitlist. We'll notify you as soon as a provider in ${stateLabel} is available to see your child.</p>
+  <div style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;padding:16px 20px;margin-bottom:24px;">
+    ${entry.visit_type ? `<div style="margin-bottom:8px;"><span style="font-size:11px;color:#999;text-transform:uppercase;">Visit type</span><br><span style="font-size:14px;font-weight:500;">${entry.visit_type}</span></div>` : ''}
+    ${entry.preferred_time_window ? `<div><span style="font-size:11px;color:#999;text-transform:uppercase;">Preferred time</span><br><span style="font-size:14px;font-weight:500;">${entry.preferred_time_window}</span></div>` : ''}
+  </div>
+  <div style="background:#FAEEDA;border-radius:10px;padding:14px 16px;font-size:13px;color:#633806;">
+    You'll receive a text and email the moment a provider picks up your request. No action is needed from you in the meantime.
+  </div>
+</td></tr>
+</table></td></tr></table></body></html>`
+        if (family?.email) await sendEmail(family.email, `You're on the ${PRACTICE_NAME} waitlist`, familyHtml)
+        if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: You've been added to the waitlist. We'll text you as soon as a provider is available. Questions? Log in at ${PORTAL_URL}/family/dashboard`)
       }
 
       return res.json({ ok: true })
