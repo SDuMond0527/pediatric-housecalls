@@ -85,10 +85,11 @@ export function PatientChart() {
   const [expandedNote, setExpandedNote] = useState<string | null>(null)
 
   // Edit state
-  const [editingSection, setEditingSection] = useState<'medical' | 'insurance' | null>(null)
+  const [editingSection, setEditingSection] = useState<'contact' | 'medical' | 'insurance' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [contactEdit, setContactEdit] = useState({ parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
 
@@ -136,10 +137,20 @@ export function PatientChart() {
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
   ]
 
-  function startEdit(section: 'medical' | 'insurance') {
+  function startEdit(section: 'contact' | 'medical' | 'insurance') {
     setEditError(null)
     setEditSaved(false)
-    if (section === 'medical') {
+    if (section === 'contact') {
+      setContactEdit({
+        parent_name: child?.parent_name || '',
+        parent_phone: child?.parent_phone || '',
+        parent_email: child?.parent_email || '',
+        parent_address: child?.parent_address || '',
+        parent_city: child?.parent_city || '',
+        parent_state: child?.parent_state || '',
+        parent_zip: child?.parent_zip || '',
+      })
+    } else if (section === 'medical') {
       setMedEdit({
         allergies: child?.allergies || '',
         current_medications: child?.current_medications || '',
@@ -160,12 +171,12 @@ export function PatientChart() {
     setEditingSection(section)
   }
 
-  async function saveEdit(section: 'medical' | 'insurance') {
+  async function saveEdit(section: 'contact' | 'medical' | 'insurance') {
     if (!childId) return
     setEditSaving(true)
     setEditError(null)
     try {
-      const body = section === 'medical' ? medEdit : insEdit
+      const body = section === 'contact' ? contactEdit : section === 'medical' ? medEdit : insEdit
       const updated = await apiFetch<any>(`/api/children/${childId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -237,31 +248,105 @@ export function PatientChart() {
             {activeTab === 'overview' && (
               <div className="space-y-4">
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Phone size={14} className="text-[#7F77DD]" />
-                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Contact & Family</div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Family" value={child?.family_display_name} />
-                    <Field label="Phone" value={child?.family_phone} />
-                    <Field label="Email" value={child?.family_email} />
-                    <div>
-                      <div className="text-[11px] text-[#999] flex items-center gap-1">
-                        <MapPin size={11} />
-                        Address
-                      </div>
-                      {child?.family_address_line1 ? (
-                        <div className="text-[13px] text-[#1A1A2E] mt-0.5">
-                          {child.family_address_line1}
-                          {(child.family_city || child.family_state || child.family_zip) && (
-                            <>, {[child.family_city, child.family_state, child.family_zip].filter(Boolean).join(' ')}</>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
-                      )}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Phone size={14} className="text-[#7F77DD]" />
+                      <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Contact & Family</div>
                     </div>
+                    {editingSection !== 'contact' && (
+                      <button onClick={() => startEdit('contact')}
+                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
+                        <Pencil size={11} /> Edit
+                      </button>
+                    )}
                   </div>
+                  {editingSection === 'contact' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Parent / guardian name</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={contactEdit.parent_name} onChange={e => setContactEdit(p => ({ ...p, parent_name: e.target.value }))}
+                          placeholder="e.g. Jane Smith" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Phone</label>
+                          <input type="tel" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.parent_phone} onChange={e => setContactEdit(p => ({ ...p, parent_phone: e.target.value }))}
+                            placeholder="(704) 555-0100" />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Email</label>
+                          <input type="email" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.parent_email} onChange={e => setContactEdit(p => ({ ...p, parent_email: e.target.value }))}
+                            placeholder="parent@email.com" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Street address</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={contactEdit.parent_address} onChange={e => setContactEdit(p => ({ ...p, parent_address: e.target.value }))}
+                          placeholder="123 Main St" />
+                      </div>
+                      <div className="grid grid-cols-5 gap-2">
+                        <div className="col-span-2">
+                          <label className="text-[11px] text-[#999] block mb-1">City</label>
+                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.parent_city} onChange={e => setContactEdit(p => ({ ...p, parent_city: e.target.value }))}
+                            placeholder="Charlotte" />
+                        </div>
+                        <div className="col-span-1">
+                          <label className="text-[11px] text-[#999] block mb-1">State</label>
+                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.parent_state} onChange={e => setContactEdit(p => ({ ...p, parent_state: e.target.value }))}>
+                            <option value="">—</option>
+                            <option value="NC">NC</option>
+                            <option value="SC">SC</option>
+                            <option value="VA">VA</option>
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[11px] text-[#999] block mb-1">Zip</label>
+                          <input maxLength={5} className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.parent_zip} onChange={e => setContactEdit(p => ({ ...p, parent_zip: e.target.value }))}
+                            placeholder="28277" />
+                        </div>
+                      </div>
+                      {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => saveEdit('contact')} disabled={editSaving}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] disabled:opacity-50">
+                          {editSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingSection(null)}
+                          className="flex items-center gap-1 px-3 py-1.5 border border-[#E8E8E4] text-[12px] text-[#555] rounded-lg hover:bg-[#F1EFE8]">
+                          <X size={12} /> Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field label="Family" value={child?.family_display_name || child?.parent_name} />
+                      <Field label="Phone" value={child?.family_phone || child?.parent_phone} />
+                      <Field label="Email" value={child?.family_email || child?.parent_email} />
+                      <div>
+                        <div className="text-[11px] text-[#999] flex items-center gap-1">
+                          <MapPin size={11} />
+                          Address
+                        </div>
+                        {(child?.family_address_line1 || child?.parent_address) ? (
+                          <div className="text-[13px] text-[#1A1A2E] mt-0.5">
+                            {child.family_address_line1 || child.parent_address}
+                            {((child.family_city || child.parent_city) || (child.family_state || child.parent_state) || (child.family_zip || child.parent_zip)) && (
+                              <>, {[child.family_city || child.parent_city, child.family_state || child.parent_state, child.family_zip || child.parent_zip].filter(Boolean).join(' ')}</>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
