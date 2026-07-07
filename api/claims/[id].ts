@@ -82,7 +82,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       npi: claim.rendering_provider_npi ?? '',
       firstName: provFirst,
       lastName: provLast,
-      taxonomyCode: claim.rendering_provider_taxonomy ?? '',
+      ...(claim.rendering_provider_taxonomy ? { taxonomyCode: claim.rendering_provider_taxonomy } : {}),
     },
   }))
 
@@ -99,11 +99,11 @@ function buildStediPayload(claim: any, testMode = false): object {
     subscriber: {
       memberId: claim.member_id ?? '',
       paymentResponsibilityLevelCode: 'P',
-      firstName: subFirstName,
+      ...(subFirstName ? { firstName: subFirstName } : {}),
       lastName: subLastName,
       gender: claim.subscriber_gender === 'Female' ? 'F' : claim.subscriber_gender === 'Male' ? 'M' : 'U',
       dateOfBirth: fmtDate8(claim.subscriber_dob),
-      groupNumber: claim.group_number ?? '',
+      ...(claim.group_number ? { groupNumber: claim.group_number } : {}),
     },
     dependent: {
       firstName: claim.patient_first_name ?? '',
@@ -125,12 +125,14 @@ function buildStediPayload(claim: any, testMode = false): object {
       npi: PRACTICE_NPI,
       employerId: PRACTICE_TAX,
       organizationName: PRACTICE_NAME,
-      address: {
-        address1: PRACTICE_ADDR,
-        city: PRACTICE_CITY,
-        state: PRACTICE_STATE,
-        postalCode: PRACTICE_ZIP,
-      },
+      ...(PRACTICE_ADDR ? {
+        address: {
+          address1: PRACTICE_ADDR,
+          city: PRACTICE_CITY,
+          state: PRACTICE_STATE,
+          postalCode: PRACTICE_ZIP,
+        },
+      } : {}),
     },
     claimInformation: {
       claimFilingCode,
