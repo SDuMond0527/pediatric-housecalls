@@ -590,7 +590,7 @@ export function AdminClaims() {
                         <Icon size={11} /> {badge.label}
                       </span>
                       <a
-                        href="https://app.stedi.com/app/healthcare/claims"
+                        href="https://portal.stedi.com/app/healthcare/claims"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap"
