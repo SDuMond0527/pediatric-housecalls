@@ -161,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let stediData: any
       try {
         const stediRes = await fetch(
-          'https://healthcare.us.stedi.com/2024-04-01/change/medicalclaims/v3/claims',
+          'https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/professionalclaims/v3/submission',
           {
             method: 'POST',
             headers: {
