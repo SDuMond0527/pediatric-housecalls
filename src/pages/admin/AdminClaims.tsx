@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getUnbilledNotes, getClaims, generateClaim, submitClaim, updateClaim, deleteClaim } from '../../lib/api'
+import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim } from '../../lib/api'
 
 type Tab = 'unbilled' | 'review' | 'submitted'
 
@@ -44,6 +44,8 @@ export function AdminClaims() {
   const [generating, setGenerating] = useState<string | null>(null)
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
+  const [testing, setTesting] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
@@ -78,6 +80,21 @@ export function AdminClaims() {
       alert(e.message || 'Failed to generate claim')
     } finally {
       setGenerating(null)
+    }
+  }
+
+  async function handleTest(claimId: string) {
+    setTesting(claimId)
+    try {
+      const result = await testClaim(claimId)
+      const ack = result.acknowledgment
+      const status = ack?.transactionSets?.[0]?.claimStatusInformation?.[0]?.claimStatus ?? ack?.status ?? null
+      const errors = ack?.transactionSets?.[0]?.claimStatusInformation?.[0]?.claimStatusDetails ?? []
+      setTestResults(prev => ({ ...prev, [claimId]: { status, errors, raw: ack } }))
+    } catch (e: any) {
+      setTestResults(prev => ({ ...prev, [claimId]: { error: e.message } }))
+    } finally {
+      setTesting(null)
     }
   }
 
@@ -442,23 +459,52 @@ export function AdminClaims() {
                           </div>
                         </div>
 
+                        {/* Test result */}
+                        {testResults[c.id] && (
+                          <div className={`rounded-lg px-3 py-2.5 text-[12px] border ${testResults[c.id].error ? 'bg-[#FEE2E2] border-[#FECACA] text-[#7F1D1D]' : testResults[c.id].status === 'A' ? 'bg-[#E1F5EE] border-[#A7F3D0] text-[#085041]' : 'bg-[#FEF3E8] border-[#FDE68A] text-[#633806]'}`}>
+                            {testResults[c.id].error ? (
+                              <span><span className="font-semibold">Test error: </span>{testResults[c.id].error}</span>
+                            ) : (
+                              <>
+                                <span className="font-semibold">
+                                  277CA: {testResults[c.id].status === 'A' ? 'Accepted ✓' : testResults[c.id].status === 'R' ? 'Rejected' : `Status: ${testResults[c.id].status ?? 'unknown'}`}
+                                </span>
+                                {testResults[c.id].errors?.length > 0 && (
+                                  <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                    {testResults[c.id].errors.map((e: any, i: number) => (
+                                      <li key={i}>{e.statusCodeDescription ?? e.statusCode ?? JSON.stringify(e)}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <button className="mt-1 text-[11px] underline opacity-70" onClick={() => setTestResults(p => { const n={...p}; delete n[c.id]; return n })}>dismiss</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+
                         {/* Submit / Regenerate buttons */}
                         <div className="flex justify-between items-center pt-1">
-                          {(!c.cpt_codes?.length || parseFloat(c.total_charge ?? 0) === 0) && c.encounter_note_id && (
+                          <div className="flex gap-2">
+                            {(!c.cpt_codes?.length || parseFloat(c.total_charge ?? 0) === 0) && c.encounter_note_id && (
+                              <Button variant="secondary" size="sm"
+                                loading={regenerating === c.id}
+                                onClick={() => handleRegenerate(c.id, c.encounter_note_id)}>
+                                <RefreshCw size={12} className="mr-1.5" /> Regenerate from note
+                              </Button>
+                            )}
                             <Button variant="secondary" size="sm"
-                              loading={regenerating === c.id}
-                              onClick={() => handleRegenerate(c.id, c.encounter_note_id)}>
-                              <RefreshCw size={12} className="mr-1.5" /> Regenerate from note
-                            </Button>
-                          )}
-                          <div className="ml-auto">
-                            <Button variant="teal"
-                              loading={submitting === c.id}
-                              disabled={!!submitting || missingPayer}
-                              onClick={() => handleSubmit(c.id)}>
-                              <Send size={13} className="mr-1.5" /> Submit to insurance
+                              loading={testing === c.id}
+                              disabled={!!testing || missingPayer}
+                              onClick={() => handleTest(c.id)}>
+                              Test claim
                             </Button>
                           </div>
+                          <Button variant="teal"
+                            loading={submitting === c.id}
+                            disabled={!!submitting || missingPayer}
+                            onClick={() => handleSubmit(c.id)}>
+                            <Send size={13} className="mr-1.5" /> Submit to insurance
+                          </Button>
                         </div>
                       </div>
                     )}

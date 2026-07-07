@@ -22,7 +22,7 @@ const PRACTICE_STATE = process.env.PRACTICE_STATE || 'NC'
 const PRACTICE_ZIP  = process.env.PRACTICE_ZIP   || '28202'
 const PRACTICE_PHONE = (process.env.PRACTICE_PHONE || '7045550000').replace(/\D/g, '')
 
-function buildStediPayload(claim: any): object {
+function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
 
@@ -58,6 +58,7 @@ function buildStediPayload(claim: any): object {
   const provLast  = providerParts.slice(1).join(' ') || provFirst
 
   return {
+    ...(testMode ? { usageIndicator: 'T' } : {}),
     tradingPartnerServiceId: claim.payer_id ?? '',
     submitter: {
       organizationName: PRACTICE_NAME,
@@ -147,14 +148,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PUT') {
     const { action, ...fields } = req.body ?? {}
 
-    // Submit to Stedi
-    if (action === 'submit') {
+    // Submit to Stedi (live or test)
+    if (action === 'submit' || action === 'test') {
+      const testMode = action === 'test'
       const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
       if (!claim) return res.status(404).json({ error: 'Claim not found' })
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
 
-      const payload = buildStediPayload(claim)
+      const payload = buildStediPayload(claim, testMode)
 
       let stediData: any
       try {
@@ -189,6 +191,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const claimId = stediData?.claimReference?.referenceNumber ?? stediData?.id ?? null
+
+      if (testMode) {
+        // Don't change status for test submissions — just return the 277CA response
+        return res.json({ test: true, acknowledgment: stediData })
+      }
+
       const [updated] = await sql`
         UPDATE claims SET
           status = 'submitted',
