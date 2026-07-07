@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion } from 'lucide-react'
+import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText } from 'lucide-react'
 import { format } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -129,6 +129,7 @@ export function AdminSchedule() {
   const [doneInstructions, setDoneInstructions] = useState('')
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
+  const [notes, setNotes] = useState<Record<string, any>>({})
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
@@ -250,7 +251,15 @@ export function AdminSchedule() {
                 return (
                   <div key={appt.id}
                     className={`border rounded-lg overflow-hidden cursor-pointer transition-all ${isExpanded ? 'border-[#7F77DD]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
-                    onClick={() => setExpanded(isExpanded ? null : appt.id)}>
+                    onClick={() => {
+                      const next = isExpanded ? null : appt.id
+                      setExpanded(next)
+                      if (next && !(next in notes)) {
+                        getEncounterNote({ appointment_id: next })
+                          .then(n => setNotes(prev => ({ ...prev, [next]: n ?? false })))
+                          .catch(() => setNotes(prev => ({ ...prev, [next]: false })))
+                      }
+                    }}>
                     <div className="flex items-center gap-3 px-4 py-2.5">
                       <span className="text-[12px] text-[#555] w-14 flex-shrink-0">{to12h(appt.scheduled_time)}</span>
                       <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{appt.visit_type}</span>
@@ -341,6 +350,77 @@ export function AdminSchedule() {
                             </div>
                           )
                         })()}
+                        {/* Encounter note */}
+                        <div className="mt-3 border border-[#E8E8E4] rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-2 bg-[#FAFAF8] border-b border-[#E8E8E4]">
+                            <FileText size={13} className="text-[#7F77DD]" />
+                            <span className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Encounter Note</span>
+                            {notes[appt.id]?.is_signed && (
+                              <span className="ml-auto text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] px-2 py-0.5 rounded-full">Signed</span>
+                            )}
+                          </div>
+                          {!(appt.id in notes) ? (
+                            <div className="px-3 py-2 text-[12px] text-[#999]">Loading…</div>
+                          ) : !notes[appt.id] ? (
+                            <div className="px-3 py-2 text-[12px] text-[#999]">No encounter note on file.</div>
+                          ) : !notes[appt.id].is_signed ? (
+                            <div className="px-3 py-2 text-[12px] text-[#F59E0B] font-medium">Note is a draft — not yet signed by the provider.</div>
+                          ) : (
+                            <div className="px-3 py-3 space-y-3">
+                              {notes[appt.id].chief_complaint && (
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Chief complaint</div>
+                                  <div className="text-[13px] text-[#1A1A2E]">{notes[appt.id].chief_complaint}</div>
+                                </div>
+                              )}
+                              {(notes[appt.id].diagnoses ?? []).length > 0 && (
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Diagnoses</div>
+                                  <div className="space-y-1">
+                                    {notes[appt.id].diagnoses.map((d: any, i: number) => (
+                                      <div key={i} className="flex items-baseline gap-2 text-[12px]">
+                                        <span className="font-mono text-[#7F77DD] font-medium">{d.code}</span>
+                                        <span className="text-[#555]">{d.description}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {(notes[appt.id].cpt_codes ?? []).length > 0 && (
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT codes & charges</div>
+                                  <div className="space-y-1">
+                                    {notes[appt.id].cpt_codes.map((c: any, i: number) => (
+                                      <div key={i} className="flex items-baseline justify-between gap-2 text-[12px]">
+                                        <div className="flex items-baseline gap-2">
+                                          <span className="font-mono text-[#7F77DD] font-medium">{c.code}</span>
+                                          <span className="text-[#555]">{c.description}</span>
+                                          {c.category === 'Non-Covered Services' && (
+                                            <span className="text-[10px] text-[#999] italic">non-covered</span>
+                                          )}
+                                        </div>
+                                        <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {notes[appt.id].assessment && (
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Assessment</div>
+                                  <div className="text-[12px] text-[#555] whitespace-pre-wrap">{notes[appt.id].assessment}</div>
+                                </div>
+                              )}
+                              {notes[appt.id].plan && (
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Plan</div>
+                                  <div className="text-[12px] text-[#555] whitespace-pre-wrap">{notes[appt.id].plan}</div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Insurance eligibility */}
                         <div className="mt-3">
                           <EligibilityCard
