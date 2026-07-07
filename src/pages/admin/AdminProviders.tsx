@@ -8,7 +8,7 @@ import type { Provider } from '../../types'
 
 type ProviderWithContact = Provider & { phone?: string | null; email?: string | null; home_address?: string | null }
 
-type ProviderEdit = { phone: string; email: string; home_address: string }
+type ProviderEdit = { phone: string; email: string; home_address: string; npi: string; taxonomy_code: string }
 
 const ROLE_COLORS: Record<string, 'purple' | 'teal' | 'amber' | 'blue' | 'gray'> = {
   MD: 'purple', PNP: 'teal', CMA: 'amber', RN: 'blue', admin: 'gray',
@@ -52,7 +52,7 @@ export function AdminProviders() {
   }, [])
 
   function getEdit(p: ProviderWithContact): ProviderEdit {
-    return edits[p.id] ?? { phone: p.phone || '', email: p.email || '', home_address: (p as any).home_address || '' }
+    return edits[p.id] ?? { phone: p.phone || '', email: p.email || '', home_address: (p as any).home_address || '', npi: (p as any).npi || '', taxonomy_code: (p as any).taxonomy_code || '' }
   }
 
   function setField(id: string, field: keyof ProviderEdit, value: string) {
@@ -66,6 +66,8 @@ export function AdminProviders() {
       phone: edit.phone || null,
       email: edit.email || null,
       home_address: edit.home_address || null,
+      npi: edit.npi || null,
+      taxonomy_code: edit.taxonomy_code || null,
     }).catch(() => {})
     const data = await getProviders().catch(() => null)
     if (data) setProviders(data as ProviderWithContact[])
@@ -159,6 +161,12 @@ export function AdminProviders() {
                         <Input label="Home address (for convenience fee calculation)"
                           placeholder="e.g. 123 Main St, Charlotte, NC 28205"
                           value={edit.home_address} onChange={e => setField(p.id, 'home_address', e.target.value)} />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input label="NPI" placeholder="1234567890"
+                            value={edit.npi} onChange={e => setField(p.id, 'npi', e.target.value)} />
+                          <Input label="Taxonomy code" placeholder="207Q00000X"
+                            value={edit.taxonomy_code} onChange={e => setField(p.id, 'taxonomy_code', e.target.value)} />
+                        </div>
                         <div className="flex items-center gap-3">
                           <Button size="sm" loading={isSaving} onClick={() => save(p)}>Save</Button>
                           {isSaved && (

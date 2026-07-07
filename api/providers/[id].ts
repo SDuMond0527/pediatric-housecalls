@@ -34,6 +34,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (b.email !== undefined)               updates.push('email')
   if (b.zones !== undefined)               updates.push('zones')
   if (b.states !== undefined)              updates.push('states')
+  if (b.npi !== undefined)                 updates.push('npi')
+  if (b.taxonomy_code !== undefined)       updates.push('taxonomy_code')
 
   if (!updates.length) return res.status(400).json({ error: 'No valid fields' })
 
@@ -47,7 +49,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       home_address       = CASE WHEN ${b.home_address !== undefined} THEN ${b.home_address ?? null} ELSE home_address       END,
       email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END,
       zones              = CASE WHEN ${b.zones !== undefined} THEN ${zones}::jsonb               ELSE zones              END,
-      states             = CASE WHEN ${b.states !== undefined} THEN ${states}::jsonb              ELSE states             END
+      states             = CASE WHEN ${b.states !== undefined} THEN ${states}::jsonb              ELSE states             END,
+      npi                = CASE WHEN ${b.npi !== undefined} THEN ${b.npi ?? null}                ELSE npi                END,
+      taxonomy_code      = CASE WHEN ${b.taxonomy_code !== undefined} THEN ${b.taxonomy_code ?? null} ELSE taxonomy_code  END
     WHERE id = ${id}::uuid
     RETURNING *`
   res.json(row)
