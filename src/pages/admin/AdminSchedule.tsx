@@ -432,9 +432,11 @@ export function AdminSchedule() {
                                     <div className="text-[#555] whitespace-pre-wrap">{n.plan}</div>
                                   </div>
                                 )}
-                                {(n.cpt_codes ?? []).length > 0 && (
-                                  <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT Codes & Charges</div>
+                                <div>
+                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT Codes & Charges</div>
+                                  {(n.cpt_codes ?? []).length === 0 ? (
+                                    <div className="text-[#F59E0B] font-medium">No CPT codes on file — provider must unlock and re-sign note.</div>
+                                  ) : (
                                     <div className="space-y-1">
                                       {n.cpt_codes.map((c: any, i: number) => (
                                         <div key={i} className="flex items-baseline justify-between gap-2">
@@ -449,8 +451,8 @@ export function AdminSchedule() {
                                         </div>
                                       ))}
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             )
                           })()}
