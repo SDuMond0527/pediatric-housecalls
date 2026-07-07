@@ -160,6 +160,12 @@ export const updateChild = (id: string, body: Record<string, unknown>) =>
 export const providerCreateChild = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
 
+export const archiveChildInsurance = (id: string) =>
+  apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify({ _action: 'archive_insurance' }) })
+
+export const familyArchiveChildInsurance = (id: string) =>
+  familyApiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify({ _action: 'archive_insurance' }) })
+
 export const deleteChild = (id: string) =>
   apiFetch<void>(`/api/children/${id}`, { method: 'DELETE' })
 

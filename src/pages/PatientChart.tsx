@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 
 interface NoteWithVisit {
@@ -94,6 +94,9 @@ export function PatientChart() {
   const [contactEdit, setContactEdit] = useState({ parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+
+  const [archivingIns, setArchivingIns] = useState(false)
+  const [pastInsOpen, setPastInsOpen] = useState(false)
 
   // Add sibling
   const [siblingOpen, setSiblingOpen] = useState(false)
@@ -206,6 +209,20 @@ export function PatientChart() {
       setEditError(e.message ?? 'Save failed')
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function archiveInsurance() {
+    if (!childId) return
+    setArchivingIns(true)
+    try {
+      const updated = await archiveChildInsurance(childId)
+      setChild((prev: any) => ({ ...prev, ...updated }))
+      startEdit('insurance')
+    } catch (e: any) {
+      alert(e.message ?? 'Failed to archive insurance')
+    } finally {
+      setArchivingIns(false)
     }
   }
 
@@ -510,10 +527,20 @@ export function PatientChart() {
                       <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</div>
                     </div>
                     {editingSection !== 'insurance' && (
-                      <button onClick={() => startEdit('insurance')}
-                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
-                        <Pencil size={11} /> Edit
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => startEdit('insurance')}
+                          className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
+                          <Pencil size={11} /> Edit
+                        </button>
+                        {(child?.insurance_provider || child?.insurance_member_id) && (
+                          <button
+                            onClick={archiveInsurance}
+                            disabled={archivingIns}
+                            className="text-[11px] text-[#F59E0B] font-medium border border-[#F59E0B] px-2 py-0.5 rounded hover:bg-[#FEF9EC] transition-colors disabled:opacity-50">
+                            {archivingIns ? 'Archiving…' : 'Make inactive & add new'}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   {editingSection === 'insurance' ? (
@@ -573,41 +600,96 @@ export function PatientChart() {
                       </div>
                     </div>
                   ) : (
-                    child?.insurance_provider || child?.insurance_member_id || child?.insurance_group_number ? (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <Field label="Insurance plan" value={child?.insurance_provider} />
-                          <Field label="Member ID" value={child?.insurance_member_id} />
-                          <Field label="Group number" value={child?.insurance_group_number} />
-                          <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
-                          <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
-                          <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
-                        </div>
-                        {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
-                          <div>
-                            <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
-                            <div className="grid grid-cols-2 gap-3">
-                              {child?.insurance_card_front_url && (
-                                <div>
-                                  <div className="text-[11px] text-[#999] mb-1">Front</div>
-                                  <img src={child.insurance_card_front_url} alt="Insurance card front"
-                                    className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
-                                </div>
-                              )}
-                              {child?.insurance_card_back_url && (
-                                <div>
-                                  <div className="text-[11px] text-[#999] mb-1">Back</div>
-                                  <img src={child.insurance_card_back_url} alt="Insurance card back"
-                                    className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
-                                </div>
-                              )}
-                            </div>
+                    <>
+                      {child?.insurance_provider || child?.insurance_member_id || child?.insurance_group_number ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Field label="Insurance plan" value={child?.insurance_provider} />
+                            <Field label="Member ID" value={child?.insurance_member_id} />
+                            <Field label="Group number" value={child?.insurance_group_number} />
+                            <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
+                            <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
+                            <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-[13px] text-[#bbb] text-center py-4">No insurance information on file</div>
-                    )
+                          {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
+                            <div>
+                              <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
+                              <div className="grid grid-cols-2 gap-3">
+                                {child?.insurance_card_front_url && (
+                                  <div>
+                                    <div className="text-[11px] text-[#999] mb-1">Front</div>
+                                    <img src={child.insurance_card_front_url} alt="Insurance card front"
+                                      className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
+                                  </div>
+                                )}
+                                {child?.insurance_card_back_url && (
+                                  <div>
+                                    <div className="text-[11px] text-[#999] mb-1">Back</div>
+                                    <img src={child.insurance_card_back_url} alt="Insurance card back"
+                                      className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[13px] text-[#bbb] text-center py-4">No active insurance on file</div>
+                      )}
+
+                      {/* Past insurance policies */}
+                      {Array.isArray(child?.previous_insurance) && child.previous_insurance.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
+                          <button
+                            onClick={() => setPastInsOpen(o => !o)}
+                            className="flex items-center gap-1.5 text-[11px] font-medium text-[#999] hover:text-[#555] transition-colors">
+                            <ChevronDown size={12} className={`transition-transform ${pastInsOpen ? 'rotate-180' : ''}`} />
+                            {child.previous_insurance.length} previous polic{child.previous_insurance.length === 1 ? 'y' : 'ies'}
+                          </button>
+                          {pastInsOpen && (
+                            <div className="mt-3 space-y-4">
+                              {[...child.previous_insurance].reverse().map((p: any, i: number) => (
+                                <div key={i} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-2">
+                                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">
+                                    Inactive since {p.deactivated_at ?? 'unknown date'}
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Insurance plan" value={p.insurance_provider} />
+                                    <Field label="Member ID" value={p.insurance_member_id} />
+                                    <Field label="Group number" value={p.insurance_group_number} />
+                                    <Field label="Subscriber" value={p.insurance_subscriber_name} />
+                                    <Field label="Subscriber DOB" value={p.insurance_subscriber_dob ? formatDob(String(p.insurance_subscriber_dob).split('T')[0]) : null} />
+                                    <Field label="Subscriber sex" value={p.insurance_subscriber_gender === 'M' ? 'Male' : p.insurance_subscriber_gender === 'F' ? 'Female' : p.insurance_subscriber_gender} />
+                                  </div>
+                                  {(p.insurance_card_front_url || p.insurance_card_back_url) && (
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                      {p.insurance_card_front_url && (
+                                        <div>
+                                          <div className="text-[10px] text-[#999] mb-1">Card front</div>
+                                          <a href={p.insurance_card_front_url} target="_blank" rel="noopener noreferrer">
+                                            <img src={p.insurance_card_front_url} alt="Old card front"
+                                              className="w-full rounded border border-[#E8E8E4] object-cover" />
+                                          </a>
+                                        </div>
+                                      )}
+                                      {p.insurance_card_back_url && (
+                                        <div>
+                                          <div className="text-[10px] text-[#999] mb-1">Card back</div>
+                                          <a href={p.insurance_card_back_url} target="_blank" rel="noopener noreferrer">
+                                            <img src={p.insurance_card_back_url} alt="Old card back"
+                                              className="w-full rounded border border-[#E8E8E4] object-cover" />
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 {editSaved && (

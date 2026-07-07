@@ -47,6 +47,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PATCH') {
     try {
       const b = req.body
+
+      // ── Archive current insurance and clear it ────────────────────────────────
+      if (b._action === 'archive_insurance') {
+        const [current] = await sql`SELECT * FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+        if (!current) return res.status(404).json({ error: 'Not found' })
+
+        const entry = {
+          insurance_provider:        current.insurance_provider        ?? null,
+          insurance_member_id:       current.insurance_member_id       ?? null,
+          insurance_group_number:    current.insurance_group_number    ?? null,
+          insurance_subscriber_name: current.insurance_subscriber_name ?? null,
+          insurance_subscriber_dob:  current.insurance_subscriber_dob  ?? null,
+          insurance_subscriber_gender: current.insurance_subscriber_gender ?? null,
+          insurance_card_front_url:  current.insurance_card_front_url  ?? null,
+          insurance_card_back_url:   current.insurance_card_back_url   ?? null,
+          deactivated_at: new Date().toISOString().split('T')[0],
+        }
+        const hasData = entry.insurance_provider || entry.insurance_member_id || entry.insurance_group_number
+        const history = [
+          ...(Array.isArray(current.previous_insurance) ? current.previous_insurance : []),
+          ...(hasData ? [entry] : []),
+        ]
+
+        const [row] = await sql`
+          UPDATE children SET
+            previous_insurance           = ${JSON.stringify(history)}::jsonb,
+            insurance_provider           = NULL,
+            insurance_member_id          = NULL,
+            insurance_group_number       = NULL,
+            insurance_subscriber_name    = NULL,
+            insurance_subscriber_dob     = NULL,
+            insurance_subscriber_gender  = NULL,
+            insurance_card_front_url     = NULL,
+            insurance_card_back_url      = NULL
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+        return res.json(row)
+      }
+
       const dob = b.date_of_birth || null
       const [row] = await sql`
         UPDATE children SET

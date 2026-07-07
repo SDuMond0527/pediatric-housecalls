@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
-import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword } from '../../lib/api'
+import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -89,6 +89,8 @@ export function FamilyProfile() {
   const [savedChildId, setSavedChildId] = useState<string | null>(null)
   const [childSaveError, setChildSaveError] = useState<string | null>(null)
   const [uploadingChild, setUploadingChild] = useState<{ id: string; side: 'front' | 'back' } | null>(null)
+  const [archivingInsId, setArchivingInsId] = useState<string | null>(null)
+  const [pastInsOpenId, setPastInsOpenId] = useState<string | null>(null)
   const frontRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const backRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -146,6 +148,33 @@ export function FamilyProfile() {
       setChildSaveError(e.message ?? 'Upload failed')
     } finally {
       setUploadingChild(null)
+    }
+  }
+
+  async function archiveInsurance(child: Child) {
+    setArchivingInsId(child.id)
+    setChildSaveError(null)
+    try {
+      await familyArchiveChildInsurance(child.id)
+      // Update child in local state and clear the edit fields for insurance
+      setChildEdits(prev => ({
+        ...prev,
+        [child.id]: {
+          ...(prev[child.id] || childEditFrom(child)),
+          insurance_provider: '',
+          insurance_member_id: '',
+          insurance_group_number: '',
+          insurance_card_front_url: '',
+          insurance_card_back_url: '',
+        },
+      }))
+      // Refresh children list to get updated previous_insurance
+      await refreshFamily()
+      // Keep child expanded so they can enter new insurance
+    } catch (e: any) {
+      setChildSaveError(e.message ?? 'Failed to archive insurance')
+    } finally {
+      setArchivingInsId(null)
     }
   }
 
@@ -325,7 +354,17 @@ export function FamilyProfile() {
 
                     {/* Insurance text fields */}
                     <div>
-                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Insurance</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Insurance</p>
+                        {(c.insurance_provider || c.insurance_member_id) && (
+                          <button
+                            onClick={() => archiveInsurance(c)}
+                            disabled={archivingInsId === c.id}
+                            className="text-[11px] text-[#F59E0B] font-medium border border-[#F59E0B] px-2 py-0.5 rounded hover:bg-[#FEF9EC] transition-colors disabled:opacity-50">
+                            {archivingInsId === c.id ? 'Archiving…' : 'Make inactive & add new'}
+                          </button>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <Input label="Insurance company / plan name" placeholder="e.g. Blue Cross Blue Shield"
                           value={edit.insurance_provider}
@@ -382,6 +421,49 @@ export function FamilyProfile() {
                         })}
                       </div>
                     </div>
+
+                    {/* Previous insurance policies */}
+                    {Array.isArray((c as any).previous_insurance) && (c as any).previous_insurance.length > 0 && (
+                      <div className="border-t border-[#E8E8E4] pt-3">
+                        <button
+                          onClick={() => setPastInsOpenId(pastInsOpenId === c.id ? null : c.id)}
+                          className="flex items-center gap-1.5 text-[11px] font-medium text-[#999] hover:text-[#555] transition-colors mb-2">
+                          {pastInsOpenId === c.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          {(c as any).previous_insurance.length} previous polic{(c as any).previous_insurance.length === 1 ? 'y' : 'ies'}
+                        </button>
+                        {pastInsOpenId === c.id && (
+                          <div className="space-y-3">
+                            {[...(c as any).previous_insurance].reverse().map((p: any, i: number) => (
+                              <div key={i} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5 text-[13px]">
+                                <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">
+                                  Inactive since {p.deactivated_at ?? 'unknown date'}
+                                </div>
+                                {p.insurance_provider && <div><span className="text-[#999] text-[11px]">Plan: </span>{p.insurance_provider}</div>}
+                                {p.insurance_member_id && <div><span className="text-[#999] text-[11px]">Member ID: </span>{p.insurance_member_id}</div>}
+                                {p.insurance_group_number && <div><span className="text-[#999] text-[11px]">Group #: </span>{p.insurance_group_number}</div>}
+                                {p.insurance_subscriber_name && <div><span className="text-[#999] text-[11px]">Subscriber: </span>{p.insurance_subscriber_name}</div>}
+                                {(p.insurance_card_front_url || p.insurance_card_back_url) && (
+                                  <div className="grid grid-cols-2 gap-2 pt-1">
+                                    {p.insurance_card_front_url && (
+                                      <a href={p.insurance_card_front_url} target="_blank" rel="noopener noreferrer">
+                                        <img src={p.insurance_card_front_url} alt="Old card front" className="w-full rounded border border-[#E8E8E4] object-cover" />
+                                        <div className="text-[10px] text-center text-[#999] mt-0.5">Front</div>
+                                      </a>
+                                    )}
+                                    {p.insurance_card_back_url && (
+                                      <a href={p.insurance_card_back_url} target="_blank" rel="noopener noreferrer">
+                                        <img src={p.insurance_card_back_url} alt="Old card back" className="w-full rounded border border-[#E8E8E4] object-cover" />
+                                        <div className="text-[10px] text-center text-[#999] mt-0.5">Back</div>
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Medical info */}
                     <div>
