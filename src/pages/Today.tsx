@@ -60,7 +60,7 @@ export function Today() {
 
   // Add appointment
   const [adding, setAdding] = useState(false)
-  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', date: '', time: '', notes: '' })
+  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', date: '', time: '', notes: '' })
   const [addCustomTime, setAddCustomTime] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
@@ -232,7 +232,7 @@ export function Today() {
 
   function openAdd() {
     setAddForProviderId(provider?.id || '')
-    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', date: viewDate, time: '', notes: '' })
+    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', date: viewDate, time: '', notes: '' })
     setAddCustomTime('')
     setPatientSearch('')
     setPatientResults([])
@@ -291,6 +291,9 @@ export function Today() {
     if (fullAddr) noteParts.push(`ADDR:${fullAddr}`)
     if (addForm.email) noteParts.push(`PARENTEMAIL:${addForm.email}`)
     if (addForm.phone) noteParts.push(`PARENTPHONE:${addForm.phone}`)
+    if (addForm.insurancePayer) noteParts.push(`INSURANCE:${addForm.insurancePayer}`)
+    if (addForm.insuranceMemberId) noteParts.push(`MEMBERID:${addForm.insuranceMemberId}`)
+    if (addForm.insuranceGroup) noteParts.push(`GROUPNUM:${addForm.insuranceGroup}`)
     if (addForm.notes) noteParts.push(`NOTES:${addForm.notes}`)
 
     const providerId = addForProviderId || provider.id
@@ -570,6 +573,7 @@ export function Today() {
                           ALLERGY: 'Allergies', MEDS: 'Medications', PMH: 'Medical history',
                           VAX: 'Vaccination status', PCP: 'Primary care physician',
                           PHARMACY: 'Preferred pharmacy', INSURANCE: 'Insurance',
+                          MEMBERID: 'Member ID', GROUPNUM: 'Group #',
                           CHILDREN: 'Children seen', PARENTEMAIL: 'Parent email',
                           PARENTPHONE: 'Parent phone', GENDER: 'Sex',
                           CARDFRONT: 'Insurance card front', CARDBACK: 'Insurance card back',
@@ -1003,6 +1007,30 @@ export function Today() {
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Email</label>
                   <input type="email" placeholder="parent@email.com" value={addForm.email}
                     onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+              </div>
+
+              <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Insurance</div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance payer</label>
+                <input type="text" placeholder="BlueCross BlueShield" value={addForm.insurancePayer}
+                  onChange={e => setAddForm(f => ({ ...f, insurancePayer: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Member ID</label>
+                  <input type="text" placeholder="XYZ123456" value={addForm.insuranceMemberId}
+                    onChange={e => setAddForm(f => ({ ...f, insuranceMemberId: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Group #</label>
+                  <input type="text" placeholder="GRP001" value={addForm.insuranceGroup}
+                    onChange={e => setAddForm(f => ({ ...f, insuranceGroup: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                 </div>
               </div>
