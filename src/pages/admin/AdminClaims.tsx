@@ -40,6 +40,11 @@ export function AdminClaims() {
   const [generating, setGenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
+  const [editPatient, setEditPatient] = useState<Record<string, {
+    patient_first_name: string; patient_last_name: string; patient_dob: string; patient_gender: string;
+    member_id: string; group_number: string;
+    subscriber_name: string; subscriber_dob: string; subscriber_gender: string;
+  }>>({})
 
   async function load() {
     setLoading(true)
@@ -86,6 +91,14 @@ export function AdminClaims() {
     if (!p) return
     await updateClaim(claimId, { payer_name: p.name, payer_id: p.id })
     setEditPayer(prev => { const n = { ...prev }; delete n[claimId]; return n })
+    await load()
+  }
+
+  async function handlePatientSave(claimId: string) {
+    const p = editPatient[claimId]
+    if (!p) return
+    await updateClaim(claimId, p)
+    setEditPatient(prev => { const n = { ...prev }; delete n[claimId]; return n })
     await load()
   }
 
@@ -201,16 +214,110 @@ export function AdminClaims() {
                     {isOpen && (
                       <div className="px-4 pb-4 border-t border-[#F1EFE8] pt-4 space-y-4">
                         {/* Claim detail grid */}
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-                          <div><span className="text-[#999]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
-                          <div><span className="text-[#999]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
-                          <div><span className="text-[#999]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
-                          <div><span className="text-[#999]">Subscriber DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.subscriber_dob)}</span></div>
-                          <div><span className="text-[#999]">Member ID: </span><span className="text-[#1A1A2E]">{c.member_id || '—'}</span></div>
-                          <div><span className="text-[#999]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
-                          <div><span className="text-[#999]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
-                          <div><span className="text-[#999]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
-                        </div>
+                        {editPatient[c.id] ? (
+                          <div className="space-y-3">
+                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Patient info</div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">First name</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_first_name}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_first_name: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Last name</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_last_name}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_last_name: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Date of birth</label>
+                                <input type="date" className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_dob}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_dob: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Sex</label>
+                                <select className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_gender}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_gender: e.target.value } }))}>
+                                  <option value="">—</option>
+                                  <option value="M">Male</option>
+                                  <option value="F">Female</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider pt-1">Insurance</div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Member ID</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].member_id}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], member_id: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Group #</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].group_number}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], group_number: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Subscriber name</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].subscriber_name}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], subscriber_name: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Subscriber DOB</label>
+                                <input type="date" className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].subscriber_dob}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], subscriber_dob: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">Subscriber sex</label>
+                                <select className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].subscriber_gender}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], subscriber_gender: e.target.value } }))}>
+                                  <option value="">—</option>
+                                  <option value="M">Male</option>
+                                  <option value="F">Female</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                              <Button size="sm" variant="teal" onClick={() => handlePatientSave(c.id)}>Save</Button>
+                              <Button size="sm" variant="secondary" onClick={() => setEditPatient(prev => { const n = { ...prev }; delete n[c.id]; return n })}>Cancel</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+                              <div><span className="text-[#999]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
+                              <div><span className="text-[#999]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
+                              <div><span className="text-[#999]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
+                              <div><span className="text-[#999]">Subscriber DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.subscriber_dob)}</span></div>
+                              <div><span className="text-[#999]">Member ID: </span><span className="text-[#1A1A2E]">{c.member_id || '—'}</span></div>
+                              <div><span className="text-[#999]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
+                              <div><span className="text-[#999]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
+                              <div><span className="text-[#999]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
+                            </div>
+                            <button
+                              onClick={() => setEditPatient(prev => ({ ...prev, [c.id]: {
+                                patient_first_name: c.patient_first_name ?? '',
+                                patient_last_name: c.patient_last_name ?? '',
+                                patient_dob: c.patient_dob ? String(c.patient_dob).split('T')[0] : '',
+                                patient_gender: c.patient_gender ?? '',
+                                member_id: c.member_id ?? '',
+                                group_number: c.group_number ?? '',
+                                subscriber_name: c.subscriber_name ?? '',
+                                subscriber_dob: c.subscriber_dob ? String(c.subscriber_dob).split('T')[0] : '',
+                                subscriber_gender: c.subscriber_gender ?? '',
+                              }}))}
+                              className="mt-2 text-[11px] text-[#7F77DD] hover:underline">
+                              Edit patient &amp; insurance info
+                            </button>
+                          </div>
+                        )}
 
                         {/* Payer */}
                         <div>
