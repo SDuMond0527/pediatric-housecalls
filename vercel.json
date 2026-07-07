@@ -19,6 +19,7 @@
     { "src": "/api/appointments/([^/]+)", "dest": "/api/appointments/[id]?id=$1" },
     { "src": "/api/booking-requests/([^/]+)", "dest": "/api/booking-requests/[id]?id=$1" },
     { "src": "/api/broadcasts/([^/]+)", "dest": "/api/broadcasts/[id]?id=$1" },
+    { "src": "/api/claims/([^/]+)", "dest": "/api/claims/[id]?id=$1" },
     { "src": "/api/children/([^/]+)", "dest": "/api/children/[id]?id=$1" },
     { "src": "/api/providers/([^/]+)", "dest": "/api/providers/[id]?id=$1" },
     { "src": "/api/schedule-blocks/([^/]+)", "dest": "/api/schedule-blocks/[id]?id=$1" },
