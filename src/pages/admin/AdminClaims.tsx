@@ -39,6 +39,8 @@ export function AdminClaims() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
   const [editPatient, setEditPatient] = useState<Record<string, {
     patient_first_name: string; patient_last_name: string; patient_dob: string; patient_gender: string;
@@ -89,17 +91,33 @@ export function AdminClaims() {
   async function handlePayerSave(claimId: string) {
     const p = editPayer[claimId]
     if (!p) return
-    await updateClaim(claimId, { payer_name: p.name, payer_id: p.id })
-    setEditPayer(prev => { const n = { ...prev }; delete n[claimId]; return n })
-    await load()
+    setSaving(claimId)
+    setSaveError(null)
+    try {
+      await updateClaim(claimId, { payer_name: p.name, payer_id: p.id })
+      setEditPayer(prev => { const n = { ...prev }; delete n[claimId]; return n })
+      await load()
+    } catch (e: any) {
+      setSaveError(e.message ?? 'Save failed')
+    } finally {
+      setSaving(null)
+    }
   }
 
   async function handlePatientSave(claimId: string) {
     const p = editPatient[claimId]
     if (!p) return
-    await updateClaim(claimId, p)
-    setEditPatient(prev => { const n = { ...prev }; delete n[claimId]; return n })
-    await load()
+    setSaving(claimId + '_patient')
+    setSaveError(null)
+    try {
+      await updateClaim(claimId, p)
+      setEditPatient(prev => { const n = { ...prev }; delete n[claimId]; return n })
+      await load()
+    } catch (e: any) {
+      setSaveError(e.message ?? 'Save failed')
+    } finally {
+      setSaving(null)
+    }
   }
 
   const reviewClaims = claims.filter(c => c.status === 'pending_review')
@@ -284,9 +302,10 @@ export function AdminClaims() {
                                 </select>
                               </div>
                             </div>
+                            {saveError && saving === null && <div className="text-[12px] text-[#DC2626]">{saveError}</div>}
                             <div className="flex gap-2 pt-1">
-                              <Button size="sm" variant="teal" onClick={() => handlePatientSave(c.id)}>Save</Button>
-                              <Button size="sm" variant="secondary" onClick={() => setEditPatient(prev => { const n = { ...prev }; delete n[c.id]; return n })}>Cancel</Button>
+                              <Button size="sm" variant="teal" loading={saving === c.id + '_patient'} onClick={() => handlePatientSave(c.id)}>Save</Button>
+                              <Button size="sm" variant="secondary" onClick={() => { setEditPatient(prev => { const n = { ...prev }; delete n[c.id]; return n }); setSaveError(null) }}>Cancel</Button>
                             </div>
                           </div>
                         ) : (
@@ -344,8 +363,8 @@ export function AdminClaims() {
                                   onChange={e => setEditPayer(prev => ({ ...prev, [c.id]: { ...prev[c.id], id: e.target.value } }))}
                                   className="px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] w-28" />
                               </div>
-                              <Button size="sm" variant="teal" onClick={() => handlePayerSave(c.id)}>Save</Button>
-                              <Button size="sm" variant="secondary" onClick={() => setEditPayer(prev => { const n = { ...prev }; delete n[c.id]; return n })}>Cancel</Button>
+                              <Button size="sm" variant="teal" loading={saving === c.id} onClick={() => handlePayerSave(c.id)}>Save</Button>
+                              <Button size="sm" variant="secondary" onClick={() => { setEditPayer(prev => { const n = { ...prev }; delete n[c.id]; return n }); setSaveError(null) }}>Cancel</Button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-3">
