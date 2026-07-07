@@ -176,6 +176,27 @@ export function AdminProviders() {
                           )}
                         </div>
 
+                        <div className="border-t border-[#E8E8E4] pt-3">
+                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Licensed States</div>
+                          <div className="flex flex-wrap gap-2">
+                            {['NC', 'SC', 'VA'].map(state => {
+                              const checked = (p.states ?? []).includes(state)
+                              return (
+                                <label key={state} className="flex items-center gap-1.5 cursor-pointer">
+                                  <input type="checkbox" checked={checked} className="w-3.5 h-3.5 accent-[#7F77DD]"
+                                    onChange={async () => {
+                                      const current = p.states ?? []
+                                      const next = checked ? current.filter(s => s !== state) : [...current, state]
+                                      await updateProvider(p.id, { states: next }).catch(() => {})
+                                      setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, states: next } : pr))
+                                    }} />
+                                  <span className="text-[12px] text-[#555]">{state}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+
                         {practiceZones.length > 0 && (
                           <div className="border-t border-[#E8E8E4] pt-3">
                             <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Service Zones</div>
