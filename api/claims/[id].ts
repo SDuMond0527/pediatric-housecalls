@@ -79,7 +79,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       lastName:  claim.patient_last_name  ?? '',
       gender: claim.patient_gender === 'Female' ? 'F' : claim.patient_gender === 'Male' ? 'M' : 'U',
       dateOfBirth: fmtDate8(claim.patient_dob),
-      relationshipCode: '19',
+      relationshipToSubscriberCode: '19',
       ...(claim.patient_address ? {
         address: {
           address1: claim.patient_address,
