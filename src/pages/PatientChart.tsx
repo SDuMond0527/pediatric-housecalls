@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, apiFetch } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 
 interface NoteWithVisit {
@@ -84,6 +84,14 @@ export function PatientChart() {
   const [loading, setLoading] = useState(true)
   const [expandedNote, setExpandedNote] = useState<string | null>(null)
 
+  // Edit state
+  const [editingSection, setEditingSection] = useState<'medical' | 'insurance' | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editSaved, setEditSaved] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
+  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+
   useEffect(() => {
     if (!childId) return
     const cid = childId
@@ -127,6 +135,51 @@ export function PatientChart() {
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
   ]
+
+  function startEdit(section: 'medical' | 'insurance') {
+    setEditError(null)
+    setEditSaved(false)
+    if (section === 'medical') {
+      setMedEdit({
+        allergies: child?.allergies || '',
+        current_medications: child?.current_medications || '',
+        medical_history: child?.medical_history || '',
+        pcp: child?.pcp || '',
+        preferred_pharmacy: child?.preferred_pharmacy || '',
+      })
+    } else {
+      setInsEdit({
+        insurance_provider: child?.insurance_provider || '',
+        insurance_member_id: child?.insurance_member_id || '',
+        insurance_group_number: child?.insurance_group_number || '',
+        insurance_subscriber_name: child?.insurance_subscriber_name || '',
+        insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
+        insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
+      })
+    }
+    setEditingSection(section)
+  }
+
+  async function saveEdit(section: 'medical' | 'insurance') {
+    if (!childId) return
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const body = section === 'medical' ? medEdit : insEdit
+      const updated = await apiFetch<any>(`/api/children/${childId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      setChild((prev: any) => ({ ...prev, ...updated }))
+      setEditingSection(null)
+      setEditSaved(true)
+      setTimeout(() => setEditSaved(false), 2500)
+    } catch (e: any) {
+      setEditError(e.message ?? 'Save failed')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
@@ -212,89 +265,210 @@ export function PatientChart() {
                 </div>
 
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Stethoscope size={14} className="text-[#7F77DD]" />
-                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Medical Information</div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Stethoscope size={14} className="text-[#7F77DD]" />
+                      <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Medical Information</div>
+                    </div>
+                    {editingSection !== 'medical' && (
+                      <button onClick={() => startEdit('medical')}
+                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
+                        <Pencil size={11} /> Edit
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-[11px] text-[#999] flex items-center gap-1">
-                        <Pill size={11} />
-                        Drug &amp; food allergies
+                  {editingSection === 'medical' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[11px] text-[#999] flex items-center gap-1 mb-1"><Pill size={11} /> Drug &amp; food allergies</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={medEdit.allergies} onChange={e => setMedEdit(p => ({ ...p, allergies: e.target.value }))}
+                          placeholder="e.g. Penicillin, peanuts — or NKDA" />
                       </div>
-                      {child?.allergies ? (
-                        <div className="text-[13px] text-[#991B1B] bg-[#FDEDED] mt-0.5 px-2.5 py-1.5 rounded-lg">
-                          {child.allergies}
-                        </div>
-                      ) : (
-                        <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
-                      )}
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Current medications</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={medEdit.current_medications} onChange={e => setMedEdit(p => ({ ...p, current_medications: e.target.value }))}
+                          placeholder="e.g. Zyrtec 5mg daily — or None" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Medical history</label>
+                        <textarea rows={2} className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none resize-none"
+                          value={medEdit.medical_history} onChange={e => setMedEdit(p => ({ ...p, medical_history: e.target.value }))}
+                          placeholder="e.g. Asthma, ADHD, prior surgeries..." />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Primary care provider</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={medEdit.pcp} onChange={e => setMedEdit(p => ({ ...p, pcp: e.target.value }))}
+                          placeholder="e.g. Dr. Jane Smith, Charlotte Pediatrics" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Preferred pharmacy</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={medEdit.preferred_pharmacy} onChange={e => setMedEdit(p => ({ ...p, preferred_pharmacy: e.target.value }))}
+                          placeholder="e.g. CVS on Providence Rd" />
+                      </div>
+                      {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => saveEdit('medical')} disabled={editSaving}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] disabled:opacity-50">
+                          {editSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingSection(null)}
+                          className="flex items-center gap-1 px-3 py-1.5 border border-[#E8E8E4] text-[12px] text-[#555] rounded-lg hover:bg-[#F1EFE8]">
+                          <X size={12} /> Cancel
+                        </button>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {[
-                        { label: 'Current medications', value: child?.current_medications },
-                        { label: 'Medical history', value: child?.medical_history },
-                        { label: 'Primary care provider', value: child?.pcp },
-                        { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
-                      ].map(({ label, value }) => (
-                        <div key={label}>
-                          <div className="text-[11px] text-[#999]">{label}</div>
-                          {value ? (
-                            <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
-                          ) : (
-                            <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
-                          )}
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-[11px] text-[#999] flex items-center gap-1">
+                          <Pill size={11} />
+                          Drug &amp; food allergies
                         </div>
-                      ))}
+                        {child?.allergies ? (
+                          <div className="text-[13px] text-[#991B1B] bg-[#FDEDED] mt-0.5 px-2.5 py-1.5 rounded-lg">
+                            {child.allergies}
+                          </div>
+                        ) : (
+                          <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {[
+                          { label: 'Current medications', value: child?.current_medications },
+                          { label: 'Medical history', value: child?.medical_history },
+                          { label: 'Primary care provider', value: child?.pcp },
+                          { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
+                        ].map(({ label, value }) => (
+                          <div key={label}>
+                            <div className="text-[11px] text-[#999]">{label}</div>
+                            {value ? (
+                              <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
+                            ) : (
+                              <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Shield size={14} className="text-[#7F77DD]" />
-                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Shield size={14} className="text-[#7F77DD]" />
+                      <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</div>
+                    </div>
+                    {editingSection !== 'insurance' && (
+                      <button onClick={() => startEdit('insurance')}
+                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
+                        <Pencil size={11} /> Edit
+                      </button>
+                    )}
                   </div>
-                  {child?.insurance_provider || child?.insurance_member_id || child?.insurance_group_number ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Insurance plan" value={child?.insurance_provider} />
-                        <Field label="Member ID" value={child?.insurance_member_id} />
-                        <Field label="Group number" value={child?.insurance_group_number} />
-                        <Field label="Subscriber" value={child?.family_display_name} />
+                  {editingSection === 'insurance' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Insurance company / plan name</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={insEdit.insurance_provider} onChange={e => setInsEdit(p => ({ ...p, insurance_provider: e.target.value }))}
+                          placeholder="e.g. Blue Cross Blue Shield" />
                       </div>
-                      {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
-                          <div className="grid grid-cols-2 gap-3">
-                            {child?.insurance_card_front_url && (
-                              <div>
-                                <div className="text-[11px] text-[#999] mb-1">Front</div>
-                                <img
-                                  src={child.insurance_card_front_url}
-                                  alt="Insurance card front"
-                                  className="w-full rounded-lg border border-[#E8E8E4] object-cover"
-                                />
-                              </div>
-                            )}
-                            {child?.insurance_card_back_url && (
-                              <div>
-                                <div className="text-[11px] text-[#999] mb-1">Back</div>
-                                <img
-                                  src={child.insurance_card_back_url}
-                                  alt="Insurance card back"
-                                  className="w-full rounded-lg border border-[#E8E8E4] object-cover"
-                                />
-                              </div>
-                            )}
-                          </div>
+                          <label className="text-[11px] text-[#999] block mb-1">Member ID</label>
+                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={insEdit.insurance_member_id} onChange={e => setInsEdit(p => ({ ...p, insurance_member_id: e.target.value }))}
+                            placeholder="e.g. XYZ123456" />
                         </div>
-                      )}
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Group number</label>
+                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={insEdit.insurance_group_number} onChange={e => setInsEdit(p => ({ ...p, insurance_group_number: e.target.value }))}
+                            placeholder="e.g. 12345" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Subscriber name</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={insEdit.insurance_subscriber_name} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_name: e.target.value }))}
+                          placeholder="e.g. John Smith" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Subscriber DOB</label>
+                          <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={insEdit.insurance_subscriber_dob} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_dob: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Subscriber sex</label>
+                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                            value={insEdit.insurance_subscriber_gender} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_gender: e.target.value }))}>
+                            <option value="">—</option>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                          </select>
+                        </div>
+                      </div>
+                      {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => saveEdit('insurance')} disabled={editSaving}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] disabled:opacity-50">
+                          {editSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingSection(null)}
+                          className="flex items-center gap-1 px-3 py-1.5 border border-[#E8E8E4] text-[12px] text-[#555] rounded-lg hover:bg-[#F1EFE8]">
+                          <X size={12} /> Cancel
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="text-[13px] text-[#bbb] text-center py-4">No insurance information on file</div>
+                    child?.insurance_provider || child?.insurance_member_id || child?.insurance_group_number ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <Field label="Insurance plan" value={child?.insurance_provider} />
+                          <Field label="Member ID" value={child?.insurance_member_id} />
+                          <Field label="Group number" value={child?.insurance_group_number} />
+                          <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
+                          <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
+                          <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
+                        </div>
+                        {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
+                          <div>
+                            <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
+                            <div className="grid grid-cols-2 gap-3">
+                              {child?.insurance_card_front_url && (
+                                <div>
+                                  <div className="text-[11px] text-[#999] mb-1">Front</div>
+                                  <img src={child.insurance_card_front_url} alt="Insurance card front"
+                                    className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
+                                </div>
+                              )}
+                              {child?.insurance_card_back_url && (
+                                <div>
+                                  <div className="text-[11px] text-[#999] mb-1">Back</div>
+                                  <img src={child.insurance_card_back_url} alt="Insurance card back"
+                                    className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[13px] text-[#bbb] text-center py-4">No insurance information on file</div>
+                    )
                   )}
                 </div>
+                {editSaved && (
+                  <div className="flex items-center gap-2 text-[13px] text-[#085041]">
+                    <CheckCircle2 size={14} /> Saved!
+                  </div>
+                )}
               </div>
             )}
 
