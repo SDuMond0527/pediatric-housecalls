@@ -46,6 +46,7 @@ export function AdminClaims() {
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, any>>({})
+  const [reopening, setReopening] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
@@ -130,6 +131,19 @@ export function AdminClaims() {
       alert(e.message || 'Submission failed')
     } finally {
       setSubmitting(null)
+    }
+  }
+
+  async function handleReopen(claimId: string) {
+    setReopening(claimId)
+    try {
+      await updateClaim(claimId, { status: 'pending_review' })
+      await load()
+      setTab('review')
+    } catch (e: any) {
+      alert(e.message || 'Failed to reopen claim')
+    } finally {
+      setReopening(null)
     }
   }
 
@@ -589,6 +603,11 @@ export function AdminClaims() {
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
                         <Icon size={11} /> {badge.label}
                       </span>
+                      <Button size="sm" variant="secondary"
+                        loading={reopening === c.id}
+                        onClick={() => handleReopen(c.id)}>
+                        Reopen
+                      </Button>
                       <a
                         href="https://portal.stedi.com/app/healthcare/claims"
                         target="_blank"
