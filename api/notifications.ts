@@ -616,6 +616,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true`
       for (const prov of stateProviders) {
+        const provStates: string[] = (prov.states ?? []) as string[]
+        if (entry.state && provStates.length > 0 && !provStates.includes(entry.state)) continue
         if (prov.email) {
           await sendEmail(
             prov.email,
@@ -646,7 +648,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
       if (!entry) throw new Error('Entry not found')
 
-      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+      const [family] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry.family_id}::uuid`
 
       const greeting = family?.display_name ? `Hi ${family.display_name.split(' ')[0]},` : 'Hi there,'
       const dateFormatted = new Date(body.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -676,6 +678,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (family?.email) {
         await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html)
+      }
+      if (family?.phone) {
+        await sendSMS(family.phone, `${PRACTICE_NAME}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`)
       }
 
       const waitlistPracticeId: string | undefined = entry.practice_id ?? undefined
