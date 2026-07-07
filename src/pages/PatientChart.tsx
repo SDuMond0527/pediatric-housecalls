@@ -35,7 +35,9 @@ function calcAge(dob: string): string {
 
 function formatDob(dob: string): string {
   try {
-    return format(parseISO(dob), 'MMM d, yyyy')
+    const s = String(dob).split('T')[0]
+    const [y, m, day] = s.split('-').map(Number)
+    return format(new Date(y, m - 1, day), 'MMM d, yyyy')
   } catch {
     return dob
   }

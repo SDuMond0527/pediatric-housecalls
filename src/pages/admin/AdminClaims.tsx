@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { format, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getUnbilledNotes, getClaims, generateClaim, submitClaim, updateClaim } from '../../lib/api'
@@ -23,7 +23,11 @@ const KNOWN_PAYERS: Record<string, string> = {
 
 function fmtDate(d: string | null) {
   if (!d) return '—'
-  try { return format(parseISO(d), 'MMM d, yyyy') } catch { return d }
+  try {
+    const s = String(d).split('T')[0]
+    const [y, m, day] = s.split('-').map(Number)
+    return format(new Date(y, m - 1, day), 'MMM d, yyyy')
+  } catch { return d }
 }
 
 function fmtMoney(n: any) {
