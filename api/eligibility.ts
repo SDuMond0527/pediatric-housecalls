@@ -14,8 +14,10 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 const PAYER_IDS: Record<string, string> = {
-  'bcbs': '560', 'bcbs of nc': '560', 'bcbs nc': '560',
-  'blue cross': '560', 'blue cross blue shield': '560', 'blue cross blue shield of nc': '560',
+  'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
+  'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
+  'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',
+  'blue cross blue shield nc': 'UPICO',
   'aetna': '60054', 'cigna': '62308',
   'united healthcare': '87726', 'united health care': '87726', 'uhc': '87726',
   'umr': '39026', 'humana': '61101',
@@ -127,9 +129,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const payerId   = resolvePayer(payerName)
   if (!payerId) return res.status(422).json({ error: `Insurance provider "${payerName}" not recognized. Verify payer name on the patient record.` })
 
-  const [subLast, subFirst] = (child.insurance_subscriber_name ?? ' ').split(', ')
-  const subscriberFirst = subFirst || subLast || ''
-  const subscriberLast  = subFirst ? subLast : ''
+  const fmtDate8 = (d: any) => {
+    if (!d) return ''
+    const s = d instanceof Date ? d.toISOString() : String(d)
+    return s.split('T')[0].replace(/-/g, '')
+  }
+
+  const parseSubName = (name: string) => {
+    if (!name?.trim()) return { first: '', last: '' }
+    if (name.includes(', ')) {
+      const [last, first] = name.split(', ')
+      return { first: first ?? '', last: last ?? '' }
+    }
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 1) return { first: '', last: parts[0] }
+    return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
+  }
+
+  const { first: subscriberFirst, last: subscriberLast } = parseSubName(child.insurance_subscriber_name ?? '')
 
   const payload = {
     controlNumber: Date.now().toString().slice(-9),
@@ -140,15 +157,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
     subscriber: {
       memberId:    child.insurance_member_id,
-      firstName:   subscriberFirst,
-      lastName:    subscriberLast,
-      dateOfBirth: child.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).slice(0, 10).replace(/-/g, '') : '',
+      ...(subscriberFirst ? { firstName: subscriberFirst } : {}),
+      lastName:    subscriberLast || subscriberFirst,
+      dateOfBirth: fmtDate8(child.insurance_subscriber_dob),
     },
     dependent: {
-      firstName:        child.first_name ?? '',
-      lastName:         child.last_name  ?? '',
-      dateOfBirth:      child.date_of_birth ? String(child.date_of_birth).slice(0, 10).replace(/-/g, '') : '',
-      relationshipCode: '19',
+      firstName:                    child.first_name ?? '',
+      lastName:                     child.last_name  ?? '',
+      dateOfBirth:                  fmtDate8(child.date_of_birth),
+      relationshipToSubscriberCode: '19',
     },
     encounter: { serviceTypeCodes: ['30'] },
   }
@@ -156,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let stediData: any
   try {
     const stediRes = await fetch(
-      'https://healthcare.us.stedi.com/2024-04-01/change/medicalclaims/v3/eligibility',
+      'https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/eligibility/v3',
       {
         method: 'POST',
         headers: {
@@ -168,7 +185,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
     stediData = await stediRes.json()
     if (!stediRes.ok) {
-      return res.status(422).json({ error: stediData?.message ?? 'Eligibility check failed', details: stediData })
+      const msg = stediData?.message ?? stediData?.error ?? JSON.stringify(stediData)
+      return res.status(422).json({ error: `Eligibility check failed: ${msg}`, details: stediData })
     }
   } catch (err: any) {
     return res.status(500).json({ error: 'Could not reach eligibility service.' })
