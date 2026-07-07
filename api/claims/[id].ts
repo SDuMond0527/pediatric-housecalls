@@ -219,6 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const allowed = ['payer_name', 'payer_id', 'member_id', 'group_number',
                      'subscriber_name', 'subscriber_dob', 'subscriber_gender',
                      'patient_first_name', 'patient_last_name', 'patient_dob', 'patient_gender',
+                     'patient_address', 'patient_city', 'patient_state', 'patient_zip',
                      'rendering_provider_npi', 'rendering_provider_taxonomy',
                      'place_of_service', 'service_date', 'status']
     const updates: Record<string, any> = {}
@@ -239,6 +240,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         patient_last_name          = COALESCE(${updates.patient_last_name ?? null}, patient_last_name),
         patient_dob                = COALESCE(${updates.patient_dob ?? null}::date, patient_dob),
         patient_gender             = COALESCE(${updates.patient_gender ?? null}, patient_gender),
+        patient_address            = COALESCE(${updates.patient_address ?? null}, patient_address),
+        patient_city               = COALESCE(${updates.patient_city ?? null}, patient_city),
+        patient_state              = COALESCE(${updates.patient_state ?? null}, patient_state),
+        patient_zip                = COALESCE(${updates.patient_zip ?? null}, patient_zip),
         rendering_provider_npi     = COALESCE(${updates.rendering_provider_npi ?? null}, rendering_provider_npi),
         rendering_provider_taxonomy = COALESCE(${updates.rendering_provider_taxonomy ?? null}, rendering_provider_taxonomy),
         place_of_service           = COALESCE(${updates.place_of_service ?? null}, place_of_service),

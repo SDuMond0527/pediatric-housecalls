@@ -51,6 +51,7 @@ export function AdminClaims() {
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
   const [editPatient, setEditPatient] = useState<Record<string, {
     patient_first_name: string; patient_last_name: string; patient_dob: string; patient_gender: string;
+    patient_address: string; patient_city: string; patient_state: string; patient_zip: string;
     member_id: string; group_number: string;
     subscriber_name: string; subscriber_dob: string; subscriber_gender: string;
   }>>({})
@@ -326,6 +327,32 @@ export function AdminClaims() {
                                 </select>
                               </div>
                             </div>
+                            <div className="col-span-2">
+                                <label className="text-[11px] text-[#555] block mb-1">Street address</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_address}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_address: e.target.value } }))} />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">City</label>
+                                <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  value={editPatient[c.id].patient_city}
+                                  onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_city: e.target.value } }))} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[11px] text-[#555] block mb-1">State</label>
+                                  <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                    value={editPatient[c.id].patient_state}
+                                    onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_state: e.target.value } }))} />
+                                </div>
+                                <div>
+                                  <label className="text-[11px] text-[#555] block mb-1">ZIP</label>
+                                  <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                    value={editPatient[c.id].patient_zip}
+                                    onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_zip: e.target.value } }))} />
+                                </div>
+                              </div>
                             <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider pt-1">Insurance</div>
                             <div className="grid grid-cols-2 gap-3">
                               <div>
@@ -387,6 +414,10 @@ export function AdminClaims() {
                                 patient_last_name: c.patient_last_name ?? '',
                                 patient_dob: c.patient_dob ? String(c.patient_dob).split('T')[0] : '',
                                 patient_gender: c.patient_gender ?? '',
+                                patient_address: c.patient_address ?? '',
+                                patient_city: c.patient_city ?? '',
+                                patient_state: c.patient_state ?? '',
+                                patient_zip: c.patient_zip ?? '',
                                 member_id: c.member_id ?? '',
                                 group_number: c.group_number ?? '',
                                 subscriber_name: c.subscriber_name ?? '',
