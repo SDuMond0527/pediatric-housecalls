@@ -44,6 +44,14 @@ function buildStediPayload(claim: any, testMode = false): object {
     return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
   }
 
+  const mapGender = (g: string | null | undefined) => {
+    if (!g) return 'U'
+    const v = g.toLowerCase()
+    if (v === 'f' || v === 'female') return 'F'
+    if (v === 'm' || v === 'male') return 'M'
+    return 'U'
+  }
+
   // BCBS payers require BL; others use CI
   const BCBS_PAYER_IDS = ['UPICO', 'BCSNC', 'NCBCBS', 'NCBLS', 'NCPNHP']
   const claimFilingCode = BCBS_PAYER_IDS.includes(claim.payer_id ?? '') ? 'BL' : 'CI'
@@ -101,14 +109,14 @@ function buildStediPayload(claim: any, testMode = false): object {
       paymentResponsibilityLevelCode: 'P',
       ...(subFirstName ? { firstName: subFirstName } : {}),
       lastName: subLastName,
-      gender: claim.subscriber_gender === 'Female' ? 'F' : claim.subscriber_gender === 'Male' ? 'M' : 'U',
+      gender: mapGender(claim.subscriber_gender),
       dateOfBirth: fmtDate8(claim.subscriber_dob),
       ...(claim.group_number ? { groupNumber: claim.group_number } : {}),
     },
     dependent: {
       firstName: claim.patient_first_name ?? '',
       lastName:  claim.patient_last_name  ?? '',
-      gender: claim.patient_gender === 'Female' ? 'F' : claim.patient_gender === 'Male' ? 'M' : 'U',
+      gender: mapGender(claim.patient_gender),
       dateOfBirth: fmtDate8(claim.patient_dob),
       relationshipToSubscriberCode: '19',
       ...(claim.patient_address ? {
