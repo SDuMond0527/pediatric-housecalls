@@ -15,7 +15,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = 
 }
 
 const KNOWN_PAYERS: Record<string, string> = {
-  'BCBS of NC': '560', 'Aetna': '60054', 'Cigna': '62308',
+  'BCBS of NC': 'UPICO', 'Aetna': '60054', 'Cigna': '62308',
   'United Healthcare': '87726', 'UMR': '39026', 'Humana': '61101',
   'PHCS / MultiPlan': '52133', 'Coventry': '38217',
   'Select Health': '53589', 'MedCost': '56196', 'Healthgram': '56162',
@@ -279,7 +279,7 @@ export function AdminClaims() {
                         <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
                         <div>
                           <div className="text-[14px] font-medium text-[#1A1A2E]">
-                            {[c.child_first_name, c.child_last_name].filter(Boolean).join(' ') || 'Unknown patient'}
+                            {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
                             <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -587,7 +587,7 @@ export function AdminClaims() {
                       <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
                       <div>
                         <div className="text-[14px] font-medium text-[#1A1A2E]">
-                          {[c.child_first_name, c.child_last_name].filter(Boolean).join(' ') || 'Unknown patient'}
+                          {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
                           <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
                         </div>
                         <div className="text-[12px] text-[#999] mt-0.5">

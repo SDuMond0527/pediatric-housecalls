@@ -34,6 +34,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(rows[0] ?? null)
   }
 
+  // Admin-only PATCH: update diagnoses and/or cpt_codes on any note (including signed)
+  if (req.method === 'PATCH') {
+    const [provRow] = await sql`SELECT role FROM providers WHERE cognito_sub = ${sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    if (provRow?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+
+    const { diagnoses, cpt_codes } = req.body
+    const [row] = await sql`
+      UPDATE encounter_notes SET
+        diagnoses  = COALESCE(${diagnoses  != null ? JSON.stringify(diagnoses)  : null}::jsonb, diagnoses),
+        cpt_codes  = COALESCE(${cpt_codes  != null ? JSON.stringify(cpt_codes)  : null}::jsonb, cpt_codes),
+        updated_at = now()
+      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+      RETURNING *`
+    if (!row) return res.status(404).json({ error: 'Note not found' })
+    return res.json(row)
+  }
+
   if (req.method === 'PUT') {
     const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
     if (!existing) return res.status(404).json({ error: 'Note not found' })

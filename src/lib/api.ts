@@ -251,6 +251,9 @@ export const createEncounterNote = (body: Record<string, unknown>) =>
 export const updateEncounterNote = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PUT', body: JSON.stringify(body) })
 
+export const patchEncounterNote = (id: string, body: { diagnoses?: unknown; cpt_codes?: unknown }) =>
+  apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
 export const getVitals = (params: Record<string, string>) =>
   apiFetch<any>(`/api/vitals?${new URLSearchParams(params)}`)
 

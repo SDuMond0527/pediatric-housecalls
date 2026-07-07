@@ -484,11 +484,13 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     icdTimer.current = setTimeout(async () => {
       setIcdSearching(true)
       try {
-        const url = `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&terms=${encodeURIComponent(q)}&maxList=8`
+        const url = `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&df=code,name&terms=${encodeURIComponent(q)}&maxList=8`
         const resp = await fetch(url)
         const data = await resp.json()
-        const items: [string, string][] = data[3] ?? []
-        setIcdResults(items.map(([code, name]) => ({ code, name })))
+        const codes: string[] = data[1] ?? []
+        const displayRows: string[][] = data[3] ?? []
+        // data[1] = codes, data[3] = [[code, name], ...] with df=code,name
+        setIcdResults(codes.map((code, i) => ({ code, name: displayRows[i]?.[1] ?? displayRows[i]?.[0] ?? '' })))
       } catch {
         setIcdResults([])
       }

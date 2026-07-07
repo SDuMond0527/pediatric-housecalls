@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search } from 'lucide-react'
 import { format } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -131,6 +131,15 @@ export function AdminSchedule() {
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [notes, setNotes] = useState<Record<string, any>>({})
   const [vitals, setVitals] = useState<Record<string, any>>({})
+  const [unlockingNote, setUnlockingNote] = useState<string | null>(null)
+  const [editNote, setEditNote] = useState<{ apptId: string; section: 'dx' | 'cpt' } | null>(null)
+  const [editDx, setEditDx] = useState<Array<{ code: string; name: string }>>([])
+  const [editCpt, setEditCpt] = useState<Array<{ code: string; description: string; category: string; charge_amount: number; modifier?: string }>>([])
+  const [icdQuery, setIcdQuery] = useState('')
+  const [icdResults, setIcdResults] = useState<Array<{ code: string; name: string }>>([])
+  const [icdLoading, setIcdLoading] = useState(false)
+  const [notePatching, setNotePatching] = useState(false)
+  const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
@@ -160,6 +169,65 @@ export function AdminSchedule() {
     } catch (err: any) {
       setEligibility(prev => ({ ...prev, [apptId]: { loading: false, data: null, error: err.message || 'Eligibility check failed.' } }))
     }
+  }
+
+  async function unlockNote(apptId: string) {
+    const n = notes[apptId]
+    if (!n?.id) return
+    setUnlockingNote(apptId)
+    try {
+      const updated = await updateEncounterNote(n.id, { is_signed: false })
+      setNotes(prev => ({ ...prev, [apptId]: updated }))
+    } catch (err: any) {
+      alert(err.message || 'Failed to unlock note')
+    }
+    setUnlockingNote(null)
+  }
+
+  function startEditDx(apptId: string) {
+    const n = notes[apptId]
+    setEditDx(Array.isArray(n?.diagnoses) ? n.diagnoses.map((d: any) => ({ code: d.code, name: d.name ?? d.description ?? '' })) : [])
+    setIcdQuery('')
+    setIcdResults([])
+    setEditNote({ apptId, section: 'dx' })
+  }
+
+  function startEditCpt(apptId: string) {
+    const n = notes[apptId]
+    setEditCpt(Array.isArray(n?.cpt_codes) ? n.cpt_codes.map((c: any) => ({ ...c })) : [])
+    setEditNote({ apptId, section: 'cpt' })
+  }
+
+  function searchIcd(q: string) {
+    setIcdQuery(q)
+    if (icdTimer.current) clearTimeout(icdTimer.current)
+    if (!q.trim()) { setIcdResults([]); return }
+    setIcdLoading(true)
+    icdTimer.current = setTimeout(async () => {
+      try {
+        const url = `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&terms=${encodeURIComponent(q)}&maxList=8`
+        const data = await fetch(url).then(r => r.json())
+        const items: [string, string][] = (data[3] ?? []).map((row: string[]) => [row[0], row[1]])
+        setIcdResults(items.map(([code, name]) => ({ code, name })))
+      } catch { setIcdResults([]) }
+      setIcdLoading(false)
+    }, 300)
+  }
+
+  async function saveNoteEdit() {
+    if (!editNote) return
+    const n = notes[editNote.apptId]
+    if (!n?.id) return
+    setNotePatching(true)
+    try {
+      const body = editNote.section === 'dx' ? { diagnoses: editDx } : { cpt_codes: editCpt }
+      const updated = await patchEncounterNote(n.id, body)
+      setNotes(prev => ({ ...prev, [editNote.apptId]: updated }))
+      setEditNote(null)
+    } catch (err: any) {
+      alert(err.message || 'Failed to save')
+    }
+    setNotePatching(false)
   }
 
   async function submitDone() {
@@ -359,9 +427,19 @@ export function AdminSchedule() {
                           <div className="flex items-center gap-2 px-3 py-2 bg-[#FAFAF8] border-b border-[#E8E8E4]">
                             <FileText size={13} className="text-[#7F77DD]" />
                             <span className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Encounter Note</span>
-                            {notes[appt.id]?.is_signed && (
-                              <span className="ml-auto text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] px-2 py-0.5 rounded-full">Signed</span>
-                            )}
+                            <div className="ml-auto flex items-center gap-2">
+                              {notes[appt.id]?.is_signed && (
+                                <span className="text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] px-2 py-0.5 rounded-full">Signed</span>
+                              )}
+                              {notes[appt.id] && (
+                                <button
+                                  onClick={() => unlockNote(appt.id)}
+                                  disabled={unlockingNote === appt.id}
+                                  className="text-[11px] font-medium px-2 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
+                                  {unlockingNote === appt.id ? 'Unlocking…' : 'Unlock note'}
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {!(appt.id in notes) ? (
                             <div className="px-3 py-2 text-[12px] text-[#999]">Loading…</div>
@@ -407,17 +485,70 @@ export function AdminSchedule() {
                                     <div className="text-[#555] whitespace-pre-wrap">{n.objective}</div>
                                   </div>
                                 )}
-                                {(n.diagnoses ?? []).length > 0 && (
-                                  <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Diagnoses</div>
-                                    <div className="space-y-1">
-                                      {n.diagnoses.map((d: any, i: number) => (
-                                        <div key={i} className="flex items-baseline gap-2">
-                                          <span className="font-mono text-[#7F77DD] font-medium">{d.code}</span>
-                                          <span className="text-[#555]">{d.description}</span>
+                                {/* Diagnoses */}
+                                {(editNote?.apptId === appt.id && editNote.section === 'dx') ? (
+                                  <div className="border border-[#7F77DD] rounded-lg p-3 space-y-2.5 bg-[#FAFAF8]">
+                                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Edit ICD-10 Diagnoses</div>
+                                    <div className="space-y-1.5">
+                                      {editDx.map((d, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                          <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-20 flex-shrink-0">{d.code}</span>
+                                          <span className="text-[#555] text-[12px] flex-1">{d.name}</span>
+                                          <button onClick={() => setEditDx(prev => prev.filter((_, j) => j !== i))}
+                                            className="text-[#999] hover:text-[#c00] transition-colors flex-shrink-0">
+                                            <X size={13} />
+                                          </button>
                                         </div>
                                       ))}
                                     </div>
+                                    <div className="relative">
+                                      <div className="flex items-center gap-1.5 border border-[#E8E8E4] rounded-lg px-2.5 py-1.5 bg-white">
+                                        <Search size={12} className="text-[#999] flex-shrink-0" />
+                                        <input autoFocus value={icdQuery} onChange={e => searchIcd(e.target.value)}
+                                          placeholder="Search ICD-10 code or diagnosis name…"
+                                          className="flex-1 text-[12px] outline-none bg-transparent placeholder:text-[#ccc]" />
+                                        {icdLoading && <span className="text-[10px] text-[#999]">…</span>}
+                                      </div>
+                                      {icdResults.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 z-20 bg-white border border-[#E8E8E4] rounded-lg shadow-lg mt-1 overflow-hidden">
+                                          {icdResults.map(r => (
+                                            <button key={r.code} onClick={() => {
+                                              if (!editDx.find(d => d.code === r.code)) setEditDx(prev => [...prev, r])
+                                              setIcdQuery(''); setIcdResults([])
+                                            }} className="w-full text-left px-3 py-2 text-[12px] hover:bg-[#EEEDFE] transition-colors flex items-baseline gap-2">
+                                              <span className="font-mono text-[#7F77DD] font-medium flex-shrink-0">{r.code}</span>
+                                              <span className="text-[#555]">{r.name}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <Button size="xs" variant="secondary" onClick={() => setEditNote(null)}>Cancel</Button>
+                                      <Button size="xs" loading={notePatching} onClick={saveNoteEdit}>Save diagnoses</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="text-[10px] text-[#999] uppercase tracking-wider">Diagnoses</div>
+                                      <button onClick={() => startEditDx(appt.id)}
+                                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:text-[#534AB7] transition-colors">
+                                        <Pencil size={10} /> Edit
+                                      </button>
+                                    </div>
+                                    {(n.diagnoses ?? []).length === 0 ? (
+                                      <div className="text-[#999] italic text-[12px]">No diagnoses recorded.</div>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {n.diagnoses.map((d: any, i: number) => (
+                                          <div key={i} className="flex items-baseline gap-2">
+                                            <span className="font-mono text-[#7F77DD] font-medium">{d.code}</span>
+                                            <span className="text-[#555]">{d.name ?? d.description}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                                 {n.assessment && (
@@ -432,27 +563,65 @@ export function AdminSchedule() {
                                     <div className="text-[#555] whitespace-pre-wrap">{n.plan}</div>
                                   </div>
                                 )}
-                                <div>
-                                  <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">CPT Codes & Charges</div>
-                                  {(n.cpt_codes ?? []).length === 0 ? (
-                                    <div className="text-[#F59E0B] font-medium">No CPT codes on file — provider must unlock and re-sign note.</div>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      {n.cpt_codes.map((c: any, i: number) => (
-                                        <div key={i} className="flex items-baseline justify-between gap-2">
-                                          <div className="flex items-baseline gap-2">
-                                            <span className="font-mono text-[#7F77DD] font-medium">{c.code}</span>
-                                            <span className="text-[#555]">{c.description}</span>
-                                            {c.category === 'Non-Covered Services' && (
-                                              <span className="text-[10px] text-[#999] italic">non-covered</span>
-                                            )}
+                                {/* CPT Codes */}
+                                {(editNote?.apptId === appt.id && editNote.section === 'cpt') ? (
+                                  <div className="border border-[#7F77DD] rounded-lg p-3 space-y-2 bg-[#FAFAF8]">
+                                    <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Edit CPT Codes</div>
+                                    <div className="space-y-2">
+                                      {editCpt.map((c, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                          <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-16 flex-shrink-0">{c.code}</span>
+                                          <span className="text-[#555] text-[12px] flex-1 truncate">{c.description}</span>
+                                          <div className="flex items-center gap-1 flex-shrink-0">
+                                            <label className="text-[10px] text-[#999]">Mod:</label>
+                                            <input value={c.modifier ?? ''} maxLength={4}
+                                              onChange={e => setEditCpt(prev => prev.map((x, j) => j === i ? { ...x, modifier: e.target.value.toUpperCase() } : x))}
+                                              placeholder="25"
+                                              className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]" />
                                           </div>
-                                          <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                          <button onClick={() => setEditCpt(prev => prev.filter((_, j) => j !== i))}
+                                            className="text-[#999] hover:text-[#c00] transition-colors flex-shrink-0">
+                                            <X size={13} />
+                                          </button>
                                         </div>
                                       ))}
                                     </div>
-                                  )}
-                                </div>
+                                    <p className="text-[10px] text-[#999]">Enter 2-digit modifier codes (e.g. 25, 59, 26) without the dash.</p>
+                                    <div className="flex gap-2 pt-1">
+                                      <Button size="xs" variant="secondary" onClick={() => setEditNote(null)}>Cancel</Button>
+                                      <Button size="xs" loading={notePatching} onClick={saveNoteEdit}>Save CPT codes</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="text-[10px] text-[#999] uppercase tracking-wider">CPT Codes & Charges</div>
+                                      <button onClick={() => startEditCpt(appt.id)}
+                                        className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:text-[#534AB7] transition-colors">
+                                        <Pencil size={10} /> Edit
+                                      </button>
+                                    </div>
+                                    {(n.cpt_codes ?? []).length === 0 ? (
+                                      <div className="text-[#F59E0B] font-medium">No CPT codes on file — provider must unlock and re-sign note.</div>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {n.cpt_codes.map((c: any, i: number) => (
+                                          <div key={i} className="flex items-baseline justify-between gap-2">
+                                            <div className="flex items-baseline gap-2 flex-wrap">
+                                              <span className="font-mono text-[#7F77DD] font-medium">{c.code}{c.modifier ? <span className="text-[#F5943A]">-{c.modifier}</span> : ''}</span>
+                                              <span className="text-[#555]">{c.description}</span>
+                                              {c.modifier && <span className="text-[10px] text-[#F5943A] font-medium">mod {c.modifier}</span>}
+                                              {c.category === 'Non-Covered Services' && (
+                                                <span className="text-[10px] text-[#999] italic">non-covered</span>
+                                              )}
+                                            </div>
+                                            <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )
                           })()}

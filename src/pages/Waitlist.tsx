@@ -164,7 +164,7 @@ export function Waitlist() {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
                   <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setDate(''); setTime('') }}>
-                    Accept
+                    Accept and move to my schedule
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => passEntry(entry.id)}>
                     Pass

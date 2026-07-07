@@ -539,13 +539,14 @@ Deno.serve(async (req) => {
       if (!entry) throw new Error('Waitlist entry not found')
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
-      const smsBody = `PediatricHousecalls: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
+      const smsBody = `PediatricHousecalls: New waitlist entry in ${stateLabel}. View: ${PORTAL_URL}/waitlist`
 
-      // Get all active providers (excluding admins)
+      // Notify only active providers licensed in this state
       const { data: stateProviders } = await supabase
         .from('providers').select('id, name, role, phone, email, states').neq('role', 'admin').eq('is_active', true)
 
       for (const prov of stateProviders || []) {
+        if (entry.state && !(prov.states ?? []).includes(entry.state)) continue
         if (prov.email) {
           await sendEmail(
             prov.email,
@@ -563,10 +564,11 @@ Deno.serve(async (req) => {
       }
 
       // Also notify admins
+      const adminSmsBody = `PediatricHousecalls: New waitlist entry — zip ${entry.zip}, ${stateLabel}. View: ${PORTAL_URL}/admin/waitlist`
       const { data: admins } = await supabase.from('providers').select('id, phone, email').eq('role', 'admin')
       for (const admin of admins || []) {
         if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' }))
-        if (admin.phone) await sendSMS(admin.phone, smsBody)
+        if (admin.phone) await sendSMS(admin.phone, adminSmsBody)
       }
 
       return new Response(JSON.stringify({ ok: true }), {
@@ -581,7 +583,7 @@ Deno.serve(async (req) => {
       if (!entry) throw new Error('Entry not found')
 
       const { data: family } = await supabase
-        .from('family_profiles').select('email, display_name').eq('id', entry.family_id).single()
+        .from('family_profiles').select('email, phone, display_name').eq('id', entry.family_id).single()
 
       const greeting = family?.display_name ? `Hi ${family.display_name.split(' ')[0]},` : 'Hi there,'
       const dateFormatted = new Date(body.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -612,18 +614,23 @@ Deno.serve(async (req) => {
       if (family?.email) {
         await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html)
       }
+      if (family?.phone) {
+        await sendSMS(family.phone, `PediatricHousecalls: ${body.providerName} has picked up your child from the waitlist and will see them on ${dateFormatted} at ${body.time}. Questions? Log in at ${PORTAL_URL}/family/dashboard`)
+      }
 
       await notifyAdmins(`[PHC] Waitlist patient booked: ${body.providerName} · ${dateFormatted} at ${body.time}`)
 
-      // Notify all providers that this patient was picked up
+      // Notify providers licensed in this state that this patient was picked up
       const pickupDesc = `a waitlist patient (zip ${entry.zip}${entry.state ? `, ${entry.state}` : ''})`
       const pickupSms = `PediatricHousecalls: ${body.providerName} has picked up ${pickupDesc}.`
-      await notifyAllProviders(
-        pickupSms,
-        `[Pickup] ${body.providerName} accepted a waitlist patient — zip ${entry.zip}`,
-        (name) => pickupNotificationEmail({ recipientName: name, acceptedBy: body.providerName, description: pickupDesc }),
-        body.providerId ?? null,
-      )
+      const { data: pickupProviders } = await supabase
+        .from('providers').select('id, name, phone, email, states').neq('role', 'admin').eq('is_active', true)
+      for (const prov of pickupProviders || []) {
+        if (body.providerId && prov.id === body.providerId) continue
+        if (entry.state && !(prov.states ?? []).includes(entry.state)) continue
+        if (prov.email) await sendEmail(prov.email, `[Pickup] ${body.providerName} accepted a waitlist patient — zip ${entry.zip}`, pickupNotificationEmail({ recipientName: prov.name, acceptedBy: body.providerName, description: pickupDesc }))
+        if (prov.phone) await sendSMS(prov.phone, pickupSms)
+      }
 
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
