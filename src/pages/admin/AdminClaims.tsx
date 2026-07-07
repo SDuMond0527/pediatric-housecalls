@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getUnbilledNotes, getClaims, generateClaim, submitClaim, updateClaim } from '../../lib/api'
+import { getUnbilledNotes, getClaims, generateClaim, submitClaim, updateClaim, deleteClaim } from '../../lib/api'
 
 type Tab = 'unbilled' | 'review' | 'submitted'
 
@@ -42,6 +42,7 @@ export function AdminClaims() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
+  const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -54,13 +55,14 @@ export function AdminClaims() {
 
   async function load() {
     setLoading(true)
-    const [u, review, submitted] = await Promise.all([
+    const [u, review, errored, submitted] = await Promise.all([
       getUnbilledNotes().catch(() => []),
       getClaims('pending_review').catch(() => []),
+      getClaims('error').catch(() => []),
       getClaims('submitted').catch(() => []),
     ])
     setUnbilled(u)
-    setClaims([...review, ...submitted])
+    setClaims([...review, ...errored, ...submitted])
     setLoading(false)
   }
 
@@ -76,6 +78,20 @@ export function AdminClaims() {
       alert(e.message || 'Failed to generate claim')
     } finally {
       setGenerating(null)
+    }
+  }
+
+  async function handleRegenerate(claimId: string, noteId: string) {
+    if (!confirm('Delete this claim and regenerate it from the current note? Use this if CPT codes were added after the claim was first generated.')) return
+    setRegenerating(claimId)
+    try {
+      await deleteClaim(claimId)
+      await generateClaim(noteId)
+      await load()
+    } catch (e: any) {
+      alert(e.message || 'Regeneration failed')
+    } finally {
+      setRegenerating(null)
     }
   }
 
@@ -124,8 +140,8 @@ export function AdminClaims() {
     }
   }
 
-  const reviewClaims = claims.filter(c => c.status === 'pending_review')
-  const submittedClaims = claims.filter(c => c.status !== 'pending_review')
+  const reviewClaims = claims.filter(c => c.status === 'pending_review' || c.status === 'error')
+  const submittedClaims = claims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`
@@ -208,6 +224,14 @@ export function AdminClaims() {
                 const isOpen = expanded === c.id
                 const ep = editPayer[c.id]
                 const missingPayer = !c.payer_id
+                const isError = c.status === 'error'
+                const stediError = (() => {
+                  if (!c.submission_error) return null
+                  try {
+                    const parsed = JSON.parse(c.submission_error)
+                    return parsed?.errors?.[0]?.description ?? parsed?.message ?? c.submission_error
+                  } catch { return c.submission_error }
+                })()
                 return (
                   <div key={c.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
                     <button className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors"
@@ -220,7 +244,11 @@ export function AdminClaims() {
                             <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
-                            {missingPayer ? (
+                            {isError ? (
+                              <span className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1">
+                                <AlertCircle size={11} /> Submission failed — click to retry
+                              </span>
+                            ) : missingPayer ? (
                               <span className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1">
                                 <AlertCircle size={11} /> Payer ID missing — review required
                               </span>
@@ -235,6 +263,11 @@ export function AdminClaims() {
 
                     {isOpen && (
                       <div className="px-4 pb-4 border-t border-[#F1EFE8] pt-4 space-y-4">
+                        {stediError && (
+                          <div className="bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2.5 text-[12px] text-[#7F1D1D]">
+                            <span className="font-semibold">Stedi rejection: </span>{stediError}
+                          </div>
+                        )}
                         {/* Claim detail grid */}
                         {editPatient[c.id] ? (
                           <div className="space-y-3">
@@ -409,14 +442,23 @@ export function AdminClaims() {
                           </div>
                         </div>
 
-                        {/* Submit button */}
-                        <div className="flex justify-end pt-1">
-                          <Button variant="teal"
-                            loading={submitting === c.id}
-                            disabled={!!submitting || missingPayer}
-                            onClick={() => handleSubmit(c.id)}>
-                            <Send size={13} className="mr-1.5" /> Submit to insurance
-                          </Button>
+                        {/* Submit / Regenerate buttons */}
+                        <div className="flex justify-between items-center pt-1">
+                          {(!c.cpt_codes?.length || parseFloat(c.total_charge ?? 0) === 0) && c.encounter_note_id && (
+                            <Button variant="secondary" size="sm"
+                              loading={regenerating === c.id}
+                              onClick={() => handleRegenerate(c.id, c.encounter_note_id)}>
+                              <RefreshCw size={12} className="mr-1.5" /> Regenerate from note
+                            </Button>
+                          )}
+                          <div className="ml-auto">
+                            <Button variant="teal"
+                              loading={submitting === c.id}
+                              disabled={!!submitting || missingPayer}
+                              onClick={() => handleSubmit(c.id)}>
+                              <Send size={13} className="mr-1.5" /> Submit to insurance
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}

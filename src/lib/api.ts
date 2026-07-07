@@ -302,6 +302,9 @@ export const updateClaim = (id: string, body: Record<string, unknown>) =>
 export const submitClaim = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'submit' }) })
 
+export const deleteClaim = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'DELETE' })
+
 // ── Practices (super admin) ───────────────────────────────────
 export const getPractices = () =>
   apiFetch<any[]>('/api/practices')

@@ -33,8 +33,10 @@ function buildStediPayload(claim: any): object {
 
   const isTelehealth = (claim.place_of_service ?? '12') === '10'
 
+  const fmtDate8 = (d: any) => String(d ?? '').split('T')[0].replace(/-/g, '')
+
   const serviceLines = cptCodes.map((c: any) => ({
-    serviceDate: (claim.service_date ?? '').replace(/-/g, ''),
+    serviceDate: fmtDate8(claim.service_date),
     professionalService: {
       procedureIdentifier: 'HC',
       procedureCode: c.code,
@@ -68,7 +70,7 @@ function buildStediPayload(claim: any): object {
       firstName: subFirstName,
       lastName: subLastName,
       gender: claim.subscriber_gender === 'Female' ? 'F' : claim.subscriber_gender === 'Male' ? 'M' : 'U',
-      dateOfBirth: (claim.subscriber_dob ?? '').replace(/-/g, ''),
+      dateOfBirth: fmtDate8(claim.subscriber_dob),
       groupNumber: claim.group_number ?? '',
       claimFilingCode: 'CI',
     },
@@ -76,7 +78,7 @@ function buildStediPayload(claim: any): object {
       firstName: claim.patient_first_name ?? '',
       lastName:  claim.patient_last_name  ?? '',
       gender: claim.patient_gender === 'Female' ? 'F' : claim.patient_gender === 'Male' ? 'M' : 'U',
-      dateOfBirth: (claim.patient_dob ?? '').replace(/-/g, ''),
+      dateOfBirth: fmtDate8(claim.patient_dob),
       relationshipCode: '19',
       ...(claim.patient_address ? {
         address: {
@@ -231,6 +233,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
     return res.json(updated)
+  }
+
+  if (req.method === 'DELETE') {
+    const [claim] = await sql`SELECT status FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    if (!claim) return res.status(404).json({ error: 'Claim not found' })
+    if (claim.status === 'submitted') return res.status(400).json({ error: 'Cannot delete a submitted claim' })
+    await sql`DELETE FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    return res.json({ deleted: true })
   }
 
   res.status(405).json({ error: 'Method not allowed' })
