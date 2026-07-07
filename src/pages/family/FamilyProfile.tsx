@@ -82,6 +82,7 @@ export function FamilyProfile() {
   const [addingChild, setAddingChild] = useState(false)
   const [newFirst, setNewFirst] = useState('')
   const [newLast, setNewLast] = useState('')
+  const [newDob, setNewDob] = useState('')
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null)
   const [childEdits, setChildEdits] = useState<Record<string, ChildEdit>>({})
   const [savingChildId, setSavingChildId] = useState<string | null>(null)
@@ -181,10 +182,11 @@ export function FamilyProfile() {
 
   async function addChild() {
     if (!newFirst.trim() && !newLast.trim()) return
-    await createChild({ first_name: newFirst.trim(), last_name: newLast.trim(), family_id: user!.id })
+    await createChild({ first_name: newFirst.trim(), last_name: newLast.trim(), date_of_birth: newDob || undefined, family_id: user!.id })
     await refreshFamily()
     setNewFirst('')
     setNewLast('')
+    setNewDob('')
     setAddingChild(false)
   }
 
@@ -434,8 +436,12 @@ export function FamilyProfile() {
               <Input label="Last name" placeholder="Smith"
                 value={newLast} onChange={e => setNewLast(e.target.value)} />
             </div>
+            <div className="mb-3">
+              <Input label="Date of birth" type="date"
+                value={newDob} onChange={e => setNewDob(e.target.value)} />
+            </div>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast('') }}>Cancel</Button>
+              <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob('') }}>Cancel</Button>
               <Button size="sm" onClick={addChild}>Add</Button>
             </div>
           </div>

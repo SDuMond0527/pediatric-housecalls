@@ -53,12 +53,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       try {
-        const { display_label, first_name, last_name } = req.body
+        const { display_label, first_name, last_name, date_of_birth } = req.body
         const familyId = rows[0].id as string
         const label = display_label || [first_name, last_name].filter(Boolean).join(' ') || 'Child'
+
+        // Link to existing provider-added record if names + DOB match
+        if (first_name?.trim() && last_name?.trim() && date_of_birth) {
+          const existing = await sql`
+            SELECT id FROM children
+            WHERE practice_id = ${practiceId}::uuid
+              AND family_id IS NULL
+              AND first_name ILIKE ${first_name.trim()}
+              AND last_name ILIKE ${last_name.trim()}
+              AND date_of_birth = ${date_of_birth}
+            LIMIT 1`
+          if (existing.length) {
+            const [linked] = await sql`
+              UPDATE children SET family_id = ${familyId}::uuid, display_label = ${label}
+              WHERE id = ${existing[0].id}::uuid
+              RETURNING *`
+            return res.json(linked)
+          }
+        }
+
         const [row] = await sql`
-          INSERT INTO children (practice_id, display_label, first_name, last_name, family_id)
-          VALUES (${practiceId}::uuid, ${label}, ${first_name || null}, ${last_name || null}, ${familyId}::uuid)
+          INSERT INTO children (practice_id, display_label, first_name, last_name, family_id, date_of_birth)
+          VALUES (${practiceId}::uuid, ${label}, ${first_name || null}, ${last_name || null}, ${familyId}::uuid, ${date_of_birth || null})
           RETURNING *`
         return res.json(row)
       } catch (e: any) {
