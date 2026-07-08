@@ -11,6 +11,13 @@ export const DEMO_CREDS = {
 }
 
 export function PracticeLogo({ className }: { className?: string }) {
+  if (DEMO_MODE) {
+    return (
+      <div className={className ?? 'mx-auto text-center'}>
+        <div className="font-display text-3xl font-semibold text-[#1A1A2E] leading-tight">{PRACTICE_NAME}</div>
+      </div>
+    )
+  }
   return (
     <img src="/logo.png" alt={PRACTICE_NAME} className={className ?? 'h-24 w-auto mx-auto'} />
   )

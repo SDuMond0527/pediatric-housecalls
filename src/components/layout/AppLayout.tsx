@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar'
 import { useAuth } from '../../contexts/AuthContext'
 import { getBroadcasts } from '../../lib/api'
 import { DemoBanner } from '../DemoBanner'
-import { DEMO_MODE } from '../../lib/practice'
+import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 
 export function AppLayout() {
   const { user, loading } = useAuth()
@@ -52,7 +52,7 @@ export function AppLayout() {
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-[#F1EFE8]">
             <Menu size={18} />
           </button>
-          <span className="font-display font-medium text-[#1A1A2E]">PediatricHousecalls</span>
+          <span className="font-display font-medium text-[#1A1A2E]">{PRACTICE_NAME}</span>
         </div>
         <Outlet context={{ broadcastCount, setBroadcastCount }} />
       </div>
