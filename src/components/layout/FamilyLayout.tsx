@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { CalendarPlus, Home, User, LogOut } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { DemoBanner } from '../DemoBanner'
-import { DEMO_MODE } from '../../lib/practice'
+import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 
 export function FamilyLayout() {
   const { user, family, loading, signOut } = useFamilyAuth()
@@ -33,7 +33,7 @@ export function FamilyLayout() {
       <header className="bg-white border-b border-[#E8E8E4] sticky top-0 z-40">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="font-display text-lg font-medium text-[#1A1A2E]">
-            Pediatric<span style={{ color: '#7F77DD' }}>Housecalls</span>
+            {PRACTICE_NAME}
           </div>
           <div className="flex items-center gap-1">
             <NavLink to="/family/dashboard"

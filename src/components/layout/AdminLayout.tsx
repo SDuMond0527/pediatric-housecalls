@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
-import { DEMO_MODE } from '../../lib/practice'
+import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -35,7 +35,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#FAFAF8]">
       <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col fixed left-0 top-0 z-40">
         <div className="px-5 py-5 border-b border-white/8">
-          <div className="font-display text-base font-medium text-white leading-snug">PediatricHousecalls</div>
+          <div className="font-display text-base font-medium text-white leading-snug">{PRACTICE_NAME}</div>
           <div className="text-[11px] text-white/40 mt-0.5">Admin portal</div>
         </div>
 
