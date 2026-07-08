@@ -36,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Admin-only PATCH: update diagnoses and/or cpt_codes on any note (including signed)
   if (req.method === 'PATCH') {
-    const [provRow] = await sql`SELECT role FROM providers WHERE cognito_sub = ${sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
-    if (provRow?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+    const [provRow] = await sql`SELECT is_admin FROM providers WHERE cognito_sub = ${sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    if (!provRow?.is_admin) return res.status(403).json({ error: 'Admin only' })
 
     const { diagnoses, cpt_codes } = req.body
     const [row] = await sql`

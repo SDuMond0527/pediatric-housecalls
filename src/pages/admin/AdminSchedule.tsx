@@ -580,7 +580,7 @@ export function AdminSchedule() {
                                       {editCpt.map((c, i) => (
                                         <div key={i} className="flex items-center gap-2">
                                           <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-16 flex-shrink-0">{c.code}</span>
-                                          <span className="text-[#555] text-[12px] flex-1 truncate">{c.description}</span>
+                                          <span className="text-[#555] text-[12px] flex-1 truncate min-w-0">{c.description}</span>
                                           <div className="flex items-center gap-1 flex-shrink-0">
                                             <label className="text-[10px] text-[#999]">Mod:</label>
                                             <input value={c.modifier ?? ''} maxLength={4}
