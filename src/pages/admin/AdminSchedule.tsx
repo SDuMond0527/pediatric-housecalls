@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search } from 'lucide-react'
 import { format } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -140,6 +140,10 @@ export function AdminSchedule() {
   const [icdLoading, setIcdLoading] = useState(false)
   const [notePatching, setNotePatching] = useState(false)
   const [noteError, setNoteError] = useState<string | null>(null)
+  const [feeSchedule, setFeeSchedule] = useState<any[]>([])
+  const [cptPickerOpen, setCptPickerOpen] = useState(false)
+  const [cptPickerTab, setCptPickerTab] = useState<'Procedure' | 'Non-Covered Services'>('Procedure')
+  const [cptPickerSearch, setCptPickerSearch] = useState('')
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
@@ -197,6 +201,9 @@ export function AdminSchedule() {
     const n = notes[apptId]
     setEditCpt(Array.isArray(n?.cpt_codes) ? n.cpt_codes.map((c: any) => ({ ...c })) : [])
     setEditNote({ apptId, section: 'cpt' })
+    setCptPickerOpen(false)
+    setCptPickerSearch('')
+    if (feeSchedule.length === 0) getFeeSchedule().then(setFeeSchedule).catch(() => {})
   }
 
   function searchIcd(q: string) {
@@ -594,6 +601,52 @@ export function AdminSchedule() {
                                           </button>
                                         </div>
                                       ))}
+                                    </div>
+                                    {/* Add code picker */}
+                                    <div>
+                                      <button
+                                        onClick={() => setCptPickerOpen(o => !o)}
+                                        className="flex items-center gap-1 text-[12px] text-[#7F77DD] font-medium hover:text-[#534AB7] transition-colors">
+                                        <span className="text-base leading-none">+</span> Add procedure or fee
+                                      </button>
+                                      {cptPickerOpen && (
+                                        <div className="mt-1.5 border border-[#E8E8E4] rounded-lg overflow-hidden bg-white">
+                                          <div className="p-1.5 border-b border-[#F1EFE8]">
+                                            <input autoFocus type="text" placeholder="Search by code or description…"
+                                              value={cptPickerSearch}
+                                              onChange={e => setCptPickerSearch(e.target.value)}
+                                              className="w-full px-2.5 py-1 border border-[#E8E8E4] rounded-lg text-[12px] outline-none focus:border-[#7F77DD]" />
+                                          </div>
+                                          <div className="flex border-b border-[#F1EFE8]">
+                                            {(['Procedure', 'Non-Covered Services'] as const).map(tab => (
+                                              <button key={tab} onClick={() => setCptPickerTab(tab)}
+                                                className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${cptPickerTab === tab ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#999]'}`}>
+                                                {tab === 'Procedure' ? 'Insurance Procedures' : 'Convenience & Self-Pay'}
+                                              </button>
+                                            ))}
+                                          </div>
+                                          <div className="max-h-48 overflow-y-auto">
+                                            {feeSchedule
+                                              .filter(c => c.category === cptPickerTab)
+                                              .filter(c => !cptPickerSearch || c.code.toLowerCase().includes(cptPickerSearch.toLowerCase()) || c.description.toLowerCase().includes(cptPickerSearch.toLowerCase()))
+                                              .filter(c => !editCpt.find((x: any) => x.code === c.code))
+                                              .map((c: any) => (
+                                                <button key={c.code}
+                                                  onClick={() => { setEditCpt(prev => [...prev, { ...c }]); setCptPickerOpen(false); setCptPickerSearch('') }}
+                                                  className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F8F8F6] last:border-0 flex items-center justify-between gap-2 transition-colors">
+                                                  <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{c.code}</span>
+                                                    <span className="text-[12px] text-[#1A1A2E] truncate">{c.description}</span>
+                                                  </div>
+                                                  <span className="text-[11px] font-medium text-[#555] flex-shrink-0">${parseFloat(c.charge_amount).toFixed(2)}</span>
+                                                </button>
+                                              ))}
+                                            {feeSchedule.filter(c => c.category === cptPickerTab).filter(c => !cptPickerSearch || c.code.toLowerCase().includes(cptPickerSearch.toLowerCase()) || c.description.toLowerCase().includes(cptPickerSearch.toLowerCase())).filter(c => !editCpt.find((x: any) => x.code === c.code)).length === 0 && (
+                                              <div className="px-3 py-2 text-[12px] text-[#999]">No codes match.</div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                     <p className="text-[10px] text-[#999]">Enter 2-digit modifier codes (e.g. 25, 59, 26) without the dash.</p>
                                     {noteError && editNote?.apptId === appt.id && editNote.section === 'cpt' && (
