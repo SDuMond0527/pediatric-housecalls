@@ -14,6 +14,7 @@ export interface PracticeVisitType {
   is_in_home: boolean
   is_cpr: boolean
   sort_order: number
+  allowed_roles: string[] | null
 }
 
 interface VisitTypeData {

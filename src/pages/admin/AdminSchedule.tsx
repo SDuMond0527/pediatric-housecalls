@@ -787,8 +787,14 @@ export function AdminSchedule() {
             <select value={form.provider_id} onChange={e => setForm(f => ({ ...f, provider_id: e.target.value }))}
               className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans bg-white">
               <option value="">Select provider...</option>
-              {providers.map(p => <option key={p.id} value={p.id}>{p.name} — {p.zones?.join(', ') || p.role}</option>)}
+              {(byType[form.visit_type]?.allowed_roles
+                ? providers.filter(p => byType[form.visit_type].allowed_roles!.includes(p.role))
+                : providers
+              ).map(p => <option key={p.id} value={p.id}>{p.name} — {p.zones?.join(', ') || p.role}</option>)}
             </select>
+            {byType[form.visit_type]?.allowed_roles && (
+              <p className="text-[11px] text-[#888] mt-1">Only {byType[form.visit_type].allowed_roles!.join(' / ')} providers are eligible for this visit type.</p>
+            )}
           </div>
 
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Patient information</div>
