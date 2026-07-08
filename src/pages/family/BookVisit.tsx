@@ -243,7 +243,7 @@ export function BookVisit() {
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
 
-  const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit' || vt === 'Video telemedicine screening for IV fluids'
+  const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
 
   useEffect(() => {
     const isIv = booking.visitType === 'In-home IV fluids'

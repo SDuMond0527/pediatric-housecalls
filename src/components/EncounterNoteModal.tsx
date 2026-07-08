@@ -8,6 +8,7 @@ import type { Appointment } from '../types'
 const NOTE_TYPES = [
   'In-home sick visit',
   'Telemedicine video visit',
+  'IV fluids telemedicine screening',
   'Text visit',
   'Sports physical',
   'RN IV fluids',
@@ -34,6 +35,11 @@ General: [Alert, interactive, in no apparent distress / appears ill] as observed
 Respiratory: [No visible work of breathing / increased work of breathing noted].
 Skin: [No visible rash / rash visible — described as...].
 Note: Unable to assess ears, throat, or auscultate lungs/heart remotely.`,
+    plan: '',
+  },
+  'IV fluids telemedicine screening': {
+    subjective: '',
+    objective: '',
     plan: '',
   },
   'Text visit': {
@@ -78,6 +84,7 @@ Post-infusion: Patient tolerated fluids well. Improved hydration status.`,
 
 function visitTypeToNoteType(visitType: string): NoteType {
   const v = visitType.toLowerCase()
+  if (v.includes('screening') && (v.includes('iv') || v.includes('fluid'))) return 'IV fluids telemedicine screening'
   if (v.includes('video') || v.includes('telemedicine')) return 'Telemedicine video visit'
   if (v.includes('text')) return 'Text visit'
   if (v.includes('sports') || v.includes('physical')) return 'Sports physical'

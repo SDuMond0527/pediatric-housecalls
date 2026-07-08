@@ -87,11 +87,6 @@ export const VISIT_TYPE_INFO = {
     duration: '60–90 min',
     note: 'Requires provider screening call first. Minimum weight 55 lbs.',
   },
-  'Video telemedicine screening for IV fluids': {
-    color: '#085041', bg: '#E1F5EE', icon: '📹',
-    duration: '30 min',
-    note: "A physician or NP will conduct a video screening to determine if in-home IV fluids are appropriate. You'll receive a secure video link by text and email 10 minutes before your appointment. Minimum weight 55 lbs.",
-  },
   'In-home CPR class (Heartsaver)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '❤️',
     duration: '3 hours · up to 6 people · $80/person',
