@@ -81,6 +81,7 @@ function getAvailableSlots(leadMin: number, date: string): string[] {
 }
 
 interface IvFluidsIntake {
+  weight: string
   symptomOnset: string
   symptoms: string
   fluidIntake: string
@@ -133,7 +134,7 @@ const RED_FLAGS = [
 
 function emptyIvFluids(): IvFluidsIntake {
   return {
-    symptomOnset: '', symptoms: '', fluidIntake: '',
+    weight: '', symptomOnset: '', symptoms: '', fluidIntake: '',
     oralRehydration: '', lastUrination: '', diarrhea: '',
     vomiting: '', activityLevel: '', mouthDryness: '',
     tears: '', hasFever: '', highestTemp: '',
@@ -767,6 +768,7 @@ export function BookVisit() {
         const iv = booking.ivFluidsIntake
         noteParts.push([
           `IV SCREENING`,
+          iv.weight ? `Weight: ${iv.weight}` : '',
           `Onset: ${iv.symptomOnset}`,
           `Symptoms: ${iv.symptoms}`,
           `Fluid intake: ${iv.fluidIntake}`,
@@ -1143,11 +1145,23 @@ export function BookVisit() {
         <Step title="IV Fluids Pre-Screening" sub="Please answer all questions so our provider can prepare for your visit.">
           <div className="space-y-6">
 
-            <IvQ label="1. When did symptoms begin?">
+            <div className="bg-[#FEF3E8] border border-[#F5943A]/30 rounded-xl p-4">
+              <p className="text-[13px] font-semibold text-[#633806] mb-1">Weight requirement</p>
+              <p className="text-[13px] text-[#633806]/80">We can only administer in-home IV fluids to children who weigh <strong>55 lbs (25 kg) or more</strong>. If your child weighs less than 55 lbs, we will not be able to provide this service.</p>
+            </div>
+
+            <IvQ label="1. What is your child's current weight?">
+              <input value={booking.ivFluidsIntake.weight}
+                onChange={e => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, weight: e.target.value } }))}
+                placeholder="e.g. 62 lbs"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+            </IvQ>
+
+            <IvQ label="2. When did symptoms begin?">
               <IvRadios field="symptomOnset" options={['Today', 'Yesterday', '2–3 days ago', 'More than 3 days ago']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="2. What symptoms is your child having?">
+            <IvQ label="3. What symptoms is your child having?">
               <textarea value={booking.ivFluidsIntake.symptoms}
                 onChange={e => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, symptoms: e.target.value } }))}
                 placeholder="Describe all symptoms..."
@@ -1155,39 +1169,39 @@ export function BookVisit() {
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
             </IvQ>
 
-            <IvQ label="3. Has your child been able to drink fluids today?">
+            <IvQ label="4. Has your child been able to drink fluids today?">
               <IvRadios field="fluidIntake" options={['Yes, normally', 'Some, but much less than usual', 'Very little', 'Not at all / all oral fluids are coming back up']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="4. Have you tried oral rehydration solution (Pedialyte or electrolyte drinks — small, frequent sips)?">
+            <IvQ label="5. Have you tried oral rehydration solution (Pedialyte or electrolyte drinks — small, frequent sips)?">
               <IvRadios field="oralRehydration" options={['Yes — and it helped', 'Yes — but child vomits it up', 'Yes — but child refuses', 'No']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="5. When did your child last urinate?">
+            <IvQ label="6. When did your child last urinate?">
               <IvRadios field="lastUrination" options={['Within the last 4 hours', '4–8 hours ago', '8–12 hours ago', 'More than 12 hours ago', 'Not sure']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="6. Has your child had diarrhea?">
+            <IvQ label="7. Has your child had diarrhea?">
               <IvRadios field="diarrhea" options={['No', 'Yes — mild (1–3 times/day)', 'Yes — frequent (4+ times/day)']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="7. Has your child been vomiting?">
+            <IvQ label="8. Has your child been vomiting?">
               <IvRadios field="vomiting" options={['No', 'Yes — 1–2 times', 'Yes — 3–5 times', 'Yes — more than 5 times']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="8. How is your child acting right now?">
+            <IvQ label="9. How is your child acting right now?">
               <IvRadios field="activityLevel" options={['Normal', 'A little tired', 'Very tired / weak', 'Hard to wake up / unusually sleepy']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="9. Are their lips or mouth dry?">
+            <IvQ label="10. Are their lips or mouth dry?">
               <IvRadios field="mouthDryness" options={['No', 'A little', 'Very dry / cracked', 'Not sure']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="10. Do they make tears when crying?">
+            <IvQ label="11. Do they make tears when crying?">
               <IvRadios field="tears" options={['Yes', 'No', 'Not sure']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="11. Has your child had a fever?">
+            <IvQ label="12. Has your child had a fever?">
               <IvRadios field="hasFever" options={['Yes', 'No']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
               {booking.ivFluidsIntake.hasFever === 'Yes' && (
                 <div className="mt-2">
@@ -1199,7 +1213,7 @@ export function BookVisit() {
               )}
             </IvQ>
 
-            <IvQ label="12. Does your child have any of the following? (Check all that apply)">
+            <IvQ label="13. Does your child have any of the following? (Check all that apply)">
               <div className="space-y-2">
                 {RED_FLAGS.map(flag => {
                   const isNone = flag === 'None of the above'
@@ -1231,18 +1245,18 @@ export function BookVisit() {
               </div>
             </IvQ>
 
-            <IvQ label="13. Any other chronic medical conditions?">
+            <IvQ label="14. Any other chronic medical conditions?">
               <input value={booking.ivFluidsIntake.otherConditions}
                 onChange={e => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, otherConditions: e.target.value } }))}
                 placeholder="List any conditions, or leave blank if none"
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
             </IvQ>
 
-            <IvQ label="14. Has your child received IV fluids recently?">
+            <IvQ label="15. Has your child received IV fluids recently?">
               <IvRadios field="recentIvFluids" options={['Yes', 'No']} iv={booking.ivFluidsIntake} set={f => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, ...f } }))} />
             </IvQ>
 
-            <IvQ label="15. Available times for your nurse visit">
+            <IvQ label="16. Available times for your nurse visit">
               <input value={booking.ivFluidsIntake.availableTimes}
                 onChange={e => setBooking(b => ({ ...b, ivFluidsIntake: { ...b.ivFluidsIntake, availableTimes: e.target.value } }))}
                 placeholder='e.g. "Any time today" or "Any time before 5pm"'
