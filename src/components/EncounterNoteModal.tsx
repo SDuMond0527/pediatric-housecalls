@@ -38,9 +38,33 @@ Note: Unable to assess ears, throat, or auscultate lungs/heart remotely.`,
     plan: '',
   },
   'IV fluids telemedicine screening': {
-    subjective: '',
-    objective: '',
-    plan: '',
+    subjective: `Onset: [Today / Yesterday / 2-3 days ago / More than 3 days ago]
+Symptoms:
+
+Oral fluid intake: [Yes normally / Some but much less than usual / Very little / Not at all — all oral fluids coming back up]
+Oral rehydration solution (Pedialyte/electrolyte drink) tried: [Yes and it helped / Yes but child vomits it up / Yes but child refuses / No]
+Last urination: [Within the last 4 hours / 4-8 hours ago / 8-12 hours ago / More than 12 hours ago / Not sure]
+Diarrhea: [No / Yes — mild 1-3x/day / Yes — frequent 4+x/day]
+Vomiting: [No / Yes — 1-2 times / Yes — 3-5 times / Yes — more than 5 times]
+Current behavior/energy: [Normal / A little tired / Very tired/weak / Hard to wake up/unusually sleepy]
+Lips/mouth dryness: [No / A little / Very dry/cracked / Not sure]
+Tears when crying: [Yes / No / Not sure]
+Highest fever:
+
+Red flag symptoms present: [None of the above / Severe belly pain / Stiff neck / Trouble breathing / Confusion / Severe relentless headache / Bloody vomit/stool / Blue lips/skin / Seizures / Diabetes / Known kidney disease]
+Chronic medical conditions:
+Medication allergies:
+Has child recently received IV fluids: [Yes / No]`,
+    objective: `Patient seen via secure HIPAA-compliant video telemedicine visit for IV fluids eligibility screening. Physical exam limited to visual assessment.
+General: [Alert, interactive, in no apparent distress / appears mildly ill / appears moderately ill] as observed via video.
+Mucous membranes: [Lips appear moist / Lips appear dry / Lips appear very dry or cracked].
+Behavior/responsiveness: [Age-appropriate and interactive / Lethargic but arousable / Difficult to arouse].
+Weight on file: [___] lbs — [meets / does not meet] 55 lb minimum for in-home IV fluids.`,
+    plan: `[ ] APPROVED for in-home IV fluids: In-home IV fluids visit scheduled with RN. Family instructed to continue small sips of oral fluids until RN arrival.
+[ ] NOT APPROVED — refer to ED: Child referred to nearest emergency department for IV fluid administration and further evaluation.
+[ ] NOT APPROVED — continue oral rehydration: Continue Pedialyte/electrolyte solution, small frequent sips. Return precautions reviewed.
+
+Return precautions: Return to ED or call 911 immediately if child develops trouble breathing, seizures, loss of consciousness, blue lips/skin, or worsening confusion.`,
   },
   'Text visit': {
     subjective: 'Parent reports via secure text: ',
