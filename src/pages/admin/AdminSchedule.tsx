@@ -139,6 +139,7 @@ export function AdminSchedule() {
   const [icdResults, setIcdResults] = useState<Array<{ code: string; name: string }>>([])
   const [icdLoading, setIcdLoading] = useState(false)
   const [notePatching, setNotePatching] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
@@ -215,17 +216,19 @@ export function AdminSchedule() {
   }
 
   async function saveNoteEdit() {
-    if (!editNote) return
-    const n = notes[editNote.apptId]
-    if (!n?.id) return
+    setNoteError(null)
+    if (!editNote) { setNoteError('No edit session — please click Edit again.'); return }
+    const apptId = editNote.apptId
+    const n = notes[apptId]
+    if (!n?.id) { setNoteError('Note not loaded — please collapse and re-expand this appointment.'); return }
     setNotePatching(true)
     try {
       const body = editNote.section === 'dx' ? { diagnoses: editDx } : { cpt_codes: editCpt }
       const updated = await patchEncounterNote(n.id, body)
-      setNotes(prev => ({ ...prev, [editNote.apptId]: updated }))
+      setNotes(prev => ({ ...prev, [apptId]: updated }))
       setEditNote(null)
     } catch (err: any) {
-      alert(err.message || 'Failed to save')
+      setNoteError(err.message || 'Failed to save')
     }
     setNotePatching(false)
   }
@@ -526,8 +529,11 @@ export function AdminSchedule() {
                                         </div>
                                       )}
                                     </div>
+                                    {noteError && editNote?.apptId === appt.id && editNote.section === 'dx' && (
+                                      <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{noteError}</div>
+                                    )}
                                     <div className="flex gap-2 pt-1">
-                                      <Button size="xs" variant="secondary" onClick={() => setEditNote(null)}>Cancel</Button>
+                                      <Button size="xs" variant="secondary" onClick={() => { setEditNote(null); setNoteError(null) }}>Cancel</Button>
                                       <Button size="xs" loading={notePatching} onClick={saveNoteEdit}>Save diagnoses</Button>
                                     </div>
                                   </div>
@@ -590,8 +596,11 @@ export function AdminSchedule() {
                                       ))}
                                     </div>
                                     <p className="text-[10px] text-[#999]">Enter 2-digit modifier codes (e.g. 25, 59, 26) without the dash.</p>
+                                    {noteError && editNote?.apptId === appt.id && editNote.section === 'cpt' && (
+                                      <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{noteError}</div>
+                                    )}
                                     <div className="flex gap-2 pt-1">
-                                      <Button size="xs" variant="secondary" onClick={() => setEditNote(null)}>Cancel</Button>
+                                      <Button size="xs" variant="secondary" onClick={() => { setEditNote(null); setNoteError(null) }}>Cancel</Button>
                                       <Button size="xs" loading={notePatching} onClick={saveNoteEdit}>Save CPT codes</Button>
                                     </div>
                                   </div>
