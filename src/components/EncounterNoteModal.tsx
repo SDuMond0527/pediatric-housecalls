@@ -173,6 +173,66 @@ const EXAM_SYSTEMS: { key: string; label: string; hasCorrectLenses?: boolean }[]
 const emptyExamFindings = (): ExamFindings =>
   Object.fromEntries(EXAM_SYSTEMS.map(s => [s.key, { val: '', correctedLenses: false, notes: '' }]))
 
+interface IvScreeningHx {
+  onset: string
+  symptoms: string
+  fluidIntake: string
+  orsTrialed: string
+  lastUrination: string
+  diarrhea: string
+  vomiting: string
+  behavior: string
+  lipsDryness: string
+  tearsCrying: string
+  highestFever: string
+  redFlags: string[]
+  chronicConditions: string
+  medicationAllergies: string
+  priorIvFluids: string
+}
+
+const emptyIvScreeningHx = (): IvScreeningHx => ({
+  onset: '', symptoms: '', fluidIntake: '', orsTrialed: '', lastUrination: '',
+  diarrhea: '', vomiting: '', behavior: '', lipsDryness: '', tearsCrying: '',
+  highestFever: '', redFlags: [], chronicConditions: '', medicationAllergies: '',
+  priorIvFluids: '',
+})
+
+function compileIvScreeningSubjective(hx: IvScreeningHx): string {
+  const f = (label: string, val: string) => val ? `${label}: ${val}` : `${label}: —`
+  const flags = hx.redFlags.length ? hx.redFlags.join(', ') : 'None of the above'
+  return [
+    f('Symptom onset', hx.onset),
+    `Symptoms: ${hx.symptoms || '—'}`,
+    f('Oral fluid intake', hx.fluidIntake),
+    f('Oral rehydration solution (Pedialyte/electrolyte) tried', hx.orsTrialed),
+    f('Last urination', hx.lastUrination),
+    f('Diarrhea', hx.diarrhea),
+    f('Vomiting', hx.vomiting),
+    f('Current behavior/energy', hx.behavior),
+    f('Lips/mouth dryness', hx.lipsDryness),
+    f('Tears when crying', hx.tearsCrying),
+    `Highest fever: ${hx.highestFever || '—'}`,
+    `Red flag symptoms: ${flags}`,
+    `Chronic medical conditions: ${hx.chronicConditions || 'None reported'}`,
+    `Medication allergies: ${hx.medicationAllergies || 'NKDA'}`,
+    f('Prior IV fluids', hx.priorIvFluids),
+  ].join('\n')
+}
+
+function compileIvScreeningPlan(disposition: string): string {
+  if (disposition === 'approved') {
+    return `APPROVED for in-home IV fluids.\nChild meets weight requirement (≥55 lbs). In-home IV fluids visit scheduled with RN. Family instructed to continue small sips of oral fluids until RN arrival.\n\nReturn precautions: Return to ED or call 911 immediately if child develops trouble breathing, seizures, loss of consciousness, blue lips/skin, or worsening confusion.`
+  }
+  if (disposition === 'ed') {
+    return `NOT APPROVED — refer to ED.\nChild referred to nearest emergency department for IV fluid administration and further evaluation.\n\nReturn precautions: Return to ED or call 911 immediately if child develops trouble breathing, seizures, loss of consciousness, blue lips/skin, or worsening confusion.`
+  }
+  if (disposition === 'oral') {
+    return `NOT APPROVED — continue oral rehydration.\nContinue Pedialyte/electrolyte solution, small frequent sips. Reassess in 1-2 hours. If unable to keep fluids down or condition worsens, proceed to ED.\n\nReturn precautions: Return to ED or call 911 immediately if child develops trouble breathing, seizures, loss of consciousness, blue lips/skin, or worsening confusion.`
+  }
+  return `[ ] APPROVED for in-home IV fluids — RN visit scheduled.\n[ ] NOT APPROVED — refer to ED.\n[ ] NOT APPROVED — continue oral rehydration.\n\nReturn precautions: Return to ED or call 911 immediately if child develops trouble breathing, seizures, loss of consciousness, blue lips/skin, or worsening confusion.`
+}
+
 function compileSportsHx(hx: SportsPxHx): string {
   const yno = (val: string, other: string) =>
     val === 'yes' ? 'Yes' : val === 'no' ? 'No' : val === 'other' ? (other || 'Other') : '—'
@@ -282,6 +342,23 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       setSubjective(compileSportsHx(next))
       return next
     })
+  }
+
+  // IV fluids screening questionnaire
+  const [ivScreeningHx, setIvScreeningHx] = useState<IvScreeningHx>(emptyIvScreeningHx())
+  const [ivDisposition, setIvDisposition] = useState('')
+
+  function updateIvScreeningHx(update: Partial<IvScreeningHx>) {
+    setIvScreeningHx(prev => {
+      const next = { ...prev, ...update }
+      setSubjective(compileIvScreeningSubjective(next))
+      return next
+    })
+  }
+
+  function setIvDispositionAndPlan(d: string) {
+    setIvDisposition(d)
+    setPlan(compileIvScreeningPlan(d))
   }
 
   function updateExamFinding(key: string, update: Partial<ExamFinding>) {
@@ -926,6 +1003,114 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 className={inputCls} />
             </section>
 
+            {/* IV Fluids Telemedicine Screening Form */}
+            {noteType === 'IV fluids telemedicine screening' && !readOnly && (() => {
+              const pillCls = (active: boolean) =>
+                `px-3 py-1 rounded-lg text-[12px] font-medium border transition-colors ${active ? 'bg-[#085041] text-white border-[#085041]' : 'bg-white text-[#555] border-[#E8E8E4] hover:border-[#085041]'}`
+              const SINGLE = ({ field, opts }: { field: keyof IvScreeningHx; opts: string[] }) => (
+                <div className="flex gap-1.5 flex-wrap mt-1.5">
+                  {opts.map(opt => (
+                    <button key={opt} type="button"
+                      onClick={() => updateIvScreeningHx({ [field]: ivScreeningHx[field] === opt ? '' : opt })}
+                      className={pillCls(ivScreeningHx[field] === opt)}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )
+              const MULTI = ({ opts }: { opts: string[] }) => (
+                <div className="flex gap-1.5 flex-wrap mt-1.5">
+                  {opts.map(opt => {
+                    const active = ivScreeningHx.redFlags.includes(opt)
+                    return (
+                      <button key={opt} type="button"
+                        onClick={() => updateIvScreeningHx({ redFlags: active ? ivScreeningHx.redFlags.filter(v => v !== opt) : [...ivScreeningHx.redFlags, opt] })}
+                        className={pillCls(active)}>
+                        {opt}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+              const Q = ({ label, children }: { label: string; children: ReactNode }) => (
+                <div>
+                  <p className="text-[13px] text-[#1A1A2E] leading-snug">{label}</p>
+                  {children}
+                </div>
+              )
+              const subHead = 'text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2 mt-1'
+              return (
+                <section>
+                  <div className={sectionHeader}>IV Fluids Screening History</div>
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 space-y-4">
+                    <div className={subHead}>History of Present Illness</div>
+                    <Q label="When did symptoms begin?">
+                      <SINGLE field="onset" opts={['Today', 'Yesterday', '2-3 days ago', 'More than 3 days ago']} />
+                    </Q>
+                    <Q label="What symptoms is the child having?">
+                      <textarea rows={2} value={ivScreeningHx.symptoms}
+                        onChange={e => updateIvScreeningHx({ symptoms: e.target.value })}
+                        placeholder="Describe symptoms…"
+                        className="mt-1.5 w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#085041] font-sans resize-none" />
+                    </Q>
+                    <Q label="Has the child been able to drink fluids today?">
+                      <SINGLE field="fluidIntake" opts={['Yes normally', 'Some but much less than usual', 'Very little', 'Not at all — all oral fluids coming back up']} />
+                    </Q>
+                    <Q label="Have you tried oral rehydration solution (Pedialyte or electrolyte drink in small frequent sips)?">
+                      <SINGLE field="orsTrialed" opts={['Yes and it helped', 'Yes but child vomits it up', 'Yes but child refuses', 'No']} />
+                    </Q>
+                    <Q label="When did the child last urinate?">
+                      <SINGLE field="lastUrination" opts={['Within the last 4 hours', '4-8 hours ago', '8-12 hours ago', 'More than 12 hours ago', 'Not sure']} />
+                    </Q>
+                    <Q label="Has the child had diarrhea?">
+                      <SINGLE field="diarrhea" opts={['No', 'Yes (mild 1-3x/day)', 'Yes (frequent 4+x/day)']} />
+                    </Q>
+                    <Q label="Has the child been vomiting?">
+                      <SINGLE field="vomiting" opts={['No', 'Yes (1-2 times)', 'Yes (3-5 times)', 'Yes (more than 5 times)']} />
+                    </Q>
+
+                    <div className={subHead}>Assessment</div>
+                    <Q label="How is the child acting right now?">
+                      <SINGLE field="behavior" opts={['Normal', 'A little tired', 'Very tired/weak', 'Hard to wake up/unusually sleepy']} />
+                    </Q>
+                    <Q label="Are the lips or mouth dry?">
+                      <SINGLE field="lipsDryness" opts={['No', 'A little', 'Very dry/cracked', 'Not sure']} />
+                    </Q>
+                    <Q label="Does the child make tears when crying?">
+                      <SINGLE field="tearsCrying" opts={['Yes', 'No', 'Not sure']} />
+                    </Q>
+                    <Q label="Has the child had a fever? If so, what is the highest temp?">
+                      <input type="text" value={ivScreeningHx.highestFever}
+                        onChange={e => updateIvScreeningHx({ highestFever: e.target.value })}
+                        placeholder="e.g. 102.4°F"
+                        className="mt-1.5 w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#085041] font-sans" />
+                    </Q>
+
+                    <div className={subHead}>Red Flags (check all that apply)</div>
+                    <MULTI opts={['Severe belly pain', 'Stiff neck', 'Trouble breathing', 'Confusion', 'Severe relentless headache', 'Bloody vomit/stool', 'Blue lips/skin', 'Seizures', 'Diabetes', 'Known kidney disease', 'None of the above']} />
+
+                    <div className={subHead}>Medical History</div>
+                    <Q label="Any chronic medical conditions?">
+                      <input type="text" value={ivScreeningHx.chronicConditions}
+                        onChange={e => updateIvScreeningHx({ chronicConditions: e.target.value })}
+                        placeholder="None, or describe…"
+                        className="mt-1.5 w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#085041] font-sans" />
+                    </Q>
+                    <Q label="Any medication allergies?">
+                      <input type="text" value={ivScreeningHx.medicationAllergies}
+                        onChange={e => updateIvScreeningHx({ medicationAllergies: e.target.value })}
+                        placeholder="NKDA, or list allergies…"
+                        className="mt-1.5 w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#085041] font-sans" />
+                    </Q>
+                    <Q label="Has the child recently received IV fluids?">
+                      <SINGLE field="priorIvFluids" opts={['Yes', 'No']} />
+                    </Q>
+                  </div>
+                  <p className="text-[11px] text-[#999] mt-1.5">Responses auto-populate the Subjective field below.</p>
+                </section>
+              )
+            })()}
+
             {/* Sports Physical Pre-Participation History */}
             {noteType === 'Sports physical' && !readOnly && (() => {
               const pillCls = (active: boolean) =>
@@ -1027,11 +1212,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             <section>
               <div className={sectionHeader}>Subjective</div>
               <p className="text-[11px] text-[#999] mb-1.5">
-                {noteType === 'Sports physical' && !readOnly
+                {(noteType === 'Sports physical' || noteType === 'IV fluids telemedicine screening') && !readOnly
                   ? 'Auto-filled from history above — edit freely'
                   : 'History of present illness, symptoms reported by parent'}
               </p>
-              <textarea rows={noteType === 'Sports physical' && !readOnly ? 6 : 4} placeholder="Parent reports…" value={subjective}
+              <textarea rows={(noteType === 'Sports physical' || noteType === 'IV fluids telemedicine screening') && !readOnly ? 8 : 4} placeholder="Parent reports…" value={subjective}
                 disabled={readOnly}
                 onChange={e => setSubjective(e.target.value)}
                 className={textareaCls} />
@@ -1303,6 +1488,27 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {/* Plan */}
             <section>
               <div className={sectionHeader}>Plan</div>
+              {noteType === 'IV fluids telemedicine screening' && !readOnly && (
+                <div className="mb-3">
+                  <p className="text-[11px] text-[#999] mb-2">Select disposition — auto-fills plan below</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      { key: 'approved', label: '✓ Approved for IV fluids', color: '#085041' },
+                      { key: 'ed', label: '→ Refer to ED', color: '#DC2626' },
+                      { key: 'oral', label: '↻ Continue oral rehydration', color: '#1D9E75' },
+                    ] as const).map(({ key, label, color }) => (
+                      <button key={key} type="button"
+                        onClick={() => setIvDispositionAndPlan(key)}
+                        className="px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors"
+                        style={ivDisposition === key
+                          ? { background: color, color: '#fff', borderColor: color }
+                          : { background: '#fff', color: '#555', borderColor: '#E8E8E4' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-[11px] text-[#999] mb-1.5">Treatment, medications, follow-up instructions</p>
               <textarea rows={4} placeholder="1. Rest and increased fluids…" value={plan}
                 disabled={readOnly}
