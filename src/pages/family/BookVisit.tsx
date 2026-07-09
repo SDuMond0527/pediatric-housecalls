@@ -670,7 +670,6 @@ export function BookVisit() {
         if (!intake.firstName || !intake.lastName || !intake.dateOfBirth) return false
         if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
       }
-      if (intake.hasProfile && !intake.cardOnFile && !intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
       return true
     })
   }
@@ -2101,7 +2100,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       )}
 
       {/* Insurance — shown for existing patients who don't have insurance info yet */}
-      {intake.hasProfile && !intake.cardOnFile && !intake.insuranceProvider && (
+      {intake.hasProfile && !intake.cardOnFile && (!intake.insuranceProvider || !intake.insuranceMemberId) && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</p>
           <button
