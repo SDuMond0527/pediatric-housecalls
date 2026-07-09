@@ -12,6 +12,7 @@ interface ApptRow {
   notes: string | null
 }
 interface ProviderRow { id: string; name: string }
+interface EncounterNoteRow { provider_id: string; cpt_codes: { code: string; description: string; charge_amount: number; modifier?: string }[] }
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -46,6 +47,7 @@ export function AdminReports() {
   const [month, setMonth] = useState(new Date())
   const [appts, setAppts] = useState<ApptRow[]>([])
   const [providers, setProviders] = useState<ProviderRow[]>([])
+  const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export function AdminReports() {
       const result = await getReports({ start, end }).catch(() => null)
       setAppts(result?.appointments ?? [])
       setProviders(result?.providers ?? [])
+      setEncounterNotes(result?.encounterNotes ?? [])
       setLoading(false)
     }
     load()
@@ -101,6 +104,24 @@ export function AdminReports() {
   const activeTypes = VISIT_TYPE_ORDER.filter(vt => appts.some(a => a.visit_type === vt))
   // Add any unexpected types not in the order list
   appts.forEach(a => { if (!activeTypes.includes(a.visit_type)) activeTypes.push(a.visit_type) })
+
+  // Procedure codes by provider
+  type CptSummary = { code: string; description: string; count: number; total: number }
+  const providerCptMap: Record<string, CptSummary[]> = {}
+  encounterNotes.forEach(en => {
+    if (!Array.isArray(en.cpt_codes)) return
+    const provider = providers.find(p => p.id === en.provider_id)
+    if (!provider) return
+    if (!providerCptMap[provider.name]) providerCptMap[provider.name] = []
+    en.cpt_codes.forEach(c => {
+      const existing = providerCptMap[provider.name].find(x => x.code === c.code)
+      if (existing) { existing.count++; existing.total += c.charge_amount ?? 0 }
+      else providerCptMap[provider.name].push({ code: c.code, description: c.description, count: 1, total: c.charge_amount ?? 0 })
+    })
+  })
+  const providerCptRows = Object.entries(providerCptMap)
+    .map(([name, codes]) => ({ name, codes: [...codes].sort((a, b) => b.count - a.count) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   // Bonus leader (highest pickups; if tied, both get badge)
   const maxPickups = Math.max(...providerStats.map(p => p.pickups), 0)
@@ -212,6 +233,44 @@ export function AdminReports() {
             </div>
           </div>
         )}
+
+        {/* Procedure codes by provider */}
+        <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Procedure codes by provider</h3>
+          <p className="text-[12px] text-[#999] mb-4">{monthLabel} — from completed encounter notes</p>
+          {providerCptRows.length === 0 ? (
+            <p className="text-[13px] text-[#999]">No procedure codes recorded this month.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#E8E8E4]">
+                    {['Provider', 'Code', 'Description', 'Count', 'Total Charges'].map(h => (
+                      <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F1EFE8]">
+                  {providerCptRows.map(({ name, codes }) =>
+                    codes.map((c, i) => (
+                      <tr key={`${name}-${c.code}`}>
+                        <td className="py-2.5 pr-6 font-medium text-[#1A1A2E] whitespace-nowrap">
+                          {i === 0 ? name : ''}
+                        </td>
+                        <td className="py-2.5 pr-6">
+                          <span className="font-mono text-[12px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{c.code}</span>
+                        </td>
+                        <td className="py-2.5 pr-6 text-[#555] max-w-xs">{c.description}</td>
+                        <td className="py-2.5 pr-6 tabular-nums font-semibold text-[#1A1A2E]">{c.count}</td>
+                        <td className="py-2.5 tabular-nums text-[#1D9E75] font-medium">${c.total.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {/* Monthly bonus leaderboard */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
