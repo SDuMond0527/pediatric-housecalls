@@ -3,7 +3,6 @@ import { createHmac } from 'crypto'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 const FROM_EMAIL     = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
-const PORTAL_URL     = process.env.PORTAL_URL || 'https://phcbooking.com'
 const PRACTICE_NAME  = process.env.VITE_PRACTICE_NAME || 'Pediatric Housecalls'
 const SECRET         = process.env.PASSWORD_RESET_SECRET || process.env.VITE_SUPABASE_ANON_KEY || 'dev-reset-secret'
 
@@ -21,9 +20,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const normalizedEmail = email.toLowerCase().trim()
   const token    = generateResetToken(normalizedEmail)
-  const resetUrl = `${PORTAL_URL}/family/reset-password?token=${encodeURIComponent(token)}`
+  const host     = process.env.PORTAL_URL || `https://${req.headers.host}`
+  const resetUrl = `${host}/family/reset-password?token=${encodeURIComponent(token)}`
 
-  console.log('forgot-password(family): sending to', normalizedEmail, '| RESEND set:', !!RESEND_API_KEY)
+  console.log('forgot-password(family): sending to', normalizedEmail, '| RESEND set:', !!RESEND_API_KEY, '| resetUrl:', resetUrl)
 
   if (!RESEND_API_KEY) {
     console.error('forgot-password(family): RESEND_API_KEY not set')
