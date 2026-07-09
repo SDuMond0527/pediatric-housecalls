@@ -364,3 +364,20 @@ export const updateNoteTemplate = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/note-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const deleteNoteTemplate = (id: string) =>
   apiFetch<void>(`/api/note-templates/${id}`, { method: 'DELETE' })
+
+// ── Patient Statements ────────────────────────────────────────
+export const getPatientStatement = (claimId: string) =>
+  apiFetch<any>(`/api/patient-statements?claim_id=${encodeURIComponent(claimId)}`)
+
+export const createPatientStatement = (data: any) =>
+  apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
+
+export const updatePatientStatement = (id: string, data: any) =>
+  apiFetch<any>(`/api/patient-statements/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+
+export const sendPatientStatement = (id: string) =>
+  apiFetch<any>(`/api/patient-statements/${id}/send`, { method: 'POST' })
+
+export const pullStediEra = (claimId: string) =>
+  apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
+

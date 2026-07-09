@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim } from '../../lib/api'
+import { PatientStatementModal } from './PatientStatementModal'
 
 type Tab = 'unbilled' | 'review' | 'submitted'
 
@@ -48,6 +49,7 @@ export function AdminClaims() {
   const [testResults, setTestResults] = useState<Record<string, any>>({})
   const [reopening, setReopening] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const [statementClaim, setStatementClaim] = useState<any>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
   const [editPatient, setEditPatient] = useState<Record<string, {
@@ -616,6 +618,11 @@ export function AdminClaims() {
                       >
                         View in Stedi <ExternalLink size={10} />
                       </a>
+                      <button
+                        onClick={() => setStatementClaim(c)}
+                        className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap font-medium">
+                        <Receipt size={11} /> Statement
+                      </button>
                     </div>
                   </div>
                 )
@@ -623,6 +630,14 @@ export function AdminClaims() {
             </div>
           )}
         </>
+      )}
+
+      {statementClaim && (
+        <PatientStatementModal
+          claim={statementClaim}
+          onClose={() => setStatementClaim(null)}
+          onSent={() => setStatementClaim(null)}
+        />
       )}
     </div>
   )
