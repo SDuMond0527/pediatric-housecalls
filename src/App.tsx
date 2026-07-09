@@ -22,6 +22,7 @@ import { AdminBookings } from './pages/admin/AdminBookings'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
+import { AdminAvailability } from './pages/admin/AdminAvailability'
 import { FamilyLogin } from './pages/family/FamilyLogin'
 import { FamilySignup } from './pages/family/FamilySignup'
 import { FamilySetup } from './pages/family/FamilySetup'
@@ -105,7 +106,7 @@ export default function App() {
                 <Route path="patients"        element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="providers"      element={<AdminProviders />} />
-                <Route path="availability"   element={<Availability />} />
+                <Route path="availability"   element={<AdminAvailability />} />
                 <Route path="provision"  element={<AdminProvision />} />
                 <Route path="settings"   element={<Settings />} />
               </Route>
