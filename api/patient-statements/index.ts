@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM patient_statements ps
         LEFT JOIN claims c ON c.id = ps.claim_id
         LEFT JOIN children ch ON ch.id = c.child_id
-        LEFT JOIN family_profiles fp ON fp.family_id = ch.family_id
+        LEFT JOIN family_profiles fp ON fp.id = ch.family_id
         WHERE ps.claim_id = ${claimId} AND ps.practice_id = ${practiceId}::uuid
         LIMIT 1
       `
