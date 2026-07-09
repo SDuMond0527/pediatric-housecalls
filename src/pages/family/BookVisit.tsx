@@ -2204,8 +2204,8 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             </div>
           )}
 
-          {/* Insurance card upload — required first time; on file or optional for established patients after that; hidden if self-pay */}
-          {!intake.selfPay && <div>
+          {/* Insurance card upload — required for new patients; shown as "tap to update" if card already on file; hidden for established patients without a card */}
+          {!intake.selfPay && (!intake.hasProfile || intake.cardOnFile) && <div>
             <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">
               Insurance card photos — front & back{' '}
               {intake.cardOnFile
