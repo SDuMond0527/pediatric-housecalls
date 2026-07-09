@@ -88,6 +88,8 @@ export function FamilyProfile() {
   const [savingChildId, setSavingChildId] = useState<string | null>(null)
   const [savedChildId, setSavedChildId] = useState<string | null>(null)
   const [childSaveError, setChildSaveError] = useState<string | null>(null)
+  const [addingChildSaving, setAddingChildSaving] = useState(false)
+  const [addChildError, setAddChildError] = useState('')
   const [uploadingChild, setUploadingChild] = useState<{ id: string; side: 'front' | 'back' } | null>(null)
   const [archivingInsId, setArchivingInsId] = useState<string | null>(null)
   const [pastInsOpenId, setPastInsOpenId] = useState<string | null>(null)
@@ -211,12 +213,17 @@ export function FamilyProfile() {
 
   async function addChild() {
     if (!newFirst.trim() && !newLast.trim()) return
-    await createChild({ first_name: newFirst.trim(), last_name: newLast.trim(), date_of_birth: newDob || undefined, family_id: user!.id })
-    await refreshFamily()
-    setNewFirst('')
-    setNewLast('')
-    setNewDob('')
-    setAddingChild(false)
+    setAddingChildSaving(true)
+    setAddChildError('')
+    try {
+      await createChild({ first_name: newFirst.trim(), last_name: newLast.trim(), date_of_birth: newDob || undefined })
+      await refreshFamily()
+      setNewFirst(''); setNewLast(''); setNewDob(''); setAddingChild(false)
+    } catch (e: any) {
+      setAddChildError(e?.message ?? 'Failed to add child. Please try again.')
+    } finally {
+      setAddingChildSaving(false)
+    }
   }
 
   async function removeChild(id: string) {
@@ -522,9 +529,10 @@ export function FamilyProfile() {
               <Input label="Date of birth" type="date"
                 value={newDob} onChange={e => setNewDob(e.target.value)} />
             </div>
+            {addChildError && <div className="mb-3 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addChildError}</div>}
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob('') }}>Cancel</Button>
-              <Button size="sm" onClick={addChild}>Add</Button>
+              <Button variant="secondary" size="sm" disabled={addingChildSaving} onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob(''); setAddChildError('') }}>Cancel</Button>
+              <Button size="sm" loading={addingChildSaving} onClick={addChild}>Add</Button>
             </div>
           </div>
         )}

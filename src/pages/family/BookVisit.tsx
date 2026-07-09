@@ -668,6 +668,7 @@ export function BookVisit() {
         if (!intake.firstName || !intake.lastName || !intake.dateOfBirth) return false
         if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
       }
+      if (intake.hasProfile && !intake.cardOnFile && !intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
       return true
     })
   }
@@ -844,27 +845,30 @@ export function BookVisit() {
     await Promise.allSettled([
       ...booking.selectedChildIds.map(childId => {
         const intake = booking.childIntakes[childId]
-        if (!intake?.hasProfile) {
-          return updateChild(childId, {
+        if (!intake) return Promise.resolve()
+        const update: Record<string, unknown> = {
+          insurance_provider: intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
+          insurance_member_id: intake.selfPay ? null : (intake.insuranceMemberId || null),
+          insurance_group_number: intake.insuranceGroupNumber || null,
+          insurance_subscriber_name: intake.insuranceSubscriberName || null,
+          insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
+          insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
+          preferred_pharmacy: intake.preferredPharmacy || null,
+          pcp: intake.pcp || null,
+        }
+        if (!intake.hasProfile) {
+          Object.assign(update, {
             phi_sharing_consent: intake.phiSharingConsent,
             first_name: intake.firstName || null,
             last_name: intake.lastName || null,
             date_of_birth: intake.dateOfBirth || null,
             gender: intake.gender || null,
-            insurance_provider: intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
-            insurance_member_id: intake.selfPay ? null : (intake.insuranceMemberId || null),
-            insurance_group_number: intake.insuranceGroupNumber || null,
-            insurance_subscriber_name: intake.insuranceSubscriberName || null,
-            insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
-            insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
             allergies: intake.allergies || null,
             current_medications: intake.currentMedications || null,
             medical_history: intake.medicalHistory || null,
-            preferred_pharmacy: intake.preferredPharmacy || null,
-            pcp: intake.pcp || null,
           })
         }
-        return Promise.resolve()
+        return updateChild(childId, update)
       }),
       ...Object.entries(booking.childIntakes)
         .filter(([, intake]) => intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl)
@@ -2091,6 +2095,45 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
         <div className="p-3 bg-[#E1F5EE] border border-[#5DCAA5] rounded-lg flex items-center gap-2 text-[13px] text-[#085041]">
           <Check size={14} />
           <span><strong>{intake.displayLabel}'s</strong> profile is on file — just tell us what's going on today.</span>
+        </div>
+      )}
+
+      {/* Insurance — shown for existing patients who don't have insurance info yet */}
+      {intake.hasProfile && !intake.cardOnFile && !intake.insuranceProvider && (
+        <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</p>
+          <button
+            type="button"
+            onClick={() => onSelfPayChange(!intake.selfPay)}
+            className={`w-full flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all text-left mb-3 ${intake.selfPay ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+          >
+            <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.selfPay ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
+              {intake.selfPay && <Check size={11} className="text-white" strokeWidth={3} />}
+            </div>
+            <div>
+              <span className={`text-[13px] font-medium block ${intake.selfPay ? 'text-[#085041]' : 'text-[#333]'}`}>We are self-pay</span>
+              <span className="text-[12px] text-[#999]">No insurance — card photos and insurance info are not required</span>
+            </div>
+          </button>
+          {!intake.selfPay && (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
+              <Input label="Member ID" placeholder="ABC123456789" value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
+              <Input label="Group number" placeholder="GRP001" value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
+              <Input label="Subscriber name" placeholder="Jennifer Smith" value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pharmacy & PCP — shown for existing patients missing these fields */}
+      {intake.hasProfile && (!intake.preferredPharmacy || !intake.pcp) && (
+        <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Health providers</p>
+          <div className="space-y-3">
+            <Input label="Preferred pharmacy — include full address" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
+            <Input label="Primary care physician — include practice name & address" placeholder="e.g. Dr. Smith, Charlotte Pediatrics, 456 Park Rd, Charlotte, NC 28209" value={intake.pcp} onChange={e => onChange('pcp', e.target.value)} />
+          </div>
         </div>
       )}
 
