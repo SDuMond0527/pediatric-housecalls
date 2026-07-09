@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Check, Plus, User, Upload, X } from 'lucide-react'
+import { ChevronLeft, Check, Plus, User, Upload, X, Camera } from 'lucide-react'
 import {
   getProviderByName,
   getProvidersByRole,
@@ -60,6 +60,7 @@ interface ChildIntake {
   // Per-appointment (every booking)
   chiefComplaint: string
   additionalInfo: string
+  textVisitPhotos: string[]
 }
 
 
@@ -173,7 +174,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', vaccinationStatus: 'fully_vaccinated',
     phiSharingConsent: false,
-    chiefComplaint: '', additionalInfo: '',
+    chiefComplaint: '', additionalInfo: '', textVisitPhotos: [],
   }
 }
 
@@ -370,6 +371,16 @@ export function BookVisit() {
       childIntakes: {
         ...b.childIntakes,
         [childId]: { ...b.childIntakes[childId], [field]: value },
+      },
+    }))
+  }
+
+  function setIntakePhotos(childId: string, photos: string[]) {
+    setBooking(b => ({
+      ...b,
+      childIntakes: {
+        ...b.childIntakes,
+        [childId]: { ...b.childIntakes[childId], textVisitPhotos: photos },
       },
     }))
   }
@@ -743,6 +754,7 @@ export function BookVisit() {
       if (firstIntake.dateOfBirth) noteParts.push(`DOB:${firstIntake.dateOfBirth}`)
       if (firstIntake.chiefComplaint)    noteParts.push(`CC:${firstIntake.chiefComplaint}`)
       if (firstIntake.additionalInfo)    noteParts.push(`NOTES:${firstIntake.additionalInfo}`)
+      if (firstIntake.textVisitPhotos?.length) firstIntake.textVisitPhotos.filter(Boolean).forEach(url => noteParts.push(`PHOTO:${url}`))
       if (firstIntake.allergies)         noteParts.push(`ALLERGY:${firstIntake.allergies}`)
       if (firstIntake.currentMedications) noteParts.push(`MEDS:${firstIntake.currentMedications}`)
       if (firstIntake.medicalHistory)    noteParts.push(`PMH:${firstIntake.medicalHistory}`)
@@ -1126,11 +1138,13 @@ export function BookVisit() {
                 <ChildIntakeFormSection
                   key={c.id}
                   intake={intake}
+                  visitType={booking.visitType}
                   onChange={(field, value) => setIntake(c.id, field, value)}
                   onConsentChange={val => setBooking(b => ({
                     ...b,
                     childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], phiSharingConsent: val } },
                   }))}
+                  onPhotosChange={photos => setIntakePhotos(c.id, photos)}
                 />
               )
             })
@@ -1893,15 +1907,44 @@ function compressToJpeg(file: File): Promise<string> {
 
 // ─── Child intake form section ─────────────────────────────────────────────────
 
-function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
+function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange }: {
   intake: ChildIntake
+  visitType: string
   onChange: (field: keyof ChildIntake, value: string) => void
   onConsentChange: (val: boolean) => void
+  onPhotosChange: (photos: string[]) => void
 }) {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
+  const photoRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
   const [uploading, setUploading] = useState<'front' | 'back' | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [photoUploading, setPhotoUploading] = useState<number | null>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+
+  async function uploadVisitPhoto(file: File, slot: number) {
+    setPhotoUploading(slot)
+    setPhotoError(null)
+    try {
+      const token = await getFamilyAccessToken()
+      const data = await compressToJpeg(file)
+      const filename = `visit-photos/${intake.childId || 'unknown'}/${Date.now()}-${slot}.jpg`
+      const res = await fetch('/api/upload-insurance-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data, filename }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Upload failed')
+      const next = [...(intake.textVisitPhotos || [])]
+      next[slot] = json.url
+      onPhotosChange(next)
+    } catch (e: any) {
+      setPhotoError(e?.message || 'Upload failed')
+    } finally {
+      setPhotoUploading(null)
+    }
+  }
 
   async function uploadCard(file: File, side: 'front' | 'back') {
     setUploading(side)
@@ -2046,6 +2089,48 @@ function ChildIntakeFormSection({ intake, onChange, onConsentChange }: {
               rows={2}
               className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none bg-white" />
           </div>
+
+          {/* Photo upload — text visits only, up to 2 photos */}
+          {visitType === 'Text visit' && (
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Photos <span className="normal-case font-normal text-[#999]">optional — up to 2 (e.g. rash, wound)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {[0, 1].map(slot => {
+                  const url = (intake.textVisitPhotos || [])[slot]
+                  return (
+                    <div key={slot}>
+                      <input ref={photoRefs[slot]} type="file" accept="image/*" className="hidden"
+                        onChange={e => { if (e.target.files?.[0]) uploadVisitPhoto(e.target.files[0], slot) }} />
+                      {url ? (
+                        <div className="relative rounded-lg overflow-hidden border border-[#E8E8E4] aspect-square">
+                          <img src={url} alt={`Photo ${slot + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => { const next = [...(intake.textVisitPhotos || [])]; next[slot] = ''; onPhotosChange(next) }}
+                            className="absolute top-1 right-1 w-6 h-6 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 transition-colors">
+                            <X size={12} className="text-white" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => photoRefs[slot].current?.click()}
+                          disabled={photoUploading === slot}
+                          className="w-full aspect-square border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1 hover:border-[#AFA9EC] transition-colors bg-white disabled:opacity-50">
+                          {photoUploading === slot
+                            ? <span className="text-[12px] text-[#999]">Uploading…</span>
+                            : <>
+                                <Camera size={20} className="text-[#D0D0CC]" />
+                                <span className="text-[11px] text-[#999]">Add photo</span>
+                              </>}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {photoError && <p className="text-[11px] text-[#DC2626] mt-1">{photoError}</p>}
+            </div>
+          )}
 
           {/* Insurance card upload — required first time; on file or optional for established patients after that */}
           <div>
