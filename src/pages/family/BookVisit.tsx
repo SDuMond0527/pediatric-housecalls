@@ -2100,7 +2100,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       )}
 
       {/* Insurance — shown for existing patients who don't have insurance info yet */}
-      {intake.hasProfile && !intake.cardOnFile && (!intake.insuranceProvider || !intake.insuranceMemberId) && (
+      {intake.hasProfile && !intake.cardOnFile && !intake.insuranceProvider && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</p>
           <button
