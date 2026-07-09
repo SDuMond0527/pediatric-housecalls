@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = myRows[0].practice_id as string
 
   const [providers, availability, overrides] = await Promise.all([
-    sql`SELECT id, name, role, initials, avatar_color, avatar_text_color FROM providers WHERE practice_id = ${practiceId}::uuid AND role != 'admin' AND is_active = true ORDER BY name`,
+    sql`SELECT id, name, role, initials, avatar_color, avatar_text_color FROM providers WHERE practice_id = ${practiceId}::uuid AND role != 'admin' ORDER BY name`,
     sql`SELECT provider_id, day_of_week, is_active, start_time, end_time FROM availability WHERE practice_id = ${practiceId}::uuid ORDER BY day_of_week`,
     sql`SELECT provider_id, date, is_available, start_time, end_time, note FROM availability_overrides WHERE practice_id = ${practiceId}::uuid AND date >= CURRENT_DATE AND date <= CURRENT_DATE + INTERVAL '60 days' ORDER BY date`,
   ])
