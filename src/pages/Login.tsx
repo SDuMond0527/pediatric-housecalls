@@ -84,7 +84,7 @@ export function Login() {
                 <Input label="Email" type="email" placeholder="you@example.com"
                   value={email} onChange={e => setEmail(e.target.value)} required />
                 <div>
-                  <Input label="Password" type="password" placeholder="••••••••"
+                  <Input label="Password" type="password" placeholder="••••••••" showPasswordToggle
                     value={password} onChange={e => setPassword(e.target.value)} required />
                   <div className="text-right mt-1">
                     <Link to="/forgot-password" className="text-[12px] text-[#7F77DD] hover:underline">Forgot password?</Link>
@@ -98,9 +98,9 @@ export function Login() {
                 <div className="text-[13px] text-[#555] mb-2">
                   Please set a permanent password to continue.
                 </div>
-                <Input label="New password" type="password" placeholder="••••••••"
+                <Input label="New password" type="password" placeholder="••••••••" showPasswordToggle
                   value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                <Input label="Confirm new password" type="password" placeholder="••••••••"
+                <Input label="Confirm new password" type="password" placeholder="••••••••" showPasswordToggle
                   value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
                 {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
                 <Button type="submit" className="w-full !py-2.5" loading={loading}>Set password & sign in</Button>

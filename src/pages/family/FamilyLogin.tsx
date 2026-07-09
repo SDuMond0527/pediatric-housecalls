@@ -63,7 +63,7 @@ export function FamilyLogin() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input label="Email" type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
               <div>
-                <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+                <Input label="Password" type="password" placeholder="••••••••" showPasswordToggle value={password} onChange={e => setPassword(e.target.value)} required />
                 <div className="text-right mt-1">
                   <Link to="/family/forgot-password" className="text-[12px] text-[#7F77DD] hover:underline">Forgot password?</Link>
                 </div>
