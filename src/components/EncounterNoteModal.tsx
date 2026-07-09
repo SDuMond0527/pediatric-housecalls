@@ -15,7 +15,15 @@ const NOTE_TYPES = [
 ] as const
 type NoteType = typeof NOTE_TYPES[number]
 
-const NOTE_TEMPLATES: Record<NoteType, { subjective: string; objective: string; plan: string }> = {
+const TELE_ASSESSMENT_BASE = `This visit was completed as a virtual video using a synchronous two-way, audio-video tele-health platform. A virtual video appointment is an accepted method of medical assessment. All issues as above were discussed and addressed. Due to the nature of a video-only modality, the only components of a physical exam that could be done are the elements supported by direct visual observation. If it was felt that a patient should be evaluated in a clinic or in an emergency setting then they were directed there.`
+
+const TELE_DURATION_OPTIONS = [
+  { label: '20-29 minutes', cpt: '99213' },
+  { label: '30-39 minutes', cpt: '99214' },
+  { label: '40-54 minutes', cpt: '99215' },
+] as const
+
+const NOTE_TEMPLATES: Record<NoteType, { subjective: string; objective: string; assessment?: string; plan: string }> = {
   'In-home sick visit': {
     subjective: 'Parent reports ',
     objective: `General: Alert, in no acute distress, well-nourished, well-hydrated child.
@@ -35,6 +43,7 @@ General: [Alert, interactive, in no apparent distress / appears ill] as observed
 Respiratory: [No visible work of breathing / increased work of breathing noted].
 Skin: [No visible rash / rash visible — described as...].
 Note: Unable to assess ears, throat, or auscultate lungs/heart remotely.`,
+    assessment: TELE_ASSESSMENT_BASE,
     plan: '',
   },
   'IV fluids telemedicine screening': {
@@ -60,6 +69,7 @@ General: [Alert, interactive, in no apparent distress / appears mildly ill / app
 Mucous membranes: [Lips appear moist / Lips appear dry / Lips appear very dry or cracked].
 Behavior/responsiveness: [Age-appropriate and interactive / Lethargic but arousable / Difficult to arouse].
 Weight on file: [___] lbs — [meets / does not meet] 55 lb minimum for in-home IV fluids.`,
+    assessment: TELE_ASSESSMENT_BASE,
     plan: `[ ] APPROVED for in-home IV fluids: In-home IV fluids visit scheduled with RN. Family instructed to continue small sips of oral fluids until RN arrival.
 [ ] NOT APPROVED — refer to ED: Child referred to nearest emergency department for IV fluid administration and further evaluation.
 [ ] NOT APPROVED — continue oral rehydration: Continue Pedialyte/electrolyte solution, small frequent sips. Return precautions reviewed.
@@ -445,8 +455,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     const t = NOTE_TEMPLATES[type]
     setSubjective(t.subjective)
     setObjective(t.objective)
+    if (t.assessment != null) setAssessment(t.assessment)
     if (t.plan) setPlan(t.plan)
     if (type !== 'Sports physical') { setSportsHx(emptySportsHx()); setExamFindings(emptyExamFindings()) }
+    setTeleDuration('')
     setShowTemplatePrompt(false)
   }
 
@@ -467,6 +479,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [assessment, setAssessment] = useState('')
   const [plan, setPlan] = useState('')
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([])
+  const [teleDuration, setTeleDuration] = useState('')
+
+  function setTeleDurationAndAssessment(cpt: string) {
+    const next = teleDuration === cpt ? '' : cpt
+    setTeleDuration(next)
+    const base = assessment.replace(/\n\nDuration of visit:.*$/s, '').trimEnd()
+    const opt = TELE_DURATION_OPTIONS.find(o => o.cpt === next)
+    setAssessment(opt ? `${base}\n\nDuration of visit: ${opt.label} (${opt.cpt})` : base)
+  }
 
   // Vitals
   const [vitals, setVitals] = useState<VitalsForm>(emptyVitals())
@@ -539,6 +560,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setSubjective(note.subjective ?? '')
         setObjective(note.objective ?? '')
         setAssessment(note.assessment ?? '')
+        const durMatch = (note.assessment ?? '').match(/Duration of visit: \S+ \((\d+)\)/)
+        if (durMatch) setTeleDuration(durMatch[1])
         setPlan(note.plan ?? '')
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
         setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => ({ ...c, charge_amount: parseFloat(c.charge_amount) })) : [])
@@ -557,6 +580,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         const t = NOTE_TEMPLATES[type]
         setSubjective(t.subjective)
         setObjective(t.objective)
+        if (t.assessment != null) setAssessment(t.assessment)
         if (t.plan) setPlan(t.plan)
       }
       if (vitalsData) {
@@ -1370,7 +1394,27 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </div>
               )}
 
-              <textarea rows={3} placeholder="Clinical reasoning and assessment notes…" value={assessment}
+              {(noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening') && !readOnly && (
+                <div className="mb-3">
+                  <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Duration of visit</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {TELE_DURATION_OPTIONS.map(opt => (
+                      <button key={opt.cpt} type="button"
+                        onClick={() => setTeleDurationAndAssessment(opt.cpt)}
+                        className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                          teleDuration === opt.cpt
+                            ? 'bg-[#7F77DD] text-white border-[#7F77DD]'
+                            : 'bg-white text-[#555] border-[#E8E8E4] hover:border-[#7F77DD]'
+                        }`}>
+                        {opt.label} <span className={teleDuration === opt.cpt ? 'opacity-80' : 'opacity-50'}>({opt.cpt})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
+                placeholder="Clinical reasoning and assessment notes…" value={assessment}
                 disabled={readOnly}
                 onChange={e => setAssessment(e.target.value)}
                 className={textareaCls} />
