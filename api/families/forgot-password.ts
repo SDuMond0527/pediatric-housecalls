@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHmac } from 'crypto'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const FROM_EMAIL     = process.env.FROM_EMAIL || 'appointments@phc-team.com'
+const FROM_EMAIL     = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
 const PRACTICE_NAME  = process.env.VITE_PRACTICE_NAME || 'Pediatric Housecalls'
 const SECRET         = process.env.PASSWORD_RESET_SECRET || process.env.VITE_SUPABASE_ANON_KEY || 'dev-reset-secret'
 

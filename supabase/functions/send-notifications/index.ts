@@ -15,7 +15,7 @@ const TWILIO_SID       = Deno.env.get('TWILIO_ACCOUNT_SID') || ''
 const TWILIO_API_KEY   = Deno.env.get('TWILIO_API_KEY_SID') || ''
 const TWILIO_API_SECRET = Deno.env.get('TWILIO_API_KEY_SECRET') || ''
 const TWILIO_FROM      = Deno.env.get('TWILIO_FROM_NUMBER') || ''
-const FROM_EMAIL       = Deno.env.get('FROM_EMAIL') || 'appointments@phc-team.com'
+const FROM_EMAIL       = Deno.env.get('FROM_EMAIL') || 'appointments@phcbooking.com'
 const PORTAL_URL       = Deno.env.get('PORTAL_URL') || 'https://phc-team.com'
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
