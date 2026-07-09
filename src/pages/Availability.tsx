@@ -9,6 +9,7 @@ import {
   createZoneRestriction, deleteZoneRestriction,
   createTimeBlock, deleteTimeBlock,
   upsertVisitTypeAvailability,
+  getProviders,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
@@ -79,7 +80,24 @@ function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): Vi
 
 export function Availability() {
   const { provider } = useAuth()
+  const isAdmin = provider?.role === 'admin'
   const { visitTypes, byType } = usePracticeVisitTypes()
+
+  // Admin provider picker
+  const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('')
+  const viewingProviderId = isAdmin ? selectedProviderId : (provider?.id ?? '')
+
+  useEffect(() => {
+    if (!isAdmin) return
+    getProviders().then((rows: any[]) => {
+      const active = rows.filter((p: any) => p.role !== 'admin' && p.is_active !== false)
+        .sort((a: any, b: any) => a.name.localeCompare(b.name))
+      setAllProviders(active)
+      if (active.length > 0) setSelectedProviderId(active[0].id)
+    }).catch(() => {})
+  }, [isAdmin])
+
   const [avail, setAvail] = useState<Availability[]>([])
   const [visitTypeAvail, setVisitTypeAvail] = useState<VisitTypeAvail[]>([])
   const [zoneRestrictions, setZoneRestrictions] = useState<ZoneRestriction[]>([])
@@ -106,27 +124,27 @@ export function Availability() {
   const [savedVisitTypes, setSavedVisitTypes] = useState<VisitTypeAvail[]>([])
 
   useEffect(() => {
-    if (!provider) return
-    getAvailability(provider.id).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
+    if (!viewingProviderId) return
+    getAvailability(viewingProviderId).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
       if (days && days.length > 0) setAvail(days as Availability[])
-      else setAvail(DEFAULT_AVAILABILITY.map(d => ({ ...d, id: '', provider_id: provider.id })))
+      else setAvail(DEFAULT_AVAILABILITY.map(d => ({ ...d, id: '', provider_id: viewingProviderId })))
       setSavedVisitTypes((saved ?? []) as VisitTypeAvail[])
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
       setTimeBlocks((tb ?? []) as TimeBlock[])
       setOverrides(((ov ?? []) as any[]).map(o => ({ ...o, date: (o.date as string).split('T')[0] })) as AvailabilityOverride[])
     })
-  }, [provider])
+  }, [viewingProviderId])
 
   // Re-merge whenever saved rows or practice visit types change
   useEffect(() => {
-    if (!provider || visitTypes.length === 0) return
-    const defaults = defaultVisitTypeAvail(provider.id, visitTypes.map(v => v.visit_type))
+    if (!viewingProviderId || visitTypes.length === 0) return
+    const defaults = defaultVisitTypeAvail(viewingProviderId, visitTypes.map(v => v.visit_type))
     const merged = defaults.map(def => {
       const existing = savedVisitTypes.find(s => s.visit_type === def.visit_type)
       return existing ?? def
     })
     setVisitTypeAvail(merged)
-  }, [provider, visitTypes, savedVisitTypes])
+  }, [viewingProviderId, visitTypes, savedVisitTypes])
 
   function toggleDay(i: number) {
     setAvail(prev => prev.map((a, idx) => idx === i ? { ...a, is_active: !a.is_active } : a))
@@ -149,20 +167,20 @@ export function Availability() {
   }
 
   async function save() {
-    if (!provider) return
+    if (!viewingProviderId) return
     setSaving(true)
     try {
-      await saveAvailabilityDays(provider.id, avail)
+      await saveAvailabilityDays(viewingProviderId, avail)
 
       const rows = visitTypeAvail.map(v => ({
         id: v.id ?? undefined,
-        provider_id: provider.id,
+        provider_id: viewingProviderId,
         visit_type: v.visit_type,
         is_active: v.is_active,
         start_time: v.start_time,
         end_time: v.end_time,
       }))
-      const upserted = await upsertVisitTypeAvailability(provider.id, rows)
+      const upserted = await upsertVisitTypeAvailability(viewingProviderId, rows)
       if (upserted) {
         setVisitTypeAvail(prev => prev.map(v => {
           const fresh = (upserted as VisitTypeAvail[]).find(u => u.visit_type === v.visit_type)
@@ -179,10 +197,10 @@ export function Availability() {
   }
 
   async function addZoneRestriction() {
-    if (!provider || !newZone.zone) return
+    if (!viewingProviderId || !newZone.zone) return
     try {
       const data = await createZoneRestriction({
-        provider_id: provider.id, zone: newZone.zone,
+        provider_id: viewingProviderId, zone: newZone.zone,
         start_time: fmt12to24(newZone.start), end_time: fmt12to24(newZone.end),
       })
       if (data) setZoneRestrictions(prev => [...prev, data as ZoneRestriction])
@@ -199,9 +217,9 @@ export function Availability() {
   }
 
   async function addTimeBlock() {
-    if (!provider || !newBlock.label) return
+    if (!viewingProviderId || !newBlock.label) return
     try {
-      const data = await createTimeBlock({ provider_id: provider.id, ...newBlock })
+      const data = await createTimeBlock({ provider_id: viewingProviderId, ...newBlock })
       if (data) setTimeBlocks(prev => [...prev, data as TimeBlock])
       setBlockModal(false)
       setNewBlock({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
@@ -216,7 +234,7 @@ export function Availability() {
   }
 
   async function addOverride() {
-    if (!provider || !newOverride.date) return
+    if (!viewingProviderId || !newOverride.date) return
     setSavingOverride(true)
     const savedDate = newOverride.date
     try {
@@ -227,9 +245,9 @@ export function Availability() {
         end_time: newOverride.is_available ? fmt12to24(newOverride.end) : null,
         note: newOverride.note || null,
       }
-      await upsertAvailabilityOverride(provider.id, payload)
+      await upsertAvailabilityOverride(viewingProviderId, payload)
       // Re-fetch from server; normalize date format (Neon may return full ISO timestamp)
-      const fresh = await getAvailability(provider.id)
+      const fresh = await getAvailability(viewingProviderId)
       const normalized = (fresh.overrides ?? []).map((o: any) => ({
         ...o,
         date: (o.date as string).split('T')[0],
@@ -279,7 +297,23 @@ export function Availability() {
   return (
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Availability settings</div>
+        <div>
+          <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Availability settings</div>
+          {isAdmin && allProviders.length > 0 && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[12px] text-[#999]">Viewing:</span>
+              <select
+                value={selectedProviderId}
+                onChange={e => setSelectedProviderId(e.target.value)}
+                className="text-[13px] font-medium text-[#1A1A2E] border border-[#E8E8E4] rounded-lg px-2.5 py-1 bg-white font-sans focus:border-[#7F77DD] outline-none"
+              >
+                {allProviders.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
         <Button variant="primary" size="sm" loading={saving} onClick={save}>
           {saved ? 'Saved!' : 'Save changes'}
         </Button>
