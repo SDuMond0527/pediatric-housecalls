@@ -248,17 +248,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(updated)
     }
 
-    // General field update (payer_id, payer_name, notes, etc.)
+    // General field update (payer_id, payer_name, cpt_codes, etc.)
     const allowed = ['payer_name', 'payer_id', 'member_id', 'group_number',
                      'subscriber_name', 'subscriber_dob', 'subscriber_gender',
                      'patient_first_name', 'patient_last_name', 'patient_dob', 'patient_gender',
                      'patient_address', 'patient_city', 'patient_state', 'patient_zip',
                      'rendering_provider_npi', 'rendering_provider_taxonomy',
-                     'place_of_service', 'service_date', 'status']
+                     'place_of_service', 'service_date', 'status', 'cpt_codes', 'diagnoses']
     const updates: Record<string, any> = {}
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key]
     }
+
+    // Recalculate total_charge when cpt_codes are updated
+    const newTotal = updates.cpt_codes != null
+      ? (updates.cpt_codes as any[]).reduce((s: number, c: any) => s + parseFloat(c.charge_amount ?? 0), 0)
+      : null
 
     const [updated] = await sql`
       UPDATE claims SET
@@ -282,6 +287,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         place_of_service           = COALESCE(${updates.place_of_service ?? null}, place_of_service),
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
         status                     = COALESCE(${updates.status ?? null}, status),
+        cpt_codes                  = COALESCE(${updates.cpt_codes != null ? JSON.stringify(updates.cpt_codes) : null}::jsonb, cpt_codes),
+        diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
+        total_charge               = COALESCE(${newTotal}, total_charge),
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
     return res.json(updated)
