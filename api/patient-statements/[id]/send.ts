@@ -14,7 +14,7 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 const RESEND_API_KEY    = process.env.RESEND_API_KEY || ''
-const FROM_EMAIL        = process.env.FROM_EMAIL || 'billing@phcbooking.com'
+const FROM_EMAIL        = process.env.FROM_EMAIL || 'billing@phc-team.com'
 const TWILIO_SID        = process.env.TWILIO_ACCOUNT_SID || ''
 const TWILIO_API_KEY    = process.env.TWILIO_API_KEY_SID || ''
 const TWILIO_API_SECRET = process.env.TWILIO_API_KEY_SECRET || ''
