@@ -137,6 +137,7 @@ export function AdminClaims() {
   }
 
   async function handleReopen(claimId: string) {
+    if (!confirm('Move this claim back to Pending Review? The claim has already been submitted to insurance — only do this if you need to correct an error and resubmit.')) return
     setReopening(claimId)
     try {
       await updateClaim(claimId, { status: 'pending_review' })
