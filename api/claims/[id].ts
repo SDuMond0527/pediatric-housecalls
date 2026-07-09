@@ -13,14 +13,15 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
-const PRACTICE_NAME = process.env.PRACTICE_NAME || 'Pediatric House Calls PLLC'
-const PRACTICE_NPI  = process.env.PRACTICE_NPI  || '1093250904'
-const PRACTICE_TAX  = (process.env.PRACTICE_TAX_ID || '814038809').replace('-', '')
-const PRACTICE_ADDR = process.env.PRACTICE_ADDRESS || ''
-const PRACTICE_CITY = process.env.PRACTICE_CITY  || 'Charlotte'
+const PRACTICE_NAME  = process.env.PRACTICE_NAME || 'Pediatric House Calls PLLC'
+const PRACTICE_NPI   = process.env.PRACTICE_NPI  || '1093250904'
+const PRACTICE_TAX   = (process.env.PRACTICE_TAX_ID || '814038809').replace('-', '')
+const PRACTICE_ADDR  = process.env.PRACTICE_ADDRESS || ''
+const PRACTICE_CITY  = process.env.PRACTICE_CITY  || 'Charlotte'
 const PRACTICE_STATE = process.env.PRACTICE_STATE || 'NC'
-const PRACTICE_ZIP  = process.env.PRACTICE_ZIP   || '28202'
+const PRACTICE_ZIP   = process.env.PRACTICE_ZIP   || '28202'
 const PRACTICE_PHONE = (process.env.PRACTICE_PHONE || '7045550000').replace(/\D/g, '')
+const PRACTICE_CLIA  = process.env.PRACTICE_CLIA_NUMBER || ''
 
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
@@ -154,6 +155,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       releaseInformationCode: 'Y',
       healthCareCodeInformation,
       serviceLines,
+      ...(PRACTICE_CLIA ? { cliaNumber: PRACTICE_CLIA } : {}),
     },
   }
 }
