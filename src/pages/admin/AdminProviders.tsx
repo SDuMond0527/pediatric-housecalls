@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check } from 'lucide-react'
+import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck } from 'lucide-react'
 import { getProviders, updateProvider, apiFetch, getPracticeZones } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -26,6 +26,7 @@ export function AdminProviders() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [pwState, setPwState] = useState<Record<string, { loading: boolean; password?: string; error?: string; copied?: boolean }>>({})
+  const [deactivating, setDeactivating] = useState<string | null>(null)
 
   async function resetPassword(providerId: string) {
     setPwState(prev => ({ ...prev, [providerId]: { loading: true } }))
@@ -37,6 +38,26 @@ export function AdminProviders() {
       setPwState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
     } catch (err: any) {
       setPwState(prev => ({ ...prev, [providerId]: { loading: false, error: err.message ?? 'Failed' } }))
+    }
+  }
+
+  async function toggleActive(p: ProviderWithContact) {
+    const reactivate = !p.is_active
+    const msg = reactivate
+      ? `Reactivate ${p.name}? They will be able to log in again.`
+      : `Deactivate ${p.name}? They will be immediately logged out and unable to access the app.`
+    if (!confirm(msg)) return
+    setDeactivating(p.id)
+    try {
+      const updated = await apiFetch<ProviderWithContact>('/api/admin/deactivate-provider', {
+        method: 'POST',
+        body: JSON.stringify({ provider_id: p.id, reactivate }),
+      })
+      setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, ...updated } : pr))
+    } catch (err: any) {
+      alert(err.message ?? 'Failed')
+    } finally {
+      setDeactivating(null)
     }
   }
 
@@ -241,6 +262,25 @@ export function AdminProviders() {
                           )}
                           {pwState[p.id]?.password && (
                             <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
+                          )}
+                        </div>
+
+                        <div className="border-t border-[#E8E8E4] pt-3">
+                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Account Status</div>
+                          {p.is_active ? (
+                            <Button size="sm" variant="secondary" loading={deactivating === p.id}
+                              onClick={() => toggleActive(p)}
+                              className="border-[#F09595] text-[#791F1F] hover:bg-[#FCEBEB]">
+                              <UserX size={13} className="mr-1" /> Deactivate
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-3">
+                              <span className="text-[12px] text-[#999] italic">Inactive — cannot log in</span>
+                              <Button size="sm" variant="secondary" loading={deactivating === p.id}
+                                onClick={() => toggleActive(p)}>
+                                <UserCheck size={13} className="mr-1" /> Reactivate
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>
