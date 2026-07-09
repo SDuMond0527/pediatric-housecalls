@@ -460,7 +460,8 @@ export function BookVisit() {
   async function onZipChange(zip: string) {
     const st = zipToState[zip] || ''
     const zone = zipToZone[zip] || ''
-    setBooking(b => ({ ...b, zip, state: st, zone, provider: '' }))
+    // Preserve existing state when zip isn't in our zone map (e.g. telemedicine patients outside in-home service area)
+    setBooking(b => ({ ...b, zip, state: st || b.state, zone, provider: '' }))
     setWaitlistDone(false)
     setAllSlotsBooked(false)
     setSlotsChecking(false)
@@ -641,6 +642,7 @@ export function BookVisit() {
   }
 
   const isCmaVisit = booking.visitType === 'CMA + telemedicine'
+  const isTele = isTelemedicine(booking.visitType)
   const zoneProviders = isIvFluids
     ? ivZoneProviders
     : isCmaVisit && cmaProvidersForZone.length > 0
@@ -1425,7 +1427,7 @@ export function BookVisit() {
             </div>
           </div>
 
-          {booking.zip.length === 5 && !waitlistDone &&
+          {booking.zip.length === 5 && !waitlistDone && !isTele &&
            (!booking.zone || waitlistZones.includes(booking.zone) || regularZoneProviders.length === 0) && (
             <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
               <div>
