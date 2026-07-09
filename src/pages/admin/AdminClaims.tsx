@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim } from '../../lib/api'
+import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
 type Tab = 'unbilled' | 'review' | 'submitted'
@@ -51,6 +51,10 @@ export function AdminClaims() {
   const [saving, setSaving] = useState<string | null>(null)
   const [statementClaim, setStatementClaim] = useState<any>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [feeSchedule, setFeeSchedule] = useState<any[]>([])
+  const [cptSearch, setCptSearch] = useState<Record<string, string>>({})
+  const [cptOpen, setCptOpen] = useState<Record<string, boolean>>({})
+  const [cptTab, setCptTab] = useState<Record<string, string>>({})
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
   const [editCpt, setEditCpt] = useState<Record<string, any[]>>({})
   const [editPatient, setEditPatient] = useState<Record<string, {
@@ -73,7 +77,10 @@ export function AdminClaims() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    getFeeSchedule().then(data => setFeeSchedule(data ?? [])).catch(() => {})
+  }, [])
 
   async function handleGenerate(noteId: string) {
     setGenerating(noteId)
@@ -528,9 +535,20 @@ export function AdminClaims() {
                             {editCpt[c.id] ? (
                               <div className="space-y-1.5">
                                 {editCpt[c.id].map((cp: any, i: number) => (
-                                  <div key={i} className="flex items-center gap-1.5">
-                                    <span className="text-[12px] font-semibold text-[#555] w-14 flex-shrink-0">{cp.code}</span>
-                                    <span className="text-[11px] text-[#999] flex-1 truncate">{cp.description}</span>
+                                  <div key={i} className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[#E8E8E4] rounded-lg">
+                                    <span className="text-[11px] font-semibold text-[#7F77DD] w-14 flex-shrink-0">{cp.code}</span>
+                                    <span className="text-[11px] text-[#1A1A2E] flex-1 truncate">{cp.description}</span>
+                                    <label className="text-[10px] text-[#999] whitespace-nowrap">Mod:</label>
+                                    <input
+                                      value={cp.modifier ?? ''}
+                                      maxLength={3}
+                                      placeholder="25"
+                                      onChange={e => setEditCpt(prev => {
+                                        const next = [...prev[c.id]]
+                                        next[i] = { ...next[i], modifier: e.target.value.toUpperCase() }
+                                        return { ...prev, [c.id]: next }
+                                      })}
+                                      className="w-10 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[11px] font-mono uppercase outline-none focus:border-[#7F77DD]" />
                                     <span className="text-[11px] text-[#999]">$</span>
                                     <input type="number" step="0.01" min="0"
                                       value={cp.charge_amount ?? ''}
@@ -546,41 +564,88 @@ export function AdminClaims() {
                                     </button>
                                   </div>
                                 ))}
-                                <div className="flex items-center gap-1.5 pt-1">
-                                  <input placeholder="Code" maxLength={5}
-                                    id={`new-cpt-code-${c.id}`}
-                                    className="w-14 px-1.5 py-0.5 border border-[#E8E8E4] rounded text-[12px] outline-none focus:border-[#7F77DD]" />
-                                  <input placeholder="Description"
-                                    id={`new-cpt-desc-${c.id}`}
-                                    className="flex-1 px-1.5 py-0.5 border border-[#E8E8E4] rounded text-[12px] outline-none focus:border-[#7F77DD]" />
-                                  <span className="text-[11px] text-[#999]">$</span>
-                                  <input placeholder="0.00" type="number" step="0.01"
-                                    id={`new-cpt-amount-${c.id}`}
-                                    className="w-20 px-1.5 py-0.5 border border-[#E8E8E4] rounded text-[12px] outline-none focus:border-[#7F77DD]" />
-                                  <button onClick={() => {
-                                    const code = (document.getElementById(`new-cpt-code-${c.id}`) as HTMLInputElement)?.value.trim()
-                                    const desc = (document.getElementById(`new-cpt-desc-${c.id}`) as HTMLInputElement)?.value.trim()
-                                    const amt  = (document.getElementById(`new-cpt-amount-${c.id}`) as HTMLInputElement)?.value.trim()
-                                    if (!code) return
-                                    setEditCpt(prev => ({ ...prev, [c.id]: [...prev[c.id], { code, description: desc, charge_amount: amt || '0' }] }))
-                                    ;(document.getElementById(`new-cpt-code-${c.id}`) as HTMLInputElement).value = ''
-                                    ;(document.getElementById(`new-cpt-desc-${c.id}`) as HTMLInputElement).value = ''
-                                    ;(document.getElementById(`new-cpt-amount-${c.id}`) as HTMLInputElement).value = ''
-                                  }} className="text-[#1D9E75] hover:opacity-70 flex-shrink-0">
-                                    <Plus size={14} />
+
+                                {/* Fee schedule picker */}
+                                <div className="pt-0.5">
+                                  <button
+                                    onClick={() => setCptOpen(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                                    className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium hover:text-[#534AB7] transition-colors mb-1.5">
+                                    <Plus size={13} /> Add procedure or fee
                                   </button>
+                                  {cptOpen[c.id] && (
+                                    <div className="border border-[#E8E8E4] rounded-xl overflow-hidden bg-white">
+                                      <div className="p-2 border-b border-[#F1EFE8]">
+                                        <input type="text" placeholder="Search by code or description…"
+                                          value={cptSearch[c.id] ?? ''}
+                                          onChange={e => setCptSearch(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                          className="w-full px-3 py-1.5 border border-[#E8E8E4] rounded-lg text-[12px] outline-none focus:border-[#7F77DD]"
+                                          autoFocus />
+                                      </div>
+                                      <div className="flex border-b border-[#F1EFE8]">
+                                        {(['Procedure', 'Non-Covered Services'] as const).map(t => (
+                                          <button key={t}
+                                            onClick={() => setCptTab(prev => ({ ...prev, [c.id]: t }))}
+                                            className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${(cptTab[c.id] ?? 'Procedure') === t ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#999]'}`}>
+                                            {t === 'Procedure' ? 'Insurance Procedures' : 'Convenience & Self-Pay'}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <div className="max-h-44 overflow-y-auto">
+                                        {feeSchedule
+                                          .filter(fs => fs.category === (cptTab[c.id] ?? 'Procedure'))
+                                          .filter(fs => {
+                                            const q = (cptSearch[c.id] ?? '').toLowerCase()
+                                            return !q || fs.code.toLowerCase().includes(q) || fs.description.toLowerCase().includes(q)
+                                          })
+                                          .filter(fs => !editCpt[c.id].find((x: any) => x.code === fs.code))
+                                          .map(fs => (
+                                            <button key={fs.code}
+                                              onClick={() => {
+                                                setEditCpt(prev => ({ ...prev, [c.id]: [...prev[c.id], { code: fs.code, description: fs.description, charge_amount: fs.charge_amount }] }))
+                                                setCptSearch(prev => ({ ...prev, [c.id]: '' }))
+                                                setCptOpen(prev => ({ ...prev, [c.id]: false }))
+                                              }}
+                                              className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F8F8F6] last:border-0 flex items-center justify-between gap-2 transition-colors">
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{fs.code}</span>
+                                                <span className="text-[11px] text-[#1A1A2E] truncate">{fs.description}</span>
+                                              </div>
+                                              <span className="text-[11px] font-medium text-[#555] flex-shrink-0">${parseFloat(fs.charge_amount).toFixed(2)}</span>
+                                            </button>
+                                          ))
+                                        }
+                                        {feeSchedule
+                                          .filter(fs => fs.category === (cptTab[c.id] ?? 'Procedure'))
+                                          .filter(fs => { const q = (cptSearch[c.id] ?? '').toLowerCase(); return !q || fs.code.toLowerCase().includes(q) || fs.description.toLowerCase().includes(q) })
+                                          .filter(fs => !editCpt[c.id].find((x: any) => x.code === fs.code))
+                                          .length === 0 && (
+                                          <div className="px-3 py-3 text-[11px] text-[#999]">No codes match your search.</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
+
                                 {saveError && saving === null && <div className="text-[11px] text-[#DC2626]">{saveError}</div>}
                                 <div className="flex gap-2 pt-1">
                                   <Button size="sm" variant="teal" loading={saving === c.id + '_cpt'} onClick={() => handleCptSave(c.id)}>Save</Button>
-                                  <Button size="sm" variant="secondary" onClick={() => { setEditCpt(prev => { const n = { ...prev }; delete n[c.id]; return n }); setSaveError(null) }}>Cancel</Button>
+                                  <Button size="sm" variant="secondary" onClick={() => {
+                                    setEditCpt(prev => { const n = { ...prev }; delete n[c.id]; return n })
+                                    setCptOpen(prev => { const n = { ...prev }; delete n[c.id]; return n })
+                                    setCptSearch(prev => { const n = { ...prev }; delete n[c.id]; return n })
+                                    setSaveError(null)
+                                  }}>Cancel</Button>
                                 </div>
                               </div>
                             ) : (
                               <div className="space-y-1">
                                 {(c.cpt_codes ?? []).map((cp: any) => (
                                   <div key={cp.code} className="flex justify-between text-[12px]">
-                                    <span className="text-[#1A1A2E]"><span className="font-semibold text-[#555]">{cp.code}</span> {cp.description}</span>
+                                    <span className="text-[#1A1A2E]">
+                                      <span className="font-semibold text-[#555]">{cp.code}</span>
+                                      {cp.modifier && <span className="ml-1 text-[10px] font-semibold text-[#F5943A]">-{cp.modifier}</span>}
+                                      {' '}{cp.description}
+                                    </span>
                                     <span className="text-[#1A1A2E] font-medium ml-2 flex-shrink-0">{fmtMoney(cp.charge_amount)}</span>
                                   </div>
                                 ))}
