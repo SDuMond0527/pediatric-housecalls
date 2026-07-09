@@ -891,6 +891,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
+    // ── Admin booked appointment from patient chart ───────────────────────────
+    if (body.type === 'admin_booked') {
+      const [appt] = await sql`SELECT * FROM appointments WHERE id = ${body.appointmentId}::uuid LIMIT 1`
+      if (!appt) return res.json({ ok: false, error: 'Appointment not found' })
+
+      const [child] = appt.child_id
+        ? await sql`SELECT first_name, last_name, family_id FROM children WHERE id = ${appt.child_id}::uuid LIMIT 1`
+        : [null]
+      const [family] = child?.family_id
+        ? await sql`SELECT email, phone, display_name FROM family_profiles WHERE id = ${child.family_id}::uuid LIMIT 1`
+        : [null]
+      const [provider] = appt.provider_id
+        ? await sql`SELECT name, email, phone FROM providers WHERE id = ${appt.provider_id}::uuid LIMIT 1`
+        : [null]
+
+      const childName = child ? `${child.first_name} ${child.last_name}`.trim() : 'your child'
+      const providerName = provider?.name ?? 'Your provider'
+      const dateFormatted = formatDate(appt.scheduled_date)
+      const timeStr = (() => {
+        const t = appt.scheduled_time ?? ''
+        if (!t) return ''
+        const [h, m] = t.split(':').map(Number)
+        const ampm = h >= 12 ? 'PM' : 'AM'
+        const hr = h % 12 || 12
+        return `${hr}:${String(m).padStart(2, '0')} ${ampm}`
+      })()
+
+      const familyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#7F77DD')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Appointment Confirmed</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">Hi ${family?.display_name ?? 'there'},<br><br>
+  An appointment has been scheduled for <strong>${childName}</strong>. Here are the details:</p>
+  <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;"><tr><td style="padding:20px;">
+    <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Visit Type</span><br><span style="font-size:14px;font-weight:500;">${appt.visit_type}</span></div>
+    <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Provider</span><br><span style="font-size:14px;font-weight:500;">${providerName}</span></div>
+    <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Date</span><br><span style="font-size:14px;font-weight:500;">${dateFormatted}</span></div>
+    ${timeStr ? `<div><span style="font-size:12px;color:#999;text-transform:uppercase;">Time</span><br><span style="font-size:14px;font-weight:500;">${timeStr}</span></div>` : ''}
+  </td></tr></table>
+  <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:#085041;">
+    Your provider will arrive within 15 minutes of your scheduled time. Please be available at your address with ${childName} ready.
+  </div>
+  <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1D9E75;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
+</td></tr>
+</table></td></tr></table></body></html>`
+
+      if (family?.email) await sendEmail(family.email, `Appointment confirmed — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml)
+      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Appointment confirmed for ${childName} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}. Log in for details: ${PORTAL_URL}/family/dashboard`)
+
+      if (provider?.email) {
+        const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName })
+        await sendEmail(provider.email, `New appointment: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml)
+      }
+      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: New appointment — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`)
+
+      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment booked from patient chart for ${childName}. View: ${PORTAL_URL}/admin/schedule`, undefined)
+      return res.json({ ok: true })
+    }
+
     // ── Manual appointment added by provider ──────────────────────────────────
     if (body.type === 'appointment_added') {
       const { visitType, parentEmail } = body

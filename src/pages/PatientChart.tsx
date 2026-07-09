@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
+import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
 interface NoteWithVisit {
   id: string
@@ -97,6 +98,9 @@ export function PatientChart() {
 
   const [archivingIns, setArchivingIns] = useState(false)
   const [pastInsOpen, setPastInsOpen] = useState(false)
+
+  // Book appointment
+  const [bookOpen, setBookOpen] = useState(false)
 
   // Add sibling
   const [siblingOpen, setSiblingOpen] = useState(false)
@@ -287,11 +291,18 @@ export function PatientChart() {
             )}
           </div>
           {child && (
-            <button
-              onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors flex-shrink-0">
-              <UserPlus size={13} /> Add sibling
-            </button>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setBookOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
+                <CalendarPlus size={13} /> Book appointment
+              </button>
+              <button
+                onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
+                <UserPlus size={13} /> Add sibling
+              </button>
+            </div>
           )}
         </div>
         <div className="flex gap-2 mt-3 max-w-3xl mx-auto">
@@ -919,6 +930,23 @@ export function PatientChart() {
           </>
         )}
       </div>
+
+      {/* Book appointment modal */}
+      {bookOpen && child && (
+        <BookAppointmentModal
+          child={child}
+          onClose={() => setBookOpen(false)}
+          onBooked={() => {
+            setBookOpen(false)
+            // Reload appointments tab
+            if (childId) getAppointments({ child_id: childId }).then(data => {
+              const appts = data ?? []
+              setBookingRequests(appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })))
+              setActiveTab('appointments')
+            }).catch(() => {})
+          }}
+        />
+      )}
 
       {/* Add sibling modal */}
       {siblingOpen && child && (
