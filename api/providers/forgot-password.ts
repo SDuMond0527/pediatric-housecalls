@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { generateResetToken } from '../_lib/reset-token'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
@@ -7,8 +7,11 @@ const FROM_EMAIL     = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
 const PORTAL_URL     = process.env.PORTAL_URL || 'https://phcbooking.com'
 const PRACTICE_NAME  = process.env.VITE_PRACTICE_NAME || 'Pediatric Housecalls'
 
-async function sendResetEmail(to: string, resetUrl: string) {
-  if (!RESEND_API_KEY) return
+async function sendResetEmail(to: string, resetUrl: string): Promise<void> {
+  if (!RESEND_API_KEY) {
+    console.error('forgot-password(provider): RESEND_API_KEY not set')
+    return
+  }
   const html = `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;background:#FAFAF8;padding:32px 24px;border-radius:16px;">
       <div style="text-align:center;margin-bottom:24px;">
@@ -32,11 +35,17 @@ async function sendResetEmail(to: string, resetUrl: string) {
         </p>
       </div>
     </div>`
-  await fetch('https://api.resend.com/emails', {
+  const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: `${PRACTICE_NAME} <${FROM_EMAIL}>`, to, subject: 'Reset your provider password', html }),
   })
+  if (!r.ok) {
+    const body = await r.text()
+    console.error('forgot-password(provider): Resend error', r.status, body)
+  } else {
+    console.log('forgot-password(provider): email sent to', to)
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -44,21 +53,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { email } = req.body ?? {}
   if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email required' })
 
-  const region     = process.env.VITE_AWS_REGION || 'us-east-2'
-  const userPoolId = process.env.VITE_AWS_USER_POOL_ID
+  const region          = process.env.VITE_AWS_REGION || 'us-east-2'
+  const userPoolId      = process.env.VITE_AWS_USER_POOL_ID
   const accessKeyId     = process.env.AWS_ADMIN_ACCESS_KEY_ID
   const secretAccessKey = process.env.AWS_ADMIN_SECRET_ACCESS_KEY
 
-  if (!userPoolId || !accessKeyId || !secretAccessKey) return res.json({ ok: true })
+  if (!userPoolId || !accessKeyId || !secretAccessKey) {
+    console.error('forgot-password(provider): missing env vars', { userPoolId: !!userPoolId, accessKeyId: !!accessKeyId, secretAccessKey: !!secretAccessKey })
+    return res.json({ ok: true })
+  }
+
+  const normalizedEmail = email.toLowerCase().trim()
 
   try {
     const client = new CognitoIdentityProviderClient({ region, credentials: { accessKeyId, secretAccessKey } })
-    await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email.toLowerCase().trim() }))
-    const token = generateResetToken(email.toLowerCase().trim(), 'provider')
+
+    const result = await client.send(new ListUsersCommand({
+      UserPoolId: userPoolId,
+      Filter: `email = "${normalizedEmail}"`,
+      Limit: 1,
+    }))
+
+    if (!result.Users || result.Users.length === 0) {
+      console.log('forgot-password(provider): no user found for', normalizedEmail)
+      return res.json({ ok: true })
+    }
+
+    const token    = generateResetToken(normalizedEmail, 'provider')
     const resetUrl = `${PORTAL_URL}/reset-password?token=${encodeURIComponent(token)}`
-    await sendResetEmail(email, resetUrl)
-  } catch {
-    // User not found or other error — return success anyway
+    console.log('forgot-password(provider): sending reset link to', normalizedEmail)
+    await sendResetEmail(email.trim(), resetUrl)
+  } catch (e: any) {
+    console.error('forgot-password(provider): unexpected error', e?.message)
   }
 
   return res.json({ ok: true })
