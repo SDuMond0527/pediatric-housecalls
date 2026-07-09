@@ -50,6 +50,7 @@ interface ChildIntake {
   insuranceSubscriberGender: string
   insuranceCardFrontUrl: string
   insuranceCardBackUrl: string
+  selfPay: boolean
   allergies: string
   currentMedications: string
   medicalHistory: string
@@ -170,6 +171,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     insuranceSubscriberName: '', insuranceSubscriberDob: '', insuranceSubscriberGender: '',
     insuranceCardFrontUrl: child?.insurance_card_front_url || '',
     insuranceCardBackUrl: child?.insurance_card_back_url || '',
+    selfPay: false,
     allergies: child?.allergies || 'NKDA', currentMedications: child?.current_medications || 'None',
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', vaccinationStatus: 'fully_vaccinated',
@@ -661,10 +663,10 @@ export function BookVisit() {
       const intake = booking.childIntakes[id]
       if (!intake) return false
       if (!intake.chiefComplaint) return false
-      if (!intake.hasProfile && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
+      if (!intake.selfPay && !intake.hasProfile && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
       if (!intake.hasProfile) {
         if (!intake.firstName || !intake.lastName || !intake.dateOfBirth) return false
-        if (!intake.insuranceProvider || !intake.insuranceMemberId) return false
+        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
       }
       return true
     })
@@ -849,8 +851,8 @@ export function BookVisit() {
             last_name: intake.lastName || null,
             date_of_birth: intake.dateOfBirth || null,
             gender: intake.gender || null,
-            insurance_provider: intake.insuranceProvider || null,
-            insurance_member_id: intake.insuranceMemberId || null,
+            insurance_provider: intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
+            insurance_member_id: intake.selfPay ? null : (intake.insuranceMemberId || null),
             insurance_group_number: intake.insuranceGroupNumber || null,
             insurance_subscriber_name: intake.insuranceSubscriberName || null,
             insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
@@ -1145,6 +1147,10 @@ export function BookVisit() {
                     childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], phiSharingConsent: val } },
                   }))}
                   onPhotosChange={photos => setIntakePhotos(c.id, photos)}
+                  onSelfPayChange={val => setBooking(b => ({
+                    ...b,
+                    childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], selfPay: val } },
+                  }))}
                 />
               )
             })
@@ -1907,12 +1913,13 @@ function compressToJpeg(file: File): Promise<string> {
 
 // ─── Child intake form section ─────────────────────────────────────────────────
 
-function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange }: {
+function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange, onSelfPayChange }: {
   intake: ChildIntake
   visitType: string
   onChange: (field: keyof ChildIntake, value: string) => void
   onConsentChange: (val: boolean) => void
   onPhotosChange: (photos: string[]) => void
+  onSelfPayChange: (val: boolean) => void
 }) {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
@@ -2002,22 +2009,42 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
           {/* Insurance */}
           <div className="border-t border-[#E8E8E4] pt-4 mt-1">
             <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-3">Insurance</p>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
-              <Input label="Member ID" placeholder="ABC123456789" value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
-              <Input label="Group number" placeholder="GRP001" value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
-              <Input label="Subscriber name" placeholder="Jennifer Smith" value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
-              <Input label="Subscriber date of birth" type="date" value={intake.insuranceSubscriberDob} onChange={e => onChange('insuranceSubscriberDob', e.target.value)} />
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex</label>
-                <select value={intake.insuranceSubscriberGender} onChange={e => onChange('insuranceSubscriberGender', e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none">
-                  <option value="">Select</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
+
+            {/* Self-pay toggle */}
+            <button
+              type="button"
+              onClick={() => onSelfPayChange(!intake.selfPay)}
+              className={`w-full flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all text-left mb-3 ${intake.selfPay ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+            >
+              <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.selfPay ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
+                {intake.selfPay && <Check size={11} className="text-white" strokeWidth={3} />}
               </div>
-            </div>
+              <div>
+                <span className={`text-[13px] font-medium block ${intake.selfPay ? 'text-[#085041]' : 'text-[#333]'}`}>
+                  We are self-pay
+                </span>
+                <span className="text-[12px] text-[#999]">No insurance — card photos and insurance info are not required</span>
+              </div>
+            </button>
+
+            {!intake.selfPay && (
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
+                <Input label="Member ID" placeholder="ABC123456789" value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
+                <Input label="Group number" placeholder="GRP001" value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
+                <Input label="Subscriber name" placeholder="Jennifer Smith" value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
+                <Input label="Subscriber date of birth" type="date" value={intake.insuranceSubscriberDob} onChange={e => onChange('insuranceSubscriberDob', e.target.value)} />
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex</label>
+                  <select value={intake.insuranceSubscriberGender} onChange={e => onChange('insuranceSubscriberGender', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none">
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Medical background */}
@@ -2132,8 +2159,8 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             </div>
           )}
 
-          {/* Insurance card upload — required first time; on file or optional for established patients after that */}
-          <div>
+          {/* Insurance card upload — required first time; on file or optional for established patients after that; hidden if self-pay */}
+          {!intake.selfPay && <div>
             <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">
               Insurance card photos — front & back{' '}
               {intake.cardOnFile
@@ -2179,7 +2206,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             {uploadError && (
               <p className="text-[12px] text-[#791F1F] mt-2">{uploadError}</p>
             )}
-          </div>
+          </div>}
 
           {/* PHI sharing consent — first booking only */}
           <div className="border-t border-[#E8E8E4] pt-4 mt-1">
