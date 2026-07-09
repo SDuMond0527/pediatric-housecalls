@@ -79,7 +79,7 @@ export const VISIT_TYPE_INFO = {
   },
   'Text visit': {
     color: '#D4537E', bg: '#FBEAF0', icon: '💬',
-    duration: 'Response within 2 hrs',
+    duration: '',
     note: 'A provider will reply within 2 hours during operating hours.',
   },
   'In-home IV fluids': {
