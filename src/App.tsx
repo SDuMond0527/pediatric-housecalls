@@ -29,6 +29,10 @@ import { FamilyAddCard } from './pages/family/FamilyAddCard'
 import { FamilyDashboard } from './pages/family/FamilyDashboard'
 import { BookVisit } from './pages/family/BookVisit'
 import { FamilyProfile } from './pages/family/FamilyProfile'
+import { FamilyForgotPassword } from './pages/family/FamilyForgotPassword'
+import { FamilyResetPassword } from './pages/family/FamilyResetPassword'
+import { ForgotPassword } from './pages/ForgotPassword'
+import { ResetPassword } from './pages/ResetPassword'
 import { Terms } from './pages/Terms'
 import { Privacy } from './pages/Privacy'
 import { useAuth } from './contexts/AuthContext'
@@ -50,10 +54,12 @@ export default function App() {
         <Route path="/family/*" element={
           <FamilyAuthProvider>
             <Routes>
-              <Route path="login"     element={<FamilyLogin />} />
-              <Route path="signup"    element={<FamilySignup />} />
-              <Route path="setup"    element={<FamilySetup />} />
-              <Route path="add-card" element={<FamilyAddCard />} />
+              <Route path="login"            element={<FamilyLogin />} />
+              <Route path="signup"           element={<FamilySignup />} />
+              <Route path="setup"            element={<FamilySetup />} />
+              <Route path="add-card"         element={<FamilyAddCard />} />
+              <Route path="forgot-password"  element={<FamilyForgotPassword />} />
+              <Route path="reset-password"   element={<FamilyResetPassword />} />
               <Route element={<FamilyLayout />}>
                 <Route path="dashboard" element={<FamilyDashboard />} />
                 <Route path="book"      element={<BookVisit />} />
@@ -67,9 +73,11 @@ export default function App() {
         <Route path="/*" element={
           <AuthProvider>
             <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/login"            element={<Login />} />
+              <Route path="/forgot-password"  element={<ForgotPassword />} />
+              <Route path="/reset-password"   element={<ResetPassword />} />
+              <Route path="/terms"            element={<Terms />} />
+              <Route path="/privacy"          element={<Privacy />} />
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="today"          element={<Today />} />

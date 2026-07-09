@@ -83,8 +83,13 @@ export function Login() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Input label="Email" type="email" placeholder="you@example.com"
                   value={email} onChange={e => setEmail(e.target.value)} required />
-                <Input label="Password" type="password" placeholder="••••••••"
-                  value={password} onChange={e => setPassword(e.target.value)} required />
+                <div>
+                  <Input label="Password" type="password" placeholder="••••••••"
+                    value={password} onChange={e => setPassword(e.target.value)} required />
+                  <div className="text-right mt-1">
+                    <Link to="/forgot-password" className="text-[12px] text-[#7F77DD] hover:underline">Forgot password?</Link>
+                  </div>
+                </div>
                 {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
                 <Button type="submit" className="w-full !py-2.5" loading={loading}>Sign in to provider portal</Button>
               </form>
