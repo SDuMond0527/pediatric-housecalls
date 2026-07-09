@@ -50,16 +50,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Password reset pages — no auth context needed */}
+        <Route path="/family/forgot-password" element={<FamilyForgotPassword />} />
+        <Route path="/family/reset-password"  element={<FamilyResetPassword />} />
+
         {/* Family portal — own auth context */}
         <Route path="/family/*" element={
           <FamilyAuthProvider>
             <Routes>
-              <Route path="login"            element={<FamilyLogin />} />
-              <Route path="signup"           element={<FamilySignup />} />
-              <Route path="setup"            element={<FamilySetup />} />
-              <Route path="add-card"         element={<FamilyAddCard />} />
-              <Route path="forgot-password"  element={<FamilyForgotPassword />} />
-              <Route path="reset-password"   element={<FamilyResetPassword />} />
+              <Route path="login"    element={<FamilyLogin />} />
+              <Route path="signup"   element={<FamilySignup />} />
+              <Route path="setup"    element={<FamilySetup />} />
+              <Route path="add-card" element={<FamilyAddCard />} />
               <Route element={<FamilyLayout />}>
                 <Route path="dashboard" element={<FamilyDashboard />} />
                 <Route path="book"      element={<BookVisit />} />
@@ -69,13 +71,15 @@ export default function App() {
           </FamilyAuthProvider>
         } />
 
+        {/* Provider password reset — no auth context needed */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password"  element={<ResetPassword />} />
+
         {/* Provider & admin portal */}
         <Route path="/*" element={
           <AuthProvider>
             <Routes>
-              <Route path="/login"            element={<Login />} />
-              <Route path="/forgot-password"  element={<ForgotPassword />} />
-              <Route path="/reset-password"   element={<ResetPassword />} />
+              <Route path="/login"   element={<Login />} />
               <Route path="/terms"            element={<Terms />} />
               <Route path="/privacy"          element={<Privacy />} />
               <Route path="/" element={<AppLayout />}>
