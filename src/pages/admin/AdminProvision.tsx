@@ -626,15 +626,26 @@ export function AdminProvision() {
               </div>
 
               {savedProviders[p.id]?.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[#E8E8E4] space-y-1">
+                <div className="mt-3 pt-3 border-t border-[#E8E8E4] space-y-2">
                   {savedProviders[p.id].map((prov: any) => (
-                    <div key={prov.id} className="flex items-center gap-2 text-[13px] text-[#555]">
-                      <CheckCircle2 size={13} className="text-[#1D9E75] flex-shrink-0" />
-                      <span className="font-medium">{prov.name}</span>
-                      <span className="text-[#bbb]">·</span>
-                      <span className="text-[#999]">{prov.role}</span>
-                      <span className="text-[#bbb]">·</span>
-                      <span className="text-[#999]">invite sent</span>
+                    <div key={prov.id} className="rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] px-3 py-2.5">
+                      <div className="flex items-center gap-2 text-[13px]">
+                        <CheckCircle2 size={13} className="text-[#1D9E75] flex-shrink-0" />
+                        <span className="font-medium text-[#1A1A2E]">{prov.name}</span>
+                        <span className="text-[#bbb]">·</span>
+                        <span className="text-[#999]">{prov.role}</span>
+                      </div>
+                      {prov.password && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <span className="text-[11px] text-[#555]">Temporary password:</span>
+                          <code className="text-[12px] font-mono text-[#3C3489] bg-white border border-[#E8E8E4] rounded px-2 py-0.5">{prov.password}</code>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(prov.password)}
+                            className="text-[11px] text-[#7F77DD] hover:underline"
+                          >Copy</button>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-[#999] mt-1">Share this password directly — no email was sent.</p>
                     </div>
                   ))}
                 </div>

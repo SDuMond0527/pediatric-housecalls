@@ -1,7 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { CognitoIdentityProviderClient, AdminCreateUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { randomBytes } from 'crypto'
+
+function generatePassword(): string {
+  const upper   = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower   = 'abcdefghijkmnpqrstuvwxyz'
+  const digits  = '23456789'
+  const special = '@#$%'
+  const all     = upper + lower + digits + special
+  const bytes   = randomBytes(16)
+  const chars = [
+    upper[bytes[0] % upper.length],
+    lower[bytes[1] % lower.length],
+    digits[bytes[2] % digits.length],
+    special[bytes[3] % special.length],
+    ...Array.from({ length: 8 }, (_, i) => all[bytes[4 + i] % all.length]),
+  ]
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = bytes[i % bytes.length] % (i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -55,13 +77,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { Name: 'email_verified', Value: 'true' },
         { Name: 'name', Value: name },
       ],
-      DesiredDeliveryMediums: ['EMAIL'],
+      MessageAction: 'SUPPRESS',
     }))
     const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
     if (!s) throw new Error('No sub returned from Cognito')
     cognitoSub = s
   } catch (e: any) {
     return res.status(400).json({ error: e.message ?? 'Failed to create Cognito user' })
+  }
+
+  const password = generatePassword()
+  try {
+    await client.send(new AdminSetUserPasswordCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      Password: password,
+      Permanent: true,
+    }))
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Account created in Cognito but failed to set permanent password: ' + e.message })
   }
 
   try {
@@ -78,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       RETURNING *
     `
-    return res.json(provider)
+    return res.json({ ...provider, password })
   } catch (e: any) {
     return res.status(500).json({ error: e.message ?? 'Failed to create provider record' })
   }
