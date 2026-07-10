@@ -57,10 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const b = req.body
-      const childIds = b.child_ids ?? []
+      const childIds: string[] = b.child_ids ?? []
+      const childIdsPg = `{${childIds.join(',')}}`
       const [row] = await sql`
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
-        VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${JSON.stringify(childIds)}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
+        VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
       await pingNotifications(row.id as string)
       return res.json(row)
@@ -94,10 +95,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const b = req.body
-    const childIds = b.child_ids ?? []
+    const childIds: string[] = b.child_ids ?? []
+    const childIdsPg = `{${childIds.join(',')}}`
     const [row] = await sql`
       INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
-      VALUES (${practiceId}::uuid, ${b.family_id}::uuid, ${JSON.stringify(childIds)}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
+      VALUES (${practiceId}::uuid, ${b.family_id}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
       RETURNING *`
     return res.json(row)
   }
