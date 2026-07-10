@@ -634,17 +634,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               preferredTime: entry.preferred_time_window,
               providerName: prov.name,
             })
-          )
+          ).catch(err => console.error('[notifications] email failed for', prov.name, err))
         }
-        if (prov.phone) await sendSMS(prov.phone, providerSmsBody)
+        if (prov.phone) await sendSMS(prov.phone, providerSmsBody).catch(err => console.error('[notifications] SMS failed for', prov.name, err))
       }
 
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
       console.error('[notifications] admins found:', admins.length)
       for (const admin of admins) {
         console.error('[notifications] notifying admin email:', !!admin.email, 'phone:', !!admin.phone)
-        if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' }))
-        if (admin.phone) await sendSMS(admin.phone, `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`)
+        if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' })).catch(err => console.error('[notifications] admin email failed', err))
+        if (admin.phone) await sendSMS(admin.phone, `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`).catch(err => console.error('[notifications] admin SMS failed', err))
       }
 
       // Confirm to the family that they've been added
