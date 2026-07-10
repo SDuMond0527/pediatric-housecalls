@@ -22,7 +22,7 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
 }
 
 async function pingNotifications(waitlistEntryId: string) {
-  const base = process.env.PORTAL_URL || 'https://phc-team.com'
+  const base = process.env.PORTAL_URL || 'https://phcbooking.com'
   try {
     await fetch(`${base}/api/notifications`, {
       method: 'POST',
