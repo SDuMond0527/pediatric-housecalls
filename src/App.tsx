@@ -36,12 +36,14 @@ import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
 import { Terms } from './pages/Terms'
 import { Privacy } from './pages/Privacy'
+import { FAQ } from './pages/FAQ'
+import { Landing } from './pages/Landing'
 import { useAuth } from './contexts/AuthContext'
 
 function RootRedirect() {
   const { user, provider, loading } = useAuth()
   if (loading) return null
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Landing />
   if (!provider) return <div className="min-h-screen flex items-center justify-center text-[#555] text-sm">No provider record found for this account. Contact your administrator.</div>
   if (provider.is_admin) return <Navigate to="/admin/analytics" replace />
   return <Navigate to="/today" replace />
@@ -83,6 +85,7 @@ export default function App() {
               <Route path="/login"   element={<Login />} />
               <Route path="/terms"            element={<Terms />} />
               <Route path="/privacy"          element={<Privacy />} />
+              <Route path="/faq"              element={<FAQ />} />
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="today"          element={<Today />} />
