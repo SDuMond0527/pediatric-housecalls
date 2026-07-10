@@ -21,13 +21,17 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   return { sub: payload.sub, isFamily: false }
 }
 
-function pingNotifications(waitlistEntryId: string) {
+async function pingNotifications(waitlistEntryId: string) {
   const base = process.env.PORTAL_URL || 'https://phc-team.com'
-  fetch(`${base}/api/notifications`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'waitlist', waitlistEntryId }),
-  }).catch(err => console.error('[waitlist-entries] notification ping failed:', err))
+  try {
+    await fetch(`${base}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'waitlist', waitlistEntryId }),
+    })
+  } catch (err) {
+    console.error('[waitlist-entries] notification ping failed:', err)
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -58,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${JSON.stringify(childIds)}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
-      pingNotifications(row.id as string)
+      await pingNotifications(row.id as string)
       return res.json(row)
     }
 
