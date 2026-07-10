@@ -1,4 +1,4 @@
-import type { NeonQueryFunction } from '@neondatabase/serverless'
+import { neon } from '@neondatabase/serverless'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 const TWILIO_SID     = process.env.TWILIO_ACCOUNT_SID || ''
@@ -67,7 +67,8 @@ function emailHtml(data: { zip: string; state: string | null; visitType: string 
 </table></td></tr></table></body></html>`
 }
 
-export async function notifyWaitlist(sql: NeonQueryFunction<false, false>, entry: Record<string, unknown>) {
+export async function notifyWaitlist(entry: Record<string, unknown>) {
+  const sql = neon(process.env.DATABASE_URL!)
   console.error('[notifyWaitlist] triggered for entry', entry.id, 'state:', entry.state)
 
   const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : (entry.state as string) || 'your state'
