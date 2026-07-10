@@ -2099,33 +2099,6 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
         </div>
       )}
 
-      {/* Insurance — shown for existing patients who don't have insurance info yet */}
-      {intake.hasProfile && !intake.cardOnFile && !intake.insuranceProvider && (
-        <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
-          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</p>
-          <button
-            type="button"
-            onClick={() => onSelfPayChange(!intake.selfPay)}
-            className={`w-full flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all text-left mb-3 ${intake.selfPay ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
-          >
-            <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.selfPay ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
-              {intake.selfPay && <Check size={11} className="text-white" strokeWidth={3} />}
-            </div>
-            <div>
-              <span className={`text-[13px] font-medium block ${intake.selfPay ? 'text-[#085041]' : 'text-[#333]'}`}>We are self-pay</span>
-              <span className="text-[12px] text-[#999]">No insurance — card photos and insurance info are not required</span>
-            </div>
-          </button>
-          {!intake.selfPay && (
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
-              <Input label="Member ID" placeholder="ABC123456789" value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
-              <Input label="Group number" placeholder="GRP001" value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
-              <Input label="Subscriber name" placeholder="Jennifer Smith" value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Pharmacy & PCP — shown for existing patients missing these fields */}
       {intake.hasProfile && (!intake.preferredPharmacy || !intake.pcp) && (
