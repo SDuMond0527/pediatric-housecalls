@@ -608,17 +608,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Waitlist notification ──────────────────────────────────────────────────
     if (body.type === 'waitlist') {
+      console.error('[notifications] waitlist triggered, entryId:', body.waitlistEntryId)
       const [entry] = await sql`SELECT * FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
       if (!entry) throw new Error('Waitlist entry not found')
+      console.error('[notifications] entry found, state:', entry.state, 'zip:', entry.zip)
 
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
       const providerSmsBody = `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/waitlist`
 
       // Notify providers licensed in the patient's state
       const stateProviders = await sql`SELECT id, name, role, phone, email, states FROM providers WHERE role != 'admin' AND is_active = true`
+      console.error('[notifications] active providers found:', stateProviders.length)
       for (const prov of stateProviders) {
         const provStates: string[] = (prov.states ?? []) as string[]
         if (entry.state && provStates.length > 0 && !provStates.includes(entry.state)) continue
+        console.error('[notifications] notifying provider:', prov.name, 'email:', !!prov.email, 'phone:', !!prov.phone)
         if (prov.email) {
           await sendEmail(
             prov.email,
@@ -636,7 +640,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      console.error('[notifications] admins found:', admins.length)
       for (const admin of admins) {
+        console.error('[notifications] notifying admin email:', !!admin.email, 'phone:', !!admin.phone)
         if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, waitlistProviderEmail({ zip: entry.zip, state: entry.state, visitType: entry.visit_type, preferredTime: entry.preferred_time_window, providerName: 'Admin' }))
         if (admin.phone) await sendSMS(admin.phone, `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`)
       }

@@ -652,7 +652,7 @@ export function BookVisit() {
 
     // Notify all providers in the same state
     if (entry?.id) {
-      familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(() => {})
+      familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(err => console.error('Waitlist notification failed:', err))
     }
 
     setWaitlistSubmitting(false)
