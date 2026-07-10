@@ -220,6 +220,7 @@ export function BookVisit() {
   const [waitlistTime, setWaitlistTime] = useState('')
   const [waitlistNotes, setWaitlistNotes] = useState('')
   const [waitlistComplaint, setWaitlistComplaint] = useState('')
+  const [waitlistChildId, setWaitlistChildId] = useState('')
   const [waitlistPatient, setWaitlistPatient] = useState('')
   const [waitlistDOB, setWaitlistDOB] = useState('')
   const [waitlistPhone, setWaitlistPhone] = useState('')
@@ -604,20 +605,38 @@ export function BookVisit() {
     noteParts.push(`Family: ${family.display_name || family.email}`)
     noteParts.push(`Email: ${family.email}`)
     if ((family as any).phone) noteParts.push(`Phone: ${(family as any).phone}`)
-    if (waitlistPatient) noteParts.push(`Patient: ${waitlistPatient}`)
-    if (waitlistDOB) noteParts.push(`DOB: ${waitlistDOB}`)
-    if (waitlistPhone) noteParts.push(`Phone: ${waitlistPhone}`)
+
+    // If a known child was selected, pull their info from the profile
+    const selectedChild = waitlistChildId ? children.find(c => c.id === waitlistChildId) : null
+    if (selectedChild) {
+      const name = [selectedChild.first_name, selectedChild.last_name].filter(Boolean).join(' ') || selectedChild.display_label
+      noteParts.push(`Patient: ${name}`)
+      if (selectedChild.date_of_birth) noteParts.push(`DOB: ${selectedChild.date_of_birth}`)
+      if (selectedChild.allergies) noteParts.push(`Allergies: ${selectedChild.allergies}`)
+      if (selectedChild.current_medications) noteParts.push(`Medications: ${selectedChild.current_medications}`)
+      if (selectedChild.medical_history) noteParts.push(`PMH: ${selectedChild.medical_history}`)
+      if (selectedChild.pcp) noteParts.push(`PCP: ${selectedChild.pcp}`)
+      if (selectedChild.preferred_pharmacy) noteParts.push(`Pharmacy: ${selectedChild.preferred_pharmacy}`)
+      if (selectedChild.insurance_provider) noteParts.push(`Insurance: ${selectedChild.insurance_provider}`)
+      if (selectedChild.insurance_member_id) noteParts.push(`Member ID: ${selectedChild.insurance_member_id}`)
+      if (selectedChild.insurance_group_number) noteParts.push(`Group #: ${selectedChild.insurance_group_number}`)
+    } else {
+      if (waitlistPatient) noteParts.push(`Patient: ${waitlistPatient}`)
+      if (waitlistDOB) noteParts.push(`DOB: ${waitlistDOB}`)
+      if (waitlistPhone) noteParts.push(`Phone: ${waitlistPhone}`)
+      if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
+      if (waitlistAllergies) noteParts.push(`Allergies: ${waitlistAllergies}`)
+      if (waitlistMedications) noteParts.push(`Medications: ${waitlistMedications}`)
+      if (waitlistPMH) noteParts.push(`PMH: ${waitlistPMH}`)
+      if (waitlistPCP) noteParts.push(`PCP: ${waitlistPCP}`)
+      if (waitlistPharmacy) noteParts.push(`Pharmacy: ${waitlistPharmacy}`)
+      if (waitlistInsurance) noteParts.push(`Insurance: ${waitlistInsurance}`)
+      if (waitlistInsuranceMemberId) noteParts.push(`Member ID: ${waitlistInsuranceMemberId}`)
+      if (waitlistInsuranceGroupNum) noteParts.push(`Group #: ${waitlistInsuranceGroupNum}`)
+      if (waitlistInsuranceSubscriber) noteParts.push(`Subscriber: ${waitlistInsuranceSubscriber}`)
+    }
+
     if (waitlistComplaint) noteParts.push(`Complaint: ${waitlistComplaint}`)
-    if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
-    if (waitlistAllergies) noteParts.push(`Allergies: ${waitlistAllergies}`)
-    if (waitlistMedications) noteParts.push(`Medications: ${waitlistMedications}`)
-    if (waitlistPMH) noteParts.push(`PMH: ${waitlistPMH}`)
-    if (waitlistPCP) noteParts.push(`PCP: ${waitlistPCP}`)
-    if (waitlistPharmacy) noteParts.push(`Pharmacy: ${waitlistPharmacy}`)
-    if (waitlistInsurance) noteParts.push(`Insurance: ${waitlistInsurance}`)
-    if (waitlistInsuranceMemberId) noteParts.push(`Member ID: ${waitlistInsuranceMemberId}`)
-    if (waitlistInsuranceGroupNum) noteParts.push(`Group #: ${waitlistInsuranceGroupNum}`)
-    if (waitlistInsuranceSubscriber) noteParts.push(`Subscriber: ${waitlistInsuranceSubscriber}`)
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
 
@@ -1749,146 +1768,196 @@ export function BookVisit() {
       )}
 
       {/* ── Waitlist modal ── */}
-      {waitlistOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setWaitlistOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">Join the waitlist</h2>
-            <p className="text-[13px] text-[#555] mb-5 leading-relaxed">
-              We'll notify you as soon as we have a provider available in <strong>{booking.zip}</strong>.
-            </p>
-            <div className="space-y-4">
+      {waitlistOpen && (() => {
+        const profiledChildren = children.filter(c => c.first_name || c.charm_patient_id)
+        const hasProfiles = profiledChildren.length > 0
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setWaitlistOpen(false)} />
+            <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">Join the waitlist</h2>
+              <p className="text-[13px] text-[#555] mb-5 leading-relaxed">
+                We'll notify you as soon as we have a provider available in <strong>{booking.zip}</strong>.
+              </p>
+              <div className="space-y-4">
 
-              {/* ── Patient info ── */}
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Patient information</div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name <span className="text-[#ff3b30]">*</span></label>
-                <input value={waitlistPatient} onChange={e => setWaitlistPatient(e.target.value)}
-                  placeholder="Child's full name"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
-                <input type="date" value={waitlistDOB} onChange={e => setWaitlistDOB(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Contact phone number</label>
-                <input type="tel" value={waitlistPhone} onChange={e => setWaitlistPhone(e.target.value)}
-                  placeholder="(704) 555-0000"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address</label>
-                <input value={waitlistAddress} onChange={e => setWaitlistAddress(e.target.value)}
-                  placeholder="123 Main St, City, State"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
+                {hasProfiles ? (
+                  <>
+                    {/* Returning family — simplified form */}
+                    {profiledChildren.length > 1 && (
+                      <div>
+                        <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Which child is this for? <span className="text-[#ff3b30]">*</span></label>
+                        <select value={waitlistChildId} onChange={e => setWaitlistChildId(e.target.value)}
+                          className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                          <option value="">Select a child</option>
+                          {profiledChildren.map(c => (
+                            <option key={c.id} value={c.id}>{c.display_label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {profiledChildren.length === 1 && !waitlistChildId && (() => { setTimeout(() => setWaitlistChildId(profiledChildren[0].id), 0); return null })()}
 
-              {/* ── Clinical ── */}
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Clinical information</div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Symptoms / chief complaint <span className="text-[#ff3b30]">*</span></label>
-                <textarea value={waitlistComplaint} onChange={e => setWaitlistComplaint(e.target.value)}
-                  placeholder="Describe what's going on..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Allergies</label>
-                <input value={waitlistAllergies} onChange={e => setWaitlistAllergies(e.target.value)}
-                  placeholder="e.g. Penicillin, peanuts — or 'NKDA'"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Current medications</label>
-                <textarea value={waitlistMedications} onChange={e => setWaitlistMedications(e.target.value)}
-                  placeholder="List any current medications and doses..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Past medical history</label>
-                <textarea value={waitlistPMH} onChange={e => setWaitlistPMH(e.target.value)}
-                  placeholder="Chronic conditions, prior hospitalizations, surgeries..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Symptoms / chief complaint <span className="text-[#ff3b30]">*</span></label>
+                      <textarea value={waitlistComplaint} onChange={e => setWaitlistComplaint(e.target.value)}
+                        placeholder="Describe what's going on..."
+                        rows={3}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
 
-              {/* ── Providers & pharmacy ── */}
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Providers & pharmacy</div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care provider — include practice name & address</label>
-                <input value={waitlistPCP} onChange={e => setWaitlistPCP(e.target.value)}
-                  placeholder="e.g. Dr. Smith, Charlotte Pediatrics, 456 Park Rd, Charlotte, NC 28209"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy</label>
-                <input value={waitlistPharmacy} onChange={e => setWaitlistPharmacy(e.target.value)}
-                  placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
+                      <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
+                        <option value="">Any time</option>
+                        <option>Morning (before noon)</option>
+                        <option>Afternoon (noon–5pm)</option>
+                        <option>After 5pm</option>
+                        <option>Weekdays only</option>
+                        <option>Weekends OK</option>
+                      </select>
+                    </div>
 
-              {/* ── Insurance ── */}
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Insurance</div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance provider</label>
-                <input value={waitlistInsurance} onChange={e => setWaitlistInsurance(e.target.value)}
-                  placeholder="e.g. Blue Cross Blue Shield"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Member ID</label>
-                <input value={waitlistInsuranceMemberId} onChange={e => setWaitlistInsuranceMemberId(e.target.value)}
-                  placeholder="Member / subscriber ID"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Group number</label>
-                <input value={waitlistInsuranceGroupNum} onChange={e => setWaitlistInsuranceGroupNum(e.target.value)}
-                  placeholder="Group #"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber name (if different from patient)</label>
-                <input value={waitlistInsuranceSubscriber} onChange={e => setWaitlistInsuranceSubscriber(e.target.value)}
-                  placeholder="Subscriber's full name"
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Additional notes</label>
+                      <textarea value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)}
+                        placeholder="Anything else we should know..."
+                        rows={2}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* New family — full form */}
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Patient information</div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name <span className="text-[#ff3b30]">*</span></label>
+                      <input value={waitlistPatient} onChange={e => setWaitlistPatient(e.target.value)}
+                        placeholder="Child's full name"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
+                      <input type="date" value={waitlistDOB} onChange={e => setWaitlistDOB(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Contact phone number</label>
+                      <input type="tel" value={waitlistPhone} onChange={e => setWaitlistPhone(e.target.value)}
+                        placeholder="(704) 555-0000"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address</label>
+                      <input value={waitlistAddress} onChange={e => setWaitlistAddress(e.target.value)}
+                        placeholder="123 Main St, City, State"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
 
-              {/* ── Scheduling ── */}
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Scheduling</div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
-                <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                  <option value="">Any time</option>
-                  <option>Morning (before noon)</option>
-                  <option>Afternoon (noon–5pm)</option>
-                  <option>After 5pm</option>
-                  <option>Weekdays only</option>
-                  <option>Weekends OK</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Additional notes</label>
-                <textarea value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)}
-                  placeholder="Anything else we should know..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
-              </div>
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Clinical information</div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Symptoms / chief complaint <span className="text-[#ff3b30]">*</span></label>
+                      <textarea value={waitlistComplaint} onChange={e => setWaitlistComplaint(e.target.value)}
+                        placeholder="Describe what's going on..."
+                        rows={2}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Allergies</label>
+                      <input value={waitlistAllergies} onChange={e => setWaitlistAllergies(e.target.value)}
+                        placeholder="e.g. Penicillin, peanuts — or 'NKDA'"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Current medications</label>
+                      <textarea value={waitlistMedications} onChange={e => setWaitlistMedications(e.target.value)}
+                        placeholder="List any current medications and doses..."
+                        rows={2}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Past medical history</label>
+                      <textarea value={waitlistPMH} onChange={e => setWaitlistPMH(e.target.value)}
+                        placeholder="Chronic conditions, prior hospitalizations, surgeries..."
+                        rows={2}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
 
-              <div className="flex gap-2 pt-1">
-                <Button variant="secondary" size="sm" className="flex-1" onClick={() => setWaitlistOpen(false)}>Cancel</Button>
-                <Button size="sm" className="flex-1" loading={waitlistSubmitting} onClick={submitWaitlist}>
-                  Join waitlist
-                </Button>
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Providers & pharmacy</div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care provider</label>
+                      <input value={waitlistPCP} onChange={e => setWaitlistPCP(e.target.value)}
+                        placeholder="e.g. Dr. Smith, Charlotte Pediatrics, 456 Park Rd, Charlotte, NC 28209"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy</label>
+                      <input value={waitlistPharmacy} onChange={e => setWaitlistPharmacy(e.target.value)}
+                        placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Insurance</div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance provider</label>
+                      <input value={waitlistInsurance} onChange={e => setWaitlistInsurance(e.target.value)}
+                        placeholder="e.g. Blue Cross Blue Shield"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Member ID</label>
+                      <input value={waitlistInsuranceMemberId} onChange={e => setWaitlistInsuranceMemberId(e.target.value)}
+                        placeholder="Member / subscriber ID"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Group number</label>
+                      <input value={waitlistInsuranceGroupNum} onChange={e => setWaitlistInsuranceGroupNum(e.target.value)}
+                        placeholder="Group #"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber name (if different from patient)</label>
+                      <input value={waitlistInsuranceSubscriber} onChange={e => setWaitlistInsuranceSubscriber(e.target.value)}
+                        placeholder="Subscriber's full name"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Scheduling</div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
+                      <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
+                        <option value="">Any time</option>
+                        <option>Morning (before noon)</option>
+                        <option>Afternoon (noon–5pm)</option>
+                        <option>After 5pm</option>
+                        <option>Weekdays only</option>
+                        <option>Weekends OK</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Additional notes</label>
+                      <textarea value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)}
+                        placeholder="Anything else we should know..."
+                        rows={2}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <Button variant="secondary" size="sm" className="flex-1" onClick={() => setWaitlistOpen(false)}>Cancel</Button>
+                  <Button size="sm" className="flex-1" loading={waitlistSubmitting} onClick={submitWaitlist}>
+                    Join waitlist
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
