@@ -171,10 +171,10 @@ export function Landing() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { label: 'Provider schedule view', file: '/screenshots/schedule.png' },
-              { label: 'Patient chart', file: '/screenshots/chart.png' },
-              { label: 'Family booking portal', file: '/screenshots/booking.png' },
-              { label: 'Admin dashboard', file: '/screenshots/admin.png' },
+              { label: 'Provider schedule — daily view', file: '/screenshots/schedule.png' },
+              { label: 'Provider schedule — week view', file: '/screenshots/weekview.png' },
+              { label: 'Admin schedule', file: '/screenshots/dailyschedule.png' },
+              { label: 'Reports & analytics', file: '/screenshots/reports.png' },
             ].map(({ label, file }) => (
               <div key={label} className="border border-[#E8E8E4] rounded-xl overflow-hidden">
                 <img
