@@ -640,7 +640,7 @@ export function BookVisit() {
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
 
-    const entry = await familyCreateWaitlistEntry({
+    await familyCreateWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
@@ -649,11 +649,6 @@ export function BookVisit() {
       notes: noteParts.join(' | '),
       status: 'waiting',
     }).catch(() => null)
-
-    // Notify all providers in the same state
-    if (entry?.id) {
-      familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: entry.id }).catch(err => console.error('Waitlist notification failed:', err))
-    }
 
     setWaitlistSubmitting(false)
     setWaitlistOpen(false)

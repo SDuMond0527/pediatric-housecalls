@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { notifyWaitlist } from '../_lib/notifyWaitlist'
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -49,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${JSON.stringify(childIds)}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
+      notifyWaitlist(sql, row).catch(err => console.error('[waitlist-entries] notification error:', err))
       return res.json(row)
     }
 
