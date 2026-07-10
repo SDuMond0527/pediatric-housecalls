@@ -86,8 +86,8 @@ export default function App() {
               <Route path="/terms"            element={<Terms />} />
               <Route path="/privacy"          element={<Privacy />} />
               <Route path="/faq"              element={<FAQ />} />
-              <Route path="/" element={<AppLayout />}>
-                <Route index element={<RootRedirect />} />
+              <Route index element={<RootRedirect />} />
+              <Route element={<AppLayout />}>
                 <Route path="today"          element={<Today />} />
                 <Route path="week"           element={<Week />} />
                 <Route path="patients"       element={<Patients />} />
