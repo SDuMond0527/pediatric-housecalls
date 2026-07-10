@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { notifyWaitlist } from '../_lib/notifyWaitlist'
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -20,6 +19,15 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${providerPoolId}` })
   if (!payload.sub) throw new Error('No sub in token')
   return { sub: payload.sub, isFamily: false }
+}
+
+function pingNotifications(waitlistEntryId: string) {
+  const base = process.env.PORTAL_URL || 'https://phc-team.com'
+  fetch(`${base}/api/notifications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'waitlist', waitlistEntryId }),
+  }).catch(err => console.error('[waitlist-entries] notification ping failed:', err))
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -50,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${JSON.stringify(childIds)}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
-      notifyWaitlist(row).catch(err => console.error('[waitlist-entries] notification error:', err))
+      pingNotifications(row.id as string)
       return res.json(row)
     }
 
@@ -69,7 +77,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (family_id) {
       rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${family_id}::uuid AND practice_id = ${practiceId}::uuid AND status = 'waiting'`
     } else if (status) {
-      // Filter by provider's licensed states so providers only see entries in their state
       if (providerStates.length > 0) {
         rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND practice_id = ${practiceId}::uuid AND (state = ANY(${providerStates}::text[]) OR state IS NULL) ORDER BY created_at ASC`
       } else {
