@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO } from '../lib/api'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -319,6 +319,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dsLaunching, setDsLaunching] = useState(false)
+
+  async function launchDoseSpot() {
+    if (!linkedChildId) return
+    setDsLaunching(true)
+    try {
+      const { ssoUrl } = await getDoseSpotSSO(linkedChildId)
+      window.open(ssoUrl, '_blank', 'noopener,noreferrer')
+    } catch (e: any) {
+      alert(e.message ?? 'Could not launch DoseSpot')
+    } finally {
+      setDsLaunching(false)
+    }
+  }
 
   // Linked patient (may be null for manually-added appointments)
   const [linkedChildId, setLinkedChildId] = useState<string | null>(childId)
@@ -779,6 +793,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </Button>
               </>
             )}
+            <button
+              onClick={launchDoseSpot}
+              disabled={dsLaunching || !linkedChildId}
+              title={!linkedChildId ? 'Link a patient to prescribe' : 'Open DoseSpot e-prescribing'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FlaskConical size={13} />
+              {dsLaunching ? 'Opening…' : 'Prescribe'}
+            </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] ml-1">
               <X size={16} />
             </button>
