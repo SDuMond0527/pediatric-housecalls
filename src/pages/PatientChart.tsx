@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
@@ -79,7 +79,12 @@ export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe'>('overview')
+
+  // DoseSpot e-prescribing
+  const [dsLoading, setDsLoading] = useState(false)
+  const [dsUrl, setDsUrl]         = useState<string | null>(null)
+  const [dsError, setDsError]     = useState<string | null>(null)
   const [child, setChild] = useState<any | null>(null)
   const [notes, setNotes] = useState<NoteWithVisit[]>([])
   const [vitalsByAppt, setVitalsByAppt] = useState<Record<string, any>>({})
@@ -159,7 +164,23 @@ export function PatientChart() {
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
+    { key: 'prescribe' as const, label: 'Prescribe', count: null },
   ]
+
+  async function launchDoseSpot() {
+    if (!childId) return
+    setDsLoading(true)
+    setDsError(null)
+    setDsUrl(null)
+    try {
+      const { ssoUrl } = await getDoseSpotSSO(childId)
+      setDsUrl(ssoUrl)
+    } catch (e: any) {
+      setDsError(e.message ?? 'Could not launch DoseSpot')
+    } finally {
+      setDsLoading(false)
+    }
+  }
 
   function startEdit(section: 'contact' | 'medical' | 'insurance') {
     setEditError(null)
@@ -923,6 +944,60 @@ export function PatientChart() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'prescribe' && (
+              <div className="space-y-4">
+                {!dsUrl && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 shadow-sm text-center">
+                    <div className="w-12 h-12 rounded-full bg-[#EEEDFE] flex items-center justify-center mx-auto mb-4">
+                      <FlaskConical size={22} className="text-[#7F77DD]" />
+                    </div>
+                    <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">e-Prescribing via DoseSpot</div>
+                    <div className="text-[13px] text-[#777] mb-6 max-w-xs mx-auto">
+                      Opens DoseSpot's prescribing interface for {child ? [child.first_name, child.last_name].filter(Boolean).join(' ') : 'this patient'}.
+                      The patient record will be created in DoseSpot on first launch.
+                    </div>
+                    {dsError && (
+                      <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg mb-4 text-left">
+                        {dsError}
+                      </div>
+                    )}
+                    <button
+                      onClick={launchDoseSpot}
+                      disabled={dsLoading}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#7F77DD] text-white text-[13px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors disabled:opacity-50"
+                    >
+                      <FlaskConical size={14} />
+                      {dsLoading ? 'Launching…' : 'Launch DoseSpot'}
+                    </button>
+                  </div>
+                )}
+
+                {dsUrl && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E8E8E4]">
+                      <div className="flex items-center gap-2 text-[12px] text-[#555]">
+                        <FlaskConical size={13} className="text-[#7F77DD]" />
+                        <span>DoseSpot — {child ? [child.first_name, child.last_name].filter(Boolean).join(' ') : 'Patient'}</span>
+                      </div>
+                      <button
+                        onClick={() => { setDsUrl(null); setDsError(null) }}
+                        className="text-[11px] text-[#999] hover:text-[#555] transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <iframe
+                      src={dsUrl}
+                      title="DoseSpot e-Prescribing"
+                      className="w-full"
+                      style={{ height: 'calc(100vh - 220px)', minHeight: 600, border: 'none' }}
+                      allow="clipboard-write"
+                    />
                   </div>
                 )}
               </div>

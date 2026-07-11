@@ -384,3 +384,7 @@ export const sendPatientStatement = (id: string) =>
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
 
+// ── DoseSpot e-Prescribing ────────────────────────────────────
+export const getDoseSpotSSO = (childId: string) =>
+  apiFetch<{ ssoUrl: string }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
+

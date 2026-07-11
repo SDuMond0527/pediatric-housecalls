@@ -138,6 +138,7 @@ create table if not exists children (
   family_id uuid references family_profiles(id) on delete cascade not null,
   display_label text not null,
   charm_patient_id text,
+  dosespot_patient_id int,
   first_name text,
   last_name text,
   date_of_birth date,
