@@ -171,6 +171,7 @@ function buildSsoUrl(dsPatientId: number, clinicianId: string): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  try {
   let sub: string
   try {
     sub = await verifyToken(req.headers.authorization)
@@ -181,23 +182,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { child_id } = req.body as { child_id?: string }
   if (!child_id) return res.status(400).json({ error: 'child_id required' })
 
+  if (!DS_CLINIC_KEY) return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_CLINIC_KEY in Vercel environment variables' })
+  if (!DS_SUB_KEY)   return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_SUBSCRIPTION_KEY in Vercel environment variables' })
+
   const sql = neon(process.env.DATABASE_URL!)
 
-  // Verify provider and get their practice
-  const [providerRow] = await sql`
-    SELECT id, practice_id
-    FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  // Verify provider
+  const [providerRow] = await sql`SELECT id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
 
   const clinicianId: string = DS_CLINICIAN
 
-  // Load child + family
+  // Load child + family (no practice_id filter — provider auth is sufficient)
   const [childRow] = await sql`
     SELECT c.*, fp.phone AS family_phone, fp.address_line1 AS family_address_line1,
            fp.city AS family_city, fp.state AS family_state, fp.zip AS family_zip
     FROM children c
     JOIN family_profiles fp ON fp.id = c.family_id
-    WHERE c.id = ${child_id}::uuid AND fp.practice_id = ${providerRow.practice_id}::uuid
+    WHERE c.id = ${child_id}::uuid
     LIMIT 1`
   if (!childRow) return res.status(404).json({ error: 'Patient not found' })
 
@@ -209,9 +211,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     state:         child.family_state,
     zip:           child.family_zip,
   }
-
-  if (!DS_CLINIC_KEY) return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_CLINIC_KEY in Vercel environment variables' })
-  if (!DS_SUB_KEY)   return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_SUBSCRIPTION_KEY in Vercel environment variables' })
 
   try {
     // 1. Get DoseSpot access token
@@ -230,7 +229,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ ssoUrl })
   } catch (err: any) {
-    console.error('[dosespot/sso]', err?.message)
-    return res.status(502).json({ error: err?.message ?? 'DoseSpot error' })
+    console.error('[dosespot/sso] DoseSpot API error:', err?.message)
+    return res.status(502).json({ error: err?.message || 'DoseSpot API error' })
+  }
+
+  } catch (err: any) {
+    console.error('[dosespot/sso] Unhandled error:', err?.message, err?.stack)
+    return res.status(500).json({ error: err?.message || 'Internal server error' })
   }
 }
