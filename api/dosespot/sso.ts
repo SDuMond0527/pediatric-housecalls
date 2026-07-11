@@ -22,11 +22,16 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 //   DOSESPOT_SUBSCRIPTION_KEY  6cccfde8eba7b72a493985bdd12f1e130b1dee3a10dffd50563a7c650128427b
 //   DOSESPOT_CLINICIAN_ID      3122427  (default; override per provider once we have per-provider IDs)
 
-const DS_BASE        = process.env.DOSESPOT_BASE_URL        || 'https://my.staging.dosespot.com'
-const DS_CLINIC_ID   = process.env.DOSESPOT_CLINIC_ID       || '1038875'
-const DS_CLINIC_KEY  = process.env.DOSESPOT_CLINIC_KEY      || ''
-const DS_SUB_KEY     = process.env.DOSESPOT_SUBSCRIPTION_KEY || ''
-const DS_CLINICIAN   = process.env.DOSESPOT_CLINICIAN_ID    || '3122427'
+// Strip any non-ASCII characters that may sneak in from copy-paste
+function cleanEnv(val: string | undefined, fallback = '') {
+  return (val || fallback).replace(/[^\x20-\x7E]/g, '').trim()
+}
+
+const DS_BASE        = cleanEnv(process.env.DOSESPOT_BASE_URL,         'https://my.staging.dosespot.com')
+const DS_CLINIC_ID   = cleanEnv(process.env.DOSESPOT_CLINIC_ID,        '1038875')
+const DS_CLINIC_KEY  = cleanEnv(process.env.DOSESPOT_CLINIC_KEY)
+const DS_SUB_KEY     = cleanEnv(process.env.DOSESPOT_SUBSCRIPTION_KEY)
+const DS_CLINICIAN   = cleanEnv(process.env.DOSESPOT_CLINICIAN_ID,     '3122427')
 
 // ─── Token generation ─────────────────────────────────────────────────────────
 // TODO: Replace with exact JWT format once DoseSpot Authentication Guide is received.
