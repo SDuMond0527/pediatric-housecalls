@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sql`SELECT id, status, state, family_id, converted_provider_id FROM waitlist_entries WHERE practice_id = ${practiceId}::uuid`,
     sql`SELECT id FROM family_profiles WHERE practice_id = ${practiceId}::uuid`,
     sql`SELECT id, name, role FROM providers WHERE practice_id = ${practiceId}::uuid`,
-    sql`SELECT id, status, created_at, is_urgent FROM broadcasts WHERE practice_id = ${practiceId}::uuid`,
+    sql`SELECT id, is_open, created_at, is_urgent FROM broadcasts WHERE practice_id = ${practiceId}::uuid`,
   ])
 
   res.json({ appointments, bookingRequests, waitlistEntries, familyProfiles, providers, broadcasts })

@@ -6,7 +6,7 @@ interface ApptRow { id: string; status: string; visit_type: string; scheduled_da
 interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string; family_id: string }
 interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null }
 interface ProviderRow { id: string; name: string; role: string }
-interface BroadcastRow { id: string; status: string; created_at: string; is_urgent: boolean }
+interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -141,9 +141,9 @@ export function AdminAnalytics() {
 
   // Broadcast pickup rate
   const totalBroadcasts   = broadcasts.length
-  const pickedUp          = broadcasts.filter(b => b.status === 'picked_up' || b.status === 'accepted').length
-  const expiredBroadcasts = broadcasts.filter(b => b.status === 'expired').length
-  const pickupRate        = (pickedUp + expiredBroadcasts) > 0 ? Math.round((pickedUp / (pickedUp + expiredBroadcasts)) * 100) : 0
+  const pickedUp          = broadcasts.filter(b => !b.is_open).length
+  const stillOpen         = broadcasts.filter(b => b.is_open).length
+  const pickupRate        = totalBroadcasts > 0 ? Math.round((pickedUp / totalBroadcasts) * 100) : 0
 
   // Zone breakdown of completed visits
   const zoneMap: Record<string, number> = {}
@@ -438,9 +438,9 @@ export function AdminAnalytics() {
               <>
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   {[
-                    { label: 'Total sent',  value: totalBroadcasts,   color: '#1A1A2E' },
-                    { label: 'Picked up',   value: pickedUp,          color: '#1D9E75' },
-                    { label: 'Expired',     value: expiredBroadcasts, color: '#C0392B' },
+                    { label: 'Total sent',  value: totalBroadcasts, color: '#1A1A2E' },
+                    { label: 'Picked up',   value: pickedUp,        color: '#1D9E75' },
+                    { label: 'Still open',  value: stillOpen,       color: '#EF9F27' },
                   ].map(s => (
                     <div key={s.label} className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
                       <div className="font-display text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
@@ -448,7 +448,7 @@ export function AdminAnalytics() {
                     </div>
                   ))}
                 </div>
-                {(pickedUp + expiredBroadcasts) > 0 && (
+                {totalBroadcasts > 0 && (
                   <>
                     <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden mb-2">
                       <div className="h-full bg-[#1D9E75] rounded-full" style={{ width: `${pickupRate}%` }} />
