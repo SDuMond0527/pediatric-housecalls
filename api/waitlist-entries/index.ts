@@ -21,16 +21,68 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   return { sub: payload.sub, isFamily: false }
 }
 
-async function pingNotifications(waitlistEntryId: string) {
-  const base = process.env.PORTAL_URL || 'https://phcbooking.com'
-  try {
-    await fetch(`${base}/api/notifications`, {
+async function sendWaitlistNotifications(entry: Record<string, unknown>, sql: ReturnType<typeof neon>) {
+  const RESEND_KEY   = process.env.RESEND_API_KEY || ''
+  const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID || ''
+  const TWILIO_KEY   = process.env.TWILIO_API_KEY_SID || ''
+  const TWILIO_SEC   = process.env.TWILIO_API_KEY_SECRET || ''
+  const TWILIO_FROM  = process.env.TWILIO_FROM_NUMBER || ''
+  const FROM_EMAIL   = process.env.FROM_EMAIL || 'appointments@phc-team.com'
+  const PORTAL_URL   = process.env.PORTAL_URL || 'https://phc-team.com'
+  const PRACTICE     = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
+
+  async function sendEmail(to: string, subject: string, html: string) {
+    if (!RESEND_KEY) { console.error('[waitlist] no RESEND_API_KEY'); return }
+    const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'waitlist', waitlistEntryId }),
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `${PRACTICE} <${FROM_EMAIL}>`, to, subject, html }),
     })
-  } catch (err) {
-    console.error('[waitlist-entries] notification ping failed:', err)
+    if (!r.ok) console.error('[waitlist] email error:', await r.text())
+    else console.error('[waitlist] email sent to', to)
+  }
+
+  async function sendSMS(to: string, body: string) {
+    if (!TWILIO_SID || !TWILIO_KEY) { console.error('[waitlist] no Twilio creds'); return }
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${TWILIO_KEY}:${TWILIO_SEC}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ From: TWILIO_FROM, To: to, Body: body }),
+    })
+    if (!r.ok) console.error('[waitlist] SMS error:', await r.text())
+    else console.error('[waitlist] SMS sent to', to)
+  }
+
+  const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : (entry.state as string) || ''
+  const smsBody = `${PRACTICE}: New waitlist entry${entry.zip ? ` (zip ${entry.zip})` : ''}. View: ${PORTAL_URL}/admin/waitlist`
+  const emailSubject = `[Waitlist] New family${entry.zip ? ` — zip ${entry.zip}` : ''}${stateLabel ? `, ${stateLabel}` : ''}`
+  const emailHtml = `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#1A1A2E;">
+<h2 style="color:#1A1A2E;">${PRACTICE} — New Waitlist Entry</h2>
+<p>A family has joined the waitlist.</p>
+<ul>
+  ${entry.zip ? `<li><strong>Zip:</strong> ${entry.zip}</li>` : ''}
+  ${stateLabel ? `<li><strong>State:</strong> ${stateLabel}</li>` : ''}
+  ${entry.visit_type ? `<li><strong>Visit type:</strong> ${entry.visit_type}</li>` : ''}
+  ${entry.preferred_time_window ? `<li><strong>Preferred time:</strong> ${entry.preferred_time_window}</li>` : ''}
+</ul>
+<p><a href="${PORTAL_URL}/admin/waitlist" style="background:#EF9F27;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">View waitlist</a></p>
+</body></html>`
+
+  const recipients = await sql`SELECT name, phone, email, states, role FROM providers WHERE is_active = true OR role = 'admin'`
+  console.error('[waitlist] notifying', recipients.length, 'recipients')
+
+  for (const prov of recipients) {
+    const provStates: string[] = (prov.states ?? []) as string[]
+    if (prov.role !== 'admin' && entry.state && provStates.length > 0 && !provStates.includes(entry.state as string)) {
+      console.error('[waitlist] skipping', prov.name, '— state mismatch')
+      continue
+    }
+    console.error('[waitlist] notifying', prov.name, 'email:', prov.email, 'phone:', prov.phone)
+    if (prov.email) await sendEmail(prov.email, emailSubject, emailHtml).catch(e => console.error('[waitlist] email failed for', prov.name, e))
+    if (prov.phone) await sendSMS(prov.phone, smsBody).catch(e => console.error('[waitlist] SMS failed for', prov.name, e))
   }
 }
 
@@ -63,7 +115,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
-      await pingNotifications(row.id as string)
+      console.error('[waitlist] entry created:', row.id)
+      await sendWaitlistNotifications(row as Record<string, unknown>, sql).catch(e => console.error('[waitlist] notification error:', e))
       return res.json(row)
     }
 
