@@ -939,6 +939,17 @@ export function PatientChart() {
                                   {note.provider_name && ` by ${note.provider_name}`}
                                 </div>
                               )}
+
+                              <div className="pt-2 border-t border-[#F1EFE8] flex justify-end">
+                                <button
+                                  onClick={() => { launchDoseSpot(); setActiveTab('prescribe') }}
+                                  disabled={dsLoading}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-50"
+                                >
+                                  <FlaskConical size={12} />
+                                  {dsLoading ? 'Launching…' : 'Prescribe'}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
