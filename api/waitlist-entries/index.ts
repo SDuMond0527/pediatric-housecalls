@@ -27,7 +27,7 @@ async function sendWaitlistNotifications(entry: Record<string, unknown>, sql: Re
   const TWILIO_KEY   = process.env.TWILIO_API_KEY_SID || ''
   const TWILIO_SEC   = process.env.TWILIO_API_KEY_SECRET || ''
   const TWILIO_FROM  = process.env.TWILIO_FROM_NUMBER || ''
-  const FROM_EMAIL   = process.env.FROM_EMAIL || 'appointments@phc-team.com'
+  const FROM_EMAIL   = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
   const PORTAL_URL   = process.env.PORTAL_URL || 'https://phc-team.com'
   const PRACTICE     = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
 
