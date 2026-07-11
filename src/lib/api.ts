@@ -27,7 +27,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error ?? res.statusText)
+    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
   }
   return res.json()
 }

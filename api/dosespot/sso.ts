@@ -210,6 +210,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     zip:           child.family_zip,
   }
 
+  if (!DS_CLINIC_KEY) return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_CLINIC_KEY in Vercel environment variables' })
+  if (!DS_SUB_KEY)   return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_SUBSCRIPTION_KEY in Vercel environment variables' })
+
   try {
     // 1. Get DoseSpot access token
     const token = await getDoseSpotToken(clinicianId)

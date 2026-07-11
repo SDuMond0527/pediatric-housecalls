@@ -328,7 +328,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       const { ssoUrl } = await getDoseSpotSSO(linkedChildId)
       window.open(ssoUrl, '_blank', 'noopener,noreferrer')
     } catch (e: any) {
-      alert(e.message ?? 'Could not launch DoseSpot')
+      alert(e.message || 'Could not launch DoseSpot')
     } finally {
       setDsLaunching(false)
     }
