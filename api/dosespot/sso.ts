@@ -185,11 +185,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Verify provider and get their practice
   const [providerRow] = await sql`
-    SELECT id, practice_id, dosespot_clinician_id
+    SELECT id, practice_id
     FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
 
-  const clinicianId: string = (providerRow.dosespot_clinician_id as string | null) || DS_CLINICIAN
+  const clinicianId: string = DS_CLINICIAN
 
   // Load child + family
   const [childRow] = await sql`
