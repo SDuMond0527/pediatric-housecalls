@@ -197,6 +197,19 @@ create table if not exists waitlist_entries (
   created_at timestamptz default now()
 );
 
+-- PHI Audit Log (HIPAA access tracking)
+create table if not exists phi_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  provider_id uuid references providers(id) on delete set null,
+  action text not null,
+  resource_type text not null,
+  resource_id text,
+  created_at timestamptz default now()
+);
+create index if not exists phi_audit_log_provider_idx on phi_audit_log(provider_id);
+create index if not exists phi_audit_log_resource_idx on phi_audit_log(resource_type, resource_id);
+create index if not exists phi_audit_log_created_idx  on phi_audit_log(created_at);
+
 -- Slot offers (waitlist → family)
 create table if not exists slot_offers (
   id uuid primary key default gen_random_uuid(),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit } from '../lib/api'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -567,6 +567,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       setCustomTemplates(templates)
       setFeeSchedule(schedule)
       let resolvedChildId = childId
+      logAudit('view_encounter_note', 'appointment', appointment.id)
       if (note) {
         setNoteId(note.id)
         setIsSigned(note.is_signed)

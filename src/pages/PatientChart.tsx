@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
@@ -127,6 +127,7 @@ export function PatientChart() {
         getAppointments({ child_id: cid }).catch(() => [] as any[]),
       ])
       setChild(childrenRes?.[0] ?? null)
+      logAudit('view_patient', 'child', cid)
       setNotes(notesRes ?? [])
       const byAppt: Record<string, any> = {}
       ;(vitalsRes ?? []).forEach((v: any) => { byAppt[v.appointment_id] = v })

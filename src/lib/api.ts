@@ -388,3 +388,9 @@ export const pullStediEra = (claimId: string) =>
 export const getDoseSpotSSO = (childId: string) =>
   apiFetch<{ ssoUrl: string }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
 
+// ── PHI Audit Log ─────────────────────────────────────────────
+export function logAudit(action: string, resource_type: string, resource_id?: string) {
+  apiFetch<void>('/api/audit', { method: 'POST', body: JSON.stringify({ action, resource_type, resource_id }) })
+    .catch(() => {})  // fire-and-forget, never block the UI
+}
+
