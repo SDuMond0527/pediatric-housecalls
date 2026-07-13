@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
@@ -766,6 +766,11 @@ export function AdminClaims() {
                         onClick={() => setStatementClaim(c)}
                         className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap font-medium">
                         <Receipt size={11} /> Statement
+                        {c.era_received_at && (
+                          <span className="ml-1 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                            <Zap size={9} /> ERA
+                          </span>
+                        )}
                       </button>
                     </div>
                   </div>

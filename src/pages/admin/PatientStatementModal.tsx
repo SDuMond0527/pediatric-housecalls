@@ -74,7 +74,16 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
           setStatement(stmt)
           populateFromStatement(stmt)
         } else {
-          // No statement yet — pre-fill from claim + family data
+          // No statement yet — pre-fill from ERA if already received
+          if (claim.era_received_at) {
+            if (claim.amount_billed_era != null)        setAmountBilled(String(claim.amount_billed_era))
+            if (claim.insurance_payment_era != null)    setInsurancePayment(String(claim.insurance_payment_era))
+            if (claim.contractual_adjustment_era != null) setContractualAdjustment(String(claim.contractual_adjustment_era))
+            if (claim.patient_copay_era != null)        setPatientCopay(String(claim.patient_copay_era))
+            if (claim.patient_deductible_era != null)   setPatientDeductible(String(claim.patient_deductible_era))
+            if (claim.patient_coinsurance_era != null)  setPatientCoinsurance(String(claim.patient_coinsurance_era))
+            if (claim.patient_non_covered_era != null)  setPatientNonCovered(String(claim.patient_non_covered_era))
+          }
           setEditing(true)
         }
       } catch (e: any) {
@@ -293,7 +302,12 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                       disabled={pullingEra}
                       className="inline-flex items-center gap-1.5 text-[11px] text-[#7F77DD] hover:underline disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                     >
-                      <Download size={11} /> {pullingEra ? 'Pulling…' : 'Pull from Stedi ERA'}
+                      <Download size={11} />
+                      {pullingEra
+                        ? 'Pulling…'
+                        : claim.era_received_at
+                          ? 'Refresh ERA'
+                          : 'Pull from Stedi ERA'}
                     </button>
                   )}
                 </div>
