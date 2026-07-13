@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Match by square_order_id (set when we created the payment link)
     const [stmt] = await sql`
-      SELECT id, status, total_amount_due
+      SELECT id, status, total_amount_due_text
       FROM patient_statements
       WHERE square_order_id = ${orderId}
       LIMIT 1

@@ -145,10 +145,8 @@ export function AdminStatements() {
                 return (
                   <tr key={stmt.id} className="hover:bg-[#FAFAF8] transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-[#1A1A2E]">
-                        {[stmt.patient_first_name, stmt.patient_last_name].filter(Boolean).join(' ') || '—'}
-                      </div>
-                      {stmt.patient_email && <div className="text-[11px] text-[#999] mt-0.5">{stmt.patient_email}</div>}
+                      <div className="font-medium text-[#1A1A2E]">{stmt.patient_name || '—'}</div>
+                      {stmt.family_email && <div className="text-[11px] text-[#999] mt-0.5">{stmt.family_email}</div>}
                     </td>
                     <td className="px-4 py-3 text-[#555] tabular-nums">{fmtDate(stmt.date_of_service)}</td>
                     <td className="px-4 py-3 text-[#555]">{stmt.payer_name ?? '—'}</td>
