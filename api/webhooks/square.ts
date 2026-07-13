@@ -32,8 +32,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
 
-  // We only care about completed payments
-  if (event.type !== 'payment.completed') {
+  // We only care about payments that have reached COMPLETED status
+  if (event.type !== 'payment.updated' && event.type !== 'payment.completed') {
+    return res.status(200).json({ received: true })
+  }
+
+  const paymentStatus = event.data?.object?.payment?.status
+  if (paymentStatus !== 'COMPLETED') {
     return res.status(200).json({ received: true })
   }
 
