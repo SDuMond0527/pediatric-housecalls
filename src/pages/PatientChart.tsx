@@ -18,6 +18,8 @@ interface NoteWithVisit {
   diagnoses: { code: string; name: string }[]
   is_signed: boolean
   signed_at: string | null
+  pcp_faxed_at: string | null
+  pcp_fax_name: string | null
   visit_type: string
   scheduled_date: string
   scheduled_time: string
@@ -1144,9 +1146,18 @@ export function PatientChart() {
                               )}
 
                               {note.is_signed && note.signed_at && (
-                                <div className="text-[11px] text-[#999] pt-2 border-t border-[#F1EFE8]">
-                                  Signed {format(new Date(note.signed_at), 'MMM d, yyyy h:mm a')}
-                                  {note.provider_name && ` by ${note.provider_name}`}
+                                <div className="text-[11px] text-[#999] pt-2 border-t border-[#F1EFE8] space-y-0.5">
+                                  <div>
+                                    Signed {format(new Date(note.signed_at), 'MMM d, yyyy h:mm a')}
+                                    {note.provider_name && ` by ${note.provider_name}`}
+                                  </div>
+                                  {note.pcp_faxed_at ? (
+                                    <div className="text-[#5a9e6f]">
+                                      Faxed to {note.pcp_fax_name || 'PCP'} on {format(new Date(note.pcp_faxed_at), 'MMM d, yyyy h:mm a')}
+                                    </div>
+                                  ) : note.is_signed && (
+                                    <div className="text-[#bbb]">Fax pending or no PCP on file</div>
+                                  )}
                                 </div>
                               )}
 
