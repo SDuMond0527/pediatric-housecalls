@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { createHmac, createHash } from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
@@ -14,102 +14,104 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
-// ─── DoseSpot config ──────────────────────────────────────────────────────────
-// Set these in Vercel environment variables:
-//   DOSESPOT_BASE_URL          https://my.staging.dosespot.com
-//   DOSESPOT_CLINIC_ID         1038875
-//   DOSESPOT_CLINIC_KEY        WUAE5MYPLDG2J9LSSMQ6TQTJHWTHECW4
-//   DOSESPOT_SUBSCRIPTION_KEY  6cccfde8eba7b72a493985bdd12f1e130b1dee3a10dffd50563a7c650128427b
-//   DOSESPOT_CLINICIAN_ID      3122427  (default; override per provider once we have per-provider IDs)
-
-// Strip any non-ASCII characters that may sneak in from copy-paste
+// Strip non-ASCII chars that sneak in from copy-paste
 function cleanEnv(val: string | undefined, fallback = '') {
   return (val || fallback).replace(/[^\x20-\x7E]/g, '').trim()
 }
 
-const DS_BASE        = cleanEnv(process.env.DOSESPOT_BASE_URL,         'https://my.staging.dosespot.com')
-const DS_CLINIC_ID   = cleanEnv(process.env.DOSESPOT_CLINIC_ID,        '1038875')
-const DS_CLINIC_KEY  = cleanEnv(process.env.DOSESPOT_CLINIC_KEY)
-const DS_SUB_KEY     = cleanEnv(process.env.DOSESPOT_SUBSCRIPTION_KEY)
-const DS_CLINICIAN   = cleanEnv(process.env.DOSESPOT_CLINICIAN_ID,     '3122427')
+const DS_BASE       = cleanEnv(process.env.DOSESPOT_BASE_URL,        'https://my.staging.dosespot.com')
+const DS_CLINIC_ID  = cleanEnv(process.env.DOSESPOT_CLINIC_ID,       '1038875')
+const DS_CLINIC_KEY = cleanEnv(process.env.DOSESPOT_CLINIC_KEY)
+const DS_SUB_KEY    = cleanEnv(process.env.DOSESPOT_SUBSCRIPTION_KEY)
+const DS_CLINICIAN  = cleanEnv(process.env.DOSESPOT_CLINICIAN_ID,    '3122427')
 
-// ─── Token generation ─────────────────────────────────────────────────────────
-// TODO: Replace with exact JWT format once DoseSpot Authentication Guide is received.
-// Current understanding based on DoseSpot RESTful API V2 patterns:
-//   1. Build a JWT (header.payload.signature) signed with HMAC-SHA256 using DS_CLINIC_KEY
-//   2. POST to ${DS_BASE}/webapi/token with grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
-//   3. Include Ocp-Apim-Subscription-Key header
-// The exact JWT claims (iss/sub/aud/exp) must be confirmed with the Authentication Guide.
+// ─── Token (section 1.3.1 of Auth Guide) ────────────────────────────────────
+// POST /webapi/v2/connect/token with grant_type=password + clinic credentials
 
-function base64url(buf: Buffer | string): string {
-  const b = typeof buf === 'string' ? Buffer.from(buf) : buf
-  return b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
+async function getDoseSpotToken(): Promise<string> {
+  const body = new URLSearchParams({
+    grant_type:    'password',
+    client_id:     DS_CLINIC_ID,
+    client_secret: DS_CLINIC_KEY,
+    username:      DS_CLINICIAN,
+    password:      DS_CLINIC_KEY,
+    scope:         'api',
+  })
 
-function buildJwt(clinicianId: string): string {
-  const header  = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const now     = Math.floor(Date.now() / 1000)
-  // TODO: Confirm exact claim names with Authentication Guide
-  const payload = base64url(JSON.stringify({
-    iss: DS_CLINIC_ID,
-    sub: clinicianId,
-    aud: `${DS_BASE}/webapi/token`,
-    exp: now + 60,
-    iat: now,
-  }))
-  const sig = base64url(
-    createHmac('sha256', DS_CLINIC_KEY).update(`${header}.${payload}`).digest()
-  )
-  return `${header}.${payload}.${sig}`
-}
-
-async function getDoseSpotToken(clinicianId: string): Promise<string> {
-  const jwt = buildJwt(clinicianId)
-  const r = await fetch(`${DS_BASE}/webapi/token`, {
+  const r = await fetch(`${DS_BASE}/webapi/v2/connect/token`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
+      'Content-Type':   'application/x-www-form-urlencoded',
+      'Subscription-Key': DS_SUB_KEY,
     },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
+    body: body.toString(),
   })
+
   if (!r.ok) {
     const msg = await r.text()
     throw new Error(`DoseSpot token error: ${msg}`)
   }
-  const data = await r.json()
-  return data.access_token as string
+  const data = await r.json() as { access_token: string }
+  return data.access_token
 }
 
-// ─── Patient sync ─────────────────────────────────────────────────────────────
+// ─── SSO URL (section 1.6 of Auth Guide) ────────────────────────────────────
+// Encrypted ClinicId  = randomPhrase + Base64(SHA512(randomPhrase + clinicKey))   [trailing == stripped]
+// Encrypted UserId    = Base64(SHA512(userId + randomPhrase[0:22] + clinicKey))   [trailing == stripped]
 
-interface DoseSpotPatient {
-  FirstName: string
-  LastName: string
-  DateOfBirth: string   // MM/DD/YYYY
-  Gender: number        // 1=Male 2=Female 3=Unknown
-  Address1: string
-  City: string
-  State: string
-  ZipCode: string
-  PrimaryPhone: string
-  PrimaryPhoneType: number  // 1=Home 2=Work 3=Cell
+function randomAlphaNum(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  while (result.length < length) {
+    const bytes = randomBytes(length * 2)
+    for (const b of bytes) {
+      if (result.length >= length) break
+      const idx = b % chars.length
+      result += chars[idx]
+    }
+  }
+  return result
 }
+
+function buildSsoUrl(clinicianId: string, patientId?: number): string {
+  const phrase = randomAlphaNum(32)
+
+  // Encrypted ClinicId
+  const clinicHash   = createHash('sha512').update(Buffer.from(phrase + DS_CLINIC_KEY, 'utf8')).digest('base64').replace(/=+$/, '')
+  const ssoCode      = encodeURIComponent(phrase + clinicHash)
+
+  // Encrypted UserId
+  const phrase22     = phrase.slice(0, 22)
+  const userHash     = createHash('sha512').update(Buffer.from(clinicianId + phrase22 + DS_CLINIC_KEY, 'utf8')).digest('base64').replace(/=+$/, '')
+  const ssoUserVerify = encodeURIComponent(userHash)
+
+  let url = `${DS_BASE}/LoginSingleSignOn.aspx`
+  url += `?SingleSignOnClinicId=${DS_CLINIC_ID}`
+  url += `&SingleSignOnUserId=${clinicianId}`
+  url += `&SingleSignOnPhraseLength=32`
+  url += `&SingleSignOnCode=${ssoCode}`
+  url += `&SingleSignOnUserIdVerify=${ssoUserVerify}`
+
+  if (patientId) {
+    url += `&PatientId=${patientId}`
+    url += `&OnBehalfOfUserId=${clinicianId}`
+  }
+
+  return url
+}
+
+// ─── Patient sync ────────────────────────────────────────────────────────────
 
 function genderCode(g: string | null): number {
   if (!g) return 3
   const l = g.toLowerCase()
-  if (l === 'male' || l === 'm') return 1
+  if (l === 'male'   || l === 'm') return 1
   if (l === 'female' || l === 'f') return 2
   return 3
 }
 
 function formatDob(dob: string): string {
-  // Convert YYYY-MM-DD → MM/DD/YYYY
-  const [y, m, d] = dob.split('T')[0].split('-')
+  const [y, m, d] = String(dob).split('T')[0].split('-')
   return `${m}/${d}/${y}`
 }
 
@@ -124,133 +126,96 @@ async function findOrCreateDoseSpotPatient(
   token: string
 ): Promise<number> {
   const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-    'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
+    'Content-Type':     'application/json',
+    Authorization:      `Bearer ${token}`,
+    'Subscription-Key': DS_SUB_KEY,
   }
 
   // If we already have a DoseSpot patient ID, verify it still exists
   if (child.dosespot_patient_id) {
-    const check = await fetch(
-      `${DS_BASE}/webapi/v2/patients/${child.dosespot_patient_id}`,
-      { headers }
-    )
+    const check = await fetch(`${DS_BASE}/webapi/v2/patients/${child.dosespot_patient_id}`, { headers })
     if (check.ok) return child.dosespot_patient_id as number
   }
 
-  // Create new patient
-  const phone = family.phone || child.parent_phone || null
-  const patient: DoseSpotPatient = {
-    FirstName:        child.first_name  || '',
-    LastName:         child.last_name   || '',
-    DateOfBirth:      child.date_of_birth ? formatDob(String(child.date_of_birth)) : '',
-    Gender:           genderCode(child.gender),
-    Address1:         family.address_line1 || child.parent_address || '',
-    City:             family.city    || child.parent_city    || '',
-    State:            family.state   || child.parent_state   || '',
-    ZipCode:          family.zip     || child.parent_zip     || '',
-    PrimaryPhone:     cleanPhone(phone),
-    PrimaryPhoneType: 3,  // Cell
-  }
-
+  // Create patient
   const r = await fetch(`${DS_BASE}/webapi/v2/patients`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(patient),
+    body: JSON.stringify({
+      FirstName:        child.first_name  || '',
+      LastName:         child.last_name   || '',
+      DateOfBirth:      child.date_of_birth ? formatDob(String(child.date_of_birth)) : '',
+      Gender:           genderCode(child.gender),
+      Address1:         family.address_line1 || '',
+      City:             family.city          || '',
+      State:            family.state         || '',
+      ZipCode:          family.zip           || '',
+      PrimaryPhone:     cleanPhone(family.phone),
+      PrimaryPhoneType: 3,
+    }),
   })
+
   if (!r.ok) {
     const msg = await r.text()
-    throw new Error(`DoseSpot create patient error: ${msg}`)
+    throw new Error(`DoseSpot patient sync error: ${msg}`)
   }
-  const data = await r.json()
-  return data.Item as number
+  const data = await r.json() as { Item?: number }
+  return data.Item ?? 0
 }
 
-// ─── SSO URL ──────────────────────────────────────────────────────────────────
-// TODO: Confirm exact SSO URL format with Authentication Guide.
-// DoseSpot JumpStart SSO opens their hosted prescribing UI in an iframe.
-// Expected format based on DoseSpot JumpStart documentation patterns:
-//   ${DS_BASE}/LoginSingleSignOn.aspx?b={encryptedToken}&p={patientId}&clinicianid={clinicianId}
-// The encrypted token is a signed payload built from the clinic key.
-
-function buildSsoUrl(dsPatientId: number, clinicianId: string): string {
-  const now        = Math.floor(Date.now() / 1000)
-  const payload    = `${DS_CLINIC_ID}${clinicianId}${now}`
-  const hash       = createHash('md5').update(payload + DS_CLINIC_KEY).digest('hex')
-  const encoded    = Buffer.from(`${payload}${hash}`).toString('base64')
-  // TODO: Verify the exact parameter names with Authentication Guide
-  return `${DS_BASE}/LoginSingleSignOn.aspx?b=${encodeURIComponent(encoded)}&p=${dsPatientId}&clinicianid=${clinicianId}`
-}
-
-// ─── Handler ──────────────────────────────────────────────────────────────────
+// ─── Handler ─────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-  let sub: string
-  try {
-    sub = await verifyToken(req.headers.authorization)
-  } catch {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
-  const { child_id } = req.body as { child_id?: string }
-  if (!child_id) return res.status(400).json({ error: 'child_id required' })
-
-  if (!DS_CLINIC_KEY) return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_CLINIC_KEY in Vercel environment variables' })
-  if (!DS_SUB_KEY)   return res.status(503).json({ error: 'DoseSpot credentials not configured — set DOSESPOT_SUBSCRIPTION_KEY in Vercel environment variables' })
-
-  const sql = neon(process.env.DATABASE_URL!)
-
-  // Verify provider
-  const [providerRow] = await sql`SELECT id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
-  if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
-
-  const clinicianId: string = DS_CLINICIAN
-
-  // Load child + family (no practice_id filter — provider auth is sufficient)
-  const [childRow] = await sql`
-    SELECT c.*, fp.phone AS family_phone, fp.address_line1 AS family_address_line1,
-           fp.city AS family_city, fp.state AS family_state, fp.zip AS family_zip
-    FROM children c
-    JOIN family_profiles fp ON fp.id = c.family_id
-    WHERE c.id = ${child_id}::uuid
-    LIMIT 1`
-  if (!childRow) return res.status(404).json({ error: 'Patient not found' })
-
-  const child  = childRow as Record<string, any>
-  const family = {
-    phone:         child.family_phone,
-    address_line1: child.family_address_line1,
-    city:          child.family_city,
-    state:         child.family_state,
-    zip:           child.family_zip,
-  }
-
-  try {
-    // 1. Get DoseSpot access token
-    const token = await getDoseSpotToken(clinicianId)
-
-    // 2. Sync patient to DoseSpot (create if first time)
-    const dsPatientId = await findOrCreateDoseSpotPatient(child, family, token)
-
-    // 3. Persist the DoseSpot patient ID so we don't re-create next time
-    if (!child.dosespot_patient_id) {
-      await sql`UPDATE children SET dosespot_patient_id = ${dsPatientId} WHERE id = ${child_id}::uuid`
+    let sub: string
+    try {
+      sub = await verifyToken(req.headers.authorization)
+    } catch {
+      return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    // 4. Generate SSO URL
-    const ssoUrl = buildSsoUrl(dsPatientId, clinicianId)
+    const { child_id } = req.body as { child_id?: string }
+    if (!child_id) return res.status(400).json({ error: 'child_id required' })
 
-    return res.json({ ssoUrl })
-  } catch (err: any) {
-    console.error('[dosespot/sso] DoseSpot API error:', err?.message)
-    return res.status(502).json({ error: err?.message || 'DoseSpot API error' })
-  }
+    if (!DS_CLINIC_KEY) return res.status(503).json({ error: 'DOSESPOT_CLINIC_KEY not configured in Vercel' })
+    if (!DS_SUB_KEY)    return res.status(503).json({ error: 'DOSESPOT_SUBSCRIPTION_KEY not configured in Vercel' })
+
+    const sql = neon(process.env.DATABASE_URL!)
+
+    const [providerRow] = await sql`SELECT id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+    if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
+
+    const [childRow] = await sql`
+      SELECT c.*, fp.phone AS family_phone, fp.address_line1, fp.city, fp.state, fp.zip
+      FROM children c
+      JOIN family_profiles fp ON fp.id = c.family_id
+      WHERE c.id = ${child_id}::uuid
+      LIMIT 1`
+    if (!childRow) return res.status(404).json({ error: 'Patient not found' })
+
+    const child  = childRow as Record<string, any>
+    const family = { phone: child.family_phone, address_line1: child.address_line1, city: child.city, state: child.state, zip: child.zip }
+
+    let dsPatientId: number | undefined = child.dosespot_patient_id || undefined
+
+    try {
+      const token   = await getDoseSpotToken()
+      dsPatientId   = await findOrCreateDoseSpotPatient(child, family, token)
+      if (dsPatientId && !child.dosespot_patient_id) {
+        await sql`UPDATE children SET dosespot_patient_id = ${dsPatientId} WHERE id = ${child_id}::uuid`
+      }
+    } catch (e: any) {
+      // Don't block SSO if patient sync fails — open DoseSpot without patient context
+      console.warn('[dosespot/sso] patient sync warning:', e.message)
+    }
+
+    const ssoUrl = buildSsoUrl(DS_CLINICIAN, dsPatientId)
+    return res.status(200).json({ ssoUrl })
 
   } catch (err: any) {
-    console.error('[dosespot/sso] Unhandled error:', err?.message, err?.stack)
+    console.error('[dosespot/sso] error:', err?.message)
     return res.status(500).json({ error: err?.message || 'Internal server error' })
   }
 }
