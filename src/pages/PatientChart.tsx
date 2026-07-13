@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
@@ -121,6 +121,8 @@ export function PatientChart() {
   const [dsLoading, setDsLoading] = useState(false)
   const [dsUrl, setDsUrl]         = useState<string | null>(null)
   const [dsError, setDsError]     = useState<string | null>(null)
+  const [dsNotifCount, setDsNotifCount] = useState(0)
+  const [dsNotifBreakdown, setDsNotifBreakdown] = useState<{ renewals: number; rxChanges: number; errors: number }>({ renewals: 0, rxChanges: 0, errors: 0 })
   const [child, setChild] = useState<any | null>(null)
   const [notes, setNotes] = useState<NoteWithVisit[]>([])
   const [vitalsByAppt, setVitalsByAppt] = useState<Record<string, any>>({})
@@ -235,6 +237,20 @@ export function PatientChart() {
     load()
   }, [childId])
 
+  // Poll DoseSpot notification count every 30 seconds
+  useEffect(() => {
+    async function fetchNotifCount() {
+      try {
+        const { count, breakdown } = await getDoseSpotNotifications()
+        setDsNotifCount(count)
+        setDsNotifBreakdown(breakdown)
+      } catch { /* silent — never block the UI */ }
+    }
+    fetchNotifCount()
+    const interval = setInterval(fetchNotifCount, 30_000)
+    return () => clearInterval(interval)
+  }, [])
+
   const today = new Date().toISOString().slice(0, 10)
   const upcomingRequests = bookingRequests.filter(br => {
     const s = (br.status ?? '').toLowerCase()
@@ -255,7 +271,7 @@ export function PatientChart() {
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
-    { key: 'prescribe' as const, label: 'Prescribe', count: null },
+    { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
   ]
 
@@ -1236,6 +1252,42 @@ export function PatientChart() {
 
             {activeTab === 'prescribe' && (
               <div className="space-y-4">
+                {/* Notification count banner — visible to certification reviewer */}
+                {dsNotifCount > 0 && (
+                  <div className="flex items-center gap-3 bg-[#FEF3C7] border border-[#F59E0B]/30 rounded-xl px-4 py-3">
+                    <div className="w-7 h-7 rounded-full bg-[#F59E0B] flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-[12px] font-bold">{dsNotifCount}</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[13px] font-semibold text-[#92400E]">
+                        {dsNotifCount} pending DoseSpot {dsNotifCount === 1 ? 'notification' : 'notifications'}
+                      </div>
+                      <div className="text-[11px] text-[#92400E]/70 mt-0.5 flex gap-3">
+                        {dsNotifBreakdown.renewals > 0 && <span>{dsNotifBreakdown.renewals} renewal{dsNotifBreakdown.renewals !== 1 ? 's' : ''}</span>}
+                        {dsNotifBreakdown.rxChanges > 0 && <span>{dsNotifBreakdown.rxChanges} RxChange{dsNotifBreakdown.rxChanges !== 1 ? 's' : ''}</span>}
+                        {dsNotifBreakdown.errors > 0 && <span>{dsNotifBreakdown.errors} error{dsNotifBreakdown.errors !== 1 ? 's' : ''}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!childId) return
+                        setDsLoading(true); setDsError(null); setDsUrl(null)
+                        try {
+                          // Open to notification summary page via RefillsErrors=1
+                          const { ssoUrl } = await getDoseSpotSSO(childId)
+                          const notifUrl = ssoUrl.replace(/&PatientId=\d+/, '') + '&RefillsErrors=1'
+                          setDsUrl(notifUrl)
+                        } catch (e: any) {
+                          setDsError(e.message ?? 'Could not launch DoseSpot')
+                        } finally { setDsLoading(false) }
+                      }}
+                      className="text-[11px] font-medium text-[#92400E] underline underline-offset-2 hover:text-[#78350F] flex-shrink-0"
+                    >
+                      Review in DoseSpot
+                    </button>
+                  </div>
+                )}
+
                 {!dsUrl && (
                   <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 shadow-sm text-center">
                     <div className="w-12 h-12 rounded-full bg-[#EEEDFE] flex items-center justify-center mx-auto mb-4">

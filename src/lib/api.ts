@@ -388,6 +388,9 @@ export const pullStediEra = (claimId: string) =>
 export const getDoseSpotSSO = (childId: string) =>
   apiFetch<{ ssoUrl: string }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
 
+export const getDoseSpotNotifications = () =>
+  apiFetch<{ count: number; breakdown: { renewals: number; rxChanges: number; errors: number } }>('/api/dosespot/notifications')
+
 // ── Labs ──────────────────────────────────────────────────────
 export const getLabOrders = (childId: string) =>
   apiFetch<any[]>(`/api/labs/results?child_id=${encodeURIComponent(childId)}`)
