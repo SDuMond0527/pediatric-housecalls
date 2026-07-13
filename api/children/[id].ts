@@ -106,6 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           medical_history      = COALESCE(${b.medical_history      || null}, medical_history),
           preferred_pharmacy   = COALESCE(${b.preferred_pharmacy   || null}, preferred_pharmacy),
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
+          pcp_id               = COALESCE(${b.pcp_id               || null}::uuid, pcp_id),
           phi_sharing_consent  = COALESCE(${b.phi_sharing_consent  ?? null}, phi_sharing_consent),
           charm_patient_id     = COALESCE(${b.charm_patient_id     || null}, charm_patient_id),
           parent_name          = COALESCE(${b.parent_name          ?? null}, parent_name),

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
@@ -137,6 +137,13 @@ export function PatientChart() {
   const [editError, setEditError] = useState<string | null>(null)
   const [contactEdit, setContactEdit] = useState({ parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
+  const [pcpList, setPcpList] = useState<any[]>([])
+  const [pcpSearch, setPcpSearch] = useState('')
+  const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
+  const [selectedPcp, setSelectedPcp] = useState<any>(null)
+  const [addingNewPcp, setAddingNewPcp] = useState(false)
+  const [newPcpName, setNewPcpName] = useState('')
+  const [newPcpFax, setNewPcpFax] = useState('')
   const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
 
   const [archivingIns, setArchivingIns] = useState(false)
@@ -218,8 +225,17 @@ export function PatientChart() {
         getBookingRequests({ child_id: cid }).catch(() => [] as any[]),
         getAppointments({ child_id: cid }).catch(() => [] as any[]),
       ])
-      setChild(childrenRes?.[0] ?? null)
+      const loadedChild = childrenRes?.[0] ?? null
+      setChild(loadedChild)
       logAudit('view_patient', 'child', cid)
+      // Load PCP directory and pre-select if child has one linked
+      getPcps().then(pcps => {
+        setPcpList(pcps ?? [])
+        if (loadedChild?.pcp_id) {
+          const found = (pcps ?? []).find((p: any) => p.id === loadedChild.pcp_id)
+          if (found) setSelectedPcp(found)
+        }
+      }).catch(() => {})
       setNotes(notesRes ?? [])
       const byAppt: Record<string, any> = {}
       ;(vitalsRes ?? []).forEach((v: any) => { byAppt[v.appointment_id] = v })
@@ -311,6 +327,11 @@ export function PatientChart() {
         pcp: child?.pcp || '',
         preferred_pharmacy: child?.preferred_pharmacy || '',
       })
+      setPcpSearch('')
+      setPcpDropdownOpen(false)
+      setAddingNewPcp(false)
+      setNewPcpName('')
+      setNewPcpFax('')
     } else {
       setInsEdit({
         insurance_provider: child?.insurance_provider || '',
@@ -329,7 +350,10 @@ export function PatientChart() {
     setEditSaving(true)
     setEditError(null)
     try {
-      const body = section === 'contact' ? contactEdit : section === 'medical' ? medEdit : insEdit
+      let body: any = section === 'contact' ? contactEdit : section === 'medical' ? medEdit : insEdit
+      if (section === 'medical') {
+        body = { ...body, pcp_id: selectedPcp?.id ?? null }
+      }
       const updated = await apiFetch<any>(`/api/children/${childId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -601,10 +625,76 @@ export function PatientChart() {
                           placeholder="e.g. Asthma, ADHD, prior surgeries..." />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Primary care provider</label>
-                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          value={medEdit.pcp} onChange={e => setMedEdit(p => ({ ...p, pcp: e.target.value }))}
-                          placeholder="e.g. Dr. Jane Smith, Charlotte Pediatrics" />
+                        <label className="text-[11px] text-[#999] block mb-1">Primary care practice</label>
+                        {selectedPcp ? (
+                          <div className="flex items-center gap-2 px-3 py-2 border border-[#7F77DD] rounded-lg bg-[#EEEDFE]">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-medium text-[#1A1A2E] truncate">{selectedPcp.name}</div>
+                              {selectedPcp.fax_number && <div className="text-[11px] text-[#999]">Fax: {selectedPcp.fax_number}</div>}
+                            </div>
+                            <button onClick={() => { setSelectedPcp(null); setPcpSearch('') }} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
+                          </div>
+                        ) : addingNewPcp ? (
+                          <div className="space-y-2 border border-[#E8E8E4] rounded-lg p-3">
+                            <div className="text-[11px] text-[#555] font-medium">Add new practice to directory</div>
+                            <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                              placeholder="Practice name" value={newPcpName} onChange={e => setNewPcpName(e.target.value)} autoFocus />
+                            <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                              placeholder="Fax number" value={newPcpFax} onChange={e => setNewPcpFax(e.target.value)} />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!newPcpName.trim()) return
+                                  try {
+                                    const created = await addPcp({ name: newPcpName.trim(), fax_number: newPcpFax.trim() || undefined })
+                                    setPcpList(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+                                    setSelectedPcp(created)
+                                    setAddingNewPcp(false)
+                                    setNewPcpName('')
+                                    setNewPcpFax('')
+                                  } catch {}
+                                }}
+                                className="px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8]">
+                                Add &amp; select
+                              </button>
+                              <button onClick={() => { setAddingNewPcp(false); setNewPcpName(''); setNewPcpFax('') }}
+                                className="px-3 py-1.5 border border-[#E8E8E4] text-[12px] text-[#555] rounded-lg hover:bg-[#F1EFE8]">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                              placeholder="Search practice name…"
+                              value={pcpSearch}
+                              onChange={e => { setPcpSearch(e.target.value); setPcpDropdownOpen(true) }}
+                              onFocus={() => setPcpDropdownOpen(true)}
+                            />
+                            {pcpDropdownOpen && (
+                              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                                {pcpList
+                                  .filter(p => {
+                                    const q = pcpSearch.toLowerCase()
+                                    return !q || p.name.toLowerCase().includes(q) || (p.aliases ?? []).some((a: string) => a.toLowerCase().includes(q))
+                                  })
+                                  .map(p => (
+                                    <button key={p.id} onMouseDown={() => { setSelectedPcp(p); setPcpDropdownOpen(false); setPcpSearch('') }}
+                                      className="w-full text-left px-3 py-2.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
+                                      <div className="text-[13px] text-[#1A1A2E]">{p.name}</div>
+                                      {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                                    </button>
+                                  ))
+                                }
+                                <button onMouseDown={() => { setPcpDropdownOpen(false); setAddingNewPcp(true) }}
+                                  className="w-full text-left px-3 py-2.5 text-[12px] text-[#7F77DD] font-medium hover:bg-[#EEEDFE]">
+                                  + Add new practice to directory
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="text-[11px] text-[#999] block mb-1">Preferred pharmacy</label>
@@ -643,7 +733,6 @@ export function PatientChart() {
                         {[
                           { label: 'Current medications', value: child?.current_medications },
                           { label: 'Medical history', value: child?.medical_history },
-                          { label: 'Primary care provider', value: child?.pcp },
                           { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
                         ].map(({ label, value }) => (
                           <div key={label}>
@@ -655,6 +744,19 @@ export function PatientChart() {
                             )}
                           </div>
                         ))}
+                        <div>
+                          <div className="text-[11px] text-[#999]">Primary care practice</div>
+                          {selectedPcp ? (
+                            <div className="mt-0.5">
+                              <div className="text-[13px] text-[#1A1A2E]">{selectedPcp.name}</div>
+                              {selectedPcp.fax_number && <div className="text-[11px] text-[#999]">Fax: {selectedPcp.fax_number}</div>}
+                            </div>
+                          ) : child?.pcp ? (
+                            <div className="text-[13px] text-[#1A1A2E] mt-0.5">{child.pcp}</div>
+                          ) : (
+                            <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
