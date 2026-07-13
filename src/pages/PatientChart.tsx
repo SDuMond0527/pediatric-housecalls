@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 
@@ -62,6 +62,42 @@ function statusColor(status: string): string {
   return 'bg-[#F1EFE8] text-[#777]'
 }
 
+const COMMON_TESTS = [
+  { code: '005009', name: 'CBC with Differential' },
+  { code: '322000', name: 'Comprehensive Metabolic Panel' },
+  { code: '320000', name: 'Basic Metabolic Panel' },
+  { code: '303756', name: 'Lipid Panel' },
+  { code: '004259', name: 'TSH' },
+  { code: '001974', name: 'Free T4' },
+  { code: '001453', name: 'Hemoglobin A1c' },
+  { code: '081950', name: 'Vitamin D, 25-OH' },
+  { code: '004598', name: 'Ferritin' },
+  { code: '001040', name: 'Lead, Blood' },
+  { code: '003772', name: 'Urinalysis with Microscopy' },
+  { code: '008417', name: 'Strep Culture, Group A' },
+  { code: '006577', name: 'Mononucleosis Screen' },
+  { code: '183788', name: 'Influenza A & B' },
+  { code: '188581', name: 'RSV' },
+  { code: '008540', name: 'Blood Culture' },
+  { code: '007898', name: 'C-Reactive Protein (CRP)' },
+  { code: '005215', name: 'Erythrocyte Sedimentation Rate (ESR)' },
+  { code: '001503', name: 'Prothrombin Time (PT/INR)' },
+  { code: '002003', name: 'Urine Culture' },
+]
+
+function LabStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending:   { label: 'Pending',   cls: 'bg-[#F1EFE8] text-[#777]' },
+    submitted: { label: 'Submitted', cls: 'bg-[#EEF6FB] text-[#2D7BA6]' },
+    received:  { label: 'Received',  cls: 'bg-[#EEF6FB] text-[#2D7BA6]' },
+    partial:   { label: 'Partial',   cls: 'bg-[#FEF3C7] text-[#92400E]' },
+    resulted:  { label: 'Resulted',  cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
+    cancelled: { label: 'Cancelled', cls: 'bg-[#FDEDED] text-[#991B1B]' },
+  }
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-[#F1EFE8] text-[#777]' }
+  return <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${cls}`}>{label}</span>
+}
+
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
@@ -79,7 +115,7 @@ export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs'>('overview')
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -106,6 +142,60 @@ export function PatientChart() {
 
   // Book appointment
   const [bookOpen, setBookOpen] = useState(false)
+
+  // Labs
+  const [labOrders, setLabOrders] = useState<any[]>([])
+  const [labsLoading, setLabsLoading] = useState(false)
+  const [labsLoaded, setLabsLoaded] = useState(false)
+  const [labsError, setLabsError] = useState<string | null>(null)
+  const [orderFormOpen, setOrderFormOpen] = useState(false)
+  const [orderTests, setOrderTests] = useState<{ code: string; name: string }[]>([])
+  const [orderDiagnoses, setOrderDiagnoses] = useState('')
+  const [orderPriority, setOrderPriority] = useState<'routine' | 'stat'>('routine')
+  const [orderNotes, setOrderNotes] = useState('')
+  const [orderSubmitting, setOrderSubmitting] = useState(false)
+  const [orderError, setOrderError] = useState<string | null>(null)
+  const [testSearch, setTestSearch] = useState('')
+
+  async function loadLabs() {
+    if (!childId) return
+    setLabsLoading(true)
+    setLabsError(null)
+    try {
+      const data = await getLabOrders(childId)
+      setLabOrders(data ?? [])
+      setLabsLoaded(true)
+    } catch (e: any) {
+      setLabsError(e.message || 'Failed to load lab orders')
+    } finally {
+      setLabsLoading(false)
+    }
+  }
+
+  async function submitLabOrder() {
+    if (!childId || !orderTests.length) return
+    setOrderSubmitting(true)
+    setOrderError(null)
+    try {
+      const order = await createLabOrder({
+        child_id: childId,
+        tests: orderTests,
+        diagnoses: orderDiagnoses.split(',').map(s => s.trim()).filter(Boolean),
+        priority: orderPriority,
+        notes: orderNotes || undefined,
+      })
+      setLabOrders(prev => [order, ...prev])
+      setOrderFormOpen(false)
+      setOrderTests([])
+      setOrderDiagnoses('')
+      setOrderPriority('routine')
+      setOrderNotes('')
+    } catch (e: any) {
+      setOrderError(e.message || 'Failed to place order')
+    } finally {
+      setOrderSubmitting(false)
+    }
+  }
 
   // Add sibling
   const [siblingOpen, setSiblingOpen] = useState(false)
@@ -166,6 +256,7 @@ export function PatientChart() {
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
     { key: 'prescribe' as const, label: 'Prescribe', count: null },
+    { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
   ]
 
   async function launchDoseSpot() {
@@ -331,7 +422,7 @@ export function PatientChart() {
           {tabs.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => { setActiveTab(tab.key); if (tab.key === 'labs' && !labsLoaded) loadLabs() }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'bg-[#7F77DD] text-white'
@@ -956,6 +1047,188 @@ export function PatientChart() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'labs' && (
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">Lab Orders</div>
+                    <div className="text-[12px] text-[#999] mt-0.5">Labcorp integration — orders placed here are tracked in your Labcorp account</div>
+                  </div>
+                  <button
+                    onClick={() => { setOrderFormOpen(true); setOrderError(null) }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors"
+                  >
+                    + New Order
+                  </button>
+                </div>
+
+                {/* Order form */}
+                {orderFormOpen && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="font-medium text-[14px] text-[#1A1A2E]">New Lab Order</div>
+                      <button onClick={() => setOrderFormOpen(false)} className="text-[#999] hover:text-[#555]"><X size={16} /></button>
+                    </div>
+
+                    {/* Test search */}
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Select Tests</div>
+                      <input
+                        value={testSearch}
+                        onChange={e => setTestSearch(e.target.value)}
+                        placeholder="Search test name or code…"
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                      <div className="border border-[#E8E8E4] rounded-lg divide-y divide-[#F1EFE8] max-h-56 overflow-y-auto">
+                        {COMMON_TESTS.filter(t =>
+                          !testSearch || t.name.toLowerCase().includes(testSearch.toLowerCase()) || t.code.includes(testSearch)
+                        ).map(t => {
+                          const selected = orderTests.some(x => x.code === t.code)
+                          return (
+                            <button
+                              key={t.code}
+                              onClick={() => setOrderTests(prev =>
+                                selected ? prev.filter(x => x.code !== t.code) : [...prev, t]
+                              )}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${selected ? 'bg-[#7F77DD]/8 text-[#5B54B5]' : 'hover:bg-[#FAFAF8] text-[#1A1A2E]'}`}
+                            >
+                              <span>{t.name}</span>
+                              <span className="text-[11px] text-[#999] font-mono ml-3 flex-shrink-0">{t.code}{selected && ' ✓'}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {orderTests.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {orderTests.map(t => (
+                            <span key={t.code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#7F77DD]/10 text-[#5B54B5] text-[11px] rounded-full font-medium">
+                              {t.name}
+                              <button onClick={() => setOrderTests(prev => prev.filter(x => x.code !== t.code))} className="hover:text-red-500"><X size={10} /></button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Diagnoses */}
+                    <div className="mb-4">
+                      <label className="text-[11px] font-semibold text-[#999] uppercase tracking-wide block mb-1">Diagnosis Codes (ICD-10)</label>
+                      <input
+                        value={orderDiagnoses}
+                        onChange={e => setOrderDiagnoses(e.target.value)}
+                        placeholder="e.g. Z00.129, J06.9"
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                      <div className="text-[11px] text-[#999] mt-1">Comma-separated</div>
+                    </div>
+
+                    {/* Priority */}
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Priority</div>
+                      <div className="flex gap-2">
+                        {(['routine', 'stat'] as const).map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setOrderPriority(p)}
+                            className={`px-4 py-1.5 rounded-lg text-[12px] font-medium border transition-all capitalize ${orderPriority === p ? (p === 'stat' ? 'bg-red-500 text-white border-red-500' : 'bg-[#7F77DD] text-white border-[#7F77DD]') : 'border-[#E8E8E4] text-[#666] hover:bg-[#F1EFE8]'}`}
+                          >
+                            {p === 'stat' ? 'STAT' : 'Routine'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="mb-4">
+                      <label className="text-[11px] font-semibold text-[#999] uppercase tracking-wide block mb-1">Notes (optional)</label>
+                      <textarea
+                        value={orderNotes}
+                        onChange={e => setOrderNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Any special instructions for this order…"
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                    </div>
+
+                    {orderError && (
+                      <div className="text-[12px] text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{orderError}</div>
+                    )}
+
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setOrderFormOpen(false)} className="px-4 py-2 text-[13px] text-[#666] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8] transition-colors">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitLabOrder}
+                        disabled={orderSubmitting || orderTests.length === 0}
+                        className="px-4 py-2 text-[13px] bg-[#7F77DD] text-white rounded-lg hover:bg-[#6C64C8] transition-colors disabled:opacity-50 font-medium"
+                      >
+                        {orderSubmitting ? 'Placing…' : 'Place Order'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Order list */}
+                {labsLoading ? (
+                  <div className="text-center py-8 text-[13px] text-[#999]">Loading…</div>
+                ) : labsError ? (
+                  <div className="text-[13px] text-red-500 bg-red-50 px-4 py-3 rounded-xl">{labsError}</div>
+                ) : labOrders.length === 0 ? (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 shadow-sm text-center">
+                    <div className="text-[13px] text-[#999]">No lab orders yet for this patient.</div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {labOrders.map(order => (
+                      <div key={order.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {(order.tests ?? []).map((t: any) => (
+                                <span key={t.code} className="px-2 py-0.5 bg-[#F1EFE8] text-[#555] text-[11px] rounded-full font-medium">{t.name}</span>
+                              ))}
+                              {order.priority === 'stat' && (
+                                <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[11px] rounded-full font-semibold">STAT</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[#999] mt-1">
+                              Ordered by {order.provider_name} · {order.created_at ? format(new Date(order.created_at), 'MMM d, yyyy') : ''}
+                            </div>
+                            {order.diagnoses?.length > 0 && (
+                              <div className="text-[11px] text-[#999] mt-0.5">Dx: {order.diagnoses.join(', ')}</div>
+                            )}
+                          </div>
+                          <LabStatusBadge status={order.status} />
+                        </div>
+
+                        {order.labcorp_order_id && (
+                          <div className="text-[11px] text-[#999] mt-1">Labcorp ID: <span className="font-mono">{order.labcorp_order_id}</span></div>
+                        )}
+
+                        {order.results?.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-[#F1EFE8]">
+                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Results</div>
+                            {order.results.map((r: any) => (
+                              <div key={r.id} className="text-[12px] text-[#1A1A2E] bg-[#FAFAF8] rounded-lg p-3">
+                                {r.report_date && <div className="text-[11px] text-[#999] mb-1">Reported {format(new Date(r.report_date), 'MMM d, yyyy')}</div>}
+                                <pre className="whitespace-pre-wrap font-sans text-[12px]">{typeof r.result_data === 'string' ? r.result_data : JSON.stringify(r.result_data, null, 2)}</pre>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {order.notes && (
+                          <div className="text-[12px] text-[#777] mt-2 pt-2 border-t border-[#F1EFE8]">{order.notes}</div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

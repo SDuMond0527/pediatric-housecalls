@@ -388,6 +388,19 @@ export const pullStediEra = (claimId: string) =>
 export const getDoseSpotSSO = (childId: string) =>
   apiFetch<{ ssoUrl: string }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
 
+// ── Labs ──────────────────────────────────────────────────────
+export const getLabOrders = (childId: string) =>
+  apiFetch<any[]>(`/api/labs/results?child_id=${encodeURIComponent(childId)}`)
+
+export const createLabOrder = (body: {
+  child_id: string
+  appointment_id?: string
+  tests: { code: string; name: string }[]
+  diagnoses: string[]
+  priority: 'routine' | 'stat'
+  notes?: string
+}) => apiFetch<any>('/api/labs/order', { method: 'POST', body: JSON.stringify(body) })
+
 // ── PHI Audit Log ─────────────────────────────────────────────
 export function logAudit(action: string, resource_type: string, resource_id?: string) {
   apiFetch<void>('/api/audit', { method: 'POST', body: JSON.stringify({ action, resource_type, resource_id }) })

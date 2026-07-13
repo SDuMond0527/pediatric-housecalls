@@ -210,6 +210,39 @@ create index if not exists phi_audit_log_provider_idx on phi_audit_log(provider_
 create index if not exists phi_audit_log_resource_idx on phi_audit_log(resource_type, resource_id);
 create index if not exists phi_audit_log_created_idx  on phi_audit_log(created_at);
 
+-- Lab orders
+create table if not exists lab_orders (
+  id uuid primary key default gen_random_uuid(),
+  child_id uuid references children(id) on delete cascade not null,
+  provider_id uuid references providers(id) not null,
+  appointment_id uuid references appointments(id) on delete set null,
+  labcorp_order_id text,
+  labcorp_requisition_number text,
+  tests jsonb not null default '[]',
+  diagnoses text[] not null default '{}',
+  priority text not null default 'routine' check (priority in ('routine','stat')),
+  status text not null default 'pending' check (status in ('pending','submitted','received','partial','resulted','cancelled')),
+  notes text,
+  created_at timestamptz default now()
+);
+create index if not exists lab_orders_child_idx on lab_orders(child_id);
+
+-- Lab results
+create table if not exists lab_results (
+  id uuid primary key default gen_random_uuid(),
+  lab_order_id uuid references lab_orders(id) on delete cascade not null,
+  child_id uuid references children(id) not null,
+  labcorp_result_id text,
+  report_date timestamptz,
+  result_data jsonb,
+  is_reviewed boolean not null default false,
+  reviewed_by uuid references providers(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at timestamptz default now()
+);
+create index if not exists lab_results_order_idx on lab_results(lab_order_id);
+create index if not exists lab_results_child_idx on lab_results(child_id);
+
 -- Slot offers (waitlist → family)
 create table if not exists slot_offers (
   id uuid primary key default gen_random_uuid(),
