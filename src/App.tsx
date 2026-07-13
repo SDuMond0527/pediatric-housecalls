@@ -24,6 +24,7 @@ import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
 import { AdminAvailability } from './pages/admin/AdminAvailability'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
+import { AdminStatements } from './pages/admin/AdminStatements'
 import { FamilyLogin } from './pages/family/FamilyLogin'
 import { FamilySignup } from './pages/family/FamilySignup'
 import { FamilySetup } from './pages/family/FamilySetup'
@@ -113,7 +114,8 @@ export default function App() {
                 <Route path="availability"   element={<AdminAvailability />} />
                 <Route path="provision"  element={<AdminProvision />} />
                 <Route path="settings"   element={<Settings />} />
-                <Route path="audit-log"  element={<AdminAuditLog />} />
+                <Route path="audit-log"   element={<AdminAuditLog />} />
+                <Route path="statements" element={<AdminStatements />} />
               </Route>
             </Routes>
           </AuthProvider>

@@ -265,12 +265,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const squareData = await squareRes.json()
     const paymentUrl: string = squareData.payment_link?.url ?? squareData.payment_link?.long_url ?? ''
+    const squareOrderId: string = squareData.payment_link?.order_id ?? ''
+    const squareLinkId: string  = squareData.payment_link?.id ?? ''
     if (!paymentUrl) return res.status(500).json({ error: 'Square did not return a payment URL' })
 
-    // 3. Save square_payment_url to statement early so email has the correct URL
+    // 3. Save square IDs early so webhook can match this statement later
     await sql`
       UPDATE patient_statements SET
-        square_payment_url = ${paymentUrl},
+        square_payment_url    = ${paymentUrl},
+        square_order_id       = ${squareOrderId || null},
+        square_payment_link_id = ${squareLinkId || null},
         updated_at = NOW()
       WHERE id = ${statementId}
     `
@@ -302,7 +306,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       UPDATE patient_statements SET
         status = 'sent',
         sent_at = NOW(),
-        square_payment_url = ${paymentUrl},
+        square_payment_url    = ${paymentUrl},
+        square_order_id       = ${squareOrderId || null},
+        square_payment_link_id = ${squareLinkId || null},
         updated_at = NOW()
       WHERE id = ${statementId}
       RETURNING *

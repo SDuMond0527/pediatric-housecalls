@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
@@ -11,7 +11,8 @@ const NAV = [
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
-  { to: '/admin/claims',     icon: Receipt,       label: 'Claims' },
+  { to: '/admin/claims',      icon: Receipt,       label: 'Claims' },
+  { to: '/admin/statements',  icon: FileText,      label: 'Statements' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },

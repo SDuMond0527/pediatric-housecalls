@@ -372,6 +372,9 @@ export const deleteNoteTemplate = (id: string) =>
 export const getPatientStatement = (claimId: string) =>
   apiFetch<any>(`/api/patient-statements?claim_id=${encodeURIComponent(claimId)}`)
 
+export const getAllPatientStatements = (status?: string) =>
+  apiFetch<any[]>(`/api/patient-statements/all${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+
 export const createPatientStatement = (data: any) =>
   apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
 
