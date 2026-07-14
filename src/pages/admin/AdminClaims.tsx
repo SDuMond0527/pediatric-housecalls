@@ -771,6 +771,11 @@ export function AdminClaims() {
                             <Zap size={9} /> ERA
                           </span>
                         )}
+                        {c.statement_status === 'sent' || c.statement_status === 'paid' ? (
+                          <span className="ml-1 inline-flex items-center gap-0.5 bg-[#EEF6FB] text-[#2D7BA6] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                            <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
+                          </span>
+                        ) : null}
                       </button>
                     </div>
                   </div>
