@@ -27,22 +27,56 @@ const P_WIDTH: Record<string, number> = {
   p3: 1, p10: 1, p25: 1, p50: 2, p75: 1, p90: 1, p97: 1,
 }
 
+function interpolateRow(refData: PercentileRow[], age: number): PercentileRow | null {
+  const lower = [...refData].reverse().find(r => r.age <= age)
+  const upper = refData.find(r => r.age > age)
+  if (!lower) return null
+  if (!upper) return lower
+  const t = (age - lower.age) / (upper.age - lower.age)
+  return {
+    age,
+    p3:  lower.p3  + t * (upper.p3  - lower.p3),
+    p10: lower.p10 + t * (upper.p10 - lower.p10),
+    p25: lower.p25 + t * (upper.p25 - lower.p25),
+    p50: lower.p50 + t * (upper.p50 - lower.p50),
+    p75: lower.p75 + t * (upper.p75 - lower.p75),
+    p90: lower.p90 + t * (upper.p90 - lower.p90),
+    p97: lower.p97 + t * (upper.p97 - lower.p97),
+  }
+}
+
+function approxPercentile(value: number, row: PercentileRow): string {
+  const bands = [
+    { p: 3, v: row.p3 }, { p: 10, v: row.p10 }, { p: 25, v: row.p25 },
+    { p: 50, v: row.p50 },
+    { p: 75, v: row.p75 }, { p: 90, v: row.p90 }, { p: 97, v: row.p97 },
+  ]
+  if (value < bands[0].v) return '<3rd percentile'
+  if (value > bands[6].v) return '>97th percentile'
+  for (let i = 0; i < bands.length - 1; i++) {
+    if (value >= bands[i].v && value <= bands[i + 1].v) {
+      const t = (value - bands[i].v) / (bands[i + 1].v - bands[i].v)
+      const pct = Math.round(bands[i].p + t * (bands[i + 1].p - bands[i].p))
+      return `~${pct}th percentile`
+    }
+  }
+  return ''
+}
+
 function buildChartData(
   refData: PercentileRow[],
-  patientPoints: { age: number; value: number; date: string }[],
+  patientPoints: { age: number; value: number; date: string; percentile: string }[],
 ) {
-  // Merge ref data rows (with patient=undefined) and patient rows (with percentiles=undefined)
-  const rows: Record<string, Record<string, number | undefined>> = {}
+  const rows: Record<string, Record<string, number | string | undefined>> = {}
 
   for (const r of refData) {
     rows[r.age] = { age: r.age, p3: r.p3, p10: r.p10, p25: r.p25, p50: r.p50, p75: r.p75, p90: r.p90, p97: r.p97 }
   }
 
-  // Patient points — snap to nearest 0.1 yr to avoid key collisions with integer ages
   for (const p of patientPoints) {
     const key = p.age.toFixed(2)
     const existing = rows[key] ?? {}
-    rows[key] = { ...existing, age: p.age, patient: p.value, patientDate: p.date as any }
+    rows[key] = { ...existing, age: p.age, patient: p.value, patientDate: p.date, patientPct: p.percentile }
   }
 
   return Object.values(rows).sort((a, b) => (a.age as number) - (b.age as number))
@@ -62,14 +96,17 @@ function CustomTooltip({ active, payload, label, unit }: any) {
   if (!active || !payload?.length) return null
   const patient = payload.find((p: any) => p.dataKey === 'patient')
   if (!patient) return null
-  const date = payload[0]?.payload?.patientDate
+  const { patientDate, patientPct } = payload[0]?.payload ?? {}
   return (
-    <div className="bg-white border border-[#E8E8E4] rounded-lg px-3 py-2 shadow text-[12px]">
-      <div className="font-medium text-[#1A1A2E] mb-0.5">
+    <div className="bg-white border border-[#E8E8E4] rounded-lg px-3 py-2.5 shadow-md text-[12px] min-w-[160px]">
+      <div className="font-semibold text-[#1A1A2E] text-[13px] mb-1">
         {patient.value?.toFixed(1)} {unit}
       </div>
+      {patientPct && (
+        <div className="text-[#1D9E75] font-medium mb-1">{patientPct}</div>
+      )}
       <div className="text-[#999]">Age {(label as number).toFixed(1)} yr</div>
-      {date && <div className="text-[#999]">{date}</div>}
+      {patientDate && <div className="text-[#999]">{patientDate}</div>}
     </div>
   )
 }
@@ -87,11 +124,16 @@ export function GrowthChart({ gender, vitalPoints }: Props) {
 
   const patientPoints = vitalPoints
     .filter(v => (mode === 'height' ? v.heightCm : v.weightKg) != null)
-    .map(v => ({
-      age: v.ageYears,
-      value: (mode === 'height' ? v.heightCm : v.weightKg) as number,
-      date: v.date,
-    }))
+    .map(v => {
+      const value = (mode === 'height' ? v.heightCm : v.weightKg) as number
+      const refRow = interpolateRow(refData, v.ageYears)
+      return {
+        age: v.ageYears,
+        value,
+        date: v.date,
+        percentile: refRow ? approxPercentile(value, refRow) : '',
+      }
+    })
 
   const chartData = buildChartData(refData, patientPoints)
 
