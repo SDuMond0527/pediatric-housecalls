@@ -706,8 +706,12 @@ export function BookVisit() {
       if (!intake.chiefComplaint) return false
       if (!intake.selfPay && !intake.hasProfile && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
       if (!intake.hasProfile) {
-        if (!intake.firstName || !intake.lastName || !intake.dateOfBirth) return false
-        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId)) return false
+        if (!intake.firstName || !intake.lastName || !intake.dateOfBirth || !intake.gender) return false
+        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender)) return false
+        if (!intake.allergies || !intake.currentMedications || !intake.medicalHistory || !intake.preferredPharmacy) return false
+        if (!intake.pcp_id && !intake.pcpNoPcp) return false
+        if (!intake.vaccinationStatus) return false
+        if (!intake.phiSharingConsent) return false
       }
       return true
     })
@@ -2149,13 +2153,13 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
           {/* Name + DOB */}
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <Input label="Legal first name" placeholder="Emma" value={intake.firstName} onChange={e => onChange('firstName', e.target.value)} />
-            <Input label="Legal last name" placeholder="Smith" value={intake.lastName} onChange={e => onChange('lastName', e.target.value)} />
+            <Input label="Legal first name" placeholder="Emma" required value={intake.firstName} onChange={e => onChange('firstName', e.target.value)} />
+            <Input label="Legal last name" placeholder="Smith" required value={intake.lastName} onChange={e => onChange('lastName', e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <Input label="Date of birth" type="date" value={intake.dateOfBirth} onChange={e => onChange('dateOfBirth', e.target.value)} />
+            <Input label="Date of birth" type="date" required value={intake.dateOfBirth} onChange={e => onChange('dateOfBirth', e.target.value)} />
             <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Sex</label>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Sex <span className="text-[#ff3b30]">*</span></label>
               <select value={intake.gender} onChange={e => onChange('gender', e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none">
                 <option value="">Select</option>
@@ -2189,13 +2193,13 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
             {!intake.selfPay && (
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
-                <Input label="Member ID" placeholder="ABC123456789" value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
-                <Input label="Group number" placeholder="GRP001" value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
-                <Input label="Subscriber name" placeholder="Jennifer Smith" value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
-                <Input label="Subscriber date of birth" type="date" value={intake.insuranceSubscriberDob} onChange={e => onChange('insuranceSubscriberDob', e.target.value)} />
+                <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." required value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
+                <Input label="Member ID" placeholder="ABC123456789" required value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
+                <Input label="Group number" placeholder="GRP001" required value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
+                <Input label="Subscriber name" placeholder="Jennifer Smith" required value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />
+                <Input label="Subscriber date of birth" type="date" required value={intake.insuranceSubscriberDob} onChange={e => onChange('insuranceSubscriberDob', e.target.value)} />
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex <span className="text-[#ff3b30]">*</span></label>
                   <select value={intake.insuranceSubscriberGender} onChange={e => onChange('insuranceSubscriberGender', e.target.value)}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none">
                     <option value="">Select</option>
@@ -2211,17 +2215,17 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
           <div className="border-t border-[#E8E8E4] pt-4 mt-4">
             <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-3">Medical background</p>
             <div className="space-y-3">
-              <Input label="Drug & food allergies" placeholder="e.g. Penicillin, peanuts — or NKDA" value={intake.allergies} onChange={e => onChange('allergies', e.target.value)} />
-              <Input label="Current medications" placeholder="e.g. Zyrtec 5mg daily — or None" value={intake.currentMedications} onChange={e => onChange('currentMedications', e.target.value)} />
+              <Input label="Drug & food allergies" placeholder="e.g. Penicillin, peanuts — or NKDA" required value={intake.allergies} onChange={e => onChange('allergies', e.target.value)} />
+              <Input label="Current medications" placeholder="e.g. Zyrtec 5mg daily — or None" required value={intake.currentMedications} onChange={e => onChange('currentMedications', e.target.value)} />
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Medical history</label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Medical history <span className="text-[#ff3b30]">*</span></label>
                 <textarea value={intake.medicalHistory} onChange={e => onChange('medicalHistory', e.target.value)}
                   placeholder="Chronic conditions, past surgeries, hospitalizations, significant health history — or None"
                   rows={3}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none bg-white" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy — include full address</label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy — include full address <span className="text-[#ff3b30]">*</span></label>
                 <input list="pharmacy-suggestions" value={intake.preferredPharmacy}
                   onChange={e => onChange('preferredPharmacy', e.target.value)}
                   placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078"
@@ -2231,7 +2235,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 </datalist>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care physician</label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care physician <span className="text-[#ff3b30]">*</span></label>
                 {intake.pcp_id ? (
                   <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
                     <span className="text-[13px] text-[#085041] font-medium">{pcpSelectedName}</span>
@@ -2313,7 +2317,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
           {/* Vaccination status */}
           <div className="border-t border-[#E8E8E4] pt-4 mt-4">
-            <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-3">Vaccination status</p>
+            <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-3">Vaccination status <span className="text-[#ff3b30]">*</span></p>
             <div className="space-y-2">
               {VAX_OPTIONS.map(v => (
                 <button key={v.value} onClick={() => onChange('vaccinationStatus', v.value)}
@@ -2546,21 +2550,24 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             )}
           </div>}
 
-          {/* PHI sharing consent — first booking only */}
-          <div className="border-t border-[#E8E8E4] pt-4 mt-1">
-            <button
-              type="button"
-              onClick={() => onConsentChange(!intake.phiSharingConsent)}
-              className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${intake.phiSharingConsent ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
-            >
-              <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.phiSharingConsent ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
-                {intake.phiSharingConsent && <Check size={11} className="text-white" strokeWidth={3} />}
-              </div>
-              <span className={`text-[13px] leading-relaxed ${intake.phiSharingConsent ? 'text-[#085041] font-medium' : 'text-[#555]'}`}>
-                I give {PRACTICE_NAME} permission to share this patient's health information with other doctors and providers involved in the patient's care.
-              </span>
-            </button>
-          </div>
+          {/* PHI sharing consent — new patients only */}
+          {!intake.hasProfile && (
+            <div className="border-t border-[#E8E8E4] pt-4 mt-1">
+              <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">PHI sharing consent <span className="text-[#ff3b30]">*</span></p>
+              <button
+                type="button"
+                onClick={() => onConsentChange(!intake.phiSharingConsent)}
+                className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${intake.phiSharingConsent ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+              >
+                <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all ${intake.phiSharingConsent ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-[#D0D0CC]'}`}>
+                  {intake.phiSharingConsent && <Check size={11} className="text-white" strokeWidth={3} />}
+                </div>
+                <span className={`text-[13px] leading-relaxed ${intake.phiSharingConsent ? 'text-[#085041] font-medium' : 'text-[#555]'}`}>
+                  I give {PRACTICE_NAME} permission to share this patient's health information with other doctors and providers involved in the patient's care.
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
