@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getUnbilledNotes, getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
-type Tab = 'unbilled' | 'review' | 'submitted'
+type Tab = 'review' | 'submitted'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
   pending_review: { label: 'Pending Review', cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
@@ -37,12 +37,10 @@ function fmtMoney(n: any) {
 }
 
 export function AdminClaims() {
-  const [tab, setTab] = useState<Tab>('unbilled')
-  const [unbilled, setUnbilled] = useState<any[]>([])
+  const [tab, setTab] = useState<Tab>('review')
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [generating, setGenerating] = useState<string | null>(null)
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
@@ -66,13 +64,11 @@ export function AdminClaims() {
 
   async function load() {
     setLoading(true)
-    const [u, review, errored, submitted] = await Promise.all([
-      getUnbilledNotes().catch(() => []),
+    const [review, errored, submitted] = await Promise.all([
       getClaims('pending_review').catch(() => []),
       getClaims('error').catch(() => []),
       getClaims('submitted').catch(() => []),
     ])
-    setUnbilled(u)
     setClaims([...review, ...errored, ...submitted])
     setLoading(false)
   }
@@ -81,19 +77,6 @@ export function AdminClaims() {
     load()
     getFeeSchedule().then(data => setFeeSchedule(data ?? [])).catch(() => {})
   }, [])
-
-  async function handleGenerate(noteId: string) {
-    setGenerating(noteId)
-    try {
-      await generateClaim(noteId)
-      await load()
-      setTab('review')
-    } catch (e: any) {
-      alert(e.message || 'Failed to generate claim')
-    } finally {
-      setGenerating(null)
-    }
-  }
 
   async function handleTest(claimId: string) {
     setTesting(claimId)
@@ -226,9 +209,6 @@ export function AdminClaims() {
 
       {/* Tabs */}
       <div className="flex border-b border-[#E8E8E4] mb-6">
-        <button className={tabCls('unbilled')} onClick={() => setTab('unbilled')}>
-          Unbilled ({unbilled.length})
-        </button>
         <button className={tabCls('review')} onClick={() => setTab('review')}>
           Pending Review ({reviewClaims.length})
         </button>
@@ -241,45 +221,6 @@ export function AdminClaims() {
         <div className="text-[#999] text-[13px] py-12 text-center">Loading…</div>
       ) : (
         <>
-          {/* UNBILLED TAB */}
-          {tab === 'unbilled' && (
-            <div className="space-y-2">
-              {unbilled.length === 0 && (
-                <div className="text-center py-12 text-[#999] text-[13px]">No unbilled signed notes.</div>
-              )}
-              {unbilled.map(n => (
-                <div key={n.note_id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileText size={16} className="text-[#7F77DD] flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-medium text-[#1A1A2E]">
-                        {[n.child_first_name, n.child_last_name].filter(Boolean).join(' ') || 'Unknown patient'}
-                      </div>
-                      <div className="text-[12px] text-[#999] mt-0.5">
-                        {fmtDate(n.scheduled_date)} · {n.visit_type}
-                        {n.insurance_provider && ` · ${n.insurance_provider}`}
-                        {n.insurance_member_id && ` · Member: ${n.insurance_member_id}`}
-                      </div>
-                      <div className="flex gap-2 mt-1 flex-wrap">
-                        {(n.diagnoses ?? []).map((d: any) => (
-                          <span key={d.code} className="text-[10px] bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded font-medium">{d.code}</span>
-                        ))}
-                        {(n.cpt_codes ?? []).map((c: any) => (
-                          <span key={c.code} className="text-[10px] bg-[#F1EFE8] text-[#555] px-1.5 py-0.5 rounded font-medium">{c.code}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="secondary" size="sm"
-                    loading={generating === n.note_id}
-                    onClick={() => handleGenerate(n.note_id)}>
-                    Generate claim
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* PENDING REVIEW TAB */}
           {tab === 'review' && (
             <div className="space-y-3">
