@@ -847,7 +847,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sql`UPDATE slot_offers SET status = 'accepted' WHERE id = ${offer.id}::uuid`
       await sql`UPDATE waitlist_entries SET status = 'converted' WHERE id = ${offer.waitlist_entry_id}::uuid`
 
-      const [fam] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${entry?.family_id}::uuid`
+      const [fam] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry?.family_id}::uuid`
       const dateFormatted = formatDate(offer.offered_date)
 
       if (fam?.email) {
@@ -882,8 +882,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         await sendEmail(fam.email, `Confirmed: ${offer.visit_type || 'Appointment'} on ${dateFormatted}`, html)
       }
+      if (fam?.phone) {
+        await sendSMS(fam.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${offer.visit_type || 'visit'} on ${dateFormatted} at ${offer.offered_time} with ${offer.provider_name}. View details: ${PORTAL_URL}/family/dashboard`)
+      }
 
-      const [offerProv] = await sql`SELECT email FROM providers WHERE id = ${offer.provider_id}::uuid`
+      const [offerProv] = await sql`SELECT email, phone FROM providers WHERE id = ${offer.provider_id}::uuid`
       if (offerProv?.email) {
         await sendEmail(
           offerProv.email,
@@ -898,8 +901,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
         )
       }
+      if (offerProv?.phone) {
+        await sendSMS(offerProv.phone, `${PRACTICE_NAME}: A waitlist family has claimed your open slot on ${dateFormatted} at ${offer.offered_time}. View your schedule: ${PORTAL_URL}`)
+      }
 
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Waitlist slot claimed. View: ${PORTAL_URL}/admin/schedule`, offerPracticeId ?? undefined)
+      await notifyAdmins(sql, `${PRACTICE_NAME}: Waitlist slot claimed — ${offer.visit_type || 'visit'} on ${dateFormatted} at ${offer.offered_time} with ${offer.provider_name}. View: ${PORTAL_URL}/admin/schedule`, offerPracticeId ?? undefined)
+
+      const pickupDesc = `a waitlist slot (${offer.zone || 'unknown zone'}, ${dateFormatted} at ${offer.offered_time})`
+      await notifyAllProviders(
+        sql,
+        `${PRACTICE_NAME}: A waitlist family claimed an open slot. View: ${PORTAL_URL}/admin/schedule`,
+        `[Pickup] Waitlist family claimed ${offer.provider_name}'s open slot — ${dateFormatted}`,
+        (name) => pickupNotificationEmail({ recipientName: name, acceptedBy: 'A waitlist family', description: pickupDesc }),
+        offer.provider_id,
+        offerPracticeId ?? undefined,
+      )
+
+      return res.json({ ok: true })
+    }
+
+    // ── Admin removed family from waitlist — notify family ───────────────────
+    if (body.type === 'waitlist_removed') {
+      const [entry] = await sql`SELECT family_id, zip, state, visit_type FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
+      if (!entry) return res.json({ ok: false, error: 'Entry not found' })
+
+      const [fam] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+      if (!fam) return res.json({ ok: true })
+
+      const greeting = fam.display_name ? `Hi ${fam.display_name.split(' ')[0]},` : 'Hi there,'
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#EF9F27')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Waitlist update</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">${greeting}<br><br>
+  We wanted to let you know that your spot on our waitlist has been removed. This may be because we were unable to reach you, or the request was no longer needed.</p>
+  <p style="font-size:14px;line-height:1.6;color:#555;margin:0 0 24px;">If you'd still like to see a provider, you're welcome to rebook through your portal at any time.</p>
+  <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">Go to my portal</a>
+</td></tr>
+</table></td></tr></table></body></html>`
+
+      if (fam.email) await sendEmail(fam.email, `Waitlist update — ${PRACTICE_NAME}`, html)
+      if (fam.phone) await sendSMS(fam.phone, `${PRACTICE_NAME}: Your waitlist spot has been removed. If you still need a visit, you can rebook at ${PORTAL_URL}/family/dashboard`)
 
       return res.json({ ok: true })
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Clock, CheckCircle2, Phone, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
-import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds } from '../../lib/api'
+import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds, invokeNotifications } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 
@@ -68,6 +68,9 @@ export function AdminWaitlist() {
   async function updateStatus(id: string, status: WaitlistEntry['status']) {
     await updateWaitlistEntry(id, { status })
     fetchEntries()
+    if (status === 'removed') {
+      invokeNotifications({ type: 'waitlist_removed', waitlistEntryId: id }).catch(() => {})
+    }
   }
 
   const waitingCount = entries.filter(e => e.status === 'waiting').length
