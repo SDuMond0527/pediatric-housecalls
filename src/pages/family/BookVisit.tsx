@@ -15,6 +15,7 @@ import {
   familyInvokeNotifications,
   invokeCharmAppointment,
   getFamilyPcps,
+  familyAddPcp,
 } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
@@ -2010,6 +2011,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [pcpSearch, setPcpSearch] = useState('')
   const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
   const [pcpSelectedName, setPcpSelectedName] = useState<string | null>(null)
+  const [pcpAdding, setPcpAdding] = useState(false)
 
   useEffect(() => {
     getFamilyPcps().then(setPcpList).catch(() => {})
@@ -2232,11 +2234,32 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                             {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
                           </button>
                         ))}
+                        {pcpSearch.trim() && (
+                          <button
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={async () => {
+                              setPcpAdding(true)
+                              try {
+                                const newPcp = await familyAddPcp(pcpSearch.trim())
+                                setPcpList(prev => [...prev, newPcp])
+                                onPcpChange(newPcp.id, false)
+                                setPcpSelectedName(newPcp.name)
+                                setPcpSearch('')
+                                setPcpDropdownOpen(false)
+                              } catch {}
+                              finally { setPcpAdding(false) }
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]"
+                          >
+                            {pcpAdding ? 'Adding…' : `+ Add "${pcpSearch.trim()}"`}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onMouseDown={e => e.preventDefault()}
                           onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
-                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic"
+                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]"
                         >
                           My child does not currently have a PCP
                         </button>

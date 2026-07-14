@@ -421,5 +421,8 @@ export const getPcps = (q?: string) =>
 export const getFamilyPcps = () =>
   familyApiFetch<any[]>('/api/pcps')
 
+export const familyAddPcp = (name: string) =>
+  familyApiFetch<any>('/api/pcps', { method: 'POST', body: JSON.stringify({ name }) })
+
 export const addPcp = (body: { name: string; fax_number?: string; aliases?: string[]; state?: string }) =>
   apiFetch<any>('/api/pcps', { method: 'POST', body: JSON.stringify(body) })
