@@ -30,13 +30,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // GET — list/search PCP directory
   if (req.method === 'GET') {
-    const q = (req.query.q as string ?? '').trim()
+    const q    = (req.query.q   as string ?? '').trim()
+    const all  = req.query.all === 'true'
 
     const rows = q
       ? await sql`
-          SELECT id, name, aliases, fax_number, state
+          SELECT id, name, aliases, fax_number, state, is_active
           FROM pcps
-          WHERE is_active = true
+          WHERE (${all} OR is_active = true)
             AND (
               name ILIKE ${'%' + q + '%'}
               OR EXISTS (
@@ -47,10 +48,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           LIMIT 20
         `
       : await sql`
-          SELECT id, name, aliases, fax_number, state
+          SELECT id, name, aliases, fax_number, state, is_active,
+            (SELECT count(*) FROM children WHERE pcp_id = pcps.id) AS patient_count
           FROM pcps
-          WHERE is_active = true
-          ORDER BY name
+          WHERE (${all} OR is_active = true)
+          ORDER BY fax_number IS NOT NULL, name
         `
 
     return res.status(200).json(rows)

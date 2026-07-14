@@ -426,3 +426,9 @@ export const familyAddPcp = (name: string) =>
 
 export const addPcp = (body: { name: string; fax_number?: string; aliases?: string[]; state?: string }) =>
   apiFetch<any>('/api/pcps', { method: 'POST', body: JSON.stringify(body) })
+
+export const updatePcp = (id: string, body: { name?: string; fax_number?: string; is_active?: boolean }) =>
+  apiFetch<any>(`/api/pcps/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const getAllPcps = () =>
+  apiFetch<any[]>('/api/pcps?all=true')
