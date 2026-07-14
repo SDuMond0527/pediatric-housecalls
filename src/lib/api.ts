@@ -421,6 +421,9 @@ export const getPcps = (q?: string) =>
 export const getFamilyPcps = () =>
   familyApiFetch<any[]>('/api/pcps')
 
+export const getFamilyPharmacies = () =>
+  familyApiFetch<string[]>('/api/pharmacies')
+
 export const familyAddPcp = (name: string) =>
   familyApiFetch<any>('/api/pcps', { method: 'POST', body: JSON.stringify({ name }) })
 

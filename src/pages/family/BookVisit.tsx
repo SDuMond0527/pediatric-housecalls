@@ -16,6 +16,7 @@ import {
   invokeCharmAppointment,
   getFamilyPcps,
   familyAddPcp,
+  getFamilyPharmacies,
 } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
@@ -2043,9 +2044,11 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [pcpAddFormOpen, setPcpAddFormOpen] = useState(false)
   const [pcpAddName, setPcpAddName] = useState('')
   const pcpInputRef = useRef<HTMLInputElement>(null)
+  const [pharmacySuggestions, setPharmacySuggestions] = useState<string[]>([])
 
   useEffect(() => {
     getFamilyPcps().then(setPcpList).catch(() => {})
+    getFamilyPharmacies().then(setPharmacySuggestions).catch(() => {})
   }, [])
 
   const filteredPcps = pcpSearch.trim()
@@ -2186,7 +2189,16 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                   rows={3}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none bg-white" />
               </div>
-              <Input label="Preferred pharmacy — include full address" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy — include full address</label>
+                <input list="pharmacy-suggestions" value={intake.preferredPharmacy}
+                  onChange={e => onChange('preferredPharmacy', e.target.value)}
+                  placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078"
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white" />
+                <datalist id="pharmacy-suggestions">
+                  {pharmacySuggestions.map(s => <option key={s} value={s} />)}
+                </datalist>
+              </div>
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care physician</label>
                 {intake.pcp_id ? (
@@ -2302,7 +2314,13 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       {intake.hasProfile && !intake.preferredPharmacy && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Preferred pharmacy</p>
-          <Input label="" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
+          <input list="pharmacy-suggestions" value={intake.preferredPharmacy}
+            onChange={e => onChange('preferredPharmacy', e.target.value)}
+            placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078"
+            className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white" />
+          <datalist id="pharmacy-suggestions">
+            {pharmacySuggestions.map(s => <option key={s} value={s} />)}
+          </datalist>
         </div>
       )}
 

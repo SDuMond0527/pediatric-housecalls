@@ -119,7 +119,7 @@ async function faxNoteToPcp(note: any, practiceId: string, sql: any): Promise<vo
 
   if (sinchRes.ok) {
     await sql`
-      UPDATE encounter_notes SET pcp_faxed_at = now(), pcp_fax_id = ${result.id ?? null}
+      UPDATE encounter_notes SET pcp_faxed_at = now(), pcp_fax_id = ${result.id ?? null}, pcp_faxed_to_name = ${child.pcp_name ?? null}
       WHERE id = ${note.id}::uuid
     `
     console.log(`[fax] Sent note ${note.id} to ${child.pcp_name} (${child.pcp_fax}) — Sinch fax id: ${result.id}`)

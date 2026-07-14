@@ -38,7 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (child_id) {
       const rows = await sql`
         SELECT en.*, a.visit_type, a.scheduled_date, a.scheduled_time, a.zone,
-               p.name as provider_name, pc.name as pcp_fax_name
+               p.name as provider_name,
+               COALESCE(en.pcp_faxed_to_name, pc.name) as pcp_fax_name
         FROM encounter_notes en
         JOIN appointments a ON a.id = en.appointment_id
         LEFT JOIN providers p ON p.id = en.provider_id
