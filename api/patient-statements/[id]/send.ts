@@ -199,7 +199,7 @@ function buildEmailHtml(stmt: any, paymentUrl: string): string {
         <!-- Footer -->
         <tr>
           <td style="background:#f9f9f7;padding:20px 36px;border-top:1px solid #E8E8E4;">
-            <p style="margin:0;font-size:11px;color:#999;text-align:center;">Pediatric Housecalls &bull; Questions? Reply to this email or call your provider.</p>
+            <p style="margin:0;font-size:11px;color:#999;text-align:center;">Pediatric Housecalls &bull; Questions? Please email us at info@pedshousecalls.com</p>
           </td>
         </tr>
 
