@@ -5,6 +5,7 @@ import { format, parseISO, differenceInYears } from 'date-fns'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
+import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
 
 interface NoteWithVisit {
   id: string
@@ -117,7 +118,7 @@ export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth'>('overview')
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -285,12 +286,19 @@ export function PatientChart() {
 
   const dob = child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : null
 
+  const childAgeYears = child?.date_of_birth
+    ? differenceInYears(new Date(), parseISO(String(child.date_of_birth).split('T')[0]))
+    : null
+  const showGrowthTab = childAgeYears != null && childAgeYears >= 2 && childAgeYears <= 20
+  const isMale = (child?.gender ?? '').toUpperCase().startsWith('M')
+
   const tabs = [
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
+    ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
   ]
 
   async function launchDoseSpot() {
@@ -1452,6 +1460,38 @@ export function PatientChart() {
                     />
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'growth' && child?.date_of_birth && (
+              <div>
+                <div className="mb-4">
+                  <div className="text-[13px] text-[#555]">
+                    {isMale ? 'Male' : 'Female'} · {childAgeYears}y old
+                  </div>
+                </div>
+                <GrowthChart
+                  gender={child.gender ?? ''}
+                  vitalPoints={(() => {
+                    const points: GrowthVitalPoint[] = []
+                    const dob = String(child.date_of_birth).split('T')[0]
+                    for (const note of notes) {
+                      const v = vitalsByAppt[note.appointment_id]
+                      if (!v || (!v.height_in && !v.weight_lbs)) continue
+                      const visitDate = note.scheduled_date
+                      const ageMs = new Date(visitDate).getTime() - new Date(dob).getTime()
+                      const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000)
+                      if (ageYears < 2 || ageYears > 20) continue
+                      points.push({
+                        ageYears,
+                        heightCm: v.height_in != null ? Math.round(v.height_in * 2.54 * 10) / 10 : undefined,
+                        weightKg: v.weight_lbs != null ? Math.round(v.weight_lbs * 0.453592 * 10) / 10 : undefined,
+                        date: format(parseISO(visitDate), 'MMM d, yyyy'),
+                      })
+                    }
+                    return points.sort((a, b) => a.ageYears - b.ageYears)
+                  })()}
+                />
               </div>
             )}
           </>

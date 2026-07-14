@@ -26,6 +26,7 @@
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.75.0",
     "react-router-dom": "^7.15.0",
+    "recharts": "^3.9.2",
     "stripe": "^22.3.0",
     "zod": "^4.4.3"
   },
