@@ -2047,7 +2047,13 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [pharmacySuggestions, setPharmacySuggestions] = useState<string[]>([])
 
   useEffect(() => {
-    getFamilyPcps().then(setPcpList).catch(() => {})
+    getFamilyPcps().then(list => {
+      setPcpList(list)
+      if (intake.pcp_id && !pcpSelectedName) {
+        const found = list.find((p: any) => p.id === intake.pcp_id)
+        if (found) setPcpSelectedName(found.name)
+      }
+    }).catch(() => {})
     getFamilyPharmacies().then(setPharmacySuggestions).catch(() => {})
   }, [])
 
