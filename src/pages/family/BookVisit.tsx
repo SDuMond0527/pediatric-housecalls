@@ -2247,86 +2247,67 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       )}
 
 
-      {/* Pharmacy & PCP — shown for existing patients missing these fields */}
-      {intake.hasProfile && (!intake.preferredPharmacy || (!intake.pcp_id && !intake.pcpNoPcp)) && (
+      {/* Pharmacy — shown for existing patients missing it */}
+      {intake.hasProfile && !intake.preferredPharmacy && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
-          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Health providers</p>
-          <div className="space-y-3">
-            {!intake.preferredPharmacy && (
-              <Input label="Preferred pharmacy — include full address" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
-            )}
-            {!intake.pcp_id && !intake.pcpNoPcp && (
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care physician</label>
-                {intake.pcp_id ? (
-                  <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
-                    <span className="text-[13px] text-[#085041] font-medium">{pcpSelectedName}</span>
-                    <button onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#999] hover:text-[#333]"><X size={14} /></button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input
-                      value={pcpSearch}
-                      onChange={e => { setPcpSearch(e.target.value); setPcpDropdownOpen(true) }}
-                      onFocus={() => setPcpDropdownOpen(true)}
-                      placeholder="Search by practice name…"
-                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white"
-                    />
-                    {pcpDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                        {filteredPcps.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => {
-                              onPcpChange(p.id, false)
-                              setPcpSelectedName(p.name)
-                              setPcpSearch('')
-                              setPcpDropdownOpen(false)
-                            }}
-                            className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F5F4FF] border-b border-[#F0F0EE] last:border-0"
-                          >
-                            <div className="font-medium text-[#1A1A2E]">{p.name}</div>
-                            {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
-                          </button>
-                        ))}
-                        {pcpSearch.trim() && (
-                          <button
-                            type="button"
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={async () => {
-                              setPcpAdding(true)
-                              try {
-                                const newPcp = await familyAddPcp(pcpSearch.trim())
-                                setPcpList(prev => [...prev, newPcp])
-                                onPcpChange(newPcp.id, false)
-                                setPcpSelectedName(newPcp.name)
-                                setPcpSearch('')
-                                setPcpDropdownOpen(false)
-                              } catch {}
-                              finally { setPcpAdding(false) }
-                            }}
-                            className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]"
-                          >
-                            {pcpAdding ? 'Adding…' : `+ Add "${pcpSearch.trim()}"`}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
-                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]"
-                        >
-                          My child does not currently have a PCP
-                        </button>
-                      </div>
-                    )}
-                  </div>
+          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Preferred pharmacy</p>
+          <Input label="" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
+        </div>
+      )}
+
+      {/* PCP picker — shown for existing patients with no PCP linked */}
+      {intake.hasProfile && !intake.pcp_id && !intake.pcpNoPcp && (
+        <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+          <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Primary care physician</p>
+          <div className="relative">
+            <input
+              value={pcpSearch}
+              onChange={e => { setPcpSearch(e.target.value); setPcpDropdownOpen(true) }}
+              onFocus={() => setPcpDropdownOpen(true)}
+              placeholder="Search by practice name…"
+              className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white"
+            />
+            {pcpDropdownOpen && (
+              <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                {filteredPcps.map(p => (
+                  <button key={p.id} type="button" onMouseDown={e => e.preventDefault()}
+                    onClick={() => { onPcpChange(p.id, false); setPcpSelectedName(p.name); setPcpSearch(''); setPcpDropdownOpen(false) }}
+                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F5F4FF] border-b border-[#F0F0EE] last:border-0">
+                    <div className="font-medium text-[#1A1A2E]">{p.name}</div>
+                    {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                  </button>
+                ))}
+                {pcpSearch.trim() && (
+                  <button type="button" onMouseDown={e => e.preventDefault()}
+                    onClick={async () => {
+                      setPcpAdding(true)
+                      try {
+                        const newPcp = await familyAddPcp(pcpSearch.trim())
+                        setPcpList(prev => [...prev, newPcp])
+                        onPcpChange(newPcp.id, false)
+                        setPcpSelectedName(newPcp.name)
+                        setPcpSearch('')
+                        setPcpDropdownOpen(false)
+                      } catch {} finally { setPcpAdding(false) }
+                    }}
+                    className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]">
+                    {pcpAdding ? 'Adding…' : `+ Add "${pcpSearch.trim()}"`}
+                  </button>
                 )}
+                <button type="button" onMouseDown={e => e.preventDefault()}
+                  onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
+                  className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
+                  My child does not currently have a PCP
+                </button>
               </div>
             )}
           </div>
+        </div>
+      )}
+      {intake.hasProfile && intake.pcp_id && (
+        <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
+          <span className="text-[13px] text-[#085041] font-medium">PCP: {pcpSelectedName}</span>
+          <button type="button" onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#999] hover:text-[#333]"><X size={14} /></button>
         </div>
       )}
 
