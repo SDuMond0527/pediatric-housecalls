@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
-import { CalendarPlus, Home, User, LogOut } from 'lucide-react'
+import { CalendarPlus, Home, User, LogOut, ClipboardList } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
@@ -39,6 +39,10 @@ export function FamilyLayout() {
             <NavLink to="/family/dashboard"
               className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
               <Home size={14} /> Home
+            </NavLink>
+            <NavLink to="/family/visits"
+              className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
+              <ClipboardList size={14} /> Visits
             </NavLink>
             <NavLink to="/family/book"
               className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
