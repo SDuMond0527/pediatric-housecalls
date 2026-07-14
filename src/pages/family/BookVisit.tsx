@@ -70,6 +70,16 @@ interface ChildIntake {
 }
 
 
+function timeStrToMinutes(t: string): number {
+  const parts = t.trim().split(' ')
+  const [hStr, mStr] = parts[0].split(':')
+  let h = Number(hStr)
+  const m = Number(mStr)
+  if (parts[1] === 'PM' && h !== 12) h += 12
+  if (parts[1] === 'AM' && h === 12) h = 0
+  return h * 60 + m
+}
+
 function getAvailableSlots(leadMin: number, date: string): string[] {
   const today = new Date().toISOString().split('T')[0]
   if (date !== today) return TIME_SLOTS
@@ -451,8 +461,7 @@ export function BookVisit() {
       const [weh, wem] = window.end.split(':').map(Number)
       if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
       return !bookedSlotsList.some(({ time: bt, duration }) => {
-        const [bh, bm] = bt.split(':').map(Number)
-        const bookedMin = bh * 60 + bm
+        const bookedMin = timeStrToMinutes(bt)
         return slotMin >= bookedMin && slotMin < bookedMin + duration
       })
     })
@@ -524,8 +533,7 @@ export function BookVisit() {
         const [weh, wem] = window.end.split(':').map(Number)
         if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
-          const [bh, bm] = bt.split(':').map(Number)
-          const bm2 = bh * 60 + bm
+          const bm2 = timeStrToMinutes(bt)
           return sm >= bm2 && sm < bm2 + duration
         })
       })
@@ -587,8 +595,7 @@ export function BookVisit() {
         const [weh, wem] = window.end.split(':').map(Number)
         if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
-          const [bh, bm] = bt.split(':').map(Number)
-          const bm2 = bh * 60 + bm
+          const bm2 = timeStrToMinutes(bt)
           return sm >= bm2 && sm < bm2 + duration
         })
       })
@@ -1374,8 +1381,7 @@ export function BookVisit() {
               }
               // Check if any booked appointment overlaps this slot
               return !bookedSlots.some(({ time: bt, duration }) => {
-                const [bh, bm] = bt.split(':').map(Number)
-                const bookedMin = bh * 60 + bm
+                const bookedMin = timeStrToMinutes(bt)
                 return slotMin >= bookedMin && slotMin < bookedMin + duration
               })
             })
