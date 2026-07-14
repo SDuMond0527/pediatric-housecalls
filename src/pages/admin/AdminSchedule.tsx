@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search } from 'lucide-react'
+import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
@@ -127,6 +127,8 @@ export function AdminSchedule() {
   const [loading, setLoading] = useState(true)
   const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
   const [doneInstructions, setDoneInstructions] = useState('')
+  const [cancelApptTarget, setCancelApptTarget] = useState<Appointment | null>(null)
+  const [cancelApptBusy, setCancelApptBusy] = useState(false)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [notes, setNotes] = useState<Record<string, any>>({})
@@ -257,6 +259,26 @@ export function AdminSchedule() {
     setDoneTarget(null)
     setDoneInstructions('')
     setDoneSubmitting(false)
+  }
+
+  async function confirmCancelAppt() {
+    if (!cancelApptTarget) return
+    setCancelApptBusy(true)
+    await updateAppointment(cancelApptTarget.id, { status: 'cancelled' })
+    setAppointments(prev => prev.map(a => a.id === cancelApptTarget!.id ? { ...a, status: 'cancelled' } : a))
+    invokeNotifications({ type: 'appointment_cancelled', appointmentId: cancelApptTarget.id }).catch(() => {})
+    if (cancelApptTarget.zone) {
+      invokeNotifications({
+        type: 'slot_opened',
+        providerId: cancelApptTarget.provider_id,
+        zone: cancelApptTarget.zone,
+        visitType: cancelApptTarget.visit_type,
+        date: cancelApptTarget.scheduled_date,
+        time: cancelApptTarget.scheduled_time,
+      }).catch(() => {})
+    }
+    setCancelApptTarget(null)
+    setCancelApptBusy(false)
   }
 
   async function addAppointment() {
@@ -727,10 +749,18 @@ export function AdminSchedule() {
                           />
                         </div>
 
-                        {appt.status !== 'done' && (
-                          <Button variant="teal" size="xs" className="mt-3" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
-                            <CheckCircle2 size={12} /> Mark complete
-                          </Button>
+                        {appt.status !== 'done' && appt.status !== 'cancelled' && (
+                          <div className="flex gap-2 mt-3">
+                            <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                              <CheckCircle2 size={12} /> Mark complete
+                            </Button>
+                            <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
+                              <XCircle size={12} /> Cancel visit
+                            </Button>
+                          </div>
+                        )}
+                        {appt.status === 'cancelled' && (
+                          <div className="mt-3 text-[12px] text-[#991B1B] font-medium">Cancelled</div>
                         )}
                       </div>
                     )}
@@ -773,6 +803,31 @@ export function AdminSchedule() {
               <Button variant="teal" className="flex-1" loading={doneSubmitting} onClick={submitDone}>
                 <CheckCircle2 size={14} /> Mark complete
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cancel appointment modal ── */}
+      {cancelApptTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !cancelApptBusy && setCancelApptTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#FDEDED] flex items-center justify-center flex-shrink-0">
+                <XCircle size={18} className="text-[#991B1B]" />
+              </div>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Cancel this visit?</h2>
+            </div>
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
+              <div className="font-medium text-[#1A1A2E]">{cancelApptTarget.visit_type}</div>
+              <div className="text-[#999]">{format(new Date(cancelApptTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(cancelApptTarget.scheduled_time)}</div>
+              {cancelApptTarget.zone && <div className="text-[#999]">{cancelApptTarget.zone}</div>}
+            </div>
+            <p className="text-[13px] text-[#555] mb-4">The provider and family will be notified. Waitlist families in the same zone will be offered this slot.</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setCancelApptTarget(null)} disabled={cancelApptBusy}>Keep visit</Button>
+              <Button variant="danger" className="flex-1" loading={cancelApptBusy} onClick={confirmCancelAppt}>Cancel visit</Button>
             </div>
           </div>
         </div>

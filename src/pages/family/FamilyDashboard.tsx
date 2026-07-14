@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarPlus, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
-import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications } from '../../lib/api'
+import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications, familyUpdateWaitlistEntry } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
@@ -31,15 +31,25 @@ export function FamilyDashboard() {
   const [cancelling, setCancelling] = useState(false)
   const [offers, setOffers] = useState<SlotOffer[]>([])
   const [acceptingOffer, setAcceptingOffer] = useState<string | null>(null)
+  const [waitlistEntries, setWaitlistEntries] = useState<any[]>([])
+  const [leavingWaitlist, setLeavingWaitlist] = useState<string | null>(null)
 
   async function fetchOffers() {
     if (!family) return
-    const waitlistEntries = await familyGetWaitlistEntries({ family_id: family.id, status: 'waiting' }).catch(() => [])
-    const ids = waitlistEntries.map((w: { id: string }) => w.id)
+    const entries = await familyGetWaitlistEntries({ family_id: family.id, status: 'waiting' }).catch(() => [])
+    setWaitlistEntries(entries ?? [])
+    const ids = (entries ?? []).map((w: { id: string }) => w.id)
     if (!ids.length) { setOffers([]); return }
 
     const data = await familyGetSlotOffers({ waitlist_entry_ids: ids.join(',') }).catch(() => [])
     setOffers((data ?? []) as SlotOffer[])
+  }
+
+  async function leaveWaitlist(entryId: string) {
+    setLeavingWaitlist(entryId)
+    await familyUpdateWaitlistEntry(entryId, { status: 'removed' }).catch(() => {})
+    setWaitlistEntries(prev => prev.filter(e => e.id !== entryId))
+    setLeavingWaitlist(null)
   }
 
   async function fetchBookings() {
@@ -187,6 +197,36 @@ export function FamilyDashboard() {
                     No thanks
                   </Button>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist entries */}
+      {waitlistEntries.filter(e => !offers.some(o => o.waitlist_entry_id === e.id)).length > 0 && (
+        <div>
+          <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">On the waitlist</h2>
+          <div className="space-y-2">
+            {waitlistEntries.filter(e => !offers.some(o => o.waitlist_entry_id === e.id)).map(entry => (
+              <div key={entry.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-display text-[14px] font-medium text-[#1A1A2E]">
+                    {entry.visit_type || 'In-home visit'}
+                  </div>
+                  <div className="text-[12px] text-[#999] mt-0.5 flex flex-wrap gap-x-3">
+                    {entry.zip && <span>Zip {entry.zip}</span>}
+                    {entry.preferred_time_window && <span>{entry.preferred_time_window}</span>}
+                    <span>Added {format(new Date(entry.created_at), 'MMM d')}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => leaveWaitlist(entry.id)}
+                  disabled={leavingWaitlist === entry.id}
+                  className="text-[12px] font-medium text-[#999] hover:text-[#991B1B] transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  {leavingWaitlist === entry.id ? 'Removing…' : 'Leave waitlist'}
+                </button>
               </div>
             ))}
           </div>

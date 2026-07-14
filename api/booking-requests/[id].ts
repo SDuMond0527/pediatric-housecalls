@@ -54,6 +54,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
     ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
+    // When a booking is cancelled, also cancel the matching appointment in the provider schedule
+    if (status === 'cancelled') {
+      const r = row as any
+      if (r?.confirmed_provider_id && r?.preferred_date && r?.preferred_time) {
+        await sql`
+          UPDATE appointments SET status = 'cancelled'
+          WHERE provider_id = ${r.confirmed_provider_id}::uuid
+            AND scheduled_date = ${r.preferred_date}::date
+            AND scheduled_time = ${r.preferred_time}
+            AND practice_id = ${practiceId}::uuid
+            AND status != 'cancelled'
+        `
+      }
+    }
   } else {
     return res.status(400).json({ error: 'No valid fields' })
   }

@@ -243,6 +243,9 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+export const familyUpdateWaitlistEntry = (id: string, body: Record<string, unknown>) =>
+  familyApiFetch<any>(`/api/waitlist-entries/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>
   apiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })
