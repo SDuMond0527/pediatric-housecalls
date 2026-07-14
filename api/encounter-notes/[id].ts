@@ -209,9 +209,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${row.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
     }
     if (signing && row?.child_id) {
-      faxNoteToPcp(row, practiceId, sql).catch(err =>
-        console.error('[fax] PCP fax failed:', err?.message)
-      )
+      try { await faxNoteToPcp(row, practiceId, sql) }
+      catch (err: any) { console.error('[fax] PCP fax failed:', err?.message) }
     }
     return res.json(row)
   }
