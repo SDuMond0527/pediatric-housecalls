@@ -433,7 +433,7 @@ export function BookVisit() {
     return { start: dayAvail.start_time, end: dayAvail.end_time }
   }
 
-  async function loadBookedTimes(providerName: string, date: string) {
+  async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
     if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
     setSlotsChecking(true)
     try {
@@ -476,6 +476,10 @@ export function BookVisit() {
     })
     setAllSlotsBooked(freeSlots.length === 0)
     setSlotsChecking(false)
+    // If caller preserved a previously chosen time, keep it only if it's still open for this provider
+    if (prevTime !== undefined) {
+      setBooking(b => ({ ...b, time: freeSlots.includes(prevTime) ? prevTime : '' }))
+    }
     } catch {
       setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null)
     }
@@ -1594,7 +1598,7 @@ export function BookVisit() {
                   </button>
                 )}
                 {zoneProviders.map(p => (
-                  <button key={p.name} onClick={() => { setFirstAvailResult(null); setBooking(b => ({ ...b, provider: p.name, time: '' })); loadBookedTimes(p.name, booking.date) }}
+                  <button key={p.name} onClick={() => { setFirstAvailResult(null); const prevTime = booking.time; setBooking(b => ({ ...b, provider: p.name })); loadBookedTimes(p.name, booking.date, prevTime) }}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === p.name ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-medium flex-shrink-0"
                       style={{ background: p.color, color: p.textColor }}>{p.initials}</div>
