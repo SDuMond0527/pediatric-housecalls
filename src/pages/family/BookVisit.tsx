@@ -1371,28 +1371,179 @@ export function BookVisit() {
 
       {/* ── When + where ── */}
       {step === STEP_LOCATION && (
-        <Step title="When & where" sub="Choose your date, time, and provider.">
-          <div className="mb-5">
-            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
-            <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
-              onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); loadBookedTimes(booking.provider, e.target.value) }}
-              className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+        <Step title="When & where" sub="Choose your address, provider, date, and time.">
+
+          {/* 1. Visit address (non-CPR in-home visits) */}
+          {!isCpr && (byType[booking.visitType]?.is_in_home ?? true) && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Visit address <span className="text-[#ff3b30]">*</span>
+              </label>
+              <input value={booking.visitAddress}
+                onChange={e => setBooking(b => ({ ...b, visitAddress: e.target.value }))}
+                placeholder="123 Main St, Charlotte, NC 28078"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">Where should your provider come? This is shared with your provider for navigation.</p>
+            </div>
+          )}
+
+          {/* CPR: show selected address as read-only confirmation */}
+          {isCpr && booking.visitAddress && (
+            <div className="mb-5 p-3 bg-[#FDEDEC] border border-[#F5B7B1] rounded-lg text-[13px] text-[#922B21]">
+              <span className="font-semibold">Address: </span>{booking.visitAddress}
+            </div>
+          )}
+
+          {/* 2. Zip / zone / provider selection — hidden for CPR */}
+          {!isCpr && <>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State</label>
+              <select value={booking.state} onChange={e => setBooking(b => ({ ...b, state: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
+                <option value="">Select state</option>
+                <option value="NC">North Carolina</option>
+                <option value="SC">South Carolina</option>
+                <option value="VA">Virginia</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code</label>
+              <input value={booking.zip} onChange={e => onZipChange(e.target.value)} maxLength={5} placeholder="e.g. 28078"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+            </div>
           </div>
 
-          {booking.date && (isCpr || isTelemedicine(booking.visitType) || (booking.zip.length === 5 && booking.zone && !waitlistZones.includes(booking.zone) && regularZoneProviders.length > 0)) && (() => {
+          {/* "We don't serve" banner */}
+          {booking.zip.length === 5 && !waitlistDone && !isTele &&
+           (!booking.zone || waitlistZones.includes(booking.zone) || regularZoneProviders.length === 0) && (
+            <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
+              <div>
+                <p className="text-[14px] font-semibold text-[#633806]">We don't currently serve zip code {booking.zip}.</p>
+                <p className="text-[13px] text-[#633806] mt-1 leading-relaxed">
+                  We're always expanding — join our waitlist and we'll contact you as soon as we have a provider in your area.
+                </p>
+              </div>
+              <button onClick={() => {
+                const firstId = booking.selectedChildIds[0]
+                const intake = firstId ? booking.childIntakes[firstId] : null
+                const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
+                setWaitlistPatient(labels.join(', '))
+                setWaitlistComplaint(intake?.chiefComplaint || '')
+                setWaitlistAddress(booking.visitAddress || '')
+                setWaitlistOpen(true)
+              }}
+                className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
+                Join the waitlist
+              </button>
+            </div>
+          )}
+
+          {/* Waitlist done */}
+          {waitlistDone && (
+            <div className="border border-[#5DCAA5] bg-[#E1F5EE] rounded-xl p-4 mb-4">
+              <p className="text-[14px] font-semibold text-[#085041]">You're on the waitlist!</p>
+              <p className="text-[13px] text-[#085041] mt-1">We'll reach out as soon as we have a provider available in your area.</p>
+            </div>
+          )}
+
+          {/* Zone display */}
+          {booking.zone && (
+            <div className="p-3 rounded-lg bg-[#EEEDFE] border border-[#AFA9EC] text-[13px] text-[#3C3489] mb-4">
+              Zone: <strong>{booking.zone}</strong>
+            </div>
+          )}
+
+          {/* 3. Provider list */}
+          {zoneProviders.length > 0 && (
+            <div className="mb-5">
+              <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Provider</p>
+              <div className="space-y-2 mb-4">
+                {zoneProviders.length > 1 && (
+                  <button
+                    onClick={() => {
+                      setFirstAvailResult(null)
+                      setBooking(b => ({ ...b, provider: '__first_available__', time: '' }))
+                      if (booking.date) findFirstAvailable(booking.date)
+                    }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === '__first_available__' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#A8DDD0]'}`}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-[16px] flex-shrink-0 bg-[#E1F5EE]">⚡</div>
+                    <div className="flex-1">
+                      <div className="font-display text-[14px] font-medium text-[#1A1A2E]">First available provider</div>
+                      <div className="text-[12px] text-[#555]">
+                        {booking.provider === '__first_available__'
+                          ? findingFirstAvail
+                            ? 'Checking availability…'
+                            : firstAvailResult
+                              ? `${firstAvailResult.provider} · ${firstAvailResult.time}`
+                              : booking.date ? 'No availability on this date — try another' : 'Select a date first'
+                          : 'Automatically assigned to the soonest available'}
+                      </div>
+                    </div>
+                    {booking.provider === '__first_available__' && firstAvailResult && (
+                      <div className="w-5 h-5 rounded-full bg-[#1D9E75] flex items-center justify-center flex-shrink-0"><Check size={10} className="text-white" /></div>
+                    )}
+                  </button>
+                )}
+                {zoneProviders.map(p => (
+                  <button key={p.name} onClick={() => { setFirstAvailResult(null); setBooking(b => ({ ...b, provider: p.name, time: '', date: '' })); }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === p.name ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-medium flex-shrink-0"
+                      style={{ background: p.color, color: p.textColor }}>{p.initials}</div>
+                    <div className="flex-1">
+                      <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{p.name}</div>
+                      <div className="text-[12px] text-[#555]">{p.role}</div>
+                    </div>
+                    {booking.provider === p.name && <div className="w-5 h-5 rounded-full bg-[#7F77DD] flex items-center justify-center"><Check size={10} className="text-white" /></div>}
+                  </button>
+                ))}
+              </div>
+
+              {secureTextProviders.length > 0 && (
+                <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8] mb-4">
+                  <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-1">Need to reach a provider directly?</p>
+                  <p className="text-[12px] text-[#999] mb-3">Text your zone's providers using their secure numbers — separate from their personal cell phones.</p>
+                  <div className="space-y-2">
+                    {secureTextProviders.map((p: any) => (
+                      <a key={p.name} href={`sms:${p.secure_text_number}`}
+                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#EEEDFE] transition-all">
+                        <div>
+                          <div className="text-[13px] font-medium text-[#1A1A2E]">{p.name}</div>
+                          <div className="text-[11px] text-[#999]">{p.role}</div>
+                        </div>
+                        <div className="text-[13px] font-semibold text-[#7F77DD]">{p.secure_text_number}</div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          </>}
+
+          {/* 4. Date picker — shown after provider is chosen (or CPR/telemedicine where provider is pre-set) */}
+          {(isCpr || isTelemedicine(booking.visitType) || booking.provider) && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
+              <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
+                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); loadBookedTimes(booking.provider, e.target.value) }}
+                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+            </div>
+          )}
+
+          {/* 5. Time slots — shown after provider + date are both set */}
+          {booking.date && (isCpr || isTelemedicine(booking.visitType) || booking.provider) && (() => {
             const availableSlots = (slotsChecking || allSlotsBooked) ? [] : getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).filter(slot => {
               const [t, ampm] = slot.split(' ')
               let [h, m] = t.split(':').map(Number)
               if (ampm === 'PM' && h !== 12) h += 12
               if (ampm === 'AM' && h === 12) h = 0
               const slotMin = h * 60 + m
-              // Filter by provider's allowed hours for this visit type
               if (visitTypeWindow) {
                 const [wsh, wsm] = visitTypeWindow.start.split(':').map(Number)
                 const [weh, wem] = visitTypeWindow.end.split(':').map(Number)
                 if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
               }
-              // Check if any booked appointment overlaps this slot
               return !bookedSlots.some(({ time: bt, duration }) => {
                 const bookedMin = timeStrToMinutes(bt)
                 return slotMin >= bookedMin && slotMin < bookedMin + duration
@@ -1428,78 +1579,13 @@ export function BookVisit() {
             )
           })()}
 
-          {/* Address shown in location step only for non-CPR types (CPR collects it in participants step) */}
-          {!isCpr && (byType[booking.visitType]?.is_in_home ?? true) && (
-            <div className="mb-5">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                Visit address <span className="text-[#ff3b30]">*</span>
-              </label>
-              <input value={booking.visitAddress}
-                onChange={e => setBooking(b => ({ ...b, visitAddress: e.target.value }))}
-                placeholder="123 Main St, Charlotte, NC 28078"
-                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
-              <p className="text-[11px] text-[#aeaeb2] mt-1">Where should your provider come? This is shared with your provider for navigation.</p>
-            </div>
-          )}
-
-          {/* CPR: show selected address as read-only confirmation */}
-          {isCpr && booking.visitAddress && (
-            <div className="mb-5 p-3 bg-[#FDEDEC] border border-[#F5B7B1] rounded-lg text-[13px] text-[#922B21]">
-              <span className="font-semibold">Address: </span>{booking.visitAddress}
-            </div>
-          )}
-
-          {/* Zip / zone / provider selection — hidden for CPR */}
-          {!isCpr && <>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State</label>
-              <select value={booking.state} onChange={e => setBooking(b => ({ ...b, state: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                <option value="">Select state</option>
-                <option value="NC">North Carolina</option>
-                <option value="SC">South Carolina</option>
-                <option value="VA">Virginia</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code</label>
-              <input value={booking.zip} onChange={e => onZipChange(e.target.value)} maxLength={5} placeholder="e.g. 28078"
-                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
-            </div>
-          </div>
-
-          {booking.zip.length === 5 && !waitlistDone && !isTele &&
-           (!booking.zone || waitlistZones.includes(booking.zone) || regularZoneProviders.length === 0) && (
-            <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
-              <div>
-                <p className="text-[14px] font-semibold text-[#633806]">We don't currently serve zip code {booking.zip}.</p>
-                <p className="text-[13px] text-[#633806] mt-1 leading-relaxed">
-                  We're always expanding — join our waitlist and we'll contact you as soon as we have a provider in your area.
-                </p>
-              </div>
-              <button onClick={() => {
-                const firstId = booking.selectedChildIds[0]
-                const intake = firstId ? booking.childIntakes[firstId] : null
-                const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
-                setWaitlistPatient(labels.join(', '))
-                setWaitlistComplaint(intake?.chiefComplaint || '')
-                setWaitlistAddress(booking.visitAddress || '')
-                setWaitlistOpen(true)
-              }}
-                className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
-                Join the waitlist
-              </button>
-            </div>
-          )}
-
+          {/* 6. No-availability / waitlist / CMA cards */}
           {booking.date && booking.zone && !waitlistZones.includes(booking.zone) && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked) && !waitlistDone && (
             <div className="mb-4 space-y-2">
               <p className="text-[13px] font-semibold text-[#633806]">
                 {booking.provider && booking.provider !== '__first_available__' ? `No availability with ${booking.provider} on this date.` : 'No availability on this date.'}
               </p>
               <div className={`flex gap-3 items-stretch`}>
-                {/* Waitlist card */}
                 <div className="flex-1 border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 flex flex-col gap-3">
                   <div>
                     <p className="text-[13px] font-semibold text-[#633806]">Join our waitlist</p>
@@ -1521,7 +1607,6 @@ export function BookVisit() {
                   </button>
                 </div>
 
-                {/* CMA + telemedicine card — shown when CMAs cover this zone */}
                 {cmaProvidersForZone.length > 0 && (
                   <div className="flex-1 bg-[#E6F1FB] border border-[#A3C4E8] rounded-xl p-4 flex flex-col gap-3">
                     <div>
@@ -1554,85 +1639,6 @@ export function BookVisit() {
               </div>
             </div>
           )}
-
-          {waitlistDone && (
-            <div className="border border-[#5DCAA5] bg-[#E1F5EE] rounded-xl p-4 mb-4">
-              <p className="text-[14px] font-semibold text-[#085041]">You're on the waitlist!</p>
-              <p className="text-[13px] text-[#085041] mt-1">We'll reach out as soon as we have a provider available in your area.</p>
-            </div>
-          )}
-          {booking.zone && (
-            <div className="p-3 rounded-lg bg-[#EEEDFE] border border-[#AFA9EC] text-[13px] text-[#3C3489] mb-4">
-              Zone: <strong>{booking.zone}</strong>
-            </div>
-          )}
-
-          {zoneProviders.length > 0 && (
-            <div>
-              <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Provider</p>
-              <div className="space-y-2 mb-4">
-                {zoneProviders.length > 1 && (
-                  <button
-                    onClick={() => {
-                      setFirstAvailResult(null)
-                      setBooking(b => ({ ...b, provider: '__first_available__', time: '' }))
-                      if (booking.date) findFirstAvailable(booking.date)
-                    }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === '__first_available__' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-[#E8E8E4] bg-white hover:border-[#A8DDD0]'}`}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-[16px] flex-shrink-0 bg-[#E1F5EE]">⚡</div>
-                    <div className="flex-1">
-                      <div className="font-display text-[14px] font-medium text-[#1A1A2E]">First available provider</div>
-                      <div className="text-[12px] text-[#555]">
-                        {booking.provider === '__first_available__'
-                          ? findingFirstAvail
-                            ? 'Checking availability…'
-                            : firstAvailResult
-                              ? `${firstAvailResult.provider} · ${firstAvailResult.time}`
-                              : booking.date ? 'No availability on this date — try another' : 'Select a date first'
-                          : 'Automatically assigned to the soonest available'}
-                      </div>
-                    </div>
-                    {booking.provider === '__first_available__' && firstAvailResult && (
-                      <div className="w-5 h-5 rounded-full bg-[#1D9E75] flex items-center justify-center flex-shrink-0"><Check size={10} className="text-white" /></div>
-                    )}
-                  </button>
-                )}
-                {zoneProviders.map(p => (
-                  <button key={p.name} onClick={() => { setFirstAvailResult(null); const prevTime = booking.time; setBooking(b => ({ ...b, provider: p.name })); loadBookedTimes(p.name, booking.date, prevTime) }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === p.name ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-medium flex-shrink-0"
-                      style={{ background: p.color, color: p.textColor }}>{p.initials}</div>
-                    <div className="flex-1">
-                      <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{p.name}</div>
-                      <div className="text-[12px] text-[#555]">{p.role}</div>
-                    </div>
-                    {booking.provider === p.name && <div className="w-5 h-5 rounded-full bg-[#7F77DD] flex items-center justify-center"><Check size={10} className="text-white" /></div>}
-                  </button>
-                ))}
-              </div>
-
-              {secureTextProviders.length > 0 && (
-                <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
-                  <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-1">Need to reach a provider directly?</p>
-                  <p className="text-[12px] text-[#999] mb-3">Text your zone's providers using their secure numbers — separate from their personal cell phones.</p>
-                  <div className="space-y-2">
-                    {secureTextProviders.map((p: any) => (
-                      <a key={p.name} href={`sms:${p.secure_text_number}`}
-                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#EEEDFE] transition-all">
-                        <div>
-                          <div className="text-[13px] font-medium text-[#1A1A2E]">{p.name}</div>
-                          <div className="text-[11px] text-[#999]">{p.role}</div>
-                        </div>
-                        <div className="text-[13px] font-semibold text-[#7F77DD]">{p.secure_text_number}</div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          </>}
 
           <NavButtons
             onBack={() => setStep(isCpr ? STEP_INTAKE : isIvFluids ? STEP_IV : STEP_INTAKE)}
