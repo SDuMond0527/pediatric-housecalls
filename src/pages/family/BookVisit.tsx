@@ -281,9 +281,10 @@ export function BookVisit() {
         .catch(() => setRegularZoneProviders([]))
       return
     }
-    if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); return }
+    if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); setCmaProvidersForZone([]); setCmaAvailResult(null); return }
     if (!isIv && !isCma) {
-      getProvidersByZone(booking.zone)
+      const capturedZone = booking.zone
+      getProvidersByZone(capturedZone)
         .then(providers => setRegularZoneProviders(
           providers
             .filter((p: any) => p.role !== 'RN' && p.role !== 'CMA')
@@ -293,6 +294,17 @@ export function BookVisit() {
             }))
         ))
         .catch(() => setRegularZoneProviders([]))
+      // Preload CMAs so we know immediately whether this is a CMA-only zone
+      setCmaProvidersForZone([])
+      setCmaAvailResult(null)
+      getProvidersByRole({ role: 'CMA', is_active: 'true', zone: capturedZone })
+        .then(rows => setCmaProvidersForZone((rows ?? []).map((r: any) => ({
+          name: r.name, role: r.role,
+          initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
+          color: r.avatar_color || '#EEEDFE',
+          textColor: r.avatar_text_color || '#3C3489',
+        }))))
+        .catch(() => {})
     }
     getProvidersByRole({ role: 'RN', is_active: 'true', zone: booking.zone })
       .then(providers => setIvZoneProviders(providers.map((p: any) => ({
@@ -331,6 +343,16 @@ export function BookVisit() {
     if (!allSlotsBooked || !booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
     findCmaAvailability(booking.date, booking.zone)
   }, [allSlotsBooked])
+
+  // For CMA-only zones (no regular providers), check CMA availability whenever date changes
+  useEffect(() => {
+    if (!booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
+    if (waitlistZones.includes(booking.zone)) return
+    if (regularZoneProviders.length === 0) {
+      setCmaAvailResult(null)
+      findCmaAvailability(booking.date, booking.zone)
+    }
+  }, [booking.date, booking.zone, regularZoneProviders.length, booking.visitType])
 
   useEffect(() => {
     if (step !== STEP_CONFIRM) return
@@ -682,6 +704,7 @@ export function BookVisit() {
 
   const isCmaVisit = booking.visitType === 'CMA + telemedicine'
   const isTele = isTelemedicine(booking.visitType)
+  const cmaOnlyZone = !!booking.zone && !waitlistZones.includes(booking.zone) && regularZoneProviders.length === 0 && !isCmaVisit
   const zoneProviders = isIvFluids
     ? ivZoneProviders
     : isCmaVisit && cmaProvidersForZone.length > 0
@@ -1420,7 +1443,7 @@ export function BookVisit() {
 
           {/* "We don't serve" banner */}
           {booking.zip.length === 5 && !waitlistDone && !isTele &&
-           (!booking.zone || waitlistZones.includes(booking.zone) || regularZoneProviders.length === 0) && (
+           (!booking.zone || waitlistZones.includes(booking.zone) || (regularZoneProviders.length === 0 && cmaProvidersForZone.length === 0)) && (
             <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
               <div>
                 <p className="text-[14px] font-semibold text-[#633806]">We don't currently serve zip code {booking.zip}.</p>
@@ -1584,39 +1607,46 @@ export function BookVisit() {
           })()}
 
           {/* 6. No-availability / waitlist / CMA cards */}
-          {booking.date && booking.zone && !waitlistZones.includes(booking.zone) && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked) && !waitlistDone && (
+          {booking.date && booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
+           ((zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked)) || (cmaOnlyZone && cmaProvidersForZone.length > 0)) && (
             <div className="mb-4 space-y-2">
-              <p className="text-[13px] font-semibold text-[#633806]">
-                {booking.provider && booking.provider !== '__first_available__' ? `No availability with ${booking.provider} on this date.` : 'No availability on this date.'}
-              </p>
-              <div className={`flex gap-3 items-stretch`}>
-                <div className="flex-1 border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 flex flex-col gap-3">
-                  <div>
-                    <p className="text-[13px] font-semibold text-[#633806]">Join our waitlist</p>
-                    <p className="text-[12px] text-[#633806] mt-1 leading-relaxed">
-                      We'll reach out as soon as a spot opens up on your preferred date.
-                    </p>
+              {!cmaOnlyZone && (
+                <p className="text-[13px] font-semibold text-[#633806]">
+                  {booking.provider && booking.provider !== '__first_available__' ? `No availability with ${booking.provider} on this date.` : 'No availability on this date.'}
+                </p>
+              )}
+              <div className="flex gap-3 items-stretch">
+                {!cmaOnlyZone && (
+                  <div className="flex-1 border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#633806]">Join our waitlist</p>
+                      <p className="text-[12px] text-[#633806] mt-1 leading-relaxed">
+                        We'll reach out as soon as a spot opens up on your preferred date.
+                      </p>
+                    </div>
+                    <button onClick={() => {
+                      const firstId = booking.selectedChildIds[0]
+                      const intake = firstId ? booking.childIntakes[firstId] : null
+                      const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
+                      setWaitlistPatient(labels.join(', '))
+                      setWaitlistComplaint(intake?.chiefComplaint || '')
+                      setWaitlistAddress(booking.visitAddress || '')
+                      setWaitlistOpen(true)
+                    }}
+                      className="mt-auto w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
+                      Join the waitlist
+                    </button>
                   </div>
-                  <button onClick={() => {
-                    const firstId = booking.selectedChildIds[0]
-                    const intake = firstId ? booking.childIntakes[firstId] : null
-                    const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
-                    setWaitlistPatient(labels.join(', '))
-                    setWaitlistComplaint(intake?.chiefComplaint || '')
-                    setWaitlistAddress(booking.visitAddress || '')
-                    setWaitlistOpen(true)
-                  }}
-                    className="mt-auto w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
-                    Join the waitlist
-                  </button>
-                </div>
+                )}
 
                 {cmaProvidersForZone.length > 0 && (
-                  <div className="flex-1 bg-[#E6F1FB] border border-[#A3C4E8] rounded-xl p-4 flex flex-col gap-3">
+                  <div className={`${cmaOnlyZone ? 'w-full' : 'flex-1'} bg-[#E6F1FB] border border-[#A3C4E8] rounded-xl p-4 flex flex-col gap-3`}>
                     <div>
                       <p className="text-[13px] font-semibold text-[#0C447C]">CMA + telemedicine visit</p>
                       <p className="text-[12px] text-[#1A3560] mt-1 leading-relaxed">
-                        One of our in-home techs comes to you for diagnostics (ear exam, strep, urine, flu/COVID testing) while our provider sees you virtually.
+                        {cmaOnlyZone
+                          ? 'This area is served by our CMA + telemedicine model. One of our in-home techs comes to you for diagnostics while our provider sees you virtually.'
+                          : 'One of our in-home techs comes to you for diagnostics (ear exam, strep, urine, flu/COVID testing) while our provider sees you virtually.'}
                       </p>
                       {cmaAvailResult && (
                         <p className="text-[12px] text-[#1A3560] mt-1">
