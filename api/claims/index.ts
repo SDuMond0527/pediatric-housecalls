@@ -52,7 +52,7 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
   const [family] = child?.family_id
-    ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
+    ? await sql`SELECT address_line1, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
 
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
@@ -84,7 +84,7 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
       ${provider?.name ?? null}, ${provider?.npi ?? null}, ${provider?.taxonomy_code ?? null},
       ${child?.first_name ?? null}, ${child?.last_name ?? null},
       ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
-      ${family?.address ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}
+      ${family?.address_line1 ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}
     )
     RETURNING *`
 
