@@ -26,66 +26,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = providerRows[0].practice_id as string
 
-  // GET — list claims or unbilled notes
+  // GET — list claims
   if (req.method === 'GET') {
-    const { status, unbilled } = req.query as Record<string, string>
-
-    if (unbilled === 'true') {
-      // Signed notes with CPT codes + diagnoses that have no claim yet
-      const rows = await sql`
-        SELECT
-          en.id AS note_id,
-          en.appointment_id,
-          en.child_id,
-          en.provider_id,
-          en.diagnoses,
-          en.cpt_codes,
-          en.signed_at,
-          a.scheduled_date,
-          a.visit_type,
-          a.zone,
-          c.first_name AS child_first_name,
-          c.last_name  AS child_last_name,
-          c.insurance_provider,
-          c.insurance_member_id,
-          p.name AS provider_name
-        FROM encounter_notes en
-        LEFT JOIN appointments a ON a.id = en.appointment_id
-        LEFT JOIN children c ON c.id = en.child_id
-        LEFT JOIN providers p ON p.id = en.provider_id
-        LEFT JOIN claims cl ON cl.encounter_note_id = en.id
-        WHERE en.is_signed = true
-          AND en.practice_id = ${practiceId}::uuid
-          AND cl.id IS NULL
-        ORDER BY a.scheduled_date DESC NULLS LAST`
+    try {
+      const { status } = req.query as Record<string, string>
+      const rows = status
+        ? await sql`
+            SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+              fp.email AS family_email, fp.phone AS family_phone,
+              ps.status AS statement_status, ps.sent_at AS statement_sent_at
+            FROM claims cl
+            LEFT JOIN children c ON c.id = cl.child_id
+            LEFT JOIN family_profiles fp ON fp.id = c.family_id
+            LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+            WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
+            ORDER BY cl.created_at DESC`
+        : await sql`
+            SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+              fp.email AS family_email, fp.phone AS family_phone,
+              ps.status AS statement_status, ps.sent_at AS statement_sent_at
+            FROM claims cl
+            LEFT JOIN children c ON c.id = cl.child_id
+            LEFT JOIN family_profiles fp ON fp.id = c.family_id
+            LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+            WHERE cl.practice_id = ${practiceId}::uuid
+            ORDER BY cl.created_at DESC`
       return res.json(rows)
+    } catch (e: any) {
+      console.error('[claims GET] error:', e?.message)
+      return res.status(500).json({ error: e?.message ?? 'Failed to load claims' })
     }
-
-    if (status) {
-      const rows = await sql`
-        SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
-          fp.email AS family_email, fp.phone AS family_phone,
-          ps.status AS statement_status, ps.sent_at AS statement_sent_at
-        FROM claims cl
-        LEFT JOIN children c ON c.id = cl.child_id
-        LEFT JOIN family_profiles fp ON fp.id = c.family_id
-        LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
-        WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
-        ORDER BY cl.created_at DESC`
-      return res.json(rows)
-    }
-
-    const rows = await sql`
-      SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
-        fp.email AS family_email, fp.phone AS family_phone,
-        ps.status AS statement_status, ps.sent_at AS statement_sent_at
-      FROM claims cl
-      LEFT JOIN children c ON c.id = cl.child_id
-      LEFT JOIN family_profiles fp ON fp.id = c.family_id
-      LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
-      WHERE cl.practice_id = ${practiceId}::uuid
-      ORDER BY cl.created_at DESC`
-    return res.json(rows)
   }
 
   // POST — generate a claim from an encounter note

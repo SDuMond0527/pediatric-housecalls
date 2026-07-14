@@ -64,13 +64,18 @@ export function AdminClaims() {
 
   async function load() {
     setLoading(true)
-    const [review, errored, submitted] = await Promise.all([
-      getClaims('pending_review').catch(() => []),
-      getClaims('error').catch(() => []),
-      getClaims('submitted').catch(() => []),
-    ])
-    setClaims([...review, ...errored, ...submitted])
-    setLoading(false)
+    try {
+      const [review, errored, submitted] = await Promise.all([
+        getClaims('pending_review'),
+        getClaims('error'),
+        getClaims('submitted'),
+      ])
+      setClaims([...review, ...errored, ...submitted])
+    } catch (e: any) {
+      alert('Failed to load claims: ' + (e.message ?? 'Unknown error'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
