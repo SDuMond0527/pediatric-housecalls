@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, Trophy } from 'lucide-react'
+import { format, startOfMonth, endOfMonth, parseISO, subDays } from 'date-fns'
+import { Trophy } from 'lucide-react'
 import { getReports } from '../../lib/api'
 
 interface ApptRow {
@@ -12,7 +12,11 @@ interface ApptRow {
   notes: string | null
 }
 interface ProviderRow { id: string; name: string }
-interface EncounterNoteRow { provider_id: string; cpt_codes: { code: string; description: string; charge_amount: number; modifier?: string }[] }
+interface EncounterNoteRow {
+  provider_id: string
+  scheduled_date: string
+  cpt_codes: { code: string; description: string; charge_amount: number; modifier?: string }[]
+}
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -43,8 +47,13 @@ function SummaryCard({ label, value, color, bg, sub }: { label: string; value: n
   )
 }
 
+const today = new Date()
+const DEFAULT_START = format(startOfMonth(today), 'yyyy-MM-dd')
+const DEFAULT_END   = format(endOfMonth(today),   'yyyy-MM-dd')
+
 export function AdminReports() {
-  const [month, setMonth] = useState(new Date())
+  const [startDate, setStartDate] = useState(DEFAULT_START)
+  const [endDate,   setEndDate]   = useState(DEFAULT_END)
   const [appts, setAppts] = useState<ApptRow[]>([])
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
@@ -52,22 +61,22 @@ export function AdminReports() {
 
   useEffect(() => {
     async function load() {
+      if (!startDate || !endDate || startDate > endDate) return
       setLoading(true)
-      const start = format(startOfMonth(month), 'yyyy-MM-dd')
-      const end   = format(endOfMonth(month),   'yyyy-MM-dd')
-
-      const result = await getReports({ start, end }).catch(() => null)
+      const result = await getReports({ start: startDate, end: endDate }).catch(() => null)
       setAppts(result?.appointments ?? [])
       setProviders(result?.providers ?? [])
       setEncounterNotes(result?.encounterNotes ?? [])
       setLoading(false)
     }
     load()
-  }, [month])
+  }, [startDate, endDate])
+
+  const rangeLabel = startDate === endDate
+    ? format(parseISO(startDate), 'MMM d, yyyy')
+    : `${format(parseISO(startDate), 'MMM d')} – ${format(parseISO(endDate), 'MMM d, yyyy')}`
 
   if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
-
-  const monthLabel = format(month, 'MMMM yyyy')
 
   // Summary totals
   const total     = appts.length
@@ -100,12 +109,11 @@ export function AdminReports() {
     .filter(p => p.total > 0)
     .sort((a, b) => b.total - a.total)
 
-  // Visit types that appear this month, in preferred order
+  // Visit types that appear this period, in preferred order
   const activeTypes = VISIT_TYPE_ORDER.filter(vt => appts.some(a => a.visit_type === vt))
-  // Add any unexpected types not in the order list
   appts.forEach(a => { if (!activeTypes.includes(a.visit_type)) activeTypes.push(a.visit_type) })
 
-  // Procedure codes by provider
+  // Procedure codes summary by provider (aggregated)
   type CptSummary = { code: string; description: string; count: number; total: number }
   const providerCptMap: Record<string, CptSummary[]> = {}
   encounterNotes.forEach(en => {
@@ -123,7 +131,32 @@ export function AdminReports() {
     .map(([name, codes]) => ({ name, codes: [...codes].sort((a, b) => b.count - a.count) }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  // Bonus leader (highest pickups; if tied, both get badge)
+  // Procedure codes detail by provider — one row per occurrence, sorted by date
+  type CptDetail = { date: string; code: string; description: string; charge: number }
+  const providerCptDetailMap: Record<string, CptDetail[]> = {}
+  encounterNotes.forEach(en => {
+    if (!Array.isArray(en.cpt_codes) || !en.scheduled_date) return
+    const provider = providers.find(p => p.id === en.provider_id)
+    if (!provider) return
+    if (!providerCptDetailMap[provider.name]) providerCptDetailMap[provider.name] = []
+    en.cpt_codes.forEach(c => {
+      providerCptDetailMap[provider.name].push({
+        date:        en.scheduled_date,
+        code:        c.code,
+        description: c.description,
+        charge:      c.charge_amount ?? 0,
+      })
+    })
+  })
+  const providerCptDetailRows = Object.entries(providerCptDetailMap)
+    .map(([name, entries]) => ({
+      name,
+      entries: [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.code.localeCompare(b.code)),
+      total: entries.reduce((sum, e) => sum + e.charge, 0),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Bonus leader
   const maxPickups = Math.max(...providerStats.map(p => p.pickups), 0)
   const pickupLeaders = providerStats.filter(p => p.pickups === maxPickups && maxPickups > 0)
   const pickupLeaderIds = new Set(pickupLeaders.map(p => p.id))
@@ -132,20 +165,36 @@ export function AdminReports() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10 flex items-center justify-between">
+      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10 flex items-center justify-between flex-wrap gap-3">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Reports</div>
-          <div className="text-[12px] text-[#999] mt-0.5">Monthly visit and provider activity</div>
+          <div className="text-[12px] text-[#999] mt-0.5">Visit and provider activity</div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setMonth(m => subMonths(m, 1))}
-            className="p-1.5 rounded-lg hover:bg-[#F1EFE8] transition-colors text-[#555] hover:text-[#1A1A2E]">
-            <ChevronLeft size={16} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="border border-[#E8E8E4] rounded-lg px-3 py-1.5 text-[13px] text-[#1A1A2E] bg-white focus:outline-none focus:border-[#7F77DD]"
+          />
+          <span className="text-[#999] text-[13px]">to</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="border border-[#E8E8E4] rounded-lg px-3 py-1.5 text-[13px] text-[#1A1A2E] bg-white focus:outline-none focus:border-[#7F77DD]"
+          />
+          <button
+            onClick={() => { setStartDate(format(startOfMonth(today), 'yyyy-MM-dd')); setEndDate(format(endOfMonth(today), 'yyyy-MM-dd')) }}
+            className="px-3 py-1.5 text-[12px] font-medium text-[#555] hover:text-[#1A1A2E] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8] transition-colors whitespace-nowrap"
+          >
+            This month
           </button>
-          <span className="font-medium text-[14px] text-[#1A1A2E] w-36 text-center">{monthLabel}</span>
-          <button onClick={() => setMonth(m => addMonths(m, 1))}
-            className="p-1.5 rounded-lg hover:bg-[#F1EFE8] transition-colors text-[#555] hover:text-[#1A1A2E]">
-            <ChevronRight size={16} />
+          <button
+            onClick={() => { const d = today; setStartDate(format(subDays(d, 13), 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')) }}
+            className="px-3 py-1.5 text-[12px] font-medium text-[#555] hover:text-[#1A1A2E] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8] transition-colors whitespace-nowrap"
+          >
+            Last 14 days
           </button>
         </div>
       </div>
@@ -164,9 +213,9 @@ export function AdminReports() {
         {/* Visits by provider */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Visits by provider</h3>
-          <p className="text-[12px] text-[#999] mb-4">{monthLabel}</p>
+          <p className="text-[12px] text-[#999] mb-4">{rangeLabel}</p>
           {providerStats.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No appointments this month.</p>
+            <p className="text-[13px] text-[#999]">No appointments in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -197,7 +246,7 @@ export function AdminReports() {
         {activeTypes.length > 0 && providerStats.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Visit type breakdown by provider</h3>
-            <p className="text-[12px] text-[#999] mb-4">{monthLabel} — all statuses</p>
+            <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — all statuses</p>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
@@ -234,12 +283,12 @@ export function AdminReports() {
           </div>
         )}
 
-        {/* Procedure codes by provider */}
+        {/* Procedure codes summary by provider */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Procedure codes by provider</h3>
-          <p className="text-[12px] text-[#999] mb-4">{monthLabel} — from completed encounter notes</p>
+          <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — from completed encounter notes</p>
           {providerCptRows.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No procedure codes recorded this month.</p>
+            <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -272,13 +321,58 @@ export function AdminReports() {
           )}
         </div>
 
+        {/* Procedure codes detail by provider — one row per occurrence with date, for payroll */}
+        <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Procedure codes by provider — by date</h3>
+          <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — each code shown with its date of service</p>
+          {providerCptDetailRows.length === 0 ? (
+            <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
+          ) : (
+            <div className="space-y-6">
+              {providerCptDetailRows.map(({ name, entries, total: provTotal }) => (
+                <div key={name}>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <div className="font-medium text-[14px] text-[#1A1A2E]">{name}</div>
+                    <div className="text-[12px] text-[#1D9E75] font-medium tabular-nums">${provTotal.toFixed(2)} total</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[13px]">
+                      <thead>
+                        <tr className="border-b border-[#E8E8E4]">
+                          {['Date', 'Code', 'Description', 'Charge'].map(h => (
+                            <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2 pr-6 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F1EFE8]">
+                        {entries.map((e, i) => (
+                          <tr key={i}>
+                            <td className="py-2 pr-6 tabular-nums text-[#555] whitespace-nowrap">
+                              {format(parseISO(e.date), 'MMM d, yyyy')}
+                            </td>
+                            <td className="py-2 pr-6">
+                              <span className="font-mono text-[12px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{e.code}</span>
+                            </td>
+                            <td className="py-2 pr-6 text-[#555] max-w-xs">{e.description}</td>
+                            <td className="py-2 tabular-nums text-[#1D9E75] font-medium">${e.charge.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Monthly bonus leaderboard */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
             <Trophy size={15} color="#EF9F27" />
-            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">Monthly bonus leaderboard</h3>
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">Bonus leaderboard</h3>
           </div>
-          <p className="text-[12px] text-[#999] mb-4">Waitlist & broadcast pickups — {monthLabel}</p>
+          <p className="text-[12px] text-[#999] mb-4">Waitlist & broadcast pickups — {rangeLabel}</p>
 
           {pickupLeaders.length > 0 && (
             <div className="mb-4 p-4 rounded-xl border border-[#EF9F27]/30 bg-[#FFFBF5] flex items-center gap-3">
@@ -288,14 +382,14 @@ export function AdminReports() {
                   {pickupLeaders.map(p => p.name).join(' & ')}
                 </div>
                 <div className="text-[12px] text-[#555] mt-0.5">
-                  {maxPickups} pickup{maxPickups !== 1 ? 's' : ''} this month · {monthLabel} bonus {pickupLeaders.length > 1 ? 'co-leaders' : 'leader'}
+                  {maxPickups} pickup{maxPickups !== 1 ? 's' : ''} · {rangeLabel} bonus {pickupLeaders.length > 1 ? 'co-leaders' : 'leader'}
                 </div>
               </div>
             </div>
           )}
 
           {pickupsSorted.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No pickups recorded this month.</p>
+            <p className="text-[13px] text-[#999]">No pickups recorded in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
