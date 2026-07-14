@@ -2012,6 +2012,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
   const [pcpSelectedName, setPcpSelectedName] = useState<string | null>(null)
   const [pcpAdding, setPcpAdding] = useState(false)
+  const pcpInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     getFamilyPcps().then(setPcpList).catch(() => {})
@@ -2171,6 +2172,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 ) : (
                   <div className="relative">
                     <input
+                      ref={pcpInputRef}
                       value={pcpSearch}
                       onChange={e => { setPcpSearch(e.target.value); setPcpDropdownOpen(true) }}
                       onFocus={() => setPcpDropdownOpen(true)}
@@ -2187,23 +2189,22 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                             {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
                           </button>
                         ))}
-                        {pcpSearch.trim() && (
-                          <button type="button" onMouseDown={e => e.preventDefault()}
-                            onClick={async () => {
-                              setPcpAdding(true)
-                              try {
-                                const newPcp = await familyAddPcp(pcpSearch.trim())
-                                setPcpList(prev => [...prev, newPcp])
-                                onPcpChange(newPcp.id, false)
-                                setPcpSelectedName(newPcp.name)
-                                setPcpSearch('')
-                                setPcpDropdownOpen(false)
-                              } catch {} finally { setPcpAdding(false) }
-                            }}
-                            className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]">
-                            {pcpAdding ? 'Adding…' : `+ Add "${pcpSearch.trim()}"`}
-                          </button>
-                        )}
+                        <button type="button" onMouseDown={e => e.preventDefault()}
+                          onClick={async () => {
+                            if (!pcpSearch.trim()) { pcpInputRef.current?.focus(); return }
+                            setPcpAdding(true)
+                            try {
+                              const newPcp = await familyAddPcp(pcpSearch.trim())
+                              setPcpList(prev => [...prev, newPcp])
+                              onPcpChange(newPcp.id, false)
+                              setPcpSelectedName(newPcp.name)
+                              setPcpSearch('')
+                              setPcpDropdownOpen(false)
+                            } catch {} finally { setPcpAdding(false) }
+                          }}
+                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]">
+                          {pcpAdding ? 'Adding…' : pcpSearch.trim() ? `+ Add "${pcpSearch.trim()}"` : '+ Add a new practice'}
+                        </button>
                         <button type="button" onMouseDown={e => e.preventDefault()}
                           onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
                           className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
@@ -2277,23 +2278,22 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                     {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
                   </button>
                 ))}
-                {pcpSearch.trim() && (
-                  <button type="button" onMouseDown={e => e.preventDefault()}
-                    onClick={async () => {
-                      setPcpAdding(true)
-                      try {
-                        const newPcp = await familyAddPcp(pcpSearch.trim())
-                        setPcpList(prev => [...prev, newPcp])
-                        onPcpChange(newPcp.id, false)
-                        setPcpSelectedName(newPcp.name)
-                        setPcpSearch('')
-                        setPcpDropdownOpen(false)
-                      } catch {} finally { setPcpAdding(false) }
-                    }}
-                    className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]">
-                    {pcpAdding ? 'Adding…' : `+ Add "${pcpSearch.trim()}"`}
-                  </button>
-                )}
+                <button type="button" onMouseDown={e => e.preventDefault()}
+                  onClick={async () => {
+                    if (!pcpSearch.trim()) { pcpInputRef.current?.focus(); return }
+                    setPcpAdding(true)
+                    try {
+                      const newPcp = await familyAddPcp(pcpSearch.trim())
+                      setPcpList(prev => [...prev, newPcp])
+                      onPcpChange(newPcp.id, false)
+                      setPcpSelectedName(newPcp.name)
+                      setPcpSearch('')
+                      setPcpDropdownOpen(false)
+                    } catch {} finally { setPcpAdding(false) }
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-[13px] text-[#7F77DD] font-medium hover:bg-[#F5F4FF] border-t border-[#E8E8E4]">
+                  {pcpAdding ? 'Adding…' : pcpSearch.trim() ? `+ Add "${pcpSearch.trim()}"` : '+ Add a new practice'}
+                </button>
                 <button type="button" onMouseDown={e => e.preventDefault()}
                   onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
                   className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
