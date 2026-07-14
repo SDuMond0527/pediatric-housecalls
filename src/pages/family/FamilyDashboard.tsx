@@ -12,6 +12,15 @@ import { PRACTICE_NAME } from '../../lib/practice'
 
 const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids']
 
+function safeFormat(value: string | null | undefined, fmt: string, suffix = ''): string {
+  if (!value) return '—'
+  try {
+    const d = new Date(value)
+    if (isNaN(d.getTime())) return '—'
+    return format(d, fmt) + suffix
+  } catch { return '—' }
+}
+
 function isWithin2Hours(booking: BookingRequest): boolean {
   const [time, ampm] = booking.preferred_time.split(' ')
   let [h, m] = time.split(':').map(Number)
@@ -178,12 +187,12 @@ export function FamilyDashboard() {
                     <div className="flex items-center gap-3 text-[12px] text-[#555] flex-wrap">
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
-                        {format(new Date(offer.offered_date + 'T12:00:00'), 'EEEE, MMMM d')} at {offer.offered_time}
+                        {safeFormat(offer.offered_date ? offer.offered_date + 'T12:00:00' : null, 'EEEE, MMMM d')} at {offer.offered_time}
                       </span>
                       {offer.zone && <span>· {offer.zone}</span>}
                     </div>
                     <p className="text-[11px] text-[#999] mt-1.5">
-                      This offer expires {format(new Date(offer.expires_at), 'MMM d')} at {format(new Date(offer.expires_at), 'h:mm a')}
+                      This offer expires {safeFormat(offer.expires_at, 'MMM d')} at {safeFormat(offer.expires_at, 'h:mm a')}
                     </p>
                   </div>
                 </div>
@@ -217,7 +226,7 @@ export function FamilyDashboard() {
                   <div className="text-[12px] text-[#999] mt-0.5 flex flex-wrap gap-x-3">
                     {entry.zip && <span>Zip {entry.zip}</span>}
                     {entry.preferred_time_window && <span>{entry.preferred_time_window}</span>}
-                    <span>Added {format(new Date(entry.created_at), 'MMM d')}</span>
+                    <span>Added {safeFormat(entry.created_at, 'MMM d')}</span>
                   </div>
                 </div>
                 <button
@@ -291,7 +300,7 @@ export function FamilyDashboard() {
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
               <div className="flex items-center gap-1.5 text-[#999]">
                 <Clock size={11} />
-                {format(new Date(cancelTarget.preferred_date + 'T12:00:00'), 'EEEE, MMMM d')} at {cancelTarget.preferred_time}
+                {safeFormat(cancelTarget.preferred_date ? cancelTarget.preferred_date + 'T12:00:00' : null, 'EEEE, MMMM d')} at {cancelTarget.preferred_time}
               </div>
               {cancelTarget.preferred_provider && (
                 <div className="text-[#999]">{cancelTarget.preferred_provider}</div>
@@ -360,7 +369,7 @@ function BookingCard({ booking, past = false, onCancel }: {
           <div className="flex items-center gap-3 mt-1 text-[12px] text-[#999]">
             <span className="flex items-center gap-1">
               <Clock size={11} />
-              {format(new Date(booking.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at {booking.preferred_time}
+              {safeFormat(booking.preferred_date ? booking.preferred_date + 'T12:00:00' : null, 'EEE, MMM d')} at {booking.preferred_time}
             </span>
             {booking.preferred_provider && <span>· {booking.preferred_provider}</span>}
           </div>
