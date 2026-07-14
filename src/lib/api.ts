@@ -418,5 +418,8 @@ export function logAudit(action: string, resource_type: string, resource_id?: st
 export const getPcps = (q?: string) =>
   apiFetch<any[]>(`/api/pcps${q ? `?q=${encodeURIComponent(q)}` : ''}`)
 
+export const getFamilyPcps = () =>
+  familyApiFetch<any[]>('/api/pcps')
+
 export const addPcp = (body: { name: string; fax_number?: string; aliases?: string[]; state?: string }) =>
   apiFetch<any>('/api/pcps', { method: 'POST', body: JSON.stringify(body) })

@@ -32,6 +32,7 @@ export interface Child {
   medical_history: string | null
   preferred_pharmacy: string | null
   pcp: string | null
+  pcp_id: string | null
   created_at: string
 }
 

@@ -2,7 +2,25 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-async function verifyToken(authHeader: string | undefined): Promise<string> {
+async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
+  const token = authHeader.slice(7)
+  const region = process.env.VITE_AWS_REGION || 'us-east-2'
+  const familyPoolId = process.env.VITE_FAMILY_USER_POOL_ID || ''
+  if (familyPoolId) {
+    try {
+      const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${familyPoolId}/.well-known/jwks.json`))
+      const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${familyPoolId}` })
+      if (payload.sub) return
+    } catch {}
+  }
+  const userPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
+  const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
+  const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
+  if (!payload.sub) throw new Error('No sub in token')
+}
+
+async function verifyProviderToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
   const region     = process.env.VITE_AWS_REGION || 'us-east-2'
@@ -14,7 +32,7 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try { await verifyToken(req.headers.authorization) } catch {
+  try { await verifyAnyToken(req.headers.authorization) } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -48,8 +66,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(rows)
   }
 
-  // POST — add a new PCP to the directory (admin only)
+  // POST — add a new PCP to the directory (provider only)
   if (req.method === 'POST') {
+    try { await verifyProviderToken(req.headers.authorization) } catch {
+      return res.status(403).json({ error: 'Providers only' })
+    }
     const { name, aliases, fax_number, state } = req.body ?? {}
     if (!name) return res.status(400).json({ error: 'name is required' })
 

@@ -14,6 +14,7 @@ import {
   updateChild,
   familyInvokeNotifications,
   invokeCharmAppointment,
+  getFamilyPcps,
 } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
@@ -56,6 +57,8 @@ interface ChildIntake {
   medicalHistory: string
   preferredPharmacy: string
   pcp: string
+  pcp_id: string | null
+  pcpNoPcp: boolean
   vaccinationStatus: string
   phiSharingConsent: boolean
   // Per-appointment (every booking)
@@ -174,7 +177,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     selfPay: false,
     allergies: child?.allergies || 'NKDA', currentMedications: child?.current_medications || 'None',
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
-    pcp: child?.pcp || '', vaccinationStatus: 'fully_vaccinated',
+    pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false, vaccinationStatus: 'fully_vaccinated',
     phiSharingConsent: false,
     chiefComplaint: '', additionalInfo: '', textVisitPhotos: [],
   }
@@ -870,6 +873,7 @@ export function BookVisit() {
           insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
           preferred_pharmacy: intake.preferredPharmacy || null,
           pcp: intake.pcp || null,
+          pcp_id: intake.pcp_id || null,
         }
         if (!intake.hasProfile) {
           Object.assign(update, {
@@ -1169,6 +1173,10 @@ export function BookVisit() {
                   onSelfPayChange={val => setBooking(b => ({
                     ...b,
                     childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], selfPay: val } },
+                  }))}
+                  onPcpChange={(pcpId, pcpNoPcp) => setBooking(b => ({
+                    ...b,
+                    childIntakes: { ...b.childIntakes, [c.id]: { ...b.childIntakes[c.id], pcp_id: pcpId, pcpNoPcp } },
                   }))}
                 />
               )
@@ -1982,13 +1990,14 @@ function compressToJpeg(file: File): Promise<string> {
 
 // ─── Child intake form section ─────────────────────────────────────────────────
 
-function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange, onSelfPayChange }: {
+function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange, onSelfPayChange, onPcpChange }: {
   intake: ChildIntake
   visitType: string
   onChange: (field: keyof ChildIntake, value: string) => void
   onConsentChange: (val: boolean) => void
   onPhotosChange: (photos: string[]) => void
   onSelfPayChange: (val: boolean) => void
+  onPcpChange: (pcpId: string | null, pcpNoPcp: boolean) => void
 }) {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
@@ -1997,6 +2006,21 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [photoUploading, setPhotoUploading] = useState<number | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [pcpList, setPcpList] = useState<any[]>([])
+  const [pcpSearch, setPcpSearch] = useState('')
+  const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
+  const [pcpSelectedName, setPcpSelectedName] = useState<string | null>(null)
+
+  useEffect(() => {
+    getFamilyPcps().then(setPcpList).catch(() => {})
+  }, [])
+
+  const filteredPcps = pcpSearch.trim()
+    ? pcpList.filter(p =>
+        p.name.toLowerCase().includes(pcpSearch.toLowerCase()) ||
+        (p.aliases || []).some((a: string) => a.toLowerCase().includes(pcpSearch.toLowerCase()))
+      )
+    : pcpList
 
   async function uploadVisitPhoto(file: File, slot: number) {
     setPhotoUploading(slot)
@@ -2165,12 +2189,63 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
 
       {/* Pharmacy & PCP — shown for existing patients missing these fields */}
-      {intake.hasProfile && (!intake.preferredPharmacy || !intake.pcp) && (
+      {intake.hasProfile && (!intake.preferredPharmacy || (!intake.pcp_id && !intake.pcpNoPcp)) && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Health providers</p>
           <div className="space-y-3">
-            <Input label="Preferred pharmacy — include full address" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
-            <Input label="Primary care physician — include practice name & address" placeholder="e.g. Dr. Smith, Charlotte Pediatrics, 456 Park Rd, Charlotte, NC 28209" value={intake.pcp} onChange={e => onChange('pcp', e.target.value)} />
+            {!intake.preferredPharmacy && (
+              <Input label="Preferred pharmacy — include full address" placeholder="e.g. CVS, 123 Main St, Charlotte, NC 28078" value={intake.preferredPharmacy} onChange={e => onChange('preferredPharmacy', e.target.value)} />
+            )}
+            {!intake.pcp_id && !intake.pcpNoPcp && (
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care physician</label>
+                {intake.pcp_id ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
+                    <span className="text-[13px] text-[#085041] font-medium">{pcpSelectedName}</span>
+                    <button onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#999] hover:text-[#333]"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      value={pcpSearch}
+                      onChange={e => { setPcpSearch(e.target.value); setPcpDropdownOpen(true) }}
+                      onFocus={() => setPcpDropdownOpen(true)}
+                      placeholder="Search by practice name…"
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white"
+                    />
+                    {pcpDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {filteredPcps.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              onPcpChange(p.id, false)
+                              setPcpSelectedName(p.name)
+                              setPcpSearch('')
+                              setPcpDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F5F4FF] border-b border-[#F0F0EE] last:border-0"
+                          >
+                            <div className="font-medium text-[#1A1A2E]">{p.name}</div>
+                            {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
+                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic"
+                        >
+                          My child does not currently have a PCP
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
