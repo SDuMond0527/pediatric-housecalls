@@ -16,15 +16,6 @@ interface Props {
   onSent: () => void
 }
 
-type ExplanationType = 'deductible' | 'coinsurance' | 'copay'
-
-interface Explanation {
-  type: ExplanationType
-  applied?: string
-  paid?: string
-  responsibility?: string
-  copayAmount?: string
-}
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -62,8 +53,6 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [priorBalance, setPriorBalance] = useState('')
   const [totalAmountDue, setTotalAmountDue] = useState('')
 
-  // Explanations
-  const [explanations, setExplanations] = useState<Explanation[]>([])
 
   useEffect(() => {
     async function load() {
@@ -114,7 +103,6 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     setRemainingBalance(stmt.remaining_balance ?? '')
     setPriorBalance(stmt.prior_balance ?? '')
     setTotalAmountDue(stmt.total_amount_due ?? '')
-    setExplanations(stmt.explanations ?? [])
   }
 
   function buildPayload() {
@@ -137,7 +125,6 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
       remaining_balance: remainingBalance,
       prior_balance: priorBalance,
       total_amount_due: totalAmountDue,
-      explanations,
     }
   }
 
@@ -200,19 +187,6 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     }
   }
 
-  function toggleExplanation(type: ExplanationType) {
-    setExplanations(prev => {
-      const exists = prev.find(e => e.type === type)
-      if (exists) return prev.filter(e => e.type !== type)
-      return [...prev, { type }]
-    })
-  }
-
-  function updateExplanation(type: ExplanationType, field: string, value: string) {
-    setExplanations(prev =>
-      prev.map(e => e.type === type ? { ...e, [field]: value } : e)
-    )
-  }
 
   const isSent = statement?.status === 'sent'
   const canSend = !!(patientEmail || patientPhone)
@@ -382,156 +356,6 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 </div>
               </div>
 
-              {/* Section 4: Explanation Messages */}
-              <div>
-                <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-1">Explanation Messages</div>
-                <p className="text-[12px] text-[#999] mb-3">Select all that apply to include in the statement.</p>
-                <div className="space-y-3">
-
-                  {/* Deductible */}
-                  {(() => {
-                    const active = explanations.find(e => e.type === 'deductible')
-                    return (
-                      <div className={`border rounded-xl p-3 transition-colors ${active ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4]'}`}>
-                        <label className="flex items-center gap-2 cursor-pointer" onClick={() => (editing || !statement) && toggleExplanation('deductible')}>
-                          <input
-                            type="checkbox"
-                            checked={!!active}
-                            onChange={() => (editing || !statement) && toggleExplanation('deductible')}
-                            className="accent-[#7F77DD]"
-                            disabled={!editing && !!statement}
-                          />
-                          <span className="text-[13px] font-medium text-[#1A1A2E]">Applied to deductible</span>
-                        </label>
-                        {active && (
-                          <div className="mt-2 ml-6">
-                            <label className={labelCls}>Amount applied to deductible</label>
-                            <div className="relative w-40">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className={`${inputCls} pl-6`}
-                                value={active.applied ?? ''}
-                                onChange={e => updateExplanation('deductible', 'applied', e.target.value)}
-                                disabled={!editing && !!statement}
-                                placeholder="0.00"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Coinsurance */}
-                  {(() => {
-                    const active = explanations.find(e => e.type === 'coinsurance')
-                    return (
-                      <div className={`border rounded-xl p-3 transition-colors ${active ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4]'}`}>
-                        <label className="flex items-center gap-2 cursor-pointer" onClick={() => (editing || !statement) && toggleExplanation('coinsurance')}>
-                          <input
-                            type="checkbox"
-                            checked={!!active}
-                            onChange={() => (editing || !statement) && toggleExplanation('coinsurance')}
-                            className="accent-[#7F77DD]"
-                            disabled={!editing && !!statement}
-                          />
-                          <span className="text-[13px] font-medium text-[#1A1A2E]">Co-insurance</span>
-                        </label>
-                        {active && (
-                          <div className="mt-2 ml-6 grid grid-cols-2 gap-3">
-                            <div>
-                              <label className={labelCls}>Insurance paid</label>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className={`${inputCls} pl-6`}
-                                  value={active.paid ?? ''}
-                                  onChange={e => updateExplanation('coinsurance', 'paid', e.target.value)}
-                                  disabled={!editing && !!statement}
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className={labelCls}>Co-insurance amount</label>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className={`${inputCls} pl-6`}
-                                  value={active.responsibility ?? ''}
-                                  onChange={e => updateExplanation('coinsurance', 'responsibility', e.target.value)}
-                                  disabled={!editing && !!statement}
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Copay */}
-                  {(() => {
-                    const active = explanations.find(e => e.type === 'copay')
-                    return (
-                      <div className={`border rounded-xl p-3 transition-colors ${active ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4]'}`}>
-                        <label className="flex items-center gap-2 cursor-pointer" onClick={() => (editing || !statement) && toggleExplanation('copay')}>
-                          <input
-                            type="checkbox"
-                            checked={!!active}
-                            onChange={() => (editing || !statement) && toggleExplanation('copay')}
-                            className="accent-[#7F77DD]"
-                            disabled={!editing && !!statement}
-                          />
-                          <span className="text-[13px] font-medium text-[#1A1A2E]">Co-pay</span>
-                        </label>
-                        {active && (
-                          <div className="mt-2 ml-6 grid grid-cols-2 gap-3">
-                            <div>
-                              <label className={labelCls}>Insurance paid</label>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className={`${inputCls} pl-6`}
-                                  value={active.paid ?? ''}
-                                  onChange={e => updateExplanation('copay', 'paid', e.target.value)}
-                                  disabled={!editing && !!statement}
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className={labelCls}>Co-pay amount</label>
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className={`${inputCls} pl-6`}
-                                  value={active.copayAmount ?? ''}
-                                  onChange={e => updateExplanation('copay', 'copayAmount', e.target.value)}
-                                  disabled={!editing && !!statement}
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                </div>
-              </div>
             </>
           )}
         </div>
