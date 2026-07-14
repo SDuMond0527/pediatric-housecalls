@@ -63,7 +63,10 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
           setStatement(stmt)
           populateFromStatement(stmt)
         } else {
-          // No statement yet — pre-fill from ERA if already received
+          // No statement yet — pre-fill contact from family profile
+          if (claim.family_email) setPatientEmail(claim.family_email)
+          if (claim.family_phone) setPatientPhone(claim.family_phone)
+          // Pre-fill financial fields from ERA if already received
           if (claim.era_received_at) {
             if (claim.amount_billed_era != null)        setAmountBilled(String(claim.amount_billed_era))
             if (claim.insurance_payment_era != null)    setInsurancePayment(String(claim.insurance_payment_era))

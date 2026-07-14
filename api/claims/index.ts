@@ -92,18 +92,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (status) {
       const rows = await sql`
-        SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name
+        SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+          fp.email AS family_email, fp.phone AS family_phone
         FROM claims cl
         LEFT JOIN children c ON c.id = cl.child_id
+        LEFT JOIN family_profiles fp ON fp.id = c.family_id
         WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
         ORDER BY cl.created_at DESC`
       return res.json(rows)
     }
 
     const rows = await sql`
-      SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name
+      SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+        fp.email AS family_email, fp.phone AS family_phone
       FROM claims cl
       LEFT JOIN children c ON c.id = cl.child_id
+      LEFT JOIN family_profiles fp ON fp.id = c.family_id
       WHERE cl.practice_id = ${practiceId}::uuid
       ORDER BY cl.created_at DESC`
     return res.json(rows)
