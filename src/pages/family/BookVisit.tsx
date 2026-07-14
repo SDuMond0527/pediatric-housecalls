@@ -1989,6 +1989,34 @@ function compressToJpeg(file: File): Promise<string> {
   })
 }
 
+function PcpAddForm({ name, onNameChange, adding, onAdd, onCancel }: {
+  name: string; onNameChange: (v: string) => void
+  adding: boolean; onAdd: () => void; onCancel: () => void
+}) {
+  return (
+    <div className="space-y-2">
+      <input
+        autoFocus
+        value={name}
+        onChange={e => onNameChange(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') onAdd() }}
+        placeholder="Enter practice name"
+        className="w-full px-3 py-2.5 border border-[#7F77DD] rounded-lg text-[14px] outline-none focus:ring-2 focus:ring-[#7F77DD]/10 bg-white"
+      />
+      <div className="flex gap-2">
+        <button type="button" onClick={onAdd} disabled={adding || !name.trim()}
+          className="flex-1 py-2 bg-[#7F77DD] text-white text-[13px] font-medium rounded-lg hover:bg-[#6B63C9] disabled:opacity-50 transition-colors">
+          {adding ? 'Adding…' : 'Add practice'}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="px-4 py-2 text-[13px] text-[#999] hover:text-[#555] border border-[#E8E8E4] rounded-lg">
+          Back
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Child intake form section ─────────────────────────────────────────────────
 
 function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, onPhotosChange, onSelfPayChange, onPcpChange }: {
@@ -2012,6 +2040,8 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
   const [pcpSelectedName, setPcpSelectedName] = useState<string | null>(null)
   const [pcpAdding, setPcpAdding] = useState(false)
+  const [pcpAddFormOpen, setPcpAddFormOpen] = useState(false)
+  const [pcpAddName, setPcpAddName] = useState('')
   const pcpInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -2169,6 +2199,21 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                     <span className="text-[13px] text-[#999] italic">No PCP</span>
                     <button type="button" onClick={() => onPcpChange(null, false)} className="text-[#999] hover:text-[#333] text-[11px]">Change</button>
                   </div>
+                ) : pcpAddFormOpen ? (
+                  <PcpAddForm name={pcpAddName} onNameChange={setPcpAddName} adding={pcpAdding}
+                    onAdd={async () => {
+                      if (!pcpAddName.trim()) return
+                      setPcpAdding(true)
+                      try {
+                        const newPcp = await familyAddPcp(pcpAddName.trim())
+                        setPcpList(prev => [...prev, newPcp])
+                        onPcpChange(newPcp.id, false)
+                        setPcpSelectedName(newPcp.name)
+                        setPcpAddFormOpen(false)
+                        setPcpAddName('')
+                      } catch {} finally { setPcpAdding(false) }
+                    }}
+                    onCancel={() => { setPcpAddFormOpen(false); setPcpDropdownOpen(true) }} />
                 ) : (
                   <div className="relative">
                     <input
@@ -2191,7 +2236,12 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                         ))}
                         <button type="button" onMouseDown={e => e.preventDefault()}
                           onClick={async () => {
-                            if (!pcpSearch.trim()) { pcpInputRef.current?.focus(); return }
+                            if (!pcpSearch.trim()) {
+                              setPcpAddName('')
+                              setPcpAddFormOpen(true)
+                              setPcpDropdownOpen(false)
+                              return
+                            }
                             setPcpAdding(true)
                             try {
                               const newPcp = await familyAddPcp(pcpSearch.trim())
@@ -2260,6 +2310,22 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       {intake.hasProfile && !intake.pcp_id && !intake.pcpNoPcp && (
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Primary care physician</p>
+          {pcpAddFormOpen ? (
+            <PcpAddForm name={pcpAddName} onNameChange={setPcpAddName} adding={pcpAdding}
+              onAdd={async () => {
+                if (!pcpAddName.trim()) return
+                setPcpAdding(true)
+                try {
+                  const newPcp = await familyAddPcp(pcpAddName.trim())
+                  setPcpList(prev => [...prev, newPcp])
+                  onPcpChange(newPcp.id, false)
+                  setPcpSelectedName(newPcp.name)
+                  setPcpAddFormOpen(false)
+                  setPcpAddName('')
+                } catch {} finally { setPcpAdding(false) }
+              }}
+              onCancel={() => { setPcpAddFormOpen(false); setPcpDropdownOpen(true) }} />
+          ) : (
           <div className="relative">
             <input
               value={pcpSearch}
@@ -2280,7 +2346,12 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 ))}
                 <button type="button" onMouseDown={e => e.preventDefault()}
                   onClick={async () => {
-                    if (!pcpSearch.trim()) { pcpInputRef.current?.focus(); return }
+                    if (!pcpSearch.trim()) {
+                      setPcpAddName('')
+                      setPcpAddFormOpen(true)
+                      setPcpDropdownOpen(false)
+                      return
+                    }
                     setPcpAdding(true)
                     try {
                       const newPcp = await familyAddPcp(pcpSearch.trim())
@@ -2302,6 +2373,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
               </div>
             )}
           </div>
+          )}
         </div>
       )}
       {intake.hasProfile && intake.pcp_id && (
