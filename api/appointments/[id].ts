@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { notifySlotOpened } from '../_lib/notifySlotOpened'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -33,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as { id: string }
   const { status, after_visit_instructions } = req.body
 
-  let row: any
+  let row: unknown
   if (status !== undefined && after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET status=${status}, after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
@@ -43,23 +42,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } else {
     return res.status(400).json({ error: 'No valid fields' })
   }
-
-  // When an appointment is cancelled, notify waitlisted families in the same zone.
-  // Must await before res.json() — Vercel kills async work after the response is sent.
-  if (status === 'cancelled' && row?.zone && row?.scheduled_date && row?.scheduled_time && row?.provider_id) {
-    try {
-      await notifySlotOpened({
-        practiceId,
-        providerId: row.provider_id,
-        zone: row.zone,
-        visitType: row.visit_type || 'In-home sick visit',
-        date: typeof row.scheduled_date === 'string' ? row.scheduled_date.split('T')[0] : row.scheduled_date,
-        scheduledTime: row.scheduled_time,
-      })
-    } catch (err: any) {
-      console.error('[appointments] notifySlotOpened failed:', err?.message)
-    }
-  }
-
   res.json(row)
 }

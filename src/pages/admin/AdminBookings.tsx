@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { XCircle, Clock, ChevronDown } from 'lucide-react'
 import { format } from 'date-fns'
-import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds } from '../../lib/api'
+import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds, invokeNotifications } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import type { BookingRequest, FamilyProfile } from '../../types/family'
@@ -47,6 +47,33 @@ export function AdminBookings() {
   async function cancelBooking(id: string) {
     await updateBookingRequest(id, { status: 'cancelled' })
     fetchBookings()
+
+    const booking = bookings.find(b => b.id === id)
+    if (booking) {
+      // Notify provider + family of admin cancellation
+      if (booking.confirmed_provider_id) {
+        invokeNotifications({
+          type: 'booking_cancelled',
+          providerId: booking.confirmed_provider_id,
+          visitType: booking.visit_type,
+          date: booking.preferred_date,
+          time: booking.preferred_time,
+          zone: booking.zone || '',
+          familyName: booking.family?.display_name || booking.family?.email || 'A family',
+        }).catch(() => {})
+      }
+      // Notify waitlisted families in the same zone that the slot opened
+      if (booking.confirmed_provider_id && booking.zone) {
+        invokeNotifications({
+          type: 'slot_opened',
+          providerId: booking.confirmed_provider_id,
+          zone: booking.zone,
+          visitType: booking.visit_type,
+          date: booking.preferred_date,
+          time: booking.preferred_time,
+        }).catch(() => {})
+      }
+    }
   }
 
   return (
