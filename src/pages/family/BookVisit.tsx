@@ -346,7 +346,7 @@ export function BookVisit() {
         const res = await fetch('/api/convenience-fee', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: prov.id, appointmentAddress: booking.visitAddress, date: booking.date, time: to24hr(booking.time), visitType: booking.visitType }),
+          body: JSON.stringify({ providerId: prov.id, appointmentAddress: booking.visitAddress, date: booking.date, time: to24hr(booking.time), visitType: booking.visitType, state: booking.state }),
         })
         const data = res.ok ? await res.json() : null
         if (data?.ok) setConvFee({ fee: data.fee, code: data.code, basis: data.basis })

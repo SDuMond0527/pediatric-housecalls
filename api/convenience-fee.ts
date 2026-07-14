@@ -61,10 +61,10 @@ async function getDrivingMiles(origin: string, destination: string): Promise<num
 
 // ── Fee calculation ───────────────────────────────────────────────────────────
 
-function calculateFee(miles: number, dateStr: string, time24: string, visitType: string): { fee: number; code: string } {
+function calculateFee(miles: number, dateStr: string, time24: string, visitType: string, state?: string): { fee: number; code: string } {
   if (visitType === 'In-home IV fluids') return { fee: 150, code: 'IV-flat' }
   if (visitType === 'CMA + telemedicine') return { fee: 50, code: 'CMA-flat' }
-  if (isMajorHoliday(dateStr)) return { fee: 200, code: 'CV13' }
+  if (isMajorHoliday(dateStr)) return state === 'VA' ? { fee: 200, code: 'VACV10' } : { fee: 200, code: 'CV13' }
 
   const date = new Date(dateStr + 'T12:00:00')
   const dow = date.getDay()
@@ -72,6 +72,25 @@ function calculateFee(miles: number, dateStr: string, time24: string, visitType:
   const [h] = time24.split(':').map(Number)
   const isPeakHours = h >= 8 && h < 15
 
+  if (state === 'VA') {
+    if (isWeekend) {
+      if (miles < 5)   return { fee: 125, code: 'VACV7' }
+      if (miles <= 15) return { fee: 150, code: 'VACV8' }
+      return { fee: 175, code: 'VACV9' }
+    }
+    if (isPeakHours) {
+      if (miles < 2)   return { fee: 50,  code: 'VACV11' }
+      if (miles < 5)   return { fee: 75,  code: 'VACV1' }
+      if (miles <= 15) return { fee: 100, code: 'VACV2' }
+      return { fee: 150, code: 'VACV3' }
+    }
+    // Off-peak weekday
+    if (miles < 5)   return { fee: 100, code: 'VACV4' }
+    if (miles <= 15) return { fee: 125, code: 'VACV5' }
+    return { fee: 150, code: 'VACV6' }
+  }
+
+  // NC / SC (default)
   if (isWeekend) {
     if (miles < 2)   return { fee: 100, code: 'CV9' }
     if (miles < 5)   return { fee: 125, code: 'CV10' }
@@ -97,11 +116,13 @@ function calculateFee(miles: number, dateStr: string, time24: string, visitType:
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
-  const { providerId, appointmentAddress, date, time, visitType } = req.body
+  const { providerId, appointmentAddress, date, time, visitType, state } = req.body
 
   if (!providerId || !appointmentAddress || !date || !time || !visitType) {
     return res.status(400).json({ ok: false, error: 'Missing required fields' })
   }
+
+  const isVA = state === 'VA'
 
   // Flat fees — no distance needed
   if (visitType === 'In-home IV fluids') {
@@ -114,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json({ ok: true, fee: 0, code: 'CPR-no-fee', basis: 'No convenience fee for CPR classes' })
   }
   if (isMajorHoliday(date)) {
-    return res.json({ ok: true, fee: 200, code: 'CV13', basis: 'Major holiday flat rate' })
+    return res.json({ ok: true, fee: 200, code: isVA ? 'VACV10' : 'CV13', basis: 'Major holiday flat rate' })
   }
 
   if (!GOOGLE_MAPS_API_KEY) {
@@ -159,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: false, error: 'Could not calculate distance' })
     }
 
-    const { fee, code } = calculateFee(miles, date, time, visitType)
+    const { fee, code } = calculateFee(miles, date, time, visitType, state)
     const basis = priorAppts.length
       ? 'Based on distance from prior appointment'
       : "Based on distance from provider's home"
