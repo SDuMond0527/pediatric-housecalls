@@ -230,7 +230,8 @@ export function AdminClaims() {
               {reviewClaims.map(c => {
                 const isOpen = expanded === c.id
                 const ep = editPayer[c.id]
-                const missingPayer = !c.payer_id
+                const isSelfPay = c.payer_name?.toLowerCase().includes('self')
+                const missingPayer = !c.payer_id && !isSelfPay
                 const isError = c.status === 'error'
                 const stediError = (() => {
                   if (!c.submission_error) return null
@@ -254,6 +255,11 @@ export function AdminClaims() {
                             {isError ? (
                               <span className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1">
                                 <AlertCircle size={11} /> Submission failed — click to retry
+                              </span>
+                            ) : isSelfPay ? (
+                              <span className="text-[12px] text-[#555]">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#F1EFE8] text-[#555] mr-1.5">Self-Pay</span>
+                                {fmtMoney(c.total_charge)}
                               </span>
                             ) : missingPayer ? (
                               <span className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1">
@@ -644,12 +650,18 @@ export function AdminClaims() {
                               Test claim
                             </Button>
                           </div>
-                          <Button variant="teal"
-                            loading={submitting === c.id}
-                            disabled={!!submitting || missingPayer}
-                            onClick={() => handleSubmit(c.id)}>
-                            <Send size={13} className="mr-1.5" /> Submit to insurance
-                          </Button>
+                          {isSelfPay ? (
+                            <Button variant="teal" onClick={() => setStatementClaim(c)}>
+                              <Receipt size={13} className="mr-1.5" /> Generate patient statement
+                            </Button>
+                          ) : (
+                            <Button variant="teal"
+                              loading={submitting === c.id}
+                              disabled={!!submitting || missingPayer}
+                              onClick={() => handleSubmit(c.id)}>
+                              <Send size={13} className="mr-1.5" /> Submit to insurance
+                            </Button>
+                          )}
                         </div>
                       </div>
                     )}
