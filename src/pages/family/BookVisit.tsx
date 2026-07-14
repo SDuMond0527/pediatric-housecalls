@@ -302,6 +302,15 @@ export function BookVisit() {
       .catch(() => setIvZoneProviders([]))
   }, [booking.zone, booking.state, booking.visitType])
 
+  // When zipToZone loads async (after mount), initialize zone if zip was pre-filled but zone is still empty
+  useEffect(() => {
+    if (booking.zip.length === 5 && !booking.zone && zipToZone[booking.zip]) {
+      const zone = zipToZone[booking.zip]
+      const st = zipToState[booking.zip] || booking.state
+      setBooking(b => ({ ...b, zone, state: st }))
+    }
+  }, [zipToZone])
+
   useEffect(() => {
     if (booking.provider === '__first_available__') {
       if (booking.date) findFirstAvailable(booking.date)
@@ -1366,7 +1375,7 @@ export function BookVisit() {
               className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
           </div>
 
-          {booking.date && (() => {
+          {booking.date && (isCpr || isTelemedicine(booking.visitType) || (booking.zip.length === 5 && booking.zone && !waitlistZones.includes(booking.zone) && regularZoneProviders.length > 0)) && (() => {
             const availableSlots = (slotsChecking || allSlotsBooked) ? [] : getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).filter(slot => {
               const [t, ampm] = slot.split(' ')
               let [h, m] = t.split(':').map(Number)
