@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { generateClaimForNote } from '../_lib/generateClaim'
 
 const PRACTICE_NAME = process.env.PRACTICE_NAME || 'Pediatric House Calls PLLC'
 const PRACTICE_PHONE = process.env.PRACTICE_PHONE || ''
@@ -217,6 +218,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (signing && row?.child_id) {
       try { await faxNoteToPcp(row, practiceId, sql) }
       catch (err: any) { console.error('[fax] PCP fax failed:', err?.message) }
+    }
+    if (signing && row?.id) {
+      try { await generateClaimForNote(sql, row.id, practiceId) }
+      catch (err: any) { console.error('[claim] Auto-generation failed:', err?.message) }
     }
     return res.json(row)
   }
