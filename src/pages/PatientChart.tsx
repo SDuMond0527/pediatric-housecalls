@@ -1155,8 +1155,10 @@ export function PatientChart() {
                                     <div className="text-[#5a9e6f]">
                                       Faxed to {note.pcp_fax_name || 'PCP'} on {format(new Date(note.pcp_faxed_at), 'MMM d, yyyy h:mm a')}
                                     </div>
+                                  ) : note.is_signed && note.pcp_fax_name ? (
+                                    <div className="text-[#b08020]">Fax to {note.pcp_fax_name} pending</div>
                                   ) : note.is_signed && (
-                                    <div className="text-[#bbb]">Fax pending or no PCP on file</div>
+                                    <div className="text-[#bbb]">No PCP on file</div>
                                   )}
                                 </div>
                               )}

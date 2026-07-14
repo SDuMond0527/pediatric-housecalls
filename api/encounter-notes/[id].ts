@@ -99,9 +99,13 @@ async function faxNoteToPcp(note: any, practiceId: string, sql: any): Promise<vo
 
   const html = buildNoteHtml(note, child, { name: child.pcp_name, fax_number: child.pcp_fax }, provider, appt)
 
+  const toNum = toE164(child.pcp_fax)
+  const fromNum = toE164(fromNumber)
+  console.log(`[fax] Attempting: from=${fromNum} to=${toNum} pcp="${child.pcp_name}"`)
+
   const form = new FormData()
-  form.append('to', toE164(child.pcp_fax))
-  form.append('from', toE164(fromNumber))
+  form.append('to', toNum)
+  form.append('from', fromNum)
   form.append('file', new Blob([html], { type: 'text/html' }), 'note.html')
 
   const sinchRes = await fetch(
@@ -115,7 +119,9 @@ async function faxNoteToPcp(note: any, practiceId: string, sql: any): Promise<vo
     }
   )
 
-  const result = await sinchRes.json().catch(() => ({}))
+  const rawText = await sinchRes.text().catch(() => '')
+  let result: any = {}
+  try { result = JSON.parse(rawText) } catch {}
 
   if (sinchRes.ok) {
     await sql`
@@ -124,7 +130,7 @@ async function faxNoteToPcp(note: any, practiceId: string, sql: any): Promise<vo
     `
     console.log(`[fax] Sent note ${note.id} to ${child.pcp_name} (${child.pcp_fax}) — Sinch fax id: ${result.id}`)
   } else {
-    console.error('[fax] Sinch error:', JSON.stringify(result))
+    console.error(`[fax] Sinch error ${sinchRes.status}:`, rawText)
   }
 }
 
