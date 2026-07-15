@@ -39,8 +39,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!updates.length) return res.status(400).json({ error: 'No valid fields' })
 
-  const zones  = b.zones  !== undefined ? JSON.stringify(b.zones)  : null
-  const states = b.states !== undefined ? JSON.stringify(b.states) : null
+  const toTextArray = (arr: string[]) => '{' + arr.map(s => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}'
+  const zones  = b.zones  !== undefined ? toTextArray(b.zones  as string[]) : null
+  const states = b.states !== undefined ? toTextArray(b.states as string[]) : null
 
   const [row] = await sql`
     UPDATE providers SET
@@ -48,8 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       secure_text_number = CASE WHEN ${b.secure_text_number !== undefined} THEN ${b.secure_text_number ?? null} ELSE secure_text_number END,
       home_address       = CASE WHEN ${b.home_address !== undefined} THEN ${b.home_address ?? null} ELSE home_address       END,
       email              = CASE WHEN ${b.email !== undefined} THEN ${b.email ?? null}              ELSE email              END,
-      zones              = CASE WHEN ${b.zones !== undefined} THEN ${zones}::jsonb               ELSE zones              END,
-      states             = CASE WHEN ${b.states !== undefined} THEN ${states}::jsonb              ELSE states             END,
+      zones              = CASE WHEN ${b.zones !== undefined} THEN ${zones}::text[]              ELSE zones              END,
+      states             = CASE WHEN ${b.states !== undefined} THEN ${states}::text[]             ELSE states             END,
       npi                = CASE WHEN ${b.npi !== undefined} THEN ${b.npi ?? null}                ELSE npi                END,
       taxonomy_code      = CASE WHEN ${b.taxonomy_code !== undefined} THEN ${b.taxonomy_code ?? null} ELSE taxonomy_code  END
     WHERE id = ${id}::uuid
