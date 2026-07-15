@@ -80,7 +80,7 @@ function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): Vi
 
 export function Availability() {
   const { provider } = useAuth()
-  const isAdmin = provider?.role === 'admin'
+  const isAdmin = !!provider?.is_admin
   const { visitTypes, byType } = usePracticeVisitTypes()
 
   // Admin provider picker
@@ -91,7 +91,7 @@ export function Availability() {
   useEffect(() => {
     if (!isAdmin) return
     getProviders().then((rows: any[]) => {
-      const active = rows.filter((p: any) => p.role !== 'admin' && p.is_active !== false)
+      const active = rows.filter((p: any) => !p.is_admin && p.is_active !== false)
         .sort((a: any, b: any) => a.name.localeCompare(b.name))
       setAllProviders(active)
       if (active.length > 0) setSelectedProviderId(active[0].id)
