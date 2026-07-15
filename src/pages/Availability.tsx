@@ -5,7 +5,7 @@ import {
   eachDayOfInterval, getDay, addMonths, subMonths, isToday, isBefore, startOfDay,
 } from 'date-fns'
 import {
-  getAvailability, saveAvailabilityDays, upsertAvailabilityOverride, deleteAvailabilityOverride,
+  getAvailability, upsertAvailabilityOverride, deleteAvailabilityOverride,
   createZoneRestriction, deleteZoneRestriction,
   createTimeBlock, deleteTimeBlock,
   upsertVisitTypeAvailability,
@@ -14,9 +14,8 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
-import { DEFAULT_AVAILABILITY, DAYS_OF_WEEK } from '../lib/constants'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
-import type { Availability, ZoneRestriction, TimeBlock } from '../types'
+import type { ZoneRestriction, TimeBlock } from '../types'
 
 interface AvailabilityOverride {
   id: string
@@ -98,7 +97,6 @@ export function Availability() {
     }).catch(() => {})
   }, [isAdmin])
 
-  const [avail, setAvail] = useState<Availability[]>([])
   const [visitTypeAvail, setVisitTypeAvail] = useState<VisitTypeAvail[]>([])
   const [zoneRestrictions, setZoneRestrictions] = useState<ZoneRestriction[]>([])
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
@@ -125,9 +123,7 @@ export function Availability() {
 
   useEffect(() => {
     if (!viewingProviderId) return
-    getAvailability(viewingProviderId).then(({ days, overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
-      if (days && days.length > 0) setAvail(days as Availability[])
-      else setAvail(DEFAULT_AVAILABILITY.map(d => ({ ...d, id: '', provider_id: viewingProviderId })))
+    getAvailability(viewingProviderId).then(({ overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
       setSavedVisitTypes((saved ?? []) as VisitTypeAvail[])
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
       setTimeBlocks((tb ?? []) as TimeBlock[])
@@ -146,14 +142,6 @@ export function Availability() {
     setVisitTypeAvail(merged)
   }, [viewingProviderId, visitTypes, savedVisitTypes])
 
-  function toggleDay(i: number) {
-    setAvail(prev => prev.map((a, idx) => idx === i ? { ...a, is_active: !a.is_active } : a))
-  }
-
-  function updateTime(i: number, field: 'start_time' | 'end_time', val: string) {
-    setAvail(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: fmt12to24(val) } : a))
-  }
-
   function toggleVisitType(visitType: string) {
     setVisitTypeAvail(prev => prev.map(v =>
       v.visit_type === visitType ? { ...v, is_active: !v.is_active } : v
@@ -164,8 +152,6 @@ export function Availability() {
     if (!viewingProviderId) return
     setSaving(true)
     try {
-      await saveAvailabilityDays(viewingProviderId, avail)
-
       const rows = visitTypeAvail.map(v => ({
         id: v.id ?? undefined,
         provider_id: viewingProviderId,
@@ -314,41 +300,6 @@ export function Availability() {
       </div>
 
       <div className="p-6 space-y-5 max-w-2xl">
-
-        {/* WORKING HOURS BY DAY */}
-        <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
-          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Working hours by day</div>
-          <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Set your working hours for each day. Toggle a day off to mark yourself unavailable.</p>
-          <div className="space-y-2">
-            {avail.map((a, i) => (
-              <div key={i} className="border border-[#E8E8E4] rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[14px] font-medium text-[#1A1A2E]">{DAYS_OF_WEEK[a.day_of_week]}</span>
-                  <button onClick={() => toggleDay(i)}
-                    className={`w-9 h-5 rounded-full relative transition-colors ${a.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
-                    <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${a.is_active ? 'left-[18px]' : 'left-0.5'}`} />
-                  </button>
-                </div>
-                {a.is_active ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] text-[#555]">From</span>
-                    <select value={fmt24to12(a.start_time)} onChange={e => updateTime(i, 'start_time', e.target.value)}
-                      className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                      {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                    <span className="text-[12px] text-[#555]">to</span>
-                    <select value={fmt24to12(a.end_time)} onChange={e => updateTime(i, 'end_time', e.target.value)}
-                      className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                      {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="text-[13px] text-[#999]">Not available this day</div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* VISIT TYPE AVAILABILITY */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
