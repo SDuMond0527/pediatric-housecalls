@@ -161,16 +161,17 @@ export function Availability() {
     setVisitTypeAvail(merged)
   }, [viewingProviderId, visitTypes, savedVisitTypes])
 
-  // Filter out on-call visit types for MD/PNP
-  function isOnCallType(visitType: string) {
-    const config = byType[visitType]
-    const label = (config?.badge_label ?? visitType).toLowerCase()
-    return visitType === 'CMA + telemedicine' || label.includes('screening')
-  }
-
   function visibleVisitTypes() {
     const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
-    return visitTypeAvail.filter(v => !(isMdOrPnp && isOnCallType(v.visit_type)))
+    return visitTypeAvail.filter(v => {
+      const config = byType[v.visit_type]
+      // Hide on-call types from MD/PNP (handled by on-call schedule instead)
+      const label = (config?.badge_label ?? v.visit_type).toLowerCase()
+      if (isMdOrPnp && (v.visit_type === 'CMA + telemedicine' || label.includes('screening'))) return false
+      // Hide visit types whose allowed_roles doesn't include this provider's role
+      if (config?.allowed_roles && viewingProviderRole && !config.allowed_roles.includes(viewingProviderRole)) return false
+      return true
+    })
   }
 
   function toggleVisitType(visitType: string) {
