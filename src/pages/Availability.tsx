@@ -83,9 +83,12 @@ export function Availability() {
   const { visitTypes, byType } = usePracticeVisitTypes()
 
   // Admin provider picker
-  const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
+  const [allProviders, setAllProviders] = useState<{ id: string; name: string; role: string }[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const viewingProviderId = isAdmin ? selectedProviderId : (provider?.id ?? '')
+  const viewingProviderRole = isAdmin
+    ? (allProviders.find(p => p.id === selectedProviderId)?.role ?? '')
+    : (provider?.role ?? '')
 
   useEffect(() => {
     if (!isAdmin) return
@@ -322,7 +325,9 @@ export function Availability() {
             Toggle on the visit types you offer, and optionally restrict the hours you're available for each type.
           </p>
           <div className="space-y-2">
-            {visitTypeAvail.map(v => {
+            {visitTypeAvail.filter(v =>
+              !(v.visit_type === 'CMA + telemedicine' && (viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'))
+            ).map(v => {
               const config = byType[v.visit_type]
               return (
                 <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3">
