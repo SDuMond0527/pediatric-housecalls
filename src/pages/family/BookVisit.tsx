@@ -440,7 +440,6 @@ export function BookVisit() {
   // Checks day-of-week availability and date-specific overrides.
   async function getProviderDayWindow(providerId: string, date: string): Promise<{ start: string; end: string } | null> {
     const sched = await getSchedulingData(providerId, { date })
-    const dayAvail = sched?.availability
     const override = sched?.override
     if (override) {
       if (!override.is_available) return null
