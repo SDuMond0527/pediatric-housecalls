@@ -36,6 +36,8 @@ interface VisitTypeAvail {
   end_time: string
 }
 
+const DEFAULT_START = '08:00'
+const DEFAULT_END = '17:00'
 
 const ALL_TIMES: string[] = (() => {
   const times: string[] = []
@@ -66,14 +68,18 @@ function fmt12to24(t: string) {
   return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`
 }
 
+function isNonDefaultHours(start: string, end: string) {
+  return start.slice(0, 5) !== DEFAULT_START || end.slice(0, 5) !== DEFAULT_END
+}
+
 function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): VisitTypeAvail[] {
   return visitTypeNames.map(vt => ({
     id: null,
     provider_id: providerId,
     visit_type: vt,
     is_active: true,
-    start_time: '08:00',
-    end_time: '17:00',
+    start_time: DEFAULT_START,
+    end_time: DEFAULT_END,
   }))
 }
 
@@ -101,6 +107,7 @@ export function Availability() {
   }, [isAdmin])
 
   const [visitTypeAvail, setVisitTypeAvail] = useState<VisitTypeAvail[]>([])
+  const [vtRestrictedTypes, setVtRestrictedTypes] = useState<Set<string>>(new Set())
   const [zoneRestrictions, setZoneRestrictions] = useState<ZoneRestriction[]>([])
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
   const [overrides, setOverrides] = useState<AvailabilityOverride[]>([])
@@ -109,10 +116,12 @@ export function Availability() {
   const [savingOverride, setSavingOverride] = useState(false)
   const [zoneModal, setZoneModal] = useState(false)
   const [blockModal, setBlockModal] = useState(false)
+  const [vtRestModal, setVtRestModal] = useState(false)
   const [overrideModal, setOverrideModal] = useState(false)
   const [overrideDateView, setOverrideDateView] = useState<'list' | 'calendar'>('calendar')
   const [calMonth, setCalMonth] = useState(() => new Date())
   const [newZone, setNewZone] = useState({ zone: '', start: '8:00 AM', end: '12:00 PM' })
+  const [newVtRest, setNewVtRest] = useState({ visit_type: '', start: '8:00 AM', end: '5:00 PM' })
   const [newBlock, setNewBlock] = useState<{
     label: string; blockType: 'recurring' | 'date'
     days: string; time_range: string
@@ -131,7 +140,10 @@ export function Availability() {
   useEffect(() => {
     if (!viewingProviderId) return
     getAvailability(viewingProviderId).then(({ overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
-      setSavedVisitTypes((saved ?? []) as VisitTypeAvail[])
+      const savedVt = (saved ?? []) as VisitTypeAvail[]
+      setSavedVisitTypes(savedVt)
+      // Any saved entry with non-default hours is an explicit hour restriction
+      setVtRestrictedTypes(new Set(savedVt.filter(v => isNonDefaultHours(v.start_time, v.end_time)).map(v => v.visit_type)))
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
       setTimeBlocks((tb ?? []) as TimeBlock[])
       setOverrides(((ov ?? []) as any[]).map(o => ({ ...o, date: (o.date as string).split('T')[0] })) as AvailabilityOverride[])
@@ -149,16 +161,41 @@ export function Availability() {
     setVisitTypeAvail(merged)
   }, [viewingProviderId, visitTypes, savedVisitTypes])
 
+  // Filter out on-call visit types for MD/PNP
+  function isOnCallType(visitType: string) {
+    const config = byType[visitType]
+    const label = (config?.badge_label ?? visitType).toLowerCase()
+    return visitType === 'CMA + telemedicine' || label.includes('screening')
+  }
+
+  function visibleVisitTypes() {
+    const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
+    return visitTypeAvail.filter(v => !(isMdOrPnp && isOnCallType(v.visit_type)))
+  }
+
   function toggleVisitType(visitType: string) {
     setVisitTypeAvail(prev => prev.map(v =>
       v.visit_type === visitType ? { ...v, is_active: !v.is_active } : v
     ))
   }
 
-  function updateVisitTypeTime(visitType: string, field: 'start_time' | 'end_time', val: string) {
+  function addVtRestriction() {
+    if (!newVtRest.visit_type) return
+    const start = fmt12to24(newVtRest.start)
+    const end = fmt12to24(newVtRest.end)
     setVisitTypeAvail(prev => prev.map(v =>
-      v.visit_type === visitType ? { ...v, [field]: fmt12to24(val) } : v
+      v.visit_type === newVtRest.visit_type ? { ...v, start_time: start, end_time: end } : v
     ))
+    setVtRestrictedTypes(prev => new Set([...prev, newVtRest.visit_type]))
+    setVtRestModal(false)
+    setNewVtRest({ visit_type: '', start: '8:00 AM', end: '5:00 PM' })
+  }
+
+  function removeVtRestriction(visitType: string) {
+    setVisitTypeAvail(prev => prev.map(v =>
+      v.visit_type === visitType ? { ...v, start_time: DEFAULT_START, end_time: DEFAULT_END } : v
+    ))
+    setVtRestrictedTypes(prev => { const s = new Set(prev); s.delete(visitType); return s })
   }
 
   async function save() {
@@ -243,14 +280,12 @@ export function Availability() {
         note: newOverride.note || null,
       }
       await upsertAvailabilityOverride(viewingProviderId, payload)
-      // Re-fetch from server; normalize date format (Neon may return full ISO timestamp)
       const fresh = await getAvailability(viewingProviderId)
       const normalized = (fresh.overrides ?? []).map((o: any) => ({
         ...o,
         date: (o.date as string).split('T')[0],
       }))
       setOverrides(normalized as AvailabilityOverride[])
-      // Navigate calendar to show the saved date's month
       setCalMonth(new Date(savedDate + 'T12:00:00'))
       setOverrideDateView('calendar')
       setOverrideModal(false)
@@ -269,7 +304,6 @@ export function Availability() {
 
   const upcomingOverrides = overrides.filter(o => !isPast(parseISO(o.date)))
   const pastOverrides = overrides.filter(o => isPast(parseISO(o.date)))
-
   const overrideByDate = Object.fromEntries(overrides.map(o => [o.date, o]))
 
   function openOverrideForDate(dateStr: string) {
@@ -290,6 +324,9 @@ export function Availability() {
 
   const calDays = eachDayOfInterval({ start: startOfMonth(calMonth), end: endOfMonth(calMonth) })
   const calStartPad = getDay(calDays[0])
+
+  // Visit types available for adding a restriction (active, not already restricted, not on-call types for MD/PNP)
+  const vtRestOptions = visibleVisitTypes().filter(v => v.is_active && !vtRestrictedTypes.has(v.visit_type))
 
   return (
     <div>
@@ -318,53 +355,65 @@ export function Availability() {
 
       <div className="p-6 space-y-5 max-w-2xl">
 
-        {/* VISIT TYPE AVAILABILITY */}
+        {/* VISIT TYPES OFFERED */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
-          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Visit type–specific hours</div>
+          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Visit types offered</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
-            Toggle on the visit types you offer, and optionally restrict the hours you're available for each type.
+            Toggle on the visit types you offer. Hit "Save changes" to update.
           </p>
           <div className="space-y-2">
-            {visitTypeAvail.filter(v => {
-              const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
-              const config = byType[v.visit_type]
-              const label = (config?.badge_label ?? v.visit_type).toLowerCase()
-              const isOnCallType = v.visit_type === 'CMA + telemedicine' || label.includes('screening')
-              return !(isMdOrPnp && isOnCallType)
-            }).map(v => {
+            {visibleVisitTypes().map(v => {
               const config = byType[v.visit_type]
               return (
-                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="text-[12px] font-medium px-2.5 py-1 rounded-full"
-                      style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
-                    >
-                      {config?.badge_label ?? v.visit_type}
-                    </span>
-                    <button onClick={() => toggleVisitType(v.visit_type)}
-                      className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
-                      <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
-                    </button>
-                  </div>
-                  {v.is_active && (
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-[12px] text-[#555]">Hours:</span>
-                      <select value={fmt24to12(v.start_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'start_time', e.target.value)}
-                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                        {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                      <span className="text-[12px] text-[#555]">to</span>
-                      <select value={fmt24to12(v.end_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'end_time', e.target.value)}
-                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                        {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  )}
+                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span
+                    className="text-[12px] font-medium px-2.5 py-1 rounded-full"
+                    style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
+                  >
+                    {config?.badge_label ?? v.visit_type}
+                  </span>
+                  <button onClick={() => toggleVisitType(v.visit_type)}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
+                    <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
                 </div>
               )
             })}
           </div>
+        </div>
+
+        {/* VISIT TYPE–SPECIFIC HOURS */}
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
+          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Visit type–specific hours</div>
+          <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
+            Restrict the hours you're available for a specific visit type (e.g. telemedicine only mornings).
+          </p>
+          <div className="space-y-2">
+            {visibleVisitTypes().filter(v => vtRestrictedTypes.has(v.visit_type)).map(v => {
+              const config = byType[v.visit_type]
+              return (
+                <div key={v.visit_type} className="flex items-center gap-2 p-3 bg-[#FAFAF8] rounded-lg flex-wrap">
+                  <span
+                    className="text-[12px] font-medium px-2.5 py-1 rounded-full"
+                    style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
+                  >
+                    {config?.badge_label ?? v.visit_type}
+                  </span>
+                  <span className="text-[12px] text-[#555]">only</span>
+                  <span className="text-[13px] font-medium text-[#1A1A2E]">{fmt24to12(v.start_time)} – {fmt24to12(v.end_time)}</span>
+                  <button onClick={() => removeVtRestriction(v.visit_type)} className="ml-auto p-1 rounded hover:bg-[#FCEBEB] text-[#999] hover:text-[#791F1F]"><X size={13} /></button>
+                </div>
+              )
+            })}
+          </div>
+          <Button variant="secondary" size="sm" className="mt-3"
+            disabled={vtRestOptions.length === 0}
+            onClick={() => {
+              setNewVtRest({ visit_type: vtRestOptions[0]?.visit_type ?? '', start: '8:00 AM', end: '5:00 PM' })
+              setVtRestModal(true)
+            }}>
+            <Plus size={13} /> Add visit type restriction
+          </Button>
         </div>
 
         {/* ZONE-HOUR CUSTOMIZATIONS */}
@@ -409,12 +458,12 @@ export function Availability() {
           </Button>
         </div>
 
-        {/* DATE-SPECIFIC OVERRIDES */}
+        {/* AVAILABILITY CALENDAR */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <CalendarDays size={16} className="text-[#7F77DD]" />
-              <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Date-specific availability</div>
+              <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Availability calendar</div>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex rounded-lg border border-[#E8E8E4] overflow-hidden">
@@ -440,13 +489,12 @@ export function Availability() {
             </div>
           </div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
-            Set custom hours or mark yourself unavailable for specific dates. These override your weekly schedule.
+            Your master schedule. Set the dates and hours you're working — mark dates off when you're unavailable.
           </p>
 
           {/* CALENDAR VIEW */}
           {overrideDateView === 'calendar' && (
             <div>
-              {/* Month navigation */}
               <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={() => setCalMonth(m => subMonths(m, 1))}
@@ -465,7 +513,6 @@ export function Availability() {
                 </button>
               </div>
 
-              {/* Day-of-week headers */}
               <div className="grid grid-cols-7 mb-1">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                   <div key={d} className="text-center text-[11px] font-semibold text-[#999] uppercase tracking-wider py-1">
@@ -474,9 +521,7 @@ export function Availability() {
                 ))}
               </div>
 
-              {/* Calendar grid */}
               <div className="grid grid-cols-7 gap-1">
-                {/* Leading empty cells */}
                 {Array.from({ length: calStartPad }).map((_, i) => (
                   <div key={`pad-${i}`} />
                 ))}
@@ -499,7 +544,7 @@ export function Availability() {
                         : 'bg-[#E1F5EE] border-[#5DCAA5] hover:bg-[#C8EFE1]'
                       subText = override.start_time && override.end_time
                         ? `${fmt24to12(override.start_time).replace(' AM','a').replace(' PM','p')} – ${fmt24to12(override.end_time).replace(' AM','a').replace(' PM','p')}`
-                        : 'Available'
+                        : 'Working'
                       subColor = 'text-[#085041]'
                     } else {
                       cellBg = past
@@ -540,11 +585,10 @@ export function Availability() {
                 })}
               </div>
 
-              {/* Legend */}
               <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#E8E8E4]">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-[#E1F5EE] border border-[#5DCAA5]" />
-                  <span className="text-[11px] text-[#555]">Custom hours</span>
+                  <span className="text-[11px] text-[#555]">Working</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-[#FCEBEB] border border-[#F09595]" />
@@ -556,7 +600,7 @@ export function Availability() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-white border border-[#E8E8E4]" />
-                  <span className="text-[11px] text-[#555]">Weekly schedule</span>
+                  <span className="text-[11px] text-[#555]">Not set</span>
                 </div>
               </div>
             </div>
@@ -567,7 +611,7 @@ export function Availability() {
             <div>
               {upcomingOverrides.length === 0 && pastOverrides.length === 0 && (
                 <div className="text-center py-6 text-[#999] text-[13px]">
-                  No date overrides set. Your weekly schedule applies to all dates.
+                  No dates set yet. Use "Add date" to build your schedule.
                 </div>
               )}
 
@@ -583,9 +627,9 @@ export function Availability() {
                               {format(parseISO(o.date), 'EEEE, MMMM d, yyyy')}
                             </span>
                             {o.is_available ? (
-                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1D9E75] text-white font-medium">Available</span>
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1D9E75] text-white font-medium">Working</span>
                             ) : (
-                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#791F1F] text-white font-medium">Unavailable</span>
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#791F1F] text-white font-medium">Off</span>
                             )}
                           </div>
                           {o.is_available && o.start_time && o.end_time && (
@@ -615,7 +659,7 @@ export function Availability() {
                           {format(parseISO(o.date), 'MMMM d, yyyy')} ·{' '}
                           {o.is_available && o.start_time && o.end_time
                             ? `${fmt24to12(o.start_time)} – ${fmt24to12(o.end_time)}`
-                            : 'Unavailable'}
+                            : 'Off'}
                         </div>
                         <button onClick={() => removeOverride(o.id)} className="p-1 text-[#999] hover:text-[#555]"><X size={12} /></button>
                       </div>
@@ -628,6 +672,7 @@ export function Availability() {
         </div>
       </div>
 
+      {/* ZONE RESTRICTION MODAL */}
       <Modal open={zoneModal} onClose={() => setZoneModal(false)} title="Add zone restriction" size="sm">
         <div className="space-y-4">
           <div>
@@ -658,6 +703,43 @@ export function Availability() {
         </div>
       </Modal>
 
+      {/* VISIT TYPE RESTRICTION MODAL */}
+      <Modal open={vtRestModal} onClose={() => setVtRestModal(false)} title="Add visit type restriction" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+            <select value={newVtRest.visit_type} onChange={e => setNewVtRest(p => ({ ...p, visit_type: e.target.value }))}
+              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+              {vtRestOptions.map(v => {
+                const config = byType[v.visit_type]
+                return <option key={v.visit_type} value={v.visit_type}>{config?.badge_label ?? v.visit_type}</option>
+              })}
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">From</label>
+              <select value={newVtRest.start} onChange={e => setNewVtRest(p => ({ ...p, start: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">To</label>
+              <select value={newVtRest.end} onChange={e => setNewVtRest(p => ({ ...p, end: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="secondary" size="sm" onClick={() => setVtRestModal(false)}>Cancel</Button>
+            <Button variant="primary" size="sm" disabled={!newVtRest.visit_type} onClick={addVtRestriction}>Add restriction</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* TIME BLOCK MODAL */}
       <Modal open={blockModal} onClose={() => setBlockModal(false)} title="Add time block" size="sm">
         <div className="space-y-4">
           <div>
@@ -729,7 +811,8 @@ export function Availability() {
         </div>
       </Modal>
 
-      <Modal open={overrideModal} onClose={() => setOverrideModal(false)} title="Set date-specific availability" size="sm">
+      {/* DATE OVERRIDE MODAL */}
+      <Modal open={overrideModal} onClose={() => setOverrideModal(false)} title="Set availability for date" size="sm">
         <div className="space-y-4">
           <div>
             <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
@@ -740,15 +823,15 @@ export function Availability() {
           </div>
 
           <div>
-            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Availability</label>
+            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Status</label>
             <div className="flex gap-2">
               <button onClick={() => setNewOverride(p => ({ ...p, is_available: true }))}
                 className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${newOverride.is_available ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#085041]' : 'border-[#E8E8E4] text-[#555]'}`}>
-                Available
+                Working
               </button>
               <button onClick={() => setNewOverride(p => ({ ...p, is_available: false }))}
                 className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${!newOverride.is_available ? 'border-[#F09595] bg-[#FCEBEB] text-[#791F1F]' : 'border-[#E8E8E4] text-[#555]'}`}>
-                Unavailable
+                Off
               </button>
             </div>
           </div>
