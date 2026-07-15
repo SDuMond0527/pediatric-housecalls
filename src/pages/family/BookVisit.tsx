@@ -439,20 +439,15 @@ export function BookVisit() {
   // Returns the provider's effective working window for a date, or null if they're off.
   // Checks day-of-week availability and date-specific overrides.
   async function getProviderDayWindow(providerId: string, date: string): Promise<{ start: string; end: string } | null> {
-    const dayOfWeek = new Date(date + 'T12:00:00').getDay()
     const sched = await getSchedulingData(providerId, { date })
     const dayAvail = sched?.availability
     const override = sched?.override
     if (override) {
       if (!override.is_available) return null
-      return { start: override.start_time || dayAvail?.start_time || '08:00', end: override.end_time || dayAvail?.end_time || '17:00' }
+      return { start: override.start_time || '08:00', end: override.end_time || '17:00' }
     }
-    if (!dayAvail) {
-      // No schedule row → weekends off by default, weekdays on
-      return (dayOfWeek === 0 || dayOfWeek === 6) ? null : { start: '08:00', end: '17:00' }
-    }
-    if (!dayAvail.is_active) return null
-    return { start: dayAvail.start_time, end: dayAvail.end_time }
+    // No calendar entry = not working that day
+    return null
   }
 
   async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
