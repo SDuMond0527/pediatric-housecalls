@@ -6,7 +6,7 @@ import {
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
-  chargeCard, apiFetch, getOnCallSchedule,
+  chargeCard, apiFetch, getOnCallSchedule, getCmaSchedule,
 } from '../lib/api'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,6 +22,14 @@ function to12h(time24: string): string {
   if (isNaN(h) || isNaN(m)) return time24
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+function t(time24: string): string {
+  const [h, m] = time24.split(':').map(Number)
+  if (isNaN(h)) return time24
+  const ampm = h >= 12 ? 'pm' : 'am'
+  const h12 = h % 12 || 12
+  return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`
 }
 
 function parseTime(raw: string): string {
@@ -164,7 +172,8 @@ export function Today() {
   }
 
   // On-call schedule
-  const [onCallEntries, setOnCallEntries] = useState<Array<{ date: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string; provider_id: string }>>([])
+  const [onCallEntries, setOnCallEntries] = useState<Array<{ date: string; state: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string; provider_id: string }>>([])
+  const [cmaSchedule, setCmaSchedule] = useState<Record<string, any[]>>({})
 
   // Schedule blocks
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
@@ -201,9 +210,9 @@ export function Today() {
     if (!provider) return
     getProviders({ exclude_admin: 'true' })
       .then((data) => setAllProviders((data ?? []) as { id: string; name: string }[]))
-    getOnCallSchedule({ start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') })
-      .then(rows => setOnCallEntries((rows ?? []) as any[]))
-      .catch(() => {})
+    const rangeParams = { start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') }
+    getOnCallSchedule(rangeParams).then(rows => setOnCallEntries((rows ?? []) as any[])).catch(() => {})
+    getCmaSchedule(rangeParams).then(setCmaSchedule).catch(() => {})
   }, [provider])
 
   async function fetchCharmDetails(appt: Appointment) {
@@ -532,35 +541,63 @@ export function Today() {
                           {state === 'NC' ? 'North Carolina' : 'South Carolina'}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                          {stateEntries.map((e: any) => (
+                          {stateEntries.map((e: any) => {
+                            const dayCmas = (cmaSchedule[e.date] ?? []).filter((c: any) => (c.states ?? []).includes(state))
+                            return (
                             <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
                               <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
                                 {format(new Date(e.date + 'T12:00:00'), 'EEE M/d')}
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-medium flex-shrink-0"
                                   style={{ background: e.avatar_color, color: e.avatar_text_color }}>
                                   {e.initials}
                                 </div>
-                                <span className="text-[12px] font-medium text-[#1A1A2E] truncate">{e.provider_name}</span>
+                                <span className="text-[11px] font-medium text-[#1A1A2E] truncate">{e.provider_name.split(' ').slice(-1)[0]}</span>
                               </div>
+                              {dayCmas.length > 0 && (
+                                <div className="text-[10px] text-[#999]">
+                                  {dayCmas.map((c: any) => `${c.name.split(' ')[0]} ${t(c.start_time)}–${t(c.end_time)}`).join(', ')}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )
                   })}
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {myEntries.map((e: any) => (
-                    <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8] flex items-center gap-2">
-                      <span className="text-[10px] font-semibold text-[#7F77DD]">{e.state}</span>
-                      <span className="text-[13px] font-medium text-[#1A1A2E]">
-                        {format(new Date(e.date + 'T12:00:00'), 'EEE, MMM d')}
-                      </span>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {myEntries.map((e: any) => {
+                    const dayCmas = (cmaSchedule[e.date] ?? []).filter((c: any) => (c.states ?? []).includes(e.state))
+                    return (
+                      <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2.5 border border-[#DDDAF8]">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-[10px] font-semibold text-[#7F77DD] bg-[#EEEDFE] px-1.5 py-0.5 rounded">{e.state}</span>
+                          <span className="text-[13px] font-medium text-[#1A1A2E]">
+                            {format(new Date(e.date + 'T12:00:00'), 'EEE, MMM d')}
+                          </span>
+                        </div>
+                        {dayCmas.length === 0 ? (
+                          <div className="text-[11px] text-[#CCC] italic">No CMA scheduled</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {dayCmas.map((c: any) => (
+                              <div key={c.provider_id} className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-medium flex-shrink-0"
+                                  style={{ background: c.avatar_color, color: c.avatar_text_color }}>
+                                  {c.initials}
+                                </div>
+                                <span className="text-[11px] text-[#555]">{c.name.split(' ')[0]} · {t(c.start_time)}–{t(c.end_time)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -115,6 +115,14 @@ function to12h(time24: string): string {
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
 }
 
+function t(time24: string): string {
+  const [h, m] = time24.split(':').map(Number)
+  if (isNaN(h)) return time24
+  const ampm = h >= 12 ? 'pm' : 'am'
+  const h12 = h % 12 || 12
+  return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`
+}
+
 export function AdminSchedule() {
   const { zipToZone } = usePracticeZones()
   const { visitTypes, byType } = usePracticeVisitTypes()
@@ -126,6 +134,8 @@ export function AdminSchedule() {
   // On-call schedule — keyed by `${date}::${state}`
   const [onCallEntries, setOnCallEntries] = useState<Record<string, { id: string; provider_id: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string }>>({})
   const [onCallSaving, setOnCallSaving] = useState<string | null>(null)
+  // CMA schedule — keyed by date, value is array of working CMAs
+  const [cmaSchedule, setCmaSchedule] = useState<Record<string, any[]>>({})
 
   const onCallDays = Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), 'yyyy-MM-dd'))
   const mdProviders = providers.filter(p => p.role !== 'CMA' && p.role !== 'RN')
@@ -164,12 +174,14 @@ export function AdminSchedule() {
 
   useEffect(() => {
     getProviders().then(data => setProviders((data ?? []) as Provider[])).catch(() => {})
-    getOnCallSchedule({ start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') })
+    const rangeParams = { start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') }
+    getOnCallSchedule(rangeParams)
       .then(rows => {
         const map: typeof onCallEntries = {}
         for (const r of rows) map[`${r.date}::${r.state}`] = r
         setOnCallEntries(map)
       }).catch(() => {})
+    getCmaSchedule(rangeParams).then(setCmaSchedule).catch(() => {})
   }, [])
 
   async function saveOnCall(date: string, state: string, providerId: string) {
@@ -380,24 +392,33 @@ export function AdminSchedule() {
                   const entry = onCallEntries[key]
                   const label = format(new Date(date + 'T12:00:00'), 'EEE M/d')
                   const isSaving = onCallSaving === key
+                  const dayCmas = (cmaSchedule[date] ?? []).filter((c: any) => (c.states ?? []).includes(state))
+                  const noCma = dayCmas.length === 0
                   return (
-                    <div key={date} className="border border-[#E8E8E4] rounded-lg p-2.5 bg-white">
+                    <div key={date} className={`border rounded-lg p-2.5 ${noCma ? 'bg-[#FAFAF8] border-[#E8E8E4]' : 'bg-white border-[#E8E8E4]'}`}>
                       <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">{label}</div>
-                      {entry && (
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
-                            style={{ background: entry.avatar_color, color: entry.avatar_text_color }}>
-                            {entry.initials}
-                          </div>
-                          <span className="text-[11px] font-medium text-[#1A1A2E] truncate">{entry.provider_name.split(' ').slice(-1)[0]}</span>
+                      {/* CMA working hours */}
+                      {noCma ? (
+                        <div className="text-[10px] text-[#CCC] italic mb-1.5">No CMA scheduled</div>
+                      ) : (
+                        <div className="mb-1.5 space-y-0.5">
+                          {dayCmas.map((c: any) => (
+                            <div key={c.provider_id} className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-medium flex-shrink-0"
+                                style={{ background: c.avatar_color, color: c.avatar_text_color }}>
+                                {c.initials}
+                              </div>
+                              <span className="text-[10px] text-[#555] truncate">{c.name.split(' ')[0]} {t(c.start_time)}–{t(c.end_time)}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                       <select
                         value={entry?.provider_id ?? ''}
-                        disabled={isSaving || stateProviders.length === 0}
+                        disabled={isSaving || stateProviders.length === 0 || noCma}
                         onChange={e => saveOnCall(date, state, e.target.value)}
                         className="w-full text-[11px] px-1.5 py-1 border border-[#E8E8E4] rounded bg-white outline-none focus:border-[#7F77DD] disabled:opacity-50">
-                        <option value="">Unassigned</option>
+                        <option value="">{noCma ? 'N/A' : 'Unassigned'}</option>
                         {stateProviders.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </div>
