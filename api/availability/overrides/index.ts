@@ -35,8 +35,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'Forbidden' })
   }
   const [row] = await sql`
-    INSERT INTO availability_overrides (practice_id, provider_id, date, is_available, start_time, end_time, note)
-    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})
+    INSERT INTO availability_overrides (provider_id, date, is_available, start_time, end_time, note)
+    VALUES (${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})
     ON CONFLICT (provider_id, date) DO UPDATE
     SET is_available=EXCLUDED.is_available, start_time=EXCLUDED.start_time, end_time=EXCLUDED.end_time, note=EXCLUDED.note
     RETURNING *`

@@ -160,12 +160,6 @@ export function Availability() {
     ))
   }
 
-  function updateVisitTypeTime(visitType: string, field: 'start_time' | 'end_time', val: string) {
-    setVisitTypeAvail(prev => prev.map(v =>
-      v.visit_type === visitType ? { ...v, [field]: fmt12to24(val) } : v
-    ))
-  }
-
   async function save() {
     if (!viewingProviderId) return
     setSaving(true)
@@ -360,41 +354,23 @@ export function Availability() {
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Availability by visit type</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
-            Set the hours you're available for each visit type within your working days. For example, you might only take virtual visits in the evenings.
+            Toggle on the visit types you offer. Use the calendar below to set your specific available dates and hours.
           </p>
           <div className="space-y-2">
             {visitTypeAvail.map(v => {
               const config = byType[v.visit_type]
               return (
-                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span
-                      className="text-[12px] font-medium px-2.5 py-1 rounded-full"
-                      style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
-                    >
-                      {config?.badge_label ?? v.visit_type}
-                    </span>
-                    <button onClick={() => toggleVisitType(v.visit_type)}
-                      className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
-                      <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
-                    </button>
-                  </div>
-                  {v.is_active ? (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[12px] text-[#555]">From</span>
-                      <select value={fmt24to12(v.start_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'start_time', e.target.value)}
-                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                        {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                      <span className="text-[12px] text-[#555]">to</span>
-                      <select value={fmt24to12(v.end_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'end_time', e.target.value)}
-                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
-                        {ALL_TIMES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="text-[13px] text-[#999]">Not offering this visit type</div>
-                  )}
+                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span
+                    className="text-[12px] font-medium px-2.5 py-1 rounded-full"
+                    style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
+                  >
+                    {config?.badge_label ?? v.visit_type}
+                  </span>
+                  <button onClick={() => toggleVisitType(v.visit_type)}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
+                    <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
                 </div>
               )
             })}

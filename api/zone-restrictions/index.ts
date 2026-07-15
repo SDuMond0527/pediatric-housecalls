@@ -31,8 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { provider_id, zone, start_time, end_time } = req.body
   const [row] = await sql`
-    INSERT INTO zone_restrictions (practice_id, provider_id, zone, start_time, end_time)
-    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${zone}, ${start_time}, ${end_time})
+    INSERT INTO zone_restrictions (provider_id, zone, start_time, end_time)
+    VALUES (${provider_id}::uuid, ${zone}, ${start_time}, ${end_time})
     RETURNING *`
   res.json(row)
 }
