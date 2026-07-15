@@ -25,11 +25,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
-  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  const providerRows = await sql`SELECT id, role, practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
+  const { id: callerId, role: callerRole, practice_id: practiceId } = providerRows[0] as { id: string; role: string; practice_id: string }
 
   const { provider_id, date, is_available, start_time, end_time, note } = req.body
+
+  if (callerRole !== 'admin' && callerId !== provider_id) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
   const [row] = await sql`
     INSERT INTO availability_overrides (practice_id, provider_id, date, is_available, start_time, end_time, note)
     VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${date}::date, ${is_available}, ${start_time ?? null}, ${end_time ?? null}, ${note ?? null})

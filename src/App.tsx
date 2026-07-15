@@ -22,7 +22,6 @@ import { AdminBookings } from './pages/admin/AdminBookings'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
-import { AdminAvailability } from './pages/admin/AdminAvailability'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
 import { AdminStatements } from './pages/admin/AdminStatements'
 import { AdminPcps } from './pages/admin/AdminPcps'
@@ -114,7 +113,7 @@ export default function App() {
                 <Route path="patients"        element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="providers"      element={<AdminProviders />} />
-                <Route path="availability"   element={<AdminAvailability />} />
+                <Route path="availability"   element={<Availability />} />
                 <Route path="provision"  element={<AdminProvision />} />
                 <Route path="settings"   element={<Settings />} />
                 <Route path="audit-log"   element={<AdminAuditLog />} />
