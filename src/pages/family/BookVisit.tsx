@@ -262,6 +262,7 @@ export function BookVisit() {
   const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
+  const [providersLoading, setProvidersLoading] = useState(false)
 
   const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
 
@@ -271,6 +272,7 @@ export function BookVisit() {
     const isTele = isTelemedicine(booking.visitType)
     if (isTele) {
       if (!booking.state) { setRegularZoneProviders([]); return }
+      setProvidersLoading(true)
       getProvidersByState(booking.state)
         .then(providers => setRegularZoneProviders(
           providers.map((p: any) => ({
@@ -279,39 +281,49 @@ export function BookVisit() {
           }))
         ))
         .catch(() => setRegularZoneProviders([]))
+        .finally(() => setProvidersLoading(false))
       return
     }
-    if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); setCmaProvidersForZone([]); setCmaAvailResult(null); return }
+    if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); setCmaProvidersForZone([]); setCmaAvailResult(null); setProvidersLoading(false); return }
+    setProvidersLoading(true)
+    const fetches: Promise<any>[] = []
     if (!isIv && !isCma) {
       const capturedZone = booking.zone
-      getProvidersByZone(capturedZone)
-        .then(providers => setRegularZoneProviders(
-          providers
-            .filter((p: any) => p.role !== 'RN' && p.role !== 'CMA')
-            .map((p: any) => ({
-              name: p.name, role: p.role, initials: p.initials,
-              color: p.avatar_color, textColor: p.avatar_text_color,
-            }))
-        ))
-        .catch(() => setRegularZoneProviders([]))
+      fetches.push(
+        getProvidersByZone(capturedZone)
+          .then(providers => setRegularZoneProviders(
+            providers
+              .filter((p: any) => p.role !== 'RN' && p.role !== 'CMA')
+              .map((p: any) => ({
+                name: p.name, role: p.role, initials: p.initials,
+                color: p.avatar_color, textColor: p.avatar_text_color,
+              }))
+          ))
+          .catch(() => setRegularZoneProviders([]))
+      )
       // Preload CMAs so we know immediately whether this is a CMA-only zone
       setCmaProvidersForZone([])
       setCmaAvailResult(null)
-      getProvidersByRole({ role: 'CMA', is_active: 'true', zone: capturedZone })
-        .then(rows => setCmaProvidersForZone((rows ?? []).map((r: any) => ({
-          name: r.name, role: r.role,
-          initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
-          color: r.avatar_color || '#EEEDFE',
-          textColor: r.avatar_text_color || '#3C3489',
-        }))))
-        .catch(() => {})
+      fetches.push(
+        getProvidersByRole({ role: 'CMA', is_active: 'true', zone: capturedZone })
+          .then(rows => setCmaProvidersForZone((rows ?? []).map((r: any) => ({
+            name: r.name, role: r.role,
+            initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
+            color: r.avatar_color || '#EEEDFE',
+            textColor: r.avatar_text_color || '#3C3489',
+          }))))
+          .catch(() => {})
+      )
     }
-    getProvidersByRole({ role: 'RN', is_active: 'true', zone: booking.zone })
-      .then(providers => setIvZoneProviders(providers.map((p: any) => ({
-        name: p.name, role: p.role, initials: p.initials,
-        color: p.avatar_color || '#E1F5EE', textColor: p.avatar_text_color || '#085041',
-      }))))
-      .catch(() => setIvZoneProviders([]))
+    fetches.push(
+      getProvidersByRole({ role: 'RN', is_active: 'true', zone: booking.zone })
+        .then(providers => setIvZoneProviders(providers.map((p: any) => ({
+          name: p.name, role: p.role, initials: p.initials,
+          color: p.avatar_color || '#E1F5EE', textColor: p.avatar_text_color || '#085041',
+        }))))
+        .catch(() => setIvZoneProviders([]))
+    )
+    Promise.all(fetches).finally(() => setProvidersLoading(false))
   }, [booking.zone, booking.state, booking.visitType])
 
   // When zipToZone loads async (after mount), initialize zone if zip was pre-filled but zone is still empty
@@ -1436,7 +1448,7 @@ export function BookVisit() {
           </div>
 
           {/* "We don't serve" banner */}
-          {booking.zip.length === 5 && !waitlistDone && !isTele &&
+          {booking.zip.length === 5 && !waitlistDone && !isTele && !providersLoading &&
            (!booking.zone || waitlistZones.includes(booking.zone) || (regularZoneProviders.length === 0 && cmaProvidersForZone.length === 0 && !(isIvFluids && ivZoneProviders.length > 0))) && (
             <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
               <div>
