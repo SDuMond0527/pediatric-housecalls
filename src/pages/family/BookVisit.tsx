@@ -1649,7 +1649,7 @@ export function BookVisit() {
                   </div>
                 )}
 
-                {cmaProvidersForZone.length > 0 && (
+                {cmaProvidersForZone.length > 0 && !isIvFluids && (
                   <div className={`${cmaOnlyZone ? 'w-full' : 'flex-1'} bg-[#E6F1FB] border border-[#A3C4E8] rounded-xl p-4 flex flex-col gap-3`}>
                     <div>
                       <p className="text-[13px] font-semibold text-[#0C447C]">CMA + telemedicine visit</p>
