@@ -128,7 +128,7 @@ export function AdminSchedule() {
   const [onCallSaving, setOnCallSaving] = useState<string | null>(null)
 
   const onCallDays = Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), 'yyyy-MM-dd'))
-  const mdProviders = providers.filter(p => !p.is_admin && p.role !== 'CMA' && p.role !== 'RN')
+  const mdProviders = providers.filter(p => p.role !== 'CMA' && p.role !== 'RN')
   const ncProviders = mdProviders.filter(p => (p.states as string[] | undefined)?.includes('NC'))
   const scProviders = mdProviders.filter(p => (p.states as string[] | undefined)?.includes('SC'))
   const [expanded, setExpanded] = useState<string | null>(null)
