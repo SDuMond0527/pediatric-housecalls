@@ -327,7 +327,9 @@ export function Availability() {
           <div className="space-y-2">
             {visitTypeAvail.filter(v => {
               const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
-              const isOnCallType = v.visit_type === 'CMA + telemedicine' || v.visit_type === 'IV fluids telemedicine screening'
+              const config = byType[v.visit_type]
+              const label = (config?.badge_label ?? v.visit_type).toLowerCase()
+              const isOnCallType = v.visit_type === 'CMA + telemedicine' || label.includes('screening')
               return !(isMdOrPnp && isOnCallType)
             }).map(v => {
               const config = byType[v.visit_type]
