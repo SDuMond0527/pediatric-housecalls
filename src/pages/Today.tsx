@@ -527,7 +527,7 @@ export function Today() {
               <div className="flex items-center gap-2 mb-3">
                 <Phone size={14} className="text-[#7F77DD]" />
                 <span className="text-[13px] font-semibold text-[#3C3489]">
-                  {isCma ? 'On-call telemedicine providers' : 'Your on-call days'}
+                  {isCma ? 'On-call telemedicine providers (CMA visits + IV fluids screening)' : 'Your on-call days (CMA visits + IV fluids screening)'}
                 </span>
               </div>
               {isCma ? (

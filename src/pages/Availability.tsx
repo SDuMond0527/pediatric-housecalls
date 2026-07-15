@@ -325,9 +325,11 @@ export function Availability() {
             Toggle on the visit types you offer, and optionally restrict the hours you're available for each type.
           </p>
           <div className="space-y-2">
-            {visitTypeAvail.filter(v =>
-              !(v.visit_type === 'CMA + telemedicine' && (viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'))
-            ).map(v => {
+            {visitTypeAvail.filter(v => {
+              const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
+              const isOnCallType = v.visit_type === 'CMA + telemedicine' || v.visit_type === 'IV fluids telemedicine screening'
+              return !(isMdOrPnp && isOnCallType)
+            }).map(v => {
               const config = byType[v.visit_type]
               return (
                 <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3">

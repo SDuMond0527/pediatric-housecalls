@@ -379,7 +379,7 @@ export function AdminSchedule() {
         <div className="flex items-center gap-2">
           <Phone size={14} className="text-[#7F77DD]" />
           <span className="text-[13px] font-semibold text-[#1A1A2E]">On-call telemedicine schedule</span>
-          <span className="text-[11px] text-[#999]">— assign one provider per state per day</span>
+          <span className="text-[11px] text-[#999]">— covers CMA + telemedicine and IV fluids telemedicine screening</span>
         </div>
         {(['NC', 'SC'] as const).map(state => {
           const stateProviders = state === 'NC' ? ncProviders : scProviders
