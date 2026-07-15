@@ -1443,7 +1443,7 @@ export function BookVisit() {
 
           {/* "We don't serve" banner */}
           {booking.zip.length === 5 && !waitlistDone && !isTele &&
-           (!booking.zone || waitlistZones.includes(booking.zone) || (regularZoneProviders.length === 0 && cmaProvidersForZone.length === 0)) && (
+           (!booking.zone || waitlistZones.includes(booking.zone) || (regularZoneProviders.length === 0 && cmaProvidersForZone.length === 0 && !(isIvFluids && ivZoneProviders.length > 0))) && (
             <div className="border border-[#FAC775] bg-[#FAEEDA] rounded-xl p-4 mb-4 space-y-3">
               <div>
                 <p className="text-[14px] font-semibold text-[#633806]">We don't currently serve zip code {booking.zip}.</p>
@@ -1481,8 +1481,18 @@ export function BookVisit() {
             </div>
           )}
 
-          {/* 3. Provider list */}
-          {zoneProviders.length > 0 && (
+          {/* 3a. Date picker — shown before provider for IV fluids */}
+          {isIvFluids && zoneProviders.length > 0 && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
+              <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
+                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
+                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+            </div>
+          )}
+
+          {/* 3b. Provider list */}
+          {zoneProviders.length > 0 && (!isIvFluids || booking.date) && (
             <div className="mb-5">
               <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Provider</p>
               <div className="space-y-2 mb-4">
@@ -1513,7 +1523,7 @@ export function BookVisit() {
                   </button>
                 )}
                 {zoneProviders.map(p => (
-                  <button key={p.name} onClick={() => { setFirstAvailResult(null); setBooking(b => ({ ...b, provider: p.name, time: '', date: '' })); }}
+                  <button key={p.name} onClick={() => { setFirstAvailResult(null); setBooking(b => ({ ...b, provider: p.name, time: '', ...(isIvFluids ? {} : { date: '' }) })); if (isIvFluids && booking.date) loadBookedTimes(p.name, booking.date) }}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === p.name ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-medium flex-shrink-0"
                       style={{ background: p.color, color: p.textColor }}>{p.initials}</div>
@@ -1548,8 +1558,8 @@ export function BookVisit() {
           )}
           </>}
 
-          {/* 4. Date picker — shown after provider is chosen (or CPR/telemedicine where provider is pre-set) */}
-          {(isCpr || isTelemedicine(booking.visitType) || booking.provider) && (
+          {/* 4. Date picker — shown after provider is chosen (IV fluids shows its own date picker above) */}
+          {!isIvFluids && (isCpr || isTelemedicine(booking.visitType) || booking.provider) && (
             <div className="mb-5">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
               <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
