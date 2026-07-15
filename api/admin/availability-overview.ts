@@ -28,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const [providers, availability, overrides] = await Promise.all([
     sql`SELECT id, name, role, initials, avatar_color, avatar_text_color FROM providers WHERE practice_id = ${practiceId}::uuid AND role != 'admin' ORDER BY name`,
-    sql`SELECT provider_id, day_of_week, is_active, start_time, end_time FROM availability WHERE practice_id = ${practiceId}::uuid ORDER BY day_of_week`,
-    sql`SELECT provider_id, date, is_available, start_time, end_time, note FROM availability_overrides WHERE practice_id = ${practiceId}::uuid AND date >= CURRENT_DATE AND date <= CURRENT_DATE + INTERVAL '60 days' ORDER BY date`,
+    sql`SELECT a.provider_id, a.day_of_week, a.is_active, a.start_time, a.end_time FROM availability a JOIN providers p ON p.id = a.provider_id WHERE p.practice_id = ${practiceId}::uuid ORDER BY a.day_of_week`,
+    sql`SELECT ao.provider_id, ao.date, ao.is_available, ao.start_time, ao.end_time, ao.note FROM availability_overrides ao JOIN providers p ON p.id = ao.provider_id WHERE p.practice_id = ${practiceId}::uuid AND ao.date >= CURRENT_DATE AND ao.date <= CURRENT_DATE + INTERVAL '60 days' ORDER BY ao.date`,
   ])
 
   res.json({ providers, availability, overrides })

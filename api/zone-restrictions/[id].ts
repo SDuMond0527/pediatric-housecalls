@@ -25,11 +25,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
-  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  const providerRows = await sql`SELECT id, is_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
+  const { id: callerId, is_admin: isAdmin } = providerRows[0] as { id: string; is_admin: boolean }
 
   const { id } = req.query as { id: string }
-  await sql`DELETE FROM zone_restrictions WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+  if (isAdmin) {
+    await sql`DELETE FROM zone_restrictions WHERE id = ${id}::uuid`
+  } else {
+    await sql`DELETE FROM zone_restrictions WHERE id = ${id}::uuid AND provider_id = ${callerId}::uuid`
+  }
   res.status(204).end()
 }
