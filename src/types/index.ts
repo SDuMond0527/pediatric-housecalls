@@ -56,6 +56,9 @@ export interface TimeBlock {
   label: string
   days: string
   time_range: string
+  date: string | null
+  start_time: string | null
+  end_time: string | null
 }
 
 export interface Broadcast {

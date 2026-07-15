@@ -110,7 +110,11 @@ export function Availability() {
   const [overrideDateView, setOverrideDateView] = useState<'list' | 'calendar'>('calendar')
   const [calMonth, setCalMonth] = useState(() => new Date())
   const [newZone, setNewZone] = useState({ zone: '', start: '8:00 AM', end: '12:00 PM' })
-  const [newBlock, setNewBlock] = useState({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
+  const [newBlock, setNewBlock] = useState<{
+    label: string; blockType: 'recurring' | 'date'
+    days: string; time_range: string
+    date: string; start: string; end: string
+  }>({ label: '', blockType: 'recurring', days: 'Mon–Fri', time_range: '3:30–4:00 PM', date: '', start: '8:00 AM', end: '5:00 PM' })
   const [newOverride, setNewOverride] = useState({
     date: '',
     is_available: true,
@@ -145,6 +149,12 @@ export function Availability() {
   function toggleVisitType(visitType: string) {
     setVisitTypeAvail(prev => prev.map(v =>
       v.visit_type === visitType ? { ...v, is_active: !v.is_active } : v
+    ))
+  }
+
+  function updateVisitTypeTime(visitType: string, field: 'start_time' | 'end_time', val: string) {
+    setVisitTypeAvail(prev => prev.map(v =>
+      v.visit_type === visitType ? { ...v, [field]: fmt12to24(val) } : v
     ))
   }
 
@@ -198,11 +208,15 @@ export function Availability() {
 
   async function addTimeBlock() {
     if (!viewingProviderId || !newBlock.label) return
+    if (newBlock.blockType === 'date' && !newBlock.date) return
     try {
-      const data = await createTimeBlock({ provider_id: viewingProviderId, ...newBlock })
+      const payload = newBlock.blockType === 'date'
+        ? { provider_id: viewingProviderId, label: newBlock.label, date: newBlock.date, start_time: fmt12to24(newBlock.start), end_time: fmt12to24(newBlock.end) }
+        : { provider_id: viewingProviderId, label: newBlock.label, days: newBlock.days, time_range: newBlock.time_range }
+      const data = await createTimeBlock(payload)
       if (data) setTimeBlocks(prev => [...prev, data as TimeBlock])
       setBlockModal(false)
-      setNewBlock({ label: '', days: 'Mon–Fri', time_range: '3:30–4:00 PM' })
+      setNewBlock({ label: '', blockType: 'recurring', days: 'Mon–Fri', time_range: '3:30–4:00 PM', date: '', start: '8:00 AM', end: '5:00 PM' })
     } catch (e) {
       alert('Failed to save time block: ' + (e instanceof Error ? e.message : 'Unknown error'))
     }
@@ -303,25 +317,41 @@ export function Availability() {
 
         {/* VISIT TYPE AVAILABILITY */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
-          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Availability by visit type</div>
+          <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Visit type–specific hours</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
-            Toggle on the visit types you offer. Use the calendar below to set your specific available dates and hours.
+            Toggle on the visit types you offer, and optionally restrict the hours you're available for each type.
           </p>
           <div className="space-y-2">
             {visitTypeAvail.map(v => {
               const config = byType[v.visit_type]
               return (
-                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3 flex items-center justify-between">
-                  <span
-                    className="text-[12px] font-medium px-2.5 py-1 rounded-full"
-                    style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
-                  >
-                    {config?.badge_label ?? v.visit_type}
-                  </span>
-                  <button onClick={() => toggleVisitType(v.visit_type)}
-                    className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
-                    <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
-                  </button>
+                <div key={v.visit_type} className="border border-[#E8E8E4] rounded-lg px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="text-[12px] font-medium px-2.5 py-1 rounded-full"
+                      style={{ background: config?.badge_color ?? '#F0F0EE', color: config?.badge_text_color ?? '#555' }}
+                    >
+                      {config?.badge_label ?? v.visit_type}
+                    </span>
+                    <button onClick={() => toggleVisitType(v.visit_type)}
+                      className={`w-9 h-5 rounded-full relative transition-colors ${v.is_active ? 'bg-[#1D9E75]' : 'bg-[#D0D0CC]'}`}>
+                      <span className={`absolute w-4 h-4 bg-white rounded-full top-0.5 transition-all shadow-sm ${v.is_active ? 'left-[18px]' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+                  {v.is_active && (
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[12px] text-[#555]">Hours:</span>
+                      <select value={fmt24to12(v.start_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'start_time', e.target.value)}
+                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
+                        {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      <span className="text-[12px] text-[#555]">to</span>
+                      <select value={fmt24to12(v.end_time)} onChange={e => updateVisitTypeTime(v.visit_type, 'end_time', e.target.value)}
+                        className="text-[13px] px-2 py-1 border border-[#E8E8E4] rounded-md font-sans">
+                        {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -350,11 +380,17 @@ export function Availability() {
         {/* TIME BLOCKS */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Time blocks</div>
-          <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Block specific times that should never be bookable (e.g. school pickup, recurring appointments).</p>
+          <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Block times that should never be bookable — either recurring (e.g. school pickup) or a one-time date.</p>
           <div className="space-y-2">
             {timeBlocks.map(b => (
               <div key={b.id} className="flex items-center justify-between bg-[#FCEBEB] border border-[#F09595] rounded-lg px-3 py-2.5">
-                <span className="text-[12px] text-[#791F1F]"><strong>{b.label}</strong> · {b.days} · {b.time_range}</span>
+                {b.date
+                  ? <span className="text-[12px] text-[#791F1F]">
+                      <strong>{b.label}</strong> · {format(parseISO(b.date.split('T')[0]), 'EEE MMM d')}
+                      {b.start_time && b.end_time ? ` · ${fmt24to12(b.start_time)} – ${fmt24to12(b.end_time)}` : ''}
+                    </span>
+                  : <span className="text-[12px] text-[#791F1F]"><strong>{b.label}</strong> · {b.days} · {b.time_range}</span>
+                }
                 <button onClick={() => removeBlock(b.id)} className="p-1 rounded hover:bg-[#F09595]/20 text-[#791F1F]"><X size={13} /></button>
               </div>
             ))}
@@ -621,18 +657,65 @@ export function Availability() {
               className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="e.g. School pickup" />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Days</label>
-            <input value={newBlock.days} onChange={e => setNewBlock(p => ({ ...p, days: e.target.value }))}
-              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="e.g. Mon–Fri" />
+            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Type</label>
+            <div className="flex gap-2">
+              <button onClick={() => setNewBlock(p => ({ ...p, blockType: 'recurring' }))}
+                className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${newBlock.blockType === 'recurring' ? 'border-[#1A1A2E] bg-[#1A1A2E] text-white' : 'border-[#E8E8E4] text-[#555]'}`}>
+                Recurring
+              </button>
+              <button onClick={() => setNewBlock(p => ({ ...p, blockType: 'date' }))}
+                className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${newBlock.blockType === 'date' ? 'border-[#1A1A2E] bg-[#1A1A2E] text-white' : 'border-[#E8E8E4] text-[#555]'}`}>
+                One-time date
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time range</label>
-            <input value={newBlock.time_range} onChange={e => setNewBlock(p => ({ ...p, time_range: e.target.value }))}
-              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="e.g. 3:30–4:00 PM" />
-          </div>
+          {newBlock.blockType === 'recurring' ? (
+            <>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Days</label>
+                <input value={newBlock.days} onChange={e => setNewBlock(p => ({ ...p, days: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="e.g. Mon–Fri" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time range</label>
+                <input value={newBlock.time_range} onChange={e => setNewBlock(p => ({ ...p, time_range: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="e.g. 3:30–4:00 PM" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
+                <input type="date" value={newBlock.date}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setNewBlock(p => ({ ...p, date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">From</label>
+                  <select value={newBlock.start} onChange={e => setNewBlock(p => ({ ...p, start: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                    {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">To</label>
+                  <select value={newBlock.end} onChange={e => setNewBlock(p => ({ ...p, end: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                    {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
           <div className="flex gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => setBlockModal(false)}>Cancel</Button>
-            <Button variant="primary" size="sm" onClick={addTimeBlock}>Add block</Button>
+            <Button variant="primary" size="sm"
+              disabled={!newBlock.label || (newBlock.blockType === 'date' && !newBlock.date)}
+              onClick={addTimeBlock}>
+              Add block
+            </Button>
           </div>
         </div>
       </Modal>

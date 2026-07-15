@@ -27,12 +27,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
 
-  const { provider_id, label, days, time_range } = req.body
-  const [row] = await sql`
-    INSERT INTO time_blocks (provider_id, label, days, time_range)
-    VALUES (${provider_id}::uuid, ${label}, ${days}, ${time_range})
-    RETURNING *`
+  const { provider_id, label, days, time_range, date, start_time, end_time } = req.body
+
+  let row: Record<string, unknown>
+  if (date) {
+    ;[row] = await sql`
+      INSERT INTO time_blocks (provider_id, label, days, time_range, date, start_time, end_time)
+      VALUES (${provider_id}::uuid, ${label}, ${days ?? null}, ${time_range ?? null},
+              ${date}::date, ${start_time ?? null}, ${end_time ?? null})
+      RETURNING *`
+  } else {
+    ;[row] = await sql`
+      INSERT INTO time_blocks (provider_id, label, days, time_range)
+      VALUES (${provider_id}::uuid, ${label}, ${days}, ${time_range})
+      RETURNING *`
+  }
   res.json(row)
 }
