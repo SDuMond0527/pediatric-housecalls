@@ -51,8 +51,8 @@ const ALL_TIMES: string[] = (() => {
   return times
 })()
 
-const TIME_OPTIONS_START = ['7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM']
-const TIME_OPTIONS_END   = ['2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM']
+const TIME_OPTIONS_START = ALL_TIMES
+const TIME_OPTIONS_END   = ALL_TIMES
 
 function fmt24to12(t: string) {
   const [h, m] = t.split(':').map(Number)
