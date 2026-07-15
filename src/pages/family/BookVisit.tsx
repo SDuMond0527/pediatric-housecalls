@@ -1607,8 +1607,8 @@ export function BookVisit() {
           })()}
 
           {/* 6. No-availability / waitlist / CMA cards */}
-          {booking.date && booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
-           ((zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked)) || (cmaOnlyZone && cmaProvidersForZone.length > 0)) && (
+          {booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
+           ((booking.date && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked)) || (cmaOnlyZone && cmaProvidersForZone.length > 0)) && (
             <div className="mb-4 space-y-2">
               {!cmaOnlyZone && (
                 <p className="text-[13px] font-semibold text-[#633806]">
