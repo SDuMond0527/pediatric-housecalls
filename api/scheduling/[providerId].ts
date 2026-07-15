@@ -17,10 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const dayOfWeek = new Date(date + 'T12:00:00').getDay()
 
   const [availRows, overrideRows, visitTypeRows, bookedRows] = await Promise.all([
-    sql`SELECT is_active, start_time, end_time FROM availability WHERE provider_id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid AND day_of_week = ${dayOfWeek} LIMIT 1`,
-    sql`SELECT is_available, start_time, end_time FROM availability_overrides WHERE provider_id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid AND date = ${date}::date LIMIT 1`,
+    sql`SELECT is_active, start_time, end_time FROM availability WHERE provider_id = ${providerId}::uuid AND day_of_week = ${dayOfWeek} LIMIT 1`,
+    sql`SELECT is_available, start_time, end_time FROM availability_overrides WHERE provider_id = ${providerId}::uuid AND date = ${date}::date LIMIT 1`,
     visit_type
-      ? sql`SELECT is_active, start_time, end_time FROM visit_type_availability WHERE provider_id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid AND visit_type = ${visit_type} LIMIT 1`
+      ? sql`SELECT is_active, start_time, end_time FROM visit_type_availability WHERE provider_id = ${providerId}::uuid AND visit_type = ${visit_type} LIMIT 1`
       : Promise.resolve([]),
     sql`SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes FROM appointments WHERE provider_id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid AND scheduled_date = ${date}::date AND status != 'cancelled'`,
   ])
