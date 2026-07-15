@@ -537,7 +537,7 @@ export function BookVisit() {
   }
 
   async function findFirstAvailable(date: string) {
-    const providers = isIvFluids ? ivZoneProviders : regularZoneProviders
+    const providers = zoneProviders
     if (!date || providers.length === 0) return
     setFindingFirstAvail(true)
     setFirstAvailResult(null)
