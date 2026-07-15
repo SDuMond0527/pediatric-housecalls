@@ -329,7 +329,7 @@ export function BookVisit() {
     } else if (booking.provider && booking.date) {
       loadBookedTimes(booking.provider, booking.date)
     }
-  }, [booking.provider, booking.date])
+  }, [booking.provider, booking.date, cmaProvidersForZone.length])
 
   // Check CMA availability whenever no in-person slots exist on the selected date/zone
   useEffect(() => {
