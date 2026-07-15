@@ -542,11 +542,11 @@ export function Today() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                           {stateEntries.map((e: any) => {
-                            const dayCmas = (cmaSchedule[e.date] ?? []).filter((c: any) => (c.states ?? []).includes(state))
+                            const dayCmas = (cmaSchedule[e.date.slice(0, 10)] ?? []).filter((c: any) => (c.states ?? []).includes(state))
                             return (
                             <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
                               <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
-                                {format(new Date(e.date + 'T12:00:00'), 'EEE M/d')}
+                                {format(new Date(e.date.slice(0, 10) + 'T12:00:00'), 'EEE M/d')}
                               </div>
                               <div className="flex items-center gap-1.5 mb-1">
                                 <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-medium flex-shrink-0"
@@ -571,13 +571,13 @@ export function Today() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {myEntries.map((e: any) => {
-                    const dayCmas = (cmaSchedule[e.date] ?? []).filter((c: any) => (c.states ?? []).includes(e.state))
+                    const dayCmas = (cmaSchedule[e.date.slice(0, 10)] ?? []).filter((c: any) => (c.states ?? []).includes(e.state))
                     return (
                       <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2.5 border border-[#DDDAF8]">
                         <div className="flex items-center gap-2 mb-1.5">
                           <span className="text-[10px] font-semibold text-[#7F77DD] bg-[#EEEDFE] px-1.5 py-0.5 rounded">{e.state}</span>
                           <span className="text-[13px] font-medium text-[#1A1A2E]">
-                            {format(new Date(e.date + 'T12:00:00'), 'EEE, MMM d')}
+                            {format(new Date(e.date.slice(0, 10) + 'T12:00:00'), 'EEE, MMM d')}
                           </span>
                         </div>
                         {dayCmas.length === 0 ? (
