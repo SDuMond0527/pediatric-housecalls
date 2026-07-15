@@ -123,12 +123,14 @@ export function AdminSchedule() {
   const [filterProvider, setFilterProvider] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
 
-  // On-call schedule
+  // On-call schedule — keyed by `${date}::${state}`
   const [onCallEntries, setOnCallEntries] = useState<Record<string, { id: string; provider_id: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string }>>({})
   const [onCallSaving, setOnCallSaving] = useState<string | null>(null)
 
   const onCallDays = Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), 'yyyy-MM-dd'))
   const mdProviders = providers.filter(p => !p.is_admin && p.role !== 'CMA' && p.role !== 'RN')
+  const ncProviders = mdProviders.filter(p => (p.states as string[] | undefined)?.includes('NC'))
+  const scProviders = mdProviders.filter(p => (p.states as string[] | undefined)?.includes('SC'))
   const [expanded, setExpanded] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -165,21 +167,22 @@ export function AdminSchedule() {
     getOnCallSchedule({ start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') })
       .then(rows => {
         const map: typeof onCallEntries = {}
-        for (const r of rows) map[r.date] = r
+        for (const r of rows) map[`${r.date}::${r.state}`] = r
         setOnCallEntries(map)
       }).catch(() => {})
   }, [])
 
-  async function saveOnCall(date: string, providerId: string) {
-    setOnCallSaving(date)
+  async function saveOnCall(date: string, state: string, providerId: string) {
+    const key = `${date}::${state}`
+    setOnCallSaving(key)
     try {
       if (providerId) {
-        const row = await setOnCallProvider(date, providerId)
+        const row = await setOnCallProvider(date, state, providerId)
         const p = providers.find(x => x.id === providerId)
-        setOnCallEntries(prev => ({ ...prev, [date]: { ...row, provider_name: p?.name ?? '', initials: p?.initials ?? '', avatar_color: p?.avatar_color ?? '', avatar_text_color: p?.avatar_text_color ?? '' } }))
+        setOnCallEntries(prev => ({ ...prev, [key]: { ...row, provider_name: p?.name ?? '', initials: p?.initials ?? '', avatar_color: p?.avatar_color ?? '', avatar_text_color: p?.avatar_text_color ?? '' } }))
       } else {
-        await setOnCallProvider(date, null)
-        setOnCallEntries(prev => { const n = { ...prev }; delete n[date]; return n })
+        await setOnCallProvider(date, state, null)
+        setOnCallEntries(prev => { const n = { ...prev }; delete n[key]; return n })
       }
     } catch { /* silent */ }
     setOnCallSaving(null)
@@ -360,41 +363,53 @@ export function AdminSchedule() {
       </div>
 
       {/* ── On-call telemedicine schedule ── */}
-      <div className="px-6 py-5 border-b border-[#E8E8E4]">
-        <div className="flex items-center gap-2 mb-3">
+      <div className="px-6 py-5 border-b border-[#E8E8E4] space-y-5">
+        <div className="flex items-center gap-2">
           <Phone size={14} className="text-[#7F77DD]" />
           <span className="text-[13px] font-semibold text-[#1A1A2E]">On-call telemedicine schedule</span>
-          <span className="text-[11px] text-[#999]">— assign one provider per day for CMA+telemedicine visits</span>
+          <span className="text-[11px] text-[#999]">— assign one provider per state per day</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
-          {onCallDays.map(date => {
-            const entry = onCallEntries[date]
-            const label = format(new Date(date + 'T12:00:00'), 'EEE M/d')
-            const isSaving = onCallSaving === date
-            return (
-              <div key={date} className="border border-[#E8E8E4] rounded-lg p-2.5 bg-white">
-                <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">{label}</div>
-                {entry && (
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
-                      style={{ background: entry.avatar_color, color: entry.avatar_text_color }}>
-                      {entry.initials}
+        {(['NC', 'SC'] as const).map(state => {
+          const stateProviders = state === 'NC' ? ncProviders : scProviders
+          return (
+            <div key={state}>
+              <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">{state === 'NC' ? 'North Carolina' : 'South Carolina'}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                {onCallDays.map(date => {
+                  const key = `${date}::${state}`
+                  const entry = onCallEntries[key]
+                  const label = format(new Date(date + 'T12:00:00'), 'EEE M/d')
+                  const isSaving = onCallSaving === key
+                  return (
+                    <div key={date} className="border border-[#E8E8E4] rounded-lg p-2.5 bg-white">
+                      <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">{label}</div>
+                      {entry && (
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
+                            style={{ background: entry.avatar_color, color: entry.avatar_text_color }}>
+                            {entry.initials}
+                          </div>
+                          <span className="text-[11px] font-medium text-[#1A1A2E] truncate">{entry.provider_name.split(' ').slice(-1)[0]}</span>
+                        </div>
+                      )}
+                      <select
+                        value={entry?.provider_id ?? ''}
+                        disabled={isSaving || stateProviders.length === 0}
+                        onChange={e => saveOnCall(date, state, e.target.value)}
+                        className="w-full text-[11px] px-1.5 py-1 border border-[#E8E8E4] rounded bg-white outline-none focus:border-[#7F77DD] disabled:opacity-50">
+                        <option value="">Unassigned</option>
+                        {stateProviders.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
                     </div>
-                    <span className="text-[11px] font-medium text-[#1A1A2E] truncate">{entry.provider_name.split(' ').slice(-1)[0]}</span>
-                  </div>
-                )}
-                <select
-                  value={entry?.provider_id ?? ''}
-                  disabled={isSaving}
-                  onChange={e => saveOnCall(date, e.target.value)}
-                  className="w-full text-[11px] px-1.5 py-1 border border-[#E8E8E4] rounded bg-white outline-none focus:border-[#7F77DD] disabled:opacity-50">
-                  <option value="">Unassigned</option>
-                  {mdProviders.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
+              {stateProviders.length === 0 && (
+                <p className="text-[12px] text-[#999] mt-1">No providers with {state} license on file.</p>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="p-6 space-y-6">

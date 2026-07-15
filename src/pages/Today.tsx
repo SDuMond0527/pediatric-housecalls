@@ -202,7 +202,7 @@ export function Today() {
     getProviders({ exclude_admin: 'true' })
       .then((data) => setAllProviders((data ?? []) as { id: string; name: string }[]))
     getOnCallSchedule({ start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') })
-      .then(rows => setOnCallEntries(rows ?? []))
+      .then(rows => setOnCallEntries((rows ?? []) as any[]))
       .catch(() => {})
   }, [provider])
 
@@ -511,7 +511,7 @@ export function Today() {
         {/* ── On-call telemedicine card ── */}
         {onCallEntries.length > 0 && (() => {
           const isCma = provider?.role === 'CMA'
-          const myEntries = isCma ? onCallEntries : onCallEntries.filter(e => e.provider_id === provider?.id)
+          const myEntries = isCma ? onCallEntries : onCallEntries.filter((e: any) => e.provider_id === provider?.id)
           if (!isCma && myEntries.length === 0) return null
           return (
             <div className="mb-6 bg-[#F6F5FF] border border-[#AFA9EC] rounded-xl p-4">
@@ -522,27 +522,40 @@ export function Today() {
                 </span>
               </div>
               {isCma ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {onCallEntries.map(e => (
-                    <div key={e.date} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
-                      <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
-                        {format(new Date(e.date + 'T12:00:00'), 'EEE M/d')}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
-                          style={{ background: e.avatar_color, color: e.avatar_text_color }}>
-                          {e.initials}
+                <div className="space-y-3">
+                  {(['NC', 'SC'] as const).map(state => {
+                    const stateEntries = onCallEntries.filter((e: any) => e.state === state)
+                    if (stateEntries.length === 0) return null
+                    return (
+                      <div key={state}>
+                        <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1.5">
+                          {state === 'NC' ? 'North Carolina' : 'South Carolina'}
                         </div>
-                        <span className="text-[12px] font-medium text-[#1A1A2E] truncate">{e.provider_name}</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {stateEntries.map((e: any) => (
+                            <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
+                              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
+                                {format(new Date(e.date + 'T12:00:00'), 'EEE M/d')}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
+                                  style={{ background: e.avatar_color, color: e.avatar_text_color }}>
+                                  {e.initials}
+                                </div>
+                                <span className="text-[12px] font-medium text-[#1A1A2E] truncate">{e.provider_name}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {myEntries.map(e => (
-                    <div key={e.date} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8] flex items-center gap-2">
-                      <Phone size={12} className="text-[#7F77DD] flex-shrink-0" />
+                  {myEntries.map((e: any) => (
+                    <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8] flex items-center gap-2">
+                      <span className="text-[10px] font-semibold text-[#7F77DD]">{e.state}</span>
                       <span className="text-[13px] font-medium text-[#1A1A2E]">
                         {format(new Date(e.date + 'T12:00:00'), 'EEE, MMM d')}
                       </span>

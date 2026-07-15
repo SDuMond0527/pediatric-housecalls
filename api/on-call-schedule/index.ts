@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const startDate = start || new Date().toISOString().split('T')[0]
     const endDate = end || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
     const rows = await sql`
-      SELECT oc.id, oc.date, oc.provider_id,
+      SELECT oc.id, oc.date, oc.state, oc.provider_id,
              p.name AS provider_name, p.role AS provider_role,
              p.initials, p.avatar_color, p.avatar_text_color
       FROM on_call_schedule oc
@@ -39,22 +39,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE oc.practice_id = ${practiceId}::uuid
         AND oc.date >= ${startDate}::date
         AND oc.date <= ${endDate}::date
-      ORDER BY oc.date`
+      ORDER BY oc.date, oc.state`
     return res.json(rows)
   }
 
   if (req.method === 'PUT') {
     if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
-    const { date, provider_id } = req.body as { date: string; provider_id: string | null }
-    if (!date) return res.status(400).json({ error: 'date required' })
+    const { date, state, provider_id } = req.body as { date: string; state: string; provider_id: string | null }
+    if (!date || !state) return res.status(400).json({ error: 'date and state required' })
     if (!provider_id) {
-      await sql`DELETE FROM on_call_schedule WHERE practice_id = ${practiceId}::uuid AND date = ${date}::date`
+      await sql`DELETE FROM on_call_schedule WHERE practice_id = ${practiceId}::uuid AND date = ${date}::date AND state = ${state}`
       return res.status(204).end()
     }
     const [row] = await sql`
-      INSERT INTO on_call_schedule (practice_id, date, provider_id)
-      VALUES (${practiceId}::uuid, ${date}::date, ${provider_id}::uuid)
-      ON CONFLICT (practice_id, date) DO UPDATE SET provider_id = EXCLUDED.provider_id
+      INSERT INTO on_call_schedule (practice_id, date, state, provider_id)
+      VALUES (${practiceId}::uuid, ${date}::date, ${state}, ${provider_id}::uuid)
+      ON CONFLICT (practice_id, date, state) DO UPDATE SET provider_id = EXCLUDED.provider_id
       RETURNING *`
     return res.json(row)
   }
