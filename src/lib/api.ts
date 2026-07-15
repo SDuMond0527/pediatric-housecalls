@@ -362,6 +362,12 @@ export const deletePracticeVisitType = (id: string) =>
 export const getProvidersByZone = (zone: string) =>
   publicFetch<any[]>(`/api/providers?zone=${encodeURIComponent(zone)}`)
 
+export const getOnCallSchedule = (params?: { start?: string; end?: string }) =>
+  apiFetch<any[]>(`/api/on-call-schedule${params ? '?' + new URLSearchParams(params as Record<string, string>) : ''}`)
+
+export const setOnCallProvider = (date: string, provider_id: string | null) =>
+  apiFetch<any>('/api/on-call-schedule', { method: 'PUT', body: JSON.stringify({ date, provider_id }) })
+
 export const getProvidersByState = (state: string) =>
   publicFetch<any[]>(`/api/providers?state=${encodeURIComponent(state)}`)
 

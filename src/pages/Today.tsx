@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
-  chargeCard, apiFetch,
+  chargeCard, apiFetch, getOnCallSchedule,
 } from '../lib/api'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
@@ -163,6 +163,9 @@ export function Today() {
     setNoteModalAppt(appt)
   }
 
+  // On-call schedule
+  const [onCallEntries, setOnCallEntries] = useState<Array<{ date: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string; provider_id: string }>>([])
+
   // Schedule blocks
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const [blocking, setBlocking] = useState(false)
@@ -198,6 +201,9 @@ export function Today() {
     if (!provider) return
     getProviders({ exclude_admin: 'true' })
       .then((data) => setAllProviders((data ?? []) as { id: string; name: string }[]))
+    getOnCallSchedule({ start: format(new Date(), 'yyyy-MM-dd'), end: format(addDays(new Date(), 13), 'yyyy-MM-dd') })
+      .then(rows => setOnCallEntries(rows ?? []))
+      .catch(() => {})
   }, [provider])
 
   async function fetchCharmDetails(appt: Appointment) {
@@ -501,6 +507,52 @@ export function Today() {
             </div>
           ))}
         </div>
+
+        {/* ── On-call telemedicine card ── */}
+        {onCallEntries.length > 0 && (() => {
+          const isCma = provider?.role === 'CMA'
+          const myEntries = isCma ? onCallEntries : onCallEntries.filter(e => e.provider_id === provider?.id)
+          if (!isCma && myEntries.length === 0) return null
+          return (
+            <div className="mb-6 bg-[#F6F5FF] border border-[#AFA9EC] rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Phone size={14} className="text-[#7F77DD]" />
+                <span className="text-[13px] font-semibold text-[#3C3489]">
+                  {isCma ? 'On-call telemedicine providers' : 'Your on-call days'}
+                </span>
+              </div>
+              {isCma ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {onCallEntries.map(e => (
+                    <div key={e.date} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
+                      <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
+                        {format(new Date(e.date + 'T12:00:00'), 'EEE M/d')}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium flex-shrink-0"
+                          style={{ background: e.avatar_color, color: e.avatar_text_color }}>
+                          {e.initials}
+                        </div>
+                        <span className="text-[12px] font-medium text-[#1A1A2E] truncate">{e.provider_name}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {myEntries.map(e => (
+                    <div key={e.date} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8] flex items-center gap-2">
+                      <Phone size={12} className="text-[#7F77DD] flex-shrink-0" />
+                      <span className="text-[13px] font-medium text-[#1A1A2E]">
+                        {format(new Date(e.date + 'T12:00:00'), 'EEE, MMM d')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── Today's schedule blocks ── */}
         {blocks.length > 0 && (
