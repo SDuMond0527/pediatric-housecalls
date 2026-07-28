@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { Name: 'email_verified', Value: 'true' },
           { Name: 'name', Value: provider.name },
         ],
-        MessageAction: 'SUPPRESS',
+        // No MessageAction: SUPPRESS — let Cognito email the temp password directly to the provider
       }))
       const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
       if (!s) throw new Error('No sub returned from Cognito')
