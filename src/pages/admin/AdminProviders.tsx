@@ -27,6 +27,23 @@ export function AdminProviders() {
   const [savedId, setSavedId] = useState<string | null>(null)
   const [pwState, setPwState] = useState<Record<string, { loading: boolean; password?: string; error?: string; copied?: boolean }>>({})
   const [deactivating, setDeactivating] = useState<string | null>(null)
+  const [fixState, setFixState] = useState<Record<string, { loading: boolean; password?: string; error?: string }>>({})
+
+  async function fixCognitoAccount(providerId: string) {
+    const email = prompt('Enter this provider\'s email address to recreate their login account:')
+    if (!email) return
+    setFixState(prev => ({ ...prev, [providerId]: { loading: true } }))
+    try {
+      const data = await apiFetch<{ password: string }>('/api/admin/fix-provider-cognito', {
+        method: 'POST',
+        body: JSON.stringify({ provider_id: providerId, email }),
+      })
+      setFixState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
+      setPwState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
+    } catch (err: any) {
+      setFixState(prev => ({ ...prev, [providerId]: { loading: false, error: err.message ?? 'Failed' } }))
+    }
+  }
 
   async function resetPassword(providerId: string) {
     setPwState(prev => ({ ...prev, [providerId]: { loading: true } }))
@@ -258,7 +275,19 @@ export function AdminProviders() {
                             </Button>
                           )}
                           {pwState[p.id]?.error && (
-                            <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
+                            <div>
+                              <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
+                              {pwState[p.id].error?.includes('does not exist') && (
+                                <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
+                                  onClick={() => fixCognitoAccount(p.id)}
+                                  className="mt-2 border-[#9B7FD4] text-[#3C3489]">
+                                  Relink Account
+                                </Button>
+                              )}
+                              {fixState[p.id]?.error && (
+                                <p className="text-[12px] text-[#791F1F] mt-1">{fixState[p.id].error}</p>
+                              )}
+                            </div>
                           )}
                           {pwState[p.id]?.password && (
                             <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
