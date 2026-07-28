@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand, AdminGetUserCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { randomBytes } from 'crypto'
 
@@ -97,10 +97,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // This pool auto-generates UUID usernames with email as an alias.
+  // AdminSetUserPasswordCommand requires the actual username (UUID), not the email alias.
+  let actualUsername = cognitoUsername
+  try {
+    const userInfo = await client.send(new AdminGetUserCommand({
+      UserPoolId: userPoolId,
+      Username: cognitoUsername,
+    }))
+    actualUsername = userInfo.Username ?? cognitoUsername
+  } catch { /* fall back to cognitoUsername if lookup fails */ }
+
   try {
     await client.send(new AdminSetUserPasswordCommand({
       UserPoolId: userPoolId,
-      Username:   cognitoUsername,
+      Username:   actualUsername,
       Password:   password,
       Permanent:  true,
     }))

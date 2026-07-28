@@ -75,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Create a fresh Cognito user with the email as username
   let newSub: string
+  let actualUsername: string = email
   try {
     const result = await client.send(new AdminCreateUserCommand({
       UserPoolId: userPoolId,
@@ -89,6 +90,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
     if (!s) throw new Error('No sub returned from Cognito')
     newSub = s
+    // Pool may auto-generate a UUID username; use it for AdminSetUserPasswordCommand
+    actualUsername = result.User?.Username ?? email
   } catch (e: any) {
     return res.status(500).json({ error: 'Failed to create Cognito user: ' + (e.message ?? String(e)) })
   }
@@ -97,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await client.send(new AdminSetUserPasswordCommand({
       UserPoolId: userPoolId,
-      Username: email,
+      Username: actualUsername,
       Password: password,
       Permanent: true,
     }))
