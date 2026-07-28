@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminDeleteUserCommand, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { randomBytes } from 'crypto'
 
@@ -68,32 +68,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
-  // Try to delete the old Cognito user if it exists (ignore errors if it doesn't)
-  try {
-    await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub }))
-  } catch { /* old user may not exist — that's fine */ }
-
-  // Create a fresh Cognito user with the email as username
+  let actualUsername: string
   let newSub: string
-  let actualUsername: string = email
+
+  // First check if a Cognito user already exists for this email (pool may use UUID usernames with email as alias)
+  let existingUser: { username: string; sub: string } | null = null
   try {
-    const result = await client.send(new AdminCreateUserCommand({
-      UserPoolId: userPoolId,
-      Username: email,
-      UserAttributes: [
-        { Name: 'email', Value: email },
-        { Name: 'email_verified', Value: 'true' },
-        { Name: 'name', Value: provider.name },
-      ],
-      MessageAction: 'SUPPRESS',
-    }))
-    const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
-    if (!s) throw new Error('No sub returned from Cognito')
-    newSub = s
-    // Pool may auto-generate a UUID username; use it for AdminSetUserPasswordCommand
-    actualUsername = result.User?.Username ?? email
-  } catch (e: any) {
-    return res.status(500).json({ error: 'Failed to create Cognito user: ' + (e.message ?? String(e)) })
+    const found = await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email }))
+    const sub = found.UserAttributes?.find(a => a.Name === 'sub')?.Value
+    if (found.Username && sub) {
+      existingUser = { username: found.Username, sub }
+    }
+  } catch { /* no existing user — will create one */ }
+
+  if (existingUser) {
+    // User already exists in Cognito — just set a new password and update DB link
+    actualUsername = existingUser.username
+    newSub = existingUser.sub
+  } else {
+    // Delete the old Cognito user if it exists, then create a fresh one
+    try {
+      await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub }))
+    } catch { /* old user may not exist */ }
+
+    try {
+      const result = await client.send(new AdminCreateUserCommand({
+        UserPoolId: userPoolId,
+        Username: email,
+        UserAttributes: [
+          { Name: 'email', Value: email },
+          { Name: 'email_verified', Value: 'true' },
+          { Name: 'name', Value: provider.name },
+        ],
+        MessageAction: 'SUPPRESS',
+      }))
+      const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
+      if (!s) throw new Error('No sub returned from Cognito')
+      newSub = s
+      actualUsername = result.User?.Username ?? email
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Failed to create Cognito user: ' + (e.message ?? String(e)) })
+    }
   }
 
   const password = generatePassword()
@@ -105,13 +120,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Permanent: true,
     }))
   } catch (e: any) {
-    return res.status(500).json({ error: 'Created user but failed to set password: ' + (e.message ?? String(e)) })
+    return res.status(500).json({ error: 'Failed to set password: ' + (e.message ?? String(e)) })
   }
 
-  // Update the database record with the new cognito_sub and email
   await sql`
     UPDATE providers SET cognito_sub = ${newSub}, email = ${email} WHERE id = ${provider_id}::uuid
   `
 
-  res.json({ password, message: 'Cognito account recreated and linked successfully' })
+  res.json({
+    password,
+    cognito_username: actualUsername,
+    cognito_sub: newSub,
+    message: existingUser
+      ? `Found existing Cognito user (${actualUsername}) and set new password`
+      : 'Created new Cognito user and linked successfully',
+  })
 }
