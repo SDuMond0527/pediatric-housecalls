@@ -27,7 +27,22 @@ export function AdminProviders() {
   const [savedId, setSavedId] = useState<string | null>(null)
   const [pwState, setPwState] = useState<Record<string, { loading: boolean; password?: string; error?: string; copied?: boolean }>>({})
   const [deactivating, setDeactivating] = useState<string | null>(null)
-  const [fixState, setFixState] = useState<Record<string, { loading: boolean; password?: string; error?: string }>>({})
+  const [fixState, setFixState] = useState<Record<string, { loading: boolean; password?: string; error?: string; diagnostic?: string }>>({})
+
+  async function checkCognitoStatus(providerId: string) {
+    const email = prompt('Enter the email address to check in Cognito:')
+    if (!email) return
+    setFixState(prev => ({ ...prev, [providerId]: { ...prev[providerId], loading: true } }))
+    try {
+      const data = await apiFetch<Record<string, unknown>>('/api/admin/check-provider-login', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      setFixState(prev => ({ ...prev, [providerId]: { ...prev[providerId], loading: false, diagnostic: JSON.stringify(data, null, 2) } }))
+    } catch (err: any) {
+      setFixState(prev => ({ ...prev, [providerId]: { ...prev[providerId], loading: false, diagnostic: 'Error: ' + (err.message ?? 'Failed') } }))
+    }
+  }
 
   async function fixCognitoAccount(providerId: string) {
     const email = prompt('Enter this provider\'s email address to recreate their login account:')
@@ -277,13 +292,23 @@ export function AdminProviders() {
                           {pwState[p.id]?.error && (
                             <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
                           )}
-                          <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
-                            onClick={() => fixCognitoAccount(p.id)}
-                            className="mt-2 border-[#9B7FD4] text-[#3C3489]">
-                            Relink Account
-                          </Button>
+                          <div className="flex gap-2 mt-2">
+                            <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
+                              onClick={() => fixCognitoAccount(p.id)}
+                              className="border-[#9B7FD4] text-[#3C3489]">
+                              Relink Account
+                            </Button>
+                            <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
+                              onClick={() => checkCognitoStatus(p.id)}
+                              className="border-[#999] text-[#555]">
+                              Check Status
+                            </Button>
+                          </div>
                           {fixState[p.id]?.error && (
                             <p className="text-[12px] text-[#791F1F] mt-1">{fixState[p.id].error}</p>
+                          )}
+                          {fixState[p.id]?.diagnostic && (
+                            <pre className="text-[10px] text-[#333] mt-2 bg-[#f5f5f5] p-2 rounded overflow-auto max-h-40">{fixState[p.id].diagnostic}</pre>
                           )}
                           {pwState[p.id]?.password && (
                             <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
