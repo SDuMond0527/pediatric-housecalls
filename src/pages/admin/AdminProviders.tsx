@@ -275,19 +275,15 @@ export function AdminProviders() {
                             </Button>
                           )}
                           {pwState[p.id]?.error && (
-                            <div>
-                              <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
-                              {pwState[p.id].error?.includes('does not exist') && (
-                                <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
-                                  onClick={() => fixCognitoAccount(p.id)}
-                                  className="mt-2 border-[#9B7FD4] text-[#3C3489]">
-                                  Relink Account
-                                </Button>
-                              )}
-                              {fixState[p.id]?.error && (
-                                <p className="text-[12px] text-[#791F1F] mt-1">{fixState[p.id].error}</p>
-                              )}
-                            </div>
+                            <p className="text-[12px] text-[#791F1F] mt-1">{pwState[p.id].error}</p>
+                          )}
+                          <Button size="sm" variant="secondary" loading={fixState[p.id]?.loading}
+                            onClick={() => fixCognitoAccount(p.id)}
+                            className="mt-2 border-[#9B7FD4] text-[#3C3489]">
+                            Relink Account
+                          </Button>
+                          {fixState[p.id]?.error && (
+                            <p className="text-[12px] text-[#791F1F] mt-1">{fixState[p.id].error}</p>
                           )}
                           {pwState[p.id]?.password && (
                             <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
