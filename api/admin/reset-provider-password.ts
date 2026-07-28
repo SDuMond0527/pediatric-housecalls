@@ -79,25 +79,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   })
 
   // Cognito username is the email the account was created with.
-  // If email isn't stored in the DB, look it up via Cognito by sub.
-  let cognitoUsername: string = target.email
+  // If email isn't stored in the DB, find it via Cognito ListUsers.
+  let cognitoUsername: string | undefined = target.email || undefined
+
   if (!cognitoUsername) {
-    const listResult = await client.send(new ListUsersCommand({
-      UserPoolId: userPoolId,
-      Filter: `sub = "${target.cognito_sub}"`,
-      Limit: 1,
-    }))
-    const found = listResult.Users?.[0]?.Username
-    if (!found) return res.status(404).json({ error: 'Cognito user not found' })
-    cognitoUsername = found
+    try {
+      const listResult = await client.send(new ListUsersCommand({
+        UserPoolId: userPoolId,
+        Filter: `sub = "${target.cognito_sub}"`,
+        Limit: 1,
+      }))
+      const found = listResult.Users?.[0]?.Username
+      if (!found) return res.status(404).json({ error: 'Could not find Cognito user — email not on file and sub lookup failed' })
+      cognitoUsername = found
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Cognito lookup failed: ' + (e.message ?? String(e)) })
+    }
   }
 
-  await client.send(new AdminSetUserPasswordCommand({
-    UserPoolId: userPoolId,
-    Username:   cognitoUsername,
-    Password:   password,
-    Permanent:  true,
-  }))
+  try {
+    await client.send(new AdminSetUserPasswordCommand({
+      UserPoolId: userPoolId,
+      Username:   cognitoUsername,
+      Password:   password,
+      Permanent:  true,
+    }))
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Password reset failed: ' + (e.message ?? String(e)) })
+  }
 
   res.json({ password })
 }
