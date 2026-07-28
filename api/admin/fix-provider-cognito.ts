@@ -81,15 +81,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch { /* no existing user — will create one */ }
 
-  if (existingUser) {
-    // User already exists in Cognito — just set a new password and update DB link
+  if (existingUser && existingUser.username === email) {
+    // User already has email as username — correct setup, just reset password and update DB
     actualUsername = existingUser.username
     newSub = existingUser.sub
   } else {
-    // Delete the old Cognito user if it exists, then create a fresh one
+    // User has a UUID username (not email) or doesn't exist — delete and recreate with email as username
+    // Delete the UUID-username user if found
+    if (existingUser) {
+      try {
+        await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: existingUser.username }))
+      } catch { /* ignore */ }
+    }
+    // Also try deleting by stored cognito_sub
     try {
       await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub }))
-    } catch { /* old user may not exist */ }
+    } catch { /* ignore */ }
 
     try {
       const result = await client.send(new AdminCreateUserCommand({
