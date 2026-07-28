@@ -120,11 +120,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const password = generatePassword()
   try {
+    // Use Permanent: false — this pool does not honor Permanent: true via the admin API.
+    // The provider will be prompted to set their own password on first login.
     await client.send(new AdminSetUserPasswordCommand({
       UserPoolId: userPoolId,
       Username: actualUsername,
       Password: password,
-      Permanent: true,
+      Permanent: false,
     }))
   } catch (e: any) {
     return res.status(500).json({ error: 'Failed to set password: ' + (e.message ?? String(e)) })
@@ -138,8 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     password,
     cognito_username: actualUsername,
     cognito_sub: newSub,
-    message: existingUser
-      ? `Found existing Cognito user (${actualUsername}) and set new password`
-      : 'Created new Cognito user and linked successfully',
+    mustChangePassword: true,
+    message: 'Temporary password set. Provider must set their own password on first login.',
   })
 }

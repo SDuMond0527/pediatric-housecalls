@@ -113,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       UserPoolId: userPoolId,
       Username:   actualUsername,
       Password:   password,
-      Permanent:  true,
+      Permanent:  false,
     }))
   } catch (e: any) {
     return res.status(500).json({ error: 'Password reset failed: ' + (e.message ?? String(e)) })
