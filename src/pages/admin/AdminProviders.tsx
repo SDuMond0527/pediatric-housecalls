@@ -48,7 +48,7 @@ export function AdminProviders() {
     const email = raw.trim().toLowerCase()
     setFixState(prev => ({ ...prev, [providerId]: { loading: true } }))
     try {
-      const data = await apiFetch<{ password: string; message?: string }>('/api/admin/fix-provider-cognito', {
+      const data = await apiFetch<{ password: string; message?: string; mustChangePassword?: boolean }>('/api/admin/fix-provider-cognito', {
         method: 'POST',
         body: JSON.stringify({ provider_id: providerId, email }),
       })
