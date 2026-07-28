@@ -52,8 +52,9 @@ export function AdminProviders() {
         method: 'POST',
         body: JSON.stringify({ provider_id: providerId, email }),
       })
-      const note = data.mustChangePassword ? ' — provider will be prompted to set their own password on first login' : ''
-      setFixState(prev => ({ ...prev, [providerId]: { loading: false, diagnostic: `Success: Relinked to ${email}${note}` } }))
+      const note = data.mustChangePassword ? '\nKeaira must set her own password on first login.' : ''
+      const username = (data as any).cognito_username ? `\nCognito username: ${(data as any).cognito_username}` : ''
+      setFixState(prev => ({ ...prev, [providerId]: { loading: false, diagnostic: `Success: Relinked to ${email}${username}${note}` } }))
       setPwState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
     } catch (err: any) {
       setFixState(prev => ({ ...prev, [providerId]: { loading: false, error: err.message ?? 'Failed' } }))
