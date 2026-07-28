@@ -102,6 +102,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // List ALL users in the pool with this email attribute (detect duplicates)
+  if (row.email) {
+    try {
+      const emailList = await client.send(new ListUsersCommand({
+        UserPoolId: userPoolId,
+        Filter: `email = "${row.email}"`,
+        Limit: 10,
+      }))
+      result.all_users_with_email = (emailList.Users ?? []).map(u => ({
+        username: u.Username,
+        status: u.UserStatus,
+        enabled: u.Enabled,
+        sub: u.Attributes?.find(a => a.Name === 'sub')?.Value,
+      }))
+      if ((emailList.Users?.length ?? 0) > 1) {
+        issues.push(`DUPLICATE ACCOUNTS: ${emailList.Users!.length} Cognito users share email ${row.email} — this causes login failures`)
+      }
+    } catch (e: any) {
+      result.all_users_with_email = { error: e.message }
+    }
+  }
+
   if (issues.length === 0) issues.push('No issues detected — credentials may simply be wrong')
 
   res.json(result)
