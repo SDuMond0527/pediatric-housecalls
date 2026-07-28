@@ -45,15 +45,16 @@ export function AdminProviders() {
   }
 
   async function fixCognitoAccount(providerId: string) {
-    const email = prompt('Enter this provider\'s email address to recreate their login account:')
-    if (!email) return
+    const raw = prompt('Enter this provider\'s email address to recreate their login account:')
+    if (!raw) return
+    const email = raw.trim().toLowerCase()
     setFixState(prev => ({ ...prev, [providerId]: { loading: true } }))
     try {
-      const data = await apiFetch<{ password: string }>('/api/admin/fix-provider-cognito', {
+      const data = await apiFetch<{ password: string; message?: string }>('/api/admin/fix-provider-cognito', {
         method: 'POST',
         body: JSON.stringify({ provider_id: providerId, email }),
       })
-      setFixState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
+      setFixState(prev => ({ ...prev, [providerId]: { loading: false, diagnostic: `Success: Relinked to ${email}\n${data.message ?? ''}` } }))
       setPwState(prev => ({ ...prev, [providerId]: { loading: false, password: data.password } }))
     } catch (err: any) {
       setFixState(prev => ({ ...prev, [providerId]: { loading: false, error: err.message ?? 'Failed' } }))

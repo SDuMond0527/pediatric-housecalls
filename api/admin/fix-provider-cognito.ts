@@ -51,8 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const [caller] = await sql`SELECT is_admin FROM providers WHERE cognito_sub = ${adminSub} LIMIT 1`
   if (!caller?.is_admin) return res.status(403).json({ error: 'Admin access required' })
 
-  const { provider_id, email } = req.body as { provider_id: string; email: string }
-  if (!provider_id || !email) return res.status(400).json({ error: 'provider_id and email are required' })
+  const { provider_id, email: rawEmail } = req.body as { provider_id: string; email: string }
+  if (!provider_id || !rawEmail) return res.status(400).json({ error: 'provider_id and email are required' })
+  const email = rawEmail.trim().toLowerCase()
 
   const [provider] = await sql`
     SELECT id, cognito_sub, name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1
