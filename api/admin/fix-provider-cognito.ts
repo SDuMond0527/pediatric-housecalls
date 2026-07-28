@@ -68,40 +68,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
-  let actualUsername: string
-  let newSub: string
-
-  // First check if a Cognito user already exists for this email (pool may use UUID usernames with email as alias)
+  // Check if a Cognito user already exists for this email
   let existingUser: { username: string; sub: string } | null = null
   try {
     const found = await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email }))
     const sub = found.UserAttributes?.find(a => a.Name === 'sub')?.Value
-    if (found.Username && sub) {
-      existingUser = { username: found.Username, sub }
-    }
-  } catch { /* no existing user — will create one */ }
+    if (found.Username && sub) existingUser = { username: found.Username, sub }
+  } catch { /* no existing user */ }
+
+  const password = generatePassword()
+  let actualUsername: string
+  let newSub: string
 
   if (existingUser && existingUser.username === email) {
-    // User already has email as username — correct setup, just reset password and update DB
+    // User already exists with email as username — just reset password
     actualUsername = existingUser.username
     newSub = existingUser.sub
-  } else {
-    // User has a UUID username (not email) or doesn't exist — delete and recreate with email as username
-    // Delete the UUID-username user if found
-    if (existingUser) {
-      try {
-        await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: existingUser.username }))
-      } catch { /* ignore */ }
-    }
-    // Also try deleting by stored cognito_sub
     try {
-      await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub }))
-    } catch { /* ignore */ }
+      await client.send(new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: actualUsername,
+        Password: password,
+        Permanent: false,
+      }))
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Failed to set password: ' + (e.message ?? String(e)) })
+    }
+  } else {
+    // Delete any existing UUID-username user and create a fresh one with email as username.
+    // Use TemporaryPassword at creation time — AdminSetUserPasswordCommand silently fails in this pool.
+    if (existingUser) {
+      try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: existingUser.username })) } catch { /* ignore */ }
+    }
+    try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub })) } catch { /* ignore */ }
 
     try {
       const result = await client.send(new AdminCreateUserCommand({
         UserPoolId: userPoolId,
         Username: email,
+        TemporaryPassword: password,
         UserAttributes: [
           { Name: 'email', Value: email },
           { Name: 'email_verified', Value: 'true' },
@@ -118,23 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  const password = generatePassword()
-  try {
-    // Use Permanent: false — this pool does not honor Permanent: true via the admin API.
-    // The provider will be prompted to set their own password on first login.
-    await client.send(new AdminSetUserPasswordCommand({
-      UserPoolId: userPoolId,
-      Username: actualUsername,
-      Password: password,
-      Permanent: false,
-    }))
-  } catch (e: any) {
-    return res.status(500).json({ error: 'Failed to set password: ' + (e.message ?? String(e)) })
-  }
-
-  await sql`
-    UPDATE providers SET cognito_sub = ${newSub}, email = ${email} WHERE id = ${provider_id}::uuid
-  `
+  await sql`UPDATE providers SET cognito_sub = ${newSub}, email = ${email} WHERE id = ${provider_id}::uuid`
 
   res.json({
     password,
