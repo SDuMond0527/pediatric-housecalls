@@ -1,6 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminDeleteUserCommand, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
+  AdminDeleteUserCommand,
+  AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
+} from '@aws-sdk/client-cognito-identity-provider'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { randomBytes } from 'crypto'
 
@@ -68,60 +75,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
-  // Check if a Cognito user already exists for this email
-  let existingUser: { username: string; sub: string } | null = null
+  // Find any existing Cognito user for this email (may return UUID username via alias lookup)
+  let existingByEmail: { username: string; sub: string } | null = null
   try {
     const found = await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email }))
     const sub = found.UserAttributes?.find(a => a.Name === 'sub')?.Value
-    if (found.Username && sub) existingUser = { username: found.Username, sub }
-  } catch { /* no existing user */ }
+    if (found.Username && sub) existingByEmail = { username: found.Username, sub }
+  } catch { /* no existing user with this email */ }
+
+  // Delete existing user found by email
+  if (existingByEmail) {
+    try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: existingByEmail.username })) } catch { /* ignore */ }
+  }
+
+  // Also delete any user stored under the old cognito_sub (may be a different user)
+  if (provider.cognito_sub && provider.cognito_sub !== existingByEmail?.sub) {
+    try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub })) } catch { /* ignore */ }
+  }
 
   const password = generatePassword()
-  let actualUsername: string
+
+  // Create fresh user — Cognito will auto-assign a UUID username and use email as alias
   let newSub: string
-
-  if (existingUser && existingUser.username === email) {
-    // User already exists with email as username — just reset password
-    actualUsername = existingUser.username
-    newSub = existingUser.sub
-    try {
-      await client.send(new AdminSetUserPasswordCommand({
-        UserPoolId: userPoolId,
-        Username: actualUsername,
-        Password: password,
-        Permanent: false,
-      }))
-    } catch (e: any) {
-      return res.status(500).json({ error: 'Failed to set password: ' + (e.message ?? String(e)) })
-    }
-  } else {
-    // Delete any existing UUID-username user and create a fresh one with email as username.
-    // Use TemporaryPassword at creation time — AdminSetUserPasswordCommand silently fails in this pool.
-    if (existingUser) {
-      try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: existingUser.username })) } catch { /* ignore */ }
-    }
-    try { await client.send(new AdminDeleteUserCommand({ UserPoolId: userPoolId, Username: provider.cognito_sub })) } catch { /* ignore */ }
-
-    try {
-      const result = await client.send(new AdminCreateUserCommand({
-        UserPoolId: userPoolId,
-        Username: email,
-        TemporaryPassword: password,
-        UserAttributes: [
-          { Name: 'email', Value: email },
-          { Name: 'email_verified', Value: 'true' },
-          { Name: 'name', Value: provider.name },
-        ],
-        // No MessageAction: SUPPRESS — let Cognito email the temp password directly to the provider
-      }))
-      const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
-      if (!s) throw new Error('No sub returned from Cognito')
-      newSub = s
-      actualUsername = result.User?.Username ?? email
-    } catch (e: any) {
-      return res.status(500).json({ error: 'Failed to create Cognito user: ' + (e.message ?? String(e)) })
-    }
+  let actualUsername: string
+  try {
+    const result = await client.send(new AdminCreateUserCommand({
+      UserPoolId: userPoolId,
+      Username: email,
+      UserAttributes: [
+        { Name: 'email', Value: email },
+        { Name: 'email_verified', Value: 'true' },
+        { Name: 'name', Value: provider.name },
+      ],
+      MessageAction: 'SUPPRESS',
+    }))
+    const s = result.User?.Attributes?.find(a => a.Name === 'sub')?.Value
+    if (!s) throw new Error('No sub returned from Cognito')
+    newSub = s
+    actualUsername = result.User?.Username ?? email
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Failed to create Cognito user: ' + (e.message ?? String(e)) })
   }
+
+  // Explicitly force email_verified on the actual UUID username — required before permanent password can be set
+  try {
+    await client.send(new AdminUpdateUserAttributesCommand({
+      UserPoolId: userPoolId,
+      Username: actualUsername,
+      UserAttributes: [{ Name: 'email_verified', Value: 'true' }],
+    }))
+  } catch { /* non-fatal; attempt password set anyway */ }
+
+  // Set permanent password using the real UUID username
+  try {
+    await client.send(new AdminSetUserPasswordCommand({
+      UserPoolId: userPoolId,
+      Username: actualUsername,
+      Password: password,
+      Permanent: true,
+    }))
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Failed to set permanent password: ' + (e.message ?? String(e)) })
+  }
+
+  // Verify the status actually changed to CONFIRMED
+  let finalStatus: string | undefined
+  try {
+    const check = await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: actualUsername }))
+    finalStatus = check.UserStatus
+  } catch { /* non-fatal */ }
 
   await sql`UPDATE providers SET cognito_sub = ${newSub}, email = ${email} WHERE id = ${provider_id}::uuid`
 
@@ -129,7 +151,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     password,
     cognito_username: actualUsername,
     cognito_sub: newSub,
-    mustChangePassword: true,
-    message: 'Temporary password set. Provider must set their own password on first login.',
+    cognito_status: finalStatus,
+    mustChangePassword: finalStatus === 'FORCE_CHANGE_PASSWORD',
+    message: finalStatus === 'CONFIRMED'
+      ? 'Account ready. Provider can log in immediately with this password.'
+      : 'Account created but status is ' + (finalStatus ?? 'unknown') + '. Password may require change on first login.',
   })
 }
