@@ -30,13 +30,11 @@ export function AdminProviders() {
   const [fixState, setFixState] = useState<Record<string, { loading: boolean; password?: string; error?: string; diagnostic?: string }>>({})
 
   async function checkCognitoStatus(providerId: string) {
-    const email = prompt('Enter the email address to check in Cognito:')
-    if (!email) return
     setFixState(prev => ({ ...prev, [providerId]: { ...prev[providerId], loading: true } }))
     try {
-      const data = await apiFetch<Record<string, unknown>>('/api/admin/check-provider-login', {
+      const data = await apiFetch<Record<string, unknown>>('/api/admin/diagnose-provider', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ provider_id: providerId }),
       })
       setFixState(prev => ({ ...prev, [providerId]: { ...prev[providerId], loading: false, diagnostic: JSON.stringify(data, null, 2) } }))
     } catch (err: any) {
