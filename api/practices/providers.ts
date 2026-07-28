@@ -100,11 +100,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const [provider] = await sql`
-      INSERT INTO providers (id, cognito_sub, name, role, initials, is_admin, practice_id)
+      INSERT INTO providers (id, cognito_sub, name, email, role, initials, is_admin, practice_id)
       VALUES (
         ${cognitoSub}::uuid,
         ${cognitoSub},
         ${name},
+        ${email},
         ${role},
         ${initials},
         ${role === 'admin'},

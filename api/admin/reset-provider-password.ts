@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { randomBytes } from 'crypto'
 
@@ -60,9 +60,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { provider_id } = req.body as { provider_id: string }
   if (!provider_id) return res.status(400).json({ error: 'provider_id required' })
 
-  // Get target provider's cognito_sub
+  // Get target provider's cognito_sub and email
   const [target] = await sql`
-    SELECT cognito_sub FROM providers
+    SELECT cognito_sub, email FROM providers
     WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
     LIMIT 1
   `
@@ -78,9 +78,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
+  // Cognito username is the email the account was created with.
+  // If email isn't stored in the DB, look it up via Cognito by sub.
+  let cognitoUsername: string = target.email
+  if (!cognitoUsername) {
+    const listResult = await client.send(new ListUsersCommand({
+      UserPoolId: userPoolId,
+      Filter: `sub = "${target.cognito_sub}"`,
+      Limit: 1,
+    }))
+    const found = listResult.Users?.[0]?.Username
+    if (!found) return res.status(404).json({ error: 'Cognito user not found' })
+    cognitoUsername = found
+  }
+
   await client.send(new AdminSetUserPasswordCommand({
     UserPoolId: userPoolId,
-    Username:   target.cognito_sub,
+    Username:   cognitoUsername,
     Password:   password,
     Permanent:  true,
   }))
