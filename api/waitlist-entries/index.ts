@@ -76,7 +76,8 @@ async function sendWaitlistNotifications(entry: Record<string, unknown>, sql: Re
 
   for (const prov of recipients) {
     const provStates: string[] = (prov.states ?? []) as string[]
-    if (prov.role !== 'admin' && entry.state && provStates.length > 0 && !provStates.includes(entry.state as string)) {
+    const stateFiltered = ['MD', 'PNP'].includes(prov.role)
+    if (stateFiltered && entry.state && provStates.length > 0 && !provStates.includes(entry.state as string)) {
       console.error('[waitlist] skipping', prov.name, '— state mismatch')
       continue
     }
