@@ -1661,9 +1661,14 @@ export function BookVisit() {
                       <p className="text-[13px] font-semibold text-[#0C447C]">CMA + telemedicine visit</p>
                       <p className="text-[12px] text-[#1A3560] mt-1 leading-relaxed">
                         {cmaOnlyZone
-                          ? 'This area is served by our CMA + telemedicine model. One of our in-home techs comes to you for diagnostics while our provider sees you virtually.'
+                          ? 'This area is served by our CMA + telemedicine model. One of our in-home techs comes to you for diagnostics (ear exam, strep, urine, flu/COVID testing) while our provider sees you virtually.'
                           : 'One of our in-home techs comes to you for diagnostics (ear exam, strep, urine, flu/COVID testing) while our provider sees you virtually.'}
                       </p>
+                      <div className="mt-2 bg-[#FFF8EC] border border-[#F0C97A] rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-[#7A4A00] leading-relaxed">
+                          <span className="font-semibold">Please note:</span> Our in-home techs are able to perform strep tests, flu/COVID tests, urine tests (with send-off for urine culture), and digital ear exams with images transmitted to the on-call provider. They are <span className="font-semibold">not</span> able to assess respiratory issues or order other lab or radiology tests.
+                        </p>
+                      </div>
                       {cmaAvailResult && (
                         <p className="text-[12px] text-[#1A3560] mt-1">
                           <strong>{cmaAvailResult.name}</strong> available at <strong>{cmaAvailResult.firstSlot}</strong>.
