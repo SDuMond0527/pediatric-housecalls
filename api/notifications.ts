@@ -621,7 +621,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[notifications] active providers found:', stateProviders.length)
       for (const prov of stateProviders) {
         const provStates: string[] = (prov.states ?? []) as string[]
-        if (entry.state && provStates.length > 0 && !provStates.includes(entry.state)) continue
+        const stateFiltered = ['MD', 'PNP'].includes(prov.role)
+        if (stateFiltered && entry.state && provStates.length > 0 && !provStates.includes(entry.state)) continue
         console.error('[notifications] notifying provider:', prov.name, 'email:', !!prov.email, 'phone:', !!prov.phone)
         if (prov.email) {
           await sendEmail(
