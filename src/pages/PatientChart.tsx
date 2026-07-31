@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
@@ -148,6 +148,9 @@ export function PatientChart() {
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
   const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+  const [eligResult, setEligResult] = useState<any>(null)
+  const [eligLoading, setEligLoading] = useState(false)
+  const [eligError, setEligError] = useState('')
 
   const [archivingIns, setArchivingIns] = useState(false)
   const [pastInsOpen, setPastInsOpen] = useState(false)
@@ -780,6 +783,20 @@ export function PatientChart() {
                     </div>
                     {editingSection !== 'insurance' && (
                       <div className="flex items-center gap-2">
+                        {child?.insurance_member_id && (
+                          <button
+                            onClick={async () => {
+                              setEligResult(null); setEligError(''); setEligLoading(true)
+                              try { setEligResult(await checkEligibility(childId)) }
+                              catch (e: any) { setEligError(e.message ?? 'Eligibility check failed') }
+                              finally { setEligLoading(false) }
+                            }}
+                            disabled={eligLoading}
+                            className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium border border-[#7F77DD] px-2 py-0.5 rounded hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
+                            <RefreshCw size={10} className={eligLoading ? 'animate-spin' : ''} />
+                            {eligLoading ? 'Checking…' : 'Verify insurance'}
+                          </button>
+                        )}
                         <button onClick={() => startEdit('insurance')}
                           className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
                           <Pencil size={11} /> Edit
@@ -887,6 +904,62 @@ export function PatientChart() {
                         </div>
                       ) : (
                         <div className="text-[13px] text-[#bbb] text-center py-4">No active insurance on file</div>
+                      )}
+
+                      {/* Eligibility result */}
+                      {eligError && (
+                        <div className="mt-3 px-3 py-2 bg-[#FDEDED] text-[#991B1B] text-[12px] rounded-lg">{eligError}</div>
+                      )}
+                      {eligResult && (
+                        <div className={`mt-3 rounded-lg border p-3 ${eligResult.active ? 'bg-[#F0FDF4] border-[#86EFAC]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`text-[11px] font-semibold uppercase tracking-wide ${eligResult.active ? 'text-[#166534]' : 'text-[#991B1B]'}`}>
+                              {eligResult.active ? '✓ Active coverage' : '✗ Inactive / not found'}
+                            </span>
+                            {eligResult.planName && <span className="text-[11px] text-[#555]">— {eligResult.planName}</span>}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {eligResult.deductible?.individual?.total != null && (
+                              <div>
+                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Ind. deductible</div>
+                                <div className="text-[13px] font-medium">${eligResult.deductible.individual.total.toFixed(2)}</div>
+                                {eligResult.deductible.individual.remaining != null && (
+                                  <div className="text-[10px] text-[#999]">${eligResult.deductible.individual.remaining.toFixed(2)} remaining</div>
+                                )}
+                              </div>
+                            )}
+                            {eligResult.deductible?.family?.total != null && (
+                              <div>
+                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Fam. deductible</div>
+                                <div className="text-[13px] font-medium">${eligResult.deductible.family.total.toFixed(2)}</div>
+                                {eligResult.deductible.family.remaining != null && (
+                                  <div className="text-[10px] text-[#999]">${eligResult.deductible.family.remaining.toFixed(2)} remaining</div>
+                                )}
+                              </div>
+                            )}
+                            {eligResult.outOfPocket?.individual?.total != null && (
+                              <div>
+                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Ind. OOP max</div>
+                                <div className="text-[13px] font-medium">${eligResult.outOfPocket.individual.total.toFixed(2)}</div>
+                                {eligResult.outOfPocket.individual.remaining != null && (
+                                  <div className="text-[10px] text-[#999]">${eligResult.outOfPocket.individual.remaining.toFixed(2)} remaining</div>
+                                )}
+                              </div>
+                            )}
+                            {eligResult.copay != null && (
+                              <div>
+                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Copay</div>
+                                <div className="text-[13px] font-medium">${eligResult.copay.toFixed(2)}</div>
+                              </div>
+                            )}
+                            {eligResult.coinsurance != null && (
+                              <div>
+                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Coinsurance</div>
+                                <div className="text-[13px] font-medium">{eligResult.coinsurance}%</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
 
                       {/* Past insurance policies */}

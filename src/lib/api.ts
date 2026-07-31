@@ -409,6 +409,9 @@ export const getDoseSpotSSO = (childId: string) =>
 export const getDoseSpotNotifications = () =>
   apiFetch<{ count: number; breakdown: { renewals: number; rxChanges: number; errors: number } }>('/api/dosespot/notifications')
 
+export const checkEligibility = (childId: string) =>
+  apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
+
 // ── Labs ──────────────────────────────────────────────────────
 export const getLabOrders = (childId: string) =>
   apiFetch<any[]>(`/api/labs/results?child_id=${encodeURIComponent(childId)}`)

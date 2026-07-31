@@ -91,38 +91,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
   const sql = neon(process.env.DATABASE_URL!)
-  const { appointment_id } = req.body ?? {}
-  if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
+  const { appointment_id, child_id } = req.body ?? {}
+  if (!appointment_id && !child_id) return res.status(400).json({ error: 'appointment_id or child_id required' })
 
   const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = providerRows[0].practice_id as string
 
-  // Find child via encounter note first, then booking request fallback
   let child: any = null
 
-  const [noteRow] = await sql`
-    SELECT c.* FROM encounter_notes en
-    JOIN children c ON c.id = en.child_id
-    WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
-    LIMIT 1`
-  if (noteRow) {
-    child = noteRow
+  if (child_id) {
+    const [c] = await sql`SELECT * FROM children WHERE id = ${child_id}::uuid LIMIT 1`
+    child = c ?? null
   } else {
-    // Try via booking request reference code in appointment notes
-    const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
-    const refMatch = (appt?.notes ?? '').match(/Ref: (PUC-\d+)/)
-    if (refMatch) {
-      const [booking] = await sql`SELECT child_ids FROM booking_requests WHERE reference_code = ${refMatch[1]} LIMIT 1`
-      const childId = booking?.child_ids?.[0]
-      if (childId) {
-        const [c] = await sql`SELECT * FROM children WHERE id = ${childId}::uuid`
-        child = c ?? null
+    // Find child via encounter note first, then booking request fallback
+    const [noteRow] = await sql`
+      SELECT c.* FROM encounter_notes en
+      JOIN children c ON c.id = en.child_id
+      WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
+      LIMIT 1`
+    if (noteRow) {
+      child = noteRow
+    } else {
+      const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+      const refMatch = (appt?.notes ?? '').match(/Ref: (PUC-\d+)/)
+      if (refMatch) {
+        const [booking] = await sql`SELECT child_ids FROM booking_requests WHERE reference_code = ${refMatch[1]} LIMIT 1`
+        const cId = booking?.child_ids?.[0]
+        if (cId) {
+          const [c] = await sql`SELECT * FROM children WHERE id = ${cId}::uuid`
+          child = c ?? null
+        }
       }
     }
   }
 
-  if (!child) return res.status(404).json({ error: 'No patient record found for this appointment.' })
+  if (!child) return res.status(404).json({ error: 'No patient record found.' })
   if (!child.insurance_member_id) return res.status(422).json({ error: 'No insurance information on file for this patient.' })
 
   const payerName = child.insurance_provider ?? null
