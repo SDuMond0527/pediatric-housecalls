@@ -110,8 +110,12 @@ function genderCode(g: string | null): string {
   return 'Unknown'
 }
 
-function formatDob(dob: string): string {
-  return String(dob).split('T')[0] + 'T00:00:00.000Z'
+function formatDob(dob: any): string {
+  const d = new Date(dob)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}T00:00:00.000Z`
 }
 
 function cleanPhone(phone: string | null): string {
@@ -157,6 +161,7 @@ async function findOrCreateDoseSpotPatient(
       ZipCode:          family.zip           || '',
       PrimaryPhone:     cleanPhone(family.phone),
       PrimaryPhoneType: 'Home',
+      Active:           true,
       Weight:           0,
       WeightMetric:     'lb',
       Height:           0,
