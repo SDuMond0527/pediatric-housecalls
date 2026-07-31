@@ -147,7 +147,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', pharmacy_benefits_manager: '' })
+  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -354,7 +354,6 @@ export function PatientChart() {
         insurance_subscriber_name: child?.insurance_subscriber_name || '',
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
-        pharmacy_benefits_manager: child?.pharmacy_benefits_manager || '',
       })
     }
     setEditingSection(section)
@@ -859,13 +858,7 @@ export function PatientChart() {
                           </select>
                         </div>
                       </div>
-                      <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Pharmacy benefits manager (PBM) <span className="text-[#bbb]">— optional</span></label>
-                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          placeholder="e.g. Express Scripts, CVS Caremark"
-                          value={insEdit.pharmacy_benefits_manager} onChange={e => setInsEdit(p => ({ ...p, pharmacy_benefits_manager: e.target.value }))} />
-                      </div>
-                      {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
+                      {editError &&<div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => saveEdit('insurance')} disabled={editSaving}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] disabled:opacity-50">
@@ -888,7 +881,6 @@ export function PatientChart() {
                             <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
                             <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
                             <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
-                            {child?.pharmacy_benefits_manager && <Field label="PBM" value={child.pharmacy_benefits_manager} />}
                           </div>
                           {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
                             <div>

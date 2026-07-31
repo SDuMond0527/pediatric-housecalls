@@ -101,7 +101,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           insurance_subscriber_name    = COALESCE(${b.insurance_subscriber_name    || null}, insurance_subscriber_name),
           insurance_subscriber_dob     = COALESCE(${b.insurance_subscriber_dob     || null}::date, insurance_subscriber_dob),
           insurance_subscriber_gender  = COALESCE(${b.insurance_subscriber_gender  || null}, insurance_subscriber_gender),
-          pharmacy_benefits_manager    = COALESCE(${b.pharmacy_benefits_manager    || null}, pharmacy_benefits_manager),
           allergies            = COALESCE(${b.allergies            || null}, allergies),
           current_medications  = COALESCE(${b.current_medications  || null}, current_medications),
           medical_history      = COALESCE(${b.medical_history      || null}, medical_history),
