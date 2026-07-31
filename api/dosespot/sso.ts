@@ -110,8 +110,7 @@ function genderCode(g: string | null): number {
 }
 
 function formatDob(dob: string): string {
-  const [y, m, d] = String(dob).split('T')[0].split('-')
-  return `${m}/${d}/${y}`
+  return String(dob).split('T')[0] + 'T00:00:00.000Z'
 }
 
 function cleanPhone(phone: string | null): string {
@@ -133,7 +132,11 @@ async function findOrCreateDoseSpotPatient(
   // If we already have a DoseSpot patient ID, verify it still exists
   if (child.dosespot_patient_id) {
     const check = await fetch(`${DS_BASE}/webapi/v2/patients/${child.dosespot_patient_id}`, { headers })
-    if (check.ok) return child.dosespot_patient_id as number
+    if (check.ok) {
+      const existing = await check.json() as { Item?: { PatientId?: number } }
+      return existing.Item?.PatientId ?? child.dosespot_patient_id as number
+    }
+    // Stale ID — fall through to recreate
   }
 
   // Create patient
@@ -150,7 +153,7 @@ async function findOrCreateDoseSpotPatient(
       State:            family.state         || '',
       ZipCode:          family.zip           || '',
       PrimaryPhone:     cleanPhone(family.phone),
-      PrimaryPhoneType: 3,
+      PrimaryPhoneType: 4,
     }),
   })
 
