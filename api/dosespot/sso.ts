@@ -132,7 +132,7 @@ async function findOrCreateDoseSpotPatient(
 
   // If we already have a DoseSpot patient ID, verify it still exists
   if (child.dosespot_patient_id) {
-    const check = await fetch(`${DS_BASE}/api/patients/${child.dosespot_patient_id}`, { headers })
+    const check = await fetch(`${DS_BASE}/webapi/v2/api/patients/${child.dosespot_patient_id}`, { headers })
     if (check.ok) {
       const existing = await check.json() as { Item?: { PatientId?: number } }
       return existing.Item?.PatientId ?? child.dosespot_patient_id as number
@@ -141,7 +141,7 @@ async function findOrCreateDoseSpotPatient(
   }
 
   // Create patient
-  const r = await fetch(`${DS_BASE}/api/patients`, {
+  const r = await fetch(`${DS_BASE}/webapi/v2/api/patients`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
