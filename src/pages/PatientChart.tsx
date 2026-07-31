@@ -1516,6 +1516,11 @@ export function PatientChart() {
 
                 {dsUrl && (
                   <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm overflow-hidden">
+                    {dsError && (
+                      <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 text-left">
+                        {dsError}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E8E8E4]">
                       <div className="flex items-center gap-2 text-[12px] text-[#555]">
                         <FlaskConical size={13} className="text-[#7F77DD]" />
