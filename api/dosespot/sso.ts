@@ -102,12 +102,12 @@ function buildSsoUrl(clinicianId: string, patientId?: number): string {
 
 // ─── Patient sync ────────────────────────────────────────────────────────────
 
-function genderCode(g: string | null): number {
-  if (!g) return 3
+function genderCode(g: string | null): string {
+  if (!g) return 'Unknown'
   const l = g.toLowerCase()
-  if (l === 'male'   || l === 'm') return 1
-  if (l === 'female' || l === 'f') return 2
-  return 3
+  if (l === 'male'   || l === 'm') return 'Male'
+  if (l === 'female' || l === 'f') return 'Female'
+  return 'Unknown'
 }
 
 function formatDob(dob: string): string {
@@ -132,7 +132,7 @@ async function findOrCreateDoseSpotPatient(
 
   // If we already have a DoseSpot patient ID, verify it still exists
   if (child.dosespot_patient_id) {
-    const check = await fetch(`${DS_BASE}/webapi/v2/patients/${child.dosespot_patient_id}`, { headers })
+    const check = await fetch(`${DS_BASE}/api/patients/${child.dosespot_patient_id}`, { headers })
     if (check.ok) {
       const existing = await check.json() as { Item?: { PatientId?: number } }
       return existing.Item?.PatientId ?? child.dosespot_patient_id as number
@@ -141,7 +141,7 @@ async function findOrCreateDoseSpotPatient(
   }
 
   // Create patient
-  const r = await fetch(`${DS_BASE}/webapi/v2/patients`, {
+  const r = await fetch(`${DS_BASE}/api/patients`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -154,7 +154,11 @@ async function findOrCreateDoseSpotPatient(
       State:            family.state         || '',
       ZipCode:          family.zip           || '',
       PrimaryPhone:     cleanPhone(family.phone),
-      PrimaryPhoneType: 4,
+      PrimaryPhoneType: 'Home',
+      Weight:           0,
+      WeightMetric:     'lb',
+      Height:           0,
+      HeightMetric:     'inch',
     }),
   })
 
