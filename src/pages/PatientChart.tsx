@@ -310,11 +310,9 @@ export function PatientChart() {
     setDsError(null)
     setDsUrl(null)
     try {
-      const { ssoUrl, syncError, dsPatientId } = await getDoseSpotSSO(childId)
+      const { ssoUrl, syncError } = await getDoseSpotSSO(childId)
       setDsUrl(ssoUrl)
-      if (syncError) setDsError(`Sync error: ${syncError}`)
-      else if (!dsPatientId) setDsError(`Debug: no patient ID returned from DoseSpot — SSO will open to tasks page. URL has PatientId: ${ssoUrl.includes('PatientId')}`)
-      else setDsError(`Debug: DoseSpot patient ID = ${dsPatientId}. Opening patient chart.`)
+      if (syncError) setDsError(`Warning: patient sync failed — ${syncError}. DoseSpot opened without patient context.`)
     } catch (e: any) {
       setDsError(e.message ?? 'Could not launch DoseSpot')
     } finally {
