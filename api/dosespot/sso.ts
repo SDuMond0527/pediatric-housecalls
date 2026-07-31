@@ -141,7 +141,9 @@ async function findOrCreateDoseSpotPatient(
   }
 
   // Create patient
-  const r = await fetch(`${DS_BASE}/webapi/v2/api/patients`, {
+  const patientUrl = `${DS_BASE}/webapi/v2/api/patients`
+  console.error('[dosespot/sso] calling:', patientUrl)
+  const r = await fetch(patientUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -167,7 +169,10 @@ async function findOrCreateDoseSpotPatient(
   if (!r.ok) {
     throw new Error(`DoseSpot patient create ${r.status}: ${responseText}`)
   }
-  const data = JSON.parse(responseText) as { Id?: number }
+  const data = JSON.parse(responseText) as { Id?: number; Result?: { ResultCode?: string; ResultDescription?: string } }
+  if (data.Result?.ResultCode && data.Result.ResultCode !== 'OK') {
+    throw new Error(`DoseSpot patient create error: ${data.Result.ResultDescription || data.Result.ResultCode}`)
+  }
   return data.Id ?? 0
 }
 
