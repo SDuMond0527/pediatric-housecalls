@@ -94,7 +94,6 @@ function buildSsoUrl(clinicianId: string, patientId?: number): string {
 
   if (patientId) {
     url += `&PatientId=${patientId}`
-    url += `&OnBehalfOfUserId=${clinicianId}`
   }
 
   return url
@@ -196,10 +195,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!childRow) return res.status(404).json({ error: 'Patient not found' })
 
     const child  = childRow as Record<string, any>
-    const family = { phone: child.family_phone, address_line1: child.address_line1, city: child.city, state: child.state, zip: child.zip }
+    // Use family profile fields, falling back to child's own parent fields
+    const family = {
+      phone:        child.family_phone   || child.parent_phone,
+      address_line1: child.address_line1 || child.parent_address,
+      city:         child.city           || child.parent_city,
+      state:        child.state          || child.parent_state,
+      zip:          child.zip            || child.parent_zip,
+    }
 
     let dsPatientId: number | undefined = child.dosespot_patient_id || undefined
 
+    let syncError: string | undefined
     try {
       const token   = await getDoseSpotToken()
       dsPatientId   = await findOrCreateDoseSpotPatient(child, family, token)
@@ -207,12 +214,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE children SET dosespot_patient_id = ${dsPatientId} WHERE id = ${child_id}::uuid`
       }
     } catch (e: any) {
-      // Don't block SSO if patient sync fails — open DoseSpot without patient context
-      console.warn('[dosespot/sso] patient sync warning:', e.message)
+      syncError = e.message
+      console.error('[dosespot/sso] patient sync error:', e.message)
     }
 
     const ssoUrl = buildSsoUrl(DS_CLINICIAN, dsPatientId)
-    return res.status(200).json({ ssoUrl })
+    return res.status(200).json({ ssoUrl, syncError })
 
   } catch (err: any) {
     console.error('[dosespot/sso] error:', err?.message)
