@@ -190,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [childRow] = await sql`
       SELECT c.*, fp.phone AS family_phone, fp.address_line1, fp.city, fp.state, fp.zip
       FROM children c
-      JOIN family_profiles fp ON fp.id = c.family_id
+      LEFT JOIN family_profiles fp ON fp.id = c.family_id
       WHERE c.id = ${child_id}::uuid
       LIMIT 1`
     if (!childRow) return res.status(404).json({ error: 'Patient not found' })
