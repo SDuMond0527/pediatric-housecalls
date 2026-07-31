@@ -301,8 +301,8 @@ export async function uploadNotePhoto(file: File): Promise<string> {
 }
 
 // ── Eligibility ───────────────────────────────────────────────
-export const checkEligibility = (appointmentId: string) =>
-  apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify({ appointment_id: appointmentId }) })
+export const checkEligibility = (id: string, byChild = false) =>
+  apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify(byChild ? { child_id: id } : { appointment_id: id }) })
 
 // ── Claims ────────────────────────────────────────────────────
 export const getUnbilledNotes = () =>
@@ -409,8 +409,6 @@ export const getDoseSpotSSO = (childId: string) =>
 export const getDoseSpotNotifications = () =>
   apiFetch<{ count: number; breakdown: { renewals: number; rxChanges: number; errors: number } }>('/api/dosespot/notifications')
 
-export const checkEligibility = (childId: string) =>
-  apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
 
 // ── Labs ──────────────────────────────────────────────────────
 export const getLabOrders = (childId: string) =>

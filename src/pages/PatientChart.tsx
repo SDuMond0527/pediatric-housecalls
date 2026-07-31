@@ -786,8 +786,9 @@ export function PatientChart() {
                         {child?.insurance_member_id && (
                           <button
                             onClick={async () => {
+                              if (!childId) return
                               setEligResult(null); setEligError(''); setEligLoading(true)
-                              try { setEligResult(await checkEligibility(childId)) }
+                              try { setEligResult(await checkEligibility(childId, true)) }
                               catch (e: any) { setEligError(e.message ?? 'Eligibility check failed') }
                               finally { setEligLoading(false) }
                             }}
