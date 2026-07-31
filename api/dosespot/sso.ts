@@ -94,6 +94,7 @@ function buildSsoUrl(clinicianId: string, patientId?: number): string {
 
   if (patientId) {
     url += `&PatientId=${patientId}`
+    url += `&OnBehalfOfUserId=${clinicianId}`
   }
 
   return url
