@@ -24,6 +24,7 @@ const DS_CLINIC_ID  = cleanEnv(process.env.DOSESPOT_CLINIC_ID,       '1038875')
 const DS_CLINIC_KEY = cleanEnv(process.env.DOSESPOT_CLINIC_KEY)
 const DS_SUB_KEY    = cleanEnv(process.env.DOSESPOT_SUBSCRIPTION_KEY)
 const DS_CLINICIAN  = cleanEnv(process.env.DOSESPOT_CLINICIAN_ID,    '3122427')
+const DS_ADMIN      = cleanEnv(process.env.DOSESPOT_ADMIN_ID,        '3122428')
 
 // ─── Token (section 1.3.1 of Auth Guide) ────────────────────────────────────
 // POST /webapi/v2/connect/token with grant_type=password + clinic credentials
@@ -33,7 +34,7 @@ async function getDoseSpotToken(): Promise<string> {
     grant_type:    'password',
     client_id:     DS_CLINIC_ID,
     client_secret: DS_CLINIC_KEY,
-    username:      DS_CLINICIAN,
+    username:      DS_ADMIN,
     password:      DS_CLINIC_KEY,
     scope:         'api',
   })
@@ -157,11 +158,12 @@ async function findOrCreateDoseSpotPatient(
     }),
   })
 
+  const responseText = await r.text()
+  console.error('[dosespot/sso] patient create status:', r.status, 'body:', responseText)
   if (!r.ok) {
-    const msg = await r.text()
-    throw new Error(`DoseSpot patient sync error: ${msg}`)
+    throw new Error(`DoseSpot patient create ${r.status}: ${responseText}`)
   }
-  const data = await r.json() as { Id?: number }
+  const data = JSON.parse(responseText) as { Id?: number }
   return data.Id ?? 0
 }
 
@@ -212,7 +214,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let syncError: string | undefined
     try {
       const token   = await getDoseSpotToken()
+      console.error('[dosespot/sso] got token, syncing patient. child.dosespot_patient_id:', child.dosespot_patient_id)
       dsPatientId   = await findOrCreateDoseSpotPatient(child, family, token)
+      console.error('[dosespot/sso] dsPatientId after sync:', dsPatientId)
       if (dsPatientId && !child.dosespot_patient_id) {
         await sql`UPDATE children SET dosespot_patient_id = ${dsPatientId} WHERE id = ${child_id}::uuid`
       }
@@ -222,7 +226,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const ssoUrl = buildSsoUrl(DS_CLINICIAN, dsPatientId)
-    return res.status(200).json({ ssoUrl, syncError })
+    console.error('[dosespot/sso] final dsPatientId:', dsPatientId, '| URL includes PatientId:', ssoUrl.includes('PatientId'))
+    return res.status(200).json({ ssoUrl, syncError, dsPatientId })
 
   } catch (err: any) {
     console.error('[dosespot/sso] error:', err?.message)
