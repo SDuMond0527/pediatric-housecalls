@@ -147,7 +147,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', pharmacy_benefits_manager: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -353,6 +353,7 @@ export function PatientChart() {
         insurance_subscriber_name: child?.insurance_subscriber_name || '',
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
+        pharmacy_benefits_manager: child?.pharmacy_benefits_manager || '',
       })
     }
     setEditingSection(section)
@@ -799,8 +800,8 @@ export function PatientChart() {
                           </button>
                         )}
                         <button onClick={() => startEdit('insurance')}
-                          className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium hover:underline">
-                          <Pencil size={11} /> Edit
+                          className="flex items-center gap-1 text-[11px] text-[#7F77DD] font-medium border border-[#7F77DD] px-2 py-0.5 rounded hover:bg-[#EEEDFE] transition-colors">
+                          <Pencil size={10} /> Edit current
                         </button>
                         {(child?.insurance_provider || child?.insurance_member_id) && (
                           <button
@@ -857,6 +858,12 @@ export function PatientChart() {
                           </select>
                         </div>
                       </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Pharmacy benefits manager (PBM) <span className="text-[#bbb]">— optional</span></label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          placeholder="e.g. Express Scripts, CVS Caremark"
+                          value={insEdit.pharmacy_benefits_manager} onChange={e => setInsEdit(p => ({ ...p, pharmacy_benefits_manager: e.target.value }))} />
+                      </div>
                       {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => saveEdit('insurance')} disabled={editSaving}
@@ -880,6 +887,7 @@ export function PatientChart() {
                             <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
                             <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
                             <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
+                            {child?.pharmacy_benefits_manager && <Field label="PBM" value={child.pharmacy_benefits_manager} />}
                           </div>
                           {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
                             <div>
