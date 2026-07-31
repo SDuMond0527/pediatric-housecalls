@@ -158,8 +158,8 @@ async function findOrCreateDoseSpotPatient(
     const msg = await r.text()
     throw new Error(`DoseSpot patient sync error: ${msg}`)
   }
-  const data = await r.json() as { Item?: number }
-  return data.Item ?? 0
+  const data = await r.json() as { Id?: number }
+  return data.Id ?? 0
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
