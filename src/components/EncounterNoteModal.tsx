@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -505,6 +505,36 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   // Vitals
   const [vitals, setVitals] = useState<VitalsForm>(emptyVitals())
+
+  // AI draft
+  const [aiDrafting, setAiDrafting] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  async function handleAiDraft() {
+    setAiDrafting(true)
+    setAiError(null)
+    try {
+      const patientAge = linkedChildDob
+        ? `${Math.floor((Date.now() - new Date(linkedChildDob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} years old`
+        : undefined
+      const draft = await draftEncounterNote({
+        chief_complaint: chiefComplaint,
+        note_type: noteType,
+        patient_age: patientAge,
+        vitals: Object.fromEntries(Object.entries(vitals).filter(([, v]) => v !== '')),
+        existing_subjective: subjective,
+        existing_objective: objective,
+      })
+      if (draft.subjective) setSubjective(draft.subjective)
+      if (draft.objective)  setObjective(draft.objective)
+      if (draft.assessment) setAssessment(draft.assessment)
+      if (draft.plan)       setPlan(draft.plan)
+    } catch (e: any) {
+      setAiError(e.message ?? 'AI draft failed')
+    } finally {
+      setAiDrafting(false)
+    }
+  }
 
   // ICD-10 search
   const [icdQuery, setIcdQuery] = useState('')
@@ -1255,6 +1285,24 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </section>
               )
             })()}
+
+            {/* AI Draft */}
+            {!readOnly && (
+              <section>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAiDraft}
+                    disabled={aiDrafting || (!chiefComplaint.trim() && !subjective.trim())}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#7F77DD] text-white text-[13px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors disabled:opacity-40"
+                  >
+                    <span>{aiDrafting ? '✦ Drafting…' : '✦ Draft with AI'}</span>
+                  </button>
+                  <span className="text-[11px] text-[#999]">Fills Subjective, Objective, Assessment & Plan from chief complaint + vitals</span>
+                </div>
+                {aiError && <div className="mt-2 text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{aiError}</div>}
+              </section>
+            )}
 
             {/* Subjective */}
             <section>

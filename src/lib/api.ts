@@ -402,6 +402,18 @@ export const sendPatientStatement = (id: string) =>
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
 
+// ── AI ───────────────────────────────────────────────────────
+export const draftEncounterNote = (body: {
+  chief_complaint?: string
+  note_type?: string
+  patient_age?: string
+  vitals?: Record<string, string>
+  existing_subjective?: string
+  existing_objective?: string
+}) => apiFetch<{ subjective: string; objective: string; assessment: string; plan: string }>(
+  '/api/ai/draft-note', { method: 'POST', body: JSON.stringify(body) }
+)
+
 // ── DoseSpot e-Prescribing ────────────────────────────────────
 export const getDoseSpotSSO = (childId: string) =>
   apiFetch<{ ssoUrl: string; syncError?: string; dsPatientId?: number }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
