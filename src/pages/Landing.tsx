@@ -1,9 +1,14 @@
 import { Link } from 'react-router-dom'
-import { Shield, MapPin, Smartphone, ClipboardList, Pill, Building2 } from 'lucide-react'
+import { Shield, MapPin, Smartphone, ClipboardList, Pill, Building2, Lock } from 'lucide-react'
 
 export function Landing() {
   return (
     <div className="min-h-screen bg-[#FAFAF8]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+
+      {/* Top banner */}
+      <div className="bg-[#1A1A2E] text-white text-center px-6 py-2.5 text-[13px] font-medium">
+        GoRoam Health is a complete, end-to-end Electronic Health Record (EHR) platform for mobile pediatric practices — independent of any other EHR system.
+      </div>
 
       {/* Header */}
       <header className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
@@ -20,13 +25,13 @@ export function Landing() {
       <section className="bg-white border-b border-[#E8E8E4] px-6 py-16 text-center">
         <div className="max-w-2xl mx-auto">
           <div className="inline-block bg-[#EEEDFE] text-[#7F77DD] text-[12px] font-medium px-3 py-1 rounded-full mb-5">
-            Pediatric House Call Platform
+            Complete, Independent EHR Platform for Pediatric House Call Practices
           </div>
           <h1 className="text-4xl font-semibold text-[#1A1A2E] leading-tight mb-4">
-            Clinical operations software for pediatric house call practices
+            The complete, end-to-end EHR platform for pediatric house call practices
           </h1>
           <p className="text-[16px] text-[#666] leading-relaxed mb-8">
-            GoRoam Health gives pediatric practices everything they need to coordinate in-home and telehealth care — scheduling, documentation, claims, EHR integration, and electronic prescribing — in a single platform built for providers on the move.
+            GoRoam Health is a fully independent, end-to-end Electronic Health Record (EHR) platform — not a bolt-on tool that plugs into someone else's EHR. Scheduling, charting, documentation, claims, and electronic prescribing all live natively in one system, built for providers on the move. GoRoam Health does not depend on, integrate with, or sync data to any third-party EHR platform.
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
             <Link
@@ -49,20 +54,20 @@ export function Landing() {
       <section className="px-6 py-14 max-w-4xl mx-auto">
         <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Our business model</h2>
         <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-          GoRoam Health operates as a software-as-a-service (SaaS) platform licensed to licensed medical practices. Practices pay a subscription fee to access the platform for their providers and administrative staff. GoRoam Health does not employ clinicians, does not provide medical care, and does not generate revenue from prescriptions, pharmacy relationships, or pharmaceutical partnerships.
+          GoRoam Health operates as a software-as-a-service (SaaS) platform licensed to licensed medical practices. Practices pay a subscription fee to access the platform for their providers and administrative staff. GoRoam Health is a complete, end-to-end EHR system built and maintained entirely by GoRoam Health — it is fully independent of any other EHR platform, with no reliance on third-party EHR vendors for charting, records, or clinical data storage. GoRoam Health does not employ clinicians, does not provide medical care, and does not generate revenue from prescriptions, pharmacy relationships, or pharmaceutical partnerships.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             {
               icon: <Building2 size={18} className="text-[#7F77DD]" />,
-              title: 'Practice-licensed SaaS',
-              body: 'Medical practices subscribe to the platform. Pricing is based on practice size and features — not volume of prescriptions or clinical activity.',
+              title: 'Practice-licensed, independent EHR',
+              body: 'Medical practices subscribe to GoRoam Health as their complete, standalone EHR — pricing is based on practice size and features, not volume of prescriptions or clinical activity, and there is no dependency on any other EHR vendor.',
             },
             {
               icon: <Shield size={18} className="text-[#1D9E75]" />,
               title: 'HIPAA-compliant infrastructure',
-              body: 'GoRoam Health acts as a Business Associate under HIPAA, with BAAs in place for all data sub-processors. PHI is encrypted in transit and at rest.',
+              body: 'GoRoam Health acts as a Business Associate under HIPAA, with BAAs in place for all data sub-processors. PHI is encrypted in transit and at rest within GoRoam Health\'s own systems.',
             },
             {
               icon: <Pill size={18} className="text-[#EF9F27]" />,
@@ -84,7 +89,7 @@ export function Landing() {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Who we serve</h2>
           <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-            GoRoam Health is purpose-built for licensed pediatric medical practices that deliver care in patients' homes. Our customers are small-to-mid-size practices operating across the southeastern and mid-Atlantic United States.
+            GoRoam Health is purpose-built for licensed pediatric medical practices that deliver care in patients' homes. As a complete, independent EHR platform, it replaces the need for a separate EHR system entirely. Our customers are small-to-mid-size practices operating across the southeastern and mid-Atlantic United States.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
@@ -106,7 +111,7 @@ export function Landing() {
       <section className="px-6 py-14 max-w-4xl mx-auto">
         <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Electronic prescribing</h2>
         <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-          GoRoam Health integrates with DoseSpot, a Surescripts-certified e-prescribing platform, to enable licensed providers to transmit prescriptions electronically to the patient's pharmacy of choice — directly from within the GoRoam Health provider portal.
+          As part of its complete, end-to-end EHR platform, GoRoam Health integrates with DoseSpot, a Surescripts-certified e-prescribing platform, to enable licensed providers to transmit prescriptions electronically to the patient's pharmacy of choice — directly from within the GoRoam Health provider portal.
         </p>
 
         {/* Workflow callout — Surescripts requires this explicitly */}
@@ -167,7 +172,7 @@ export function Landing() {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Platform overview</h2>
           <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-            GoRoam Health gives providers and practice administrators a unified view of scheduling, patients, and clinical activity.
+            GoRoam Health gives providers and practice administrators a unified view of scheduling, patients, and clinical activity — all within one complete, independent EHR platform, with no other EHR system required.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
@@ -199,13 +204,17 @@ export function Landing() {
 
       {/* Features */}
       <section className="px-6 py-14 max-w-4xl mx-auto">
-        <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-8">Platform features</h2>
+        <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Platform features</h2>
+        <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
+          Every feature below runs natively on GoRoam Health's own complete, end-to-end EHR — independent of any other EHR platform.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
+            { icon: <Lock size={15} className="text-[#7F77DD]" />, label: 'Complete, independent EHR — no third-party EHR required' },
             { icon: <ClipboardList size={15} className="text-[#7F77DD]" />, label: 'Appointment scheduling and management' },
             { icon: <Smartphone size={15} className="text-[#7F77DD]" />, label: 'Family patient portal with online booking' },
-            { icon: <ClipboardList size={15} className="text-[#7F77DD]" />, label: 'Encounter documentation and clinical notes' },
-            { icon: <Shield size={15} className="text-[#7F77DD]" />, label: 'EHR integration (Charm Health)' },
+            { icon: <ClipboardList size={15} className="text-[#7F77DD]" />, label: 'Encounter documentation and clinical notes, built in' },
+            { icon: <Shield size={15} className="text-[#7F77DD]" />, label: 'Native patient charting and records storage' },
             { icon: <Pill size={15} className="text-[#7F77DD]" />, label: 'Electronic prescribing via DoseSpot / Surescripts' },
             { icon: <Building2 size={15} className="text-[#7F77DD]" />, label: 'Insurance claims management' },
             { icon: <MapPin size={15} className="text-[#7F77DD]" />, label: 'Zone-based provider routing and availability' },
@@ -255,6 +264,7 @@ export function Landing() {
           <Link to="/privacy" className="hover:text-[#7F77DD] transition-colors">Privacy Policy</Link>
           <Link to="/faq" className="hover:text-[#7F77DD] transition-colors">FAQ</Link>
         </div>
+        <div className="mb-1">GoRoam Health is a complete, end-to-end EHR platform, independent of any other EHR system.</div>
         <div>© {new Date().getFullYear()} GoRoam Health, LLC · York, SC 29745</div>
       </footer>
 
