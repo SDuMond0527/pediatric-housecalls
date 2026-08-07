@@ -7,7 +7,7 @@ export function Landing() {
 
       {/* Top banner */}
       <div className="bg-[#1A1A2E] text-white text-center px-6 py-2.5 text-[13px] font-medium">
-        GoRoam Health is a complete, end-to-end Electronic Health Record (EHR) platform for mobile pediatric practices — independent of any other EHR system.
+        GoRoam Health is a complete, end-to-end Electronic Health Record (EHR) platform for mobile practices — independent of any other EHR system.
       </div>
 
       {/* Header */}
@@ -25,10 +25,10 @@ export function Landing() {
       <section className="bg-white border-b border-[#E8E8E4] px-6 py-16 text-center">
         <div className="max-w-2xl mx-auto">
           <div className="inline-block bg-[#EEEDFE] text-[#7F77DD] text-[12px] font-medium px-3 py-1 rounded-full mb-5">
-            Complete, Independent EHR Platform for Pediatric House Call Practices
+            Complete, Independent EHR Platform for Mobile Practices
           </div>
           <h1 className="text-4xl font-semibold text-[#1A1A2E] leading-tight mb-4">
-            The complete, end-to-end EHR platform for pediatric house call practices
+            The complete, end-to-end EHR platform for mobile house call practices
           </h1>
           <p className="text-[16px] text-[#666] leading-relaxed mb-8">
             GoRoam Health is a fully independent, end-to-end Electronic Health Record (EHR) platform — not a bolt-on tool that plugs into someone else's EHR. Scheduling, charting, documentation, claims, and electronic prescribing all live natively in one system, built for providers on the move. GoRoam Health does not depend on, integrate with, or sync data to any third-party EHR platform.
@@ -89,13 +89,13 @@ export function Landing() {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Who we serve</h2>
           <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-            GoRoam Health is purpose-built for licensed pediatric medical practices that deliver care in patients' homes. As a complete, independent EHR platform, it replaces the need for a separate EHR system entirely. Our customers are small-to-mid-size practices operating across the southeastern and mid-Atlantic United States.
+            GoRoam Health is purpose-built for licensed medical practices that deliver care in patients' homes. As a complete, independent EHR platform, it replaces the need for a separate EHR system entirely. Our customers are small-to-mid-size mobile practices operating across the southeastern and mid-Atlantic United States.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { label: 'Provider types', value: 'Physicians (MD), Nurse Practitioners (PNP), Clinical Medical Assistants (CMA), Registered Nurses (RN)' },
-              { label: 'Care settings', value: 'In-home sick visits, in-home IV therapy, sports physicals, telehealth video visits, CMA + telemedicine hybrid visits' },
-              { label: 'Patient population', value: 'Pediatric patients (infants through adolescents) seen in the home by their practice\'s assigned provider' },
+              { label: 'Care settings', value: 'In-home sick visits, in-home IV therapy, physicals, telehealth video visits, CMA + telemedicine hybrid visits' },
+              { label: 'Patient population', value: 'Patients seen in the home by their practice\'s assigned provider' },
               { label: 'Service areas', value: 'Currently serving practices in North Carolina, South Carolina, and Virginia, with expansion underway' },
             ].map(({ label, value }) => (
               <div key={label} className="border border-[#E8E8E4] rounded-xl p-5">
