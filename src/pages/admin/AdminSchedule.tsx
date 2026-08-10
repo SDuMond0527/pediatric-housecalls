@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren } from '../../lib/api'
+import { apiFetch, getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -385,6 +385,35 @@ export function AdminSchedule() {
       status: 'upcoming',
       notes: noteParts.length ? noteParts.join('|') : null,
     })
+
+    // Persist contact info to children table for future autofill
+    if (selectedPatient?.id) {
+      apiFetch(`/api/children/${selectedPatient.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          parent_phone:   form.phone   || null,
+          parent_email:   form.email   || null,
+          parent_address: form.address || null,
+          parent_zip:     form.zip     || null,
+        }),
+      }).catch(() => {})
+    } else if (form.patientName) {
+      const [firstName, ...rest] = form.patientName.trim().split(' ')
+      apiFetch('/api/children', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name:     firstName      || null,
+          last_name:      rest.join(' ') || null,
+          date_of_birth:  form.dob       || null,
+          gender:         form.gender    || null,
+          parent_phone:   form.phone     || null,
+          parent_email:   form.email     || null,
+          parent_address: form.address   || null,
+          parent_zip:     form.zip       || null,
+        }),
+      }).catch(() => {})
+    }
+
     setModalOpen(false)
     fetchAppointments()
     setForm(f => ({ ...f, provider_id: '', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '' }))
