@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapPin, Clock, CheckCircle2, X, Plus } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
   createAppointment, invokeNotifications, createWaitlistEntry,
@@ -32,6 +32,14 @@ interface WaitlistEntry {
 }
 
 const EMPTY_ADD = { name: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+
+function safeFormat(val: unknown, fmt: string): string {
+  try {
+    const d = val instanceof Date ? val : new Date(String(val))
+    if (!isValid(d)) return ''
+    return format(d, fmt)
+  } catch { return '' }
+}
 
 export function Waitlist() {
   const { provider } = useAuth()
@@ -267,7 +275,7 @@ export function Waitlist() {
                   <div className="flex items-center gap-3 text-[12px] text-[#999] flex-wrap">
                     <span className="flex items-center gap-1"><MapPin size={11} /> Zip {entry.zip}</span>
                     {entry.preferred_time_window && <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window}</span>}
-                    <span>Waiting since {format(new Date(entry.created_at), 'MMM d, h:mm a')}</span>
+                    <span>Waiting since {safeFormat(entry.created_at, 'MMM d, h:mm a')}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
