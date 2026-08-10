@@ -213,7 +213,30 @@ export function Waitlist() {
     if (ampm === 'AM' && h === 12) h = 0
     const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
-    // Create appointment
+    // Convert waitlist note labels to appointment note keys
+    const LABEL_TO_KEY: Record<string, string> = {
+      Patient: 'PATIENT', DOB: 'DOB', Email: 'PARENTEMAIL', Phone: 'PARENTPHONE',
+      Allergies: 'ALLERGY', Medications: 'MEDS', PMH: 'PMH',
+      PCP: 'PCP', Pharmacy: 'PHARMACY', Insurance: 'INSURANCE',
+      'Member ID': 'MEMBERID', 'Group #': 'GROUPNUM',
+    }
+    const apptNoteParts: string[] = []
+    if (accepting.complaint) apptNoteParts.push(`CC:${accepting.complaint}`)
+    if (accepting.preferred_time_window) apptNoteParts.push(`NOTES:Preferred time: ${accepting.preferred_time_window}`)
+    ;(accepting.notes || '').split(' | ').forEach(part => {
+      const colonIdx = part.indexOf(': ')
+      if (colonIdx < 1) return
+      const label = part.slice(0, colonIdx).trim()
+      const value = part.slice(colonIdx + 2).trim()
+      if (!value) return
+      if (label === 'Address') {
+        apptNoteParts.push(`ADDR:${value}${accepting.state ? ', ' + accepting.state : ''} ${accepting.zip}`.trim())
+      } else {
+        const key = LABEL_TO_KEY[label]
+        if (key) apptNoteParts.push(`${key}:${value}`)
+      }
+    })
+
     await createAppointment({
       provider_id: provider.id,
       visit_type: accepting.visit_type || 'In-home sick visit',
@@ -221,7 +244,7 @@ export function Waitlist() {
       scheduled_time: time24,
       scheduled_date: date,
       status: 'upcoming',
-      notes: `From waitlist · Zip: ${accepting.zip}${accepting.preferred_time_window ? ` · Preferred: ${accepting.preferred_time_window}` : ''}`,
+      notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
     })
 
     // Mark waitlist entry as converted, recording which provider accepted it
