@@ -232,7 +232,7 @@ export function Shifts() {
                     const cmaEnd   = stateCmas.map(c => c.end_time).sort().reverse()[0] ?? '17:00'
                     const gaps = computeGaps(cmaStart, cmaEnd, ocs)
                     const myEntry = ocs.find(oc => oc.provider_id === provider.id)
-                    const canClaim = providerStates.includes(state) && gaps.length > 0 && !myEntry
+                    const canClaim = providerStates.includes(state) && gaps.length > 0
                     const fullyCovered = ocs.length > 0 && gaps.length === 0
 
                     return (
