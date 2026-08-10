@@ -148,6 +148,7 @@ export function Waitlist() {
       visit_type: addForm.visitType || null,
       zip: addForm.zip,
       state: addForm.state,
+      complaint: addForm.complaint,
       preferred_time_window: addForm.preferredTime || null,
       notes: noteParts.join(' | '),
     }).catch(() => {})
