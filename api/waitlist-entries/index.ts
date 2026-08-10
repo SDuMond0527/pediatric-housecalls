@@ -125,10 +125,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Provider path
-  const providerRows = await sql`SELECT practice_id, states FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
+  const providerRows = await sql`SELECT practice_id, states, is_admin FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = providerRows[0].practice_id as string
   const providerStates: string[] = (providerRows[0].states ?? []) as string[]
+  const isAdmin = !!(providerRows[0].is_admin)
 
   if (req.method === 'GET') {
     const { status, family_id } = req.query as Record<string, string>
@@ -136,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (family_id) {
       rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${family_id}::uuid AND practice_id = ${practiceId}::uuid AND status = 'waiting'`
     } else if (status) {
-      if (providerStates.length > 0) {
+      if (!isAdmin && providerStates.length > 0) {
         rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND practice_id = ${practiceId}::uuid AND (state = ANY(${providerStates}::text[]) OR state IS NULL) ORDER BY created_at ASC`
       } else {
         rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND practice_id = ${practiceId}::uuid ORDER BY created_at ASC`

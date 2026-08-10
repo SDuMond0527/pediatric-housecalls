@@ -144,18 +144,25 @@ export function Waitlist() {
     if (addForm.memberId) noteParts.push(`Member ID: ${addForm.memberId}`)
     if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
     if (addForm.complaint) noteParts.push(`Complaint: ${addForm.complaint}`)
-    await createWaitlistEntry({
-      visit_type: addForm.visitType || null,
-      zip: addForm.zip,
-      state: addForm.state,
-      complaint: addForm.complaint,
-      preferred_time_window: addForm.preferredTime || null,
-      notes: noteParts.join(' | '),
-    }).catch(() => {})
-    setAddSubmitting(false)
-    setAddOpen(false)
-    setAddForm(EMPTY_ADD)
-    fetchEntries()
+    try {
+      await createWaitlistEntry({
+        visit_type: addForm.visitType || null,
+        zip: addForm.zip,
+        state: addForm.state,
+        complaint: addForm.complaint,
+        preferred_time_window: addForm.preferredTime || null,
+        notes: noteParts.join(' | '),
+      })
+      setAddSubmitting(false)
+      setAddOpen(false)
+      setAddForm(EMPTY_ADD)
+      setNameQuery('')
+      setSelectedChild(null)
+      fetchEntries()
+    } catch (err: any) {
+      setAddSubmitting(false)
+      alert(`Failed to add patient to waitlist: ${err?.message || String(err)}`)
+    }
   }
 
   async function fetchEntries() {
