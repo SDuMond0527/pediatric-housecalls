@@ -287,7 +287,21 @@ export function BookVisit() {
     if (!booking.zone) { setRegularZoneProviders([]); setIvZoneProviders([]); setCmaProvidersForZone([]); setCmaAvailResult(null); setProvidersLoading(false); return }
     setProvidersLoading(true)
     const fetches: Promise<any>[] = []
-    if (!isIv && !isCma) {
+    if (isCma) {
+      // CMA + telemedicine: show CMAs as the primary schedulable providers
+      setCmaProvidersForZone([])
+      setCmaAvailResult(null)
+      fetches.push(
+        getProvidersByRole({ role: 'CMA', is_active: 'true', zone: booking.zone })
+          .then(rows => setCmaProvidersForZone((rows ?? []).map((r: any) => ({
+            name: r.name, role: r.role,
+            initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
+            color: r.avatar_color || '#EEEDFE',
+            textColor: r.avatar_text_color || '#3C3489',
+          }))))
+          .catch(() => {})
+      )
+    } else if (!isIv) {
       const capturedZone = booking.zone
       fetches.push(
         getProvidersByZone(capturedZone)
@@ -884,8 +898,10 @@ export function BookVisit() {
         status: 'upcoming',
         notes: noteParts.join('|'),
         duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
+        ...(isCmaVisit ? { state: booking.state } : {}),
       }).catch(() => null)
-      appointmentDbId = apptRecord?.id || null
+      // CMA+tele returns { cma, md }; all other visit types return the appointment row directly
+      appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : apptRecord?.id) || null
     }
 
     const newBooking = await familyCreateBookingRequest({

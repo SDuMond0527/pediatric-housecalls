@@ -83,13 +83,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id } = req.body
+    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state } = req.body
+    const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
+
+    // CMA + telemedicine family bookings: create CMA appointment + auto-assign on-call MD/NP
+    if (visit_type === 'CMA + telemedicine' && auth.type === 'family') {
+      const [cmaRow] = await sql`
+        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
+        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+        RETURNING *`
+      await sql`
+        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (cmaRow as any).id})`
+        .catch(() => {})
+
+      let mdRow: unknown = null
+      if (state) {
+        const onCallRows = await sql`
+          SELECT provider_id FROM on_call_schedule
+          WHERE practice_id = ${practiceId}::uuid AND date = ${scheduled_date}::date AND state = ${state}
+          LIMIT 1`
+        if (onCallRows.length) {
+          const mdProviderId = onCallRows[0].provider_id as string
+          ;[mdRow] = await sql`
+            INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+            RETURNING *`
+          await sql`
+            INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
+            .catch(() => {})
+        }
+      }
+      return res.json({ cma: cmaRow, md: mdRow })
+    }
+
     const [row] = await sql`
       INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
       VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
       RETURNING *`
     // Auto-block the provider's schedule for the duration of this appointment
-    const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
     await sql`
       INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
       VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (row as any).id})`
