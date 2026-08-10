@@ -74,24 +74,16 @@ export async function notifyWaitlist(entry: Record<string, unknown>) {
   const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : (entry.state as string) || 'your state'
   const smsBody = `${PRACTICE_NAME}: New waitlist entry. View: ${PORTAL_URL}/admin/waitlist`
 
-  const providers = await sql`SELECT id, name, phone, email, states, role FROM providers WHERE role != 'admin' AND is_active = true`
+  const providers = await sql`SELECT id, name, phone, email, states, role, is_admin FROM providers WHERE is_active = true`
   console.error('[notifyWaitlist] providers to consider:', providers.length)
 
   for (const prov of providers) {
     const provStates: string[] = (prov.states ?? []) as string[]
-    const stateFiltered = ['MD', 'PNP'].includes(prov.role)
+    const stateFiltered = !prov.is_admin && ['MD', 'PNP'].includes(prov.role)
     if (stateFiltered && entry.state && provStates.length > 0 && !provStates.includes(entry.state as string)) continue
     console.error('[notifyWaitlist] notifying provider:', prov.name)
     if (prov.email) await sendEmail(prov.email, `[Waitlist] New family — zip ${entry.zip}`, emailHtml({ zip: entry.zip as string, state: entry.state as string, visitType: entry.visit_type as string, preferredTime: entry.preferred_time_window as string, providerName: prov.name }))
     if (prov.phone) await sendSMS(prov.phone, smsBody)
-  }
-
-  const admins = await sql`SELECT id, name, phone, email FROM providers WHERE role = 'admin'`
-  console.error('[notifyWaitlist] admins:', admins.length)
-  for (const admin of admins) {
-    console.error('[notifyWaitlist] notifying admin:', admin.name)
-    if (admin.email) await sendEmail(admin.email, `[Admin Waitlist] New entry — zip ${entry.zip}, ${stateLabel}`, emailHtml({ zip: entry.zip as string, state: entry.state as string, visitType: entry.visit_type as string, preferredTime: entry.preferred_time_window as string, providerName: admin.name || 'Admin' }))
-    if (admin.phone) await sendSMS(admin.phone, smsBody)
   }
 
   console.error('[notifyWaitlist] done')

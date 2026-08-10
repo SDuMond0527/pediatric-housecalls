@@ -71,12 +71,12 @@ async function sendWaitlistNotifications(entry: Record<string, unknown>, sql: Re
 <p><a href="${PORTAL_URL}/admin/waitlist" style="background:#EF9F27;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">View waitlist</a></p>
 </body></html>`
 
-  const recipients = await sql`SELECT name, phone, email, states, role FROM providers WHERE is_active = true OR role = 'admin'`
+  const recipients = await sql`SELECT name, phone, email, states, role, is_admin FROM providers WHERE is_active = true OR is_admin = true`
   console.error('[waitlist] notifying', recipients.length, 'recipients')
 
   for (const prov of recipients) {
     const provStates: string[] = (prov.states ?? []) as string[]
-    const stateFiltered = ['MD', 'PNP'].includes(prov.role)
+    const stateFiltered = !prov.is_admin && ['MD', 'PNP'].includes(prov.role)
     if (stateFiltered && entry.state && provStates.length > 0 && !provStates.includes(entry.state as string)) {
       console.error('[waitlist] skipping', prov.name, '— state mismatch')
       continue
