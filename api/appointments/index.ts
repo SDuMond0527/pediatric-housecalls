@@ -21,6 +21,26 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   return { sub: payload.sub, type: 'provider' }
 }
 
+const VISIT_DURATIONS: Record<string, number> = {
+  'In-home sick visit': 60,
+  'Sports physical': 60,
+  'CMA + telemedicine': 60,
+  'Video telemedicine': 30,
+  'Text visit': 15,
+  'In-home IV fluids': 90,
+  'In-home CPR class (Heartsaver)': 180,
+  'In-home CPR class (BLS)': 180,
+}
+
+function blockEndTime(startTime: string, visitType: string, explicitMinutes?: number | null): string {
+  const minutes = explicitMinutes ?? VISIT_DURATIONS[visitType] ?? 60
+  const [h, m] = startTime.split(':').map(Number)
+  const total = h * 60 + m + minutes
+  const eh = Math.floor(total / 60) % 24
+  const em = total % 60
+  return `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   let auth: { sub: string; type: 'family' | 'provider' }
   try {
@@ -68,6 +88,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
       VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
       RETURNING *`
+    // Auto-block the provider's schedule for the duration of this appointment
+    const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
+    await sql`
+      INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (row as any).id})`
+      .catch(e => console.error('[appointments] schedule block error:', e))
     return res.json(row)
   }
 
