@@ -51,6 +51,7 @@ export function Waitlist() {
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [passed, setPassed] = useState<Set<string>>(new Set())
+  const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ADD)
   const [addSubmitting, setAddSubmitting] = useState(false)
@@ -164,6 +165,32 @@ export function Waitlist() {
       alert(`Failed to add patient to waitlist: ${err?.message || String(err)}`)
     }
   }
+
+  function slotToMinutes(slot: string): number {
+    const [t, ampm] = slot.split(' ')
+    let [h, m] = t.split(':').map(Number)
+    if (ampm === 'PM' && h !== 12) h += 12
+    if (ampm === 'AM' && h === 12) h = 0
+    return h * 60 + m
+  }
+
+  useEffect(() => {
+    if (!date || !provider || !accepting) { setBookedSlots(new Set()); return }
+    apiFetch<any[]>(`/api/appointments?provider_id=${provider.id}&date=${date}`).then(appts => {
+      const booked = new Set<string>()
+      for (const appt of appts) {
+        const [h, m] = (appt.scheduled_time as string).split(':').map(Number)
+        const startMin = h * 60 + m
+        const endMin = startMin + (appt.duration_minutes ?? 60)
+        for (const slot of TIME_SLOTS) {
+          const slotMin = slotToMinutes(slot)
+          if (slotMin >= startMin && slotMin < endMin) booked.add(slot)
+        }
+      }
+      setBookedSlots(booked)
+      setTime(t => booked.has(t) ? '' : t)
+    }).catch(() => {})
+  }, [date, provider?.id, accepting?.id])
 
   async function fetchEntries() {
     if (!provider) return
@@ -486,12 +513,19 @@ export function Waitlist() {
                 <div>
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time</label>
                   <div className="grid grid-cols-4 gap-1.5">
-                    {TIME_SLOTS.map(slot => (
-                      <button key={slot} onClick={() => setTime(slot)}
-                        className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'}`}>
-                        {slot}
-                      </button>
-                    ))}
+                    {TIME_SLOTS.map(slot => {
+                      const isBooked = bookedSlots.has(slot)
+                      return (
+                        <button key={slot} disabled={isBooked} onClick={() => setTime(slot)}
+                          className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
+                            time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                            : isBooked ? 'border-[#E8E8E4] bg-[#F5F5F3] text-[#C8C8C4] cursor-not-allowed line-through'
+                            : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
+                          }`}>
+                          {slot}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
