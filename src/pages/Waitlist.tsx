@@ -305,7 +305,7 @@ export function Waitlist() {
                     <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
                     {selectedChild.date_of_birth && (
                       <span className="text-[12px] text-[#999] flex-shrink-0">
-                        DOB: {format(new Date(selectedChild.date_of_birth.replace(/-/g, '/')), 'MMM d, yyyy')}
+                        DOB: {String(selectedChild.date_of_birth instanceof Date ? selectedChild.date_of_birth.toISOString() : selectedChild.date_of_birth).split('T')[0]}
                       </span>
                     )}
                     <button type="button" onClick={clearSelectedChild} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
@@ -324,7 +324,7 @@ export function Waitlist() {
                       <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {searchResults.map(child => {
                           const cn = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || 'Unknown'
-                          const dob = child.date_of_birth ? format(new Date(child.date_of_birth.replace(/-/g, '/')), 'MMM d, yyyy') : null
+                          const dob = child.date_of_birth ? String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0] : null
                           return (
                             <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
                               className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
