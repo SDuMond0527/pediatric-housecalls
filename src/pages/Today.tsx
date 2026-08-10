@@ -386,6 +386,7 @@ export function Today() {
       ? (addForm.zip && !addForm.address.includes(addForm.zip) ? `${addForm.address.trim()} ${addForm.zip}` : addForm.address)
       : ''
     if (fullAddr) noteParts.push(`ADDR:${fullAddr}`)
+    if (addForm.zip) noteParts.push(`ZIP:${addForm.zip}`)
     if (addForm.email) noteParts.push(`PARENTEMAIL:${addForm.email}`)
     if (addForm.phone) noteParts.push(`PARENTPHONE:${addForm.phone}`)
     if (addForm.insurancePayer) noteParts.push(`INSURANCE:${addForm.insurancePayer}`)
@@ -914,6 +915,7 @@ export function Today() {
                         {[
                           { label: 'Visit type', value: appt.visit_type },
                           { label: 'Zone',       value: appt.zone },
+                          ...((() => { const z = (appt.notes || '').split('|').find(p => p.trim().startsWith('ZIP:'))?.replace(/^ZIP:/, '').trim(); return z ? [{ label: 'Zip', value: z }] : [] })()),
                         ].map(d => (
                           <div key={d.label} className="bg-[#7F77DD]/6 rounded-lg p-2.5">
                             <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">{d.label}</div>

@@ -221,6 +221,7 @@ export function Waitlist() {
       'Member ID': 'MEMBERID', 'Group #': 'GROUPNUM',
     }
     const apptNoteParts: string[] = []
+    if (accepting.zip) apptNoteParts.push(`ZIP:${accepting.zip}`)
     if (accepting.complaint) apptNoteParts.push(`CC:${accepting.complaint}`)
     if (accepting.preferred_time_window) apptNoteParts.push(`NOTES:Preferred time: ${accepting.preferred_time_window}`)
     ;(accepting.notes || '').split(' | ').forEach(part => {

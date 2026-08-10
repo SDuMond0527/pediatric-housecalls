@@ -662,6 +662,12 @@ export function AdminSchedule() {
                                   <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Zone</div>
                                   <div className="text-[13px] text-[#1A1A2E]">{appt.zone}</div>
                                 </div>
+                                {(() => { const z = (appt.notes || '').split('|').find(p => p.trim().startsWith('ZIP:'))?.replace(/^ZIP:/, '').trim(); return z ? (
+                                  <div className="bg-[#F6F5FF] rounded-lg p-2.5">
+                                    <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Zip</div>
+                                    <div className="text-[13px] text-[#1A1A2E]">{z}</div>
+                                  </div>
+                                ) : null })()}
                                 {addr && (
                                   <div className="col-span-2 bg-[#F6F5FF] rounded-lg p-2.5">
                                     <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Visit address</div>
