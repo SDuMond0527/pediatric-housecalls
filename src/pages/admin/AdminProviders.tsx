@@ -130,6 +130,26 @@ export function AdminProviders() {
     setTimeout(() => setSavedId(null), 2500)
   }
 
+  const [bulkResetting, setBulkResetting] = useState(false)
+  const [bulkResults, setBulkResults] = useState<Array<{ name: string; email: string; temporaryPassword: string; error?: string }> | null>(null)
+
+  async function bulkResetPasswords() {
+    if (!confirm('Reset passwords for all providers to #Phc2026! ? Skips Kiaira Bryson, Cecilia Akana-Paaluhi, and Dr. Sara DuMond. This cannot be undone.')) return
+    setBulkResetting(true)
+    setBulkResults(null)
+    try {
+      const data = await apiFetch<{ results: typeof bulkResults }>('/api/admin/bulk-reset-passwords', {
+        method: 'POST',
+        body: JSON.stringify({ password: '#Phc2026!' }),
+      })
+      setBulkResults(data?.results ?? [])
+    } catch (err: any) {
+      alert('Bulk reset failed: ' + (err.message ?? 'Unknown error'))
+    } finally {
+      setBulkResetting(false)
+    }
+  }
+
   const byRole = ['MD', 'PNP', 'CMA', 'RN', 'admin'].map(role => ({
     role,
     providers: providers.filter(p => p.role === role),
@@ -147,6 +167,44 @@ export function AdminProviders() {
       </div>
 
       <div className="p-6 space-y-6 max-w-3xl">
+        {/* Bulk password reset */}
+        <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[14px] font-medium text-[#1A1A2E]">Reset all provider passwords</div>
+              <div className="text-[12px] text-[#999] mt-0.5">Skips Kiaira Bryson, Cecilia Akana-Paaluhi, and Dr. Sara DuMond. Passwords are set immediately — no challenge required.</div>
+            </div>
+            <Button variant="secondary" size="sm" loading={bulkResetting} onClick={bulkResetPasswords}>
+              <KeyRound size={13} /> Reset all
+            </Button>
+          </div>
+
+          {bulkResults && (
+            <div className="mt-4 border border-[#E8E8E4] rounded-lg overflow-hidden">
+              <table className="w-full text-[12px]">
+                <thead className="bg-[#FAFAF8]">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-[#555]">Provider</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[#555]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F1EFE8]">
+                  {bulkResults.map((r, i) => (
+                    <tr key={i} className={r.error ? 'bg-[#FCEBEB]' : ''}>
+                      <td className="px-3 py-2 font-medium text-[#1A1A2E]">{r.name}</td>
+                      <td className="px-3 py-2">
+                        {r.error
+                          ? <span className="text-[#791F1F]">Failed: {r.error}</span>
+                          : <span className="text-[#1D9E75]">Password set to #Phc2026!</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {missingAddress.length > 0 && (
           <div className="flex items-start gap-2 bg-[#FAEEDA] border border-[#FAC775] rounded-lg px-4 py-3 text-[13px] text-[#633806]">
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
@@ -80,6 +80,16 @@ export function Today() {
   const [patientSearching, setPatientSearching] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null)
   const patientSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Edit appointment
+  const [editTarget, setEditTarget] = useState<Appointment | null>(null)
+  const [editVisitType, setEditVisitType] = useState('')
+  const [editProviderId, setEditProviderId] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editTakenTimes, setEditTakenTimes] = useState<string[]>([])
+  const [editLoadingSlots, setEditLoadingSlots] = useState(false)
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   // Cancel appointment
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
@@ -169,6 +179,61 @@ export function Today() {
     }
     setNoteModalChildId(childId)
     setNoteModalAppt(appt)
+  }
+
+  function openEdit(appt: Appointment) {
+    setEditTarget(appt)
+    setEditVisitType(appt.visit_type)
+    setEditProviderId(appt.provider_id)
+    setEditDate(appt.scheduled_date)
+    setEditTime(to12h(appt.scheduled_time))
+    loadEditSlots(appt.provider_id, appt.scheduled_date, appt.id)
+  }
+
+  async function loadEditSlots(pId: string, date: string, excludeId: string) {
+    if (!pId || !date) return
+    setEditLoadingSlots(true)
+    const data = await getAppointments({ provider_id: pId, scheduled_date: date }).catch(() => [])
+    const taken = (data ?? [])
+      .filter((a: any) => a.id !== excludeId && a.status !== 'cancelled')
+      .map((a: any) => to12h(a.scheduled_time))
+    setEditTakenTimes(taken)
+    setEditLoadingSlots(false)
+  }
+
+  async function saveEdit() {
+    if (!editTarget || !editProviderId || !editDate || !editTime) return
+    setEditSubmitting(true)
+    const [t, ampm] = editTime.split(' ')
+    let [h, m] = t.split(':').map(Number)
+    if (ampm === 'PM' && h !== 12) h += 12
+    if (ampm === 'AM' && h === 12) h = 0
+    const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    const providerChanged = editProviderId !== editTarget.provider_id
+    try {
+      await updateAppointment(editTarget.id, {
+        visit_type: editVisitType,
+        provider_id: editProviderId,
+        scheduled_date: editDate,
+        scheduled_time: time24,
+      })
+      if (providerChanged) {
+        const newProv = allProviders.find(p => p.id === editProviderId)
+        invokeNotifications({
+          type: 'appointment_reassigned',
+          appointmentId: editTarget.id,
+          newProviderName: newProv?.name ?? '',
+          newProviderId: editProviderId,
+          visitType: editVisitType,
+          date: editDate,
+          time: editTime,
+        }).catch(() => {})
+      }
+      setEditTarget(null)
+      fetchAppts()
+    } finally {
+      setEditSubmitting(false)
+    }
   }
 
   // On-call schedule
@@ -700,6 +765,11 @@ export function Today() {
                               </Button>
                             )}
                             {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                              <Button variant="secondary" size="sm" onClick={() => openEdit(appt)}>
+                                <Pencil size={13} /> Edit
+                              </Button>
+                            )}
+                            {appt.status !== 'cancelled' && appt.status !== 'done' && (
                               <Button variant="danger" size="sm" onClick={() => setCancelTarget(appt)}>
                                 <X size={13} /> Cancel visit
                               </Button>
@@ -933,6 +1003,85 @@ export function Today() {
                 loading={blockSubmitting}
                 onClick={submitBlock}>
                 <Ban size={14} /> Block time
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit appointment modal ── */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { if (!editSubmitting) setEditTarget(null) }} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit appointment</h2>
+              <button onClick={() => setEditTarget(null)} disabled={editSubmitting}
+                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={editVisitType} onChange={e => setEditVisitType(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                  {visitTypes.map((vt: any) => (
+                    <option key={vt.visit_type} value={vt.visit_type}>{vt.visit_type}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Provider</label>
+                <select value={editProviderId}
+                  onChange={e => { setEditProviderId(e.target.value); setEditTime(''); if (editDate) loadEditSlots(e.target.value, editDate, editTarget.id) }}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                  {allProviders.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
+                <input type="date" value={editDate}
+                  onChange={e => { setEditDate(e.target.value); setEditTime(''); if (editProviderId) loadEditSlots(editProviderId, e.target.value, editTarget.id) }}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              {editDate && (
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Time {editLoadingSlots && <span className="text-[#999] font-normal normal-case">(loading…)</span>}
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {TIME_SLOTS.map(slot => {
+                      const taken = editTakenTimes.includes(slot)
+                      const selected = editTime === slot
+                      return (
+                        <button key={slot} disabled={taken} onClick={() => setEditTime(slot)}
+                          className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans
+                            ${selected ? 'bg-[#7F77DD] border-[#7F77DD] text-white' :
+                              taken ? 'border-[#E8E8E4] bg-[#F8F8F6] text-[#C0C0BB] cursor-not-allowed line-through' :
+                              'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'}`}>
+                          {slot}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {editTakenTimes.length > 0 && (
+                    <p className="text-[11px] text-[#999] mt-1.5">Strikethrough times are already booked for this provider.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditTarget(null)} disabled={editSubmitting}>Cancel</Button>
+              <Button variant="primary" className="flex-1" disabled={!editDate || !editTime || !editProviderId} loading={editSubmitting} onClick={saveEdit}>
+                Save changes
               </Button>
             </div>
           </div>

@@ -10,6 +10,7 @@ import { Week } from './pages/Week'
 import { Availability } from './pages/Availability'
 import { Broadcasts } from './pages/Broadcasts'
 import { Waitlist } from './pages/Waitlist'
+import { Shifts } from './pages/Shifts'
 import { Settings } from './pages/Settings'
 import { AdminSchedule } from './pages/admin/AdminSchedule'
 import { AdminBroadcasts } from './pages/admin/AdminBroadcasts'
@@ -99,6 +100,7 @@ export default function App() {
                 <Route path="availability"   element={<Availability />} />
                 <Route path="broadcasts"     element={<Broadcasts />} />
                 <Route path="waitlist"       element={<Waitlist />} />
+                <Route path="shifts"         element={<Shifts />} />
                 <Route path="settings"       element={<Settings />} />
               </Route>
               <Route path="/admin" element={<AdminLayout />}>

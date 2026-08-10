@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users } from 'lucide-react'
+import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { PRACTICE_NAME } from '../../lib/practice'
 
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/availability', icon: Clock,         label: 'Availability' },
   { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true },
   { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist' },
+  { to: '/shifts',       icon: CalendarClock, label: 'On-call shifts' },
   { to: '/settings',     icon: Settings,      label: 'Settings' },
 ]
 

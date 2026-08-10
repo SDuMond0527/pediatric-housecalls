@@ -18,7 +18,7 @@ export function Terms() {
         </Section>
 
         <Section title="2. Platform Description">
-          <p>The GoRoam Health Platform is a software-as-a-service solution designed for licensed medical practices providing house call pediatric care. Features include appointment scheduling and management, a family patient portal, encounter documentation, electronic health record (EHR) integration, insurance claims management, electronic prescribing (e-prescribing) via integration with DoseSpot and the Surescripts network, analytics, and care coordination tools.</p>
+          <p>The GoRoam Health Platform is a software-as-a-service solution designed for licensed medical practices providing house call pediatric care. Features include appointment scheduling and management, a family patient portal, encounter documentation, electronic health record (EHR) integration, insurance claims management, electronic prescribing (e-prescribing) via integration with DoseSpot, analytics, and care coordination tools.</p>
         </Section>
 
         <Section title="3. Eligibility and Authorized Users">
@@ -43,10 +43,9 @@ export function Terms() {
         </Section>
 
         <Section title="5. Electronic Prescribing (E-Prescribing)">
-          <p>The Platform integrates with DoseSpot and the Surescripts network to enable electronic prescribing of medications, including controlled substances where applicable. By using the e-prescribing feature, you agree to:</p>
+          <p>The Platform integrates with DoseSpot to enable electronic prescribing of medications, including controlled substances where applicable. By using the e-prescribing feature, you agree to:</p>
           <ul>
             <li>Comply with all applicable federal and state laws governing electronic prescribing, including DEA regulations for controlled substance prescribing (EPCS).</li>
-            <li>Comply with Surescripts' network policies and terms of use.</li>
             <li>Only prescribe within your scope of licensure and clinical judgment.</li>
             <li>Maintain accurate prescriber credentials and NPI information within the Platform.</li>
             <li>Not use e-prescribing functionality for any unlawful purpose or in violation of applicable prescribing laws.</li>
@@ -71,7 +70,7 @@ export function Terms() {
         </Section>
 
         <Section title="8. Disclaimer of Warranties">
-          <p>The Platform is provided "as is" and "as available." GoRoam Health makes no warranties, express or implied, regarding the Platform's fitness for any particular clinical purpose, uninterrupted availability, or freedom from errors. GoRoam Health does not warrant the accuracy of any third-party data or integrations, including pharmacy benefit information or drug interaction alerts provided via DoseSpot or Surescripts.</p>
+          <p>The Platform is provided "as is" and "as available." GoRoam Health makes no warranties, express or implied, regarding the Platform's fitness for any particular clinical purpose, uninterrupted availability, or freedom from errors. GoRoam Health does not warrant the accuracy of any third-party data or integrations, including pharmacy benefit information or drug interaction alerts provided via DoseSpot.</p>
           <p>Clinical decision-making remains solely the responsibility of the licensed provider.</p>
         </Section>
 

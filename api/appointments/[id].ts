@@ -30,10 +30,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = providerRows[0].practice_id as string
 
   const { id } = req.query as { id: string }
-  const { status, after_visit_instructions } = req.body
+  const { status, after_visit_instructions, visit_type, provider_id, scheduled_date, scheduled_time } = req.body
 
   let row: unknown
-  if (status !== undefined && after_visit_instructions !== undefined) {
+
+  // Full appointment edit (visit type, provider, date, time)
+  if (visit_type !== undefined || provider_id !== undefined || scheduled_date !== undefined || scheduled_time !== undefined) {
+    ;[row] = await sql`
+      UPDATE appointments SET
+        visit_type      = COALESCE(${visit_type ?? null}, visit_type),
+        provider_id     = COALESCE(${provider_id ?? null}::uuid, provider_id),
+        scheduled_date  = COALESCE(${scheduled_date ?? null}::date, scheduled_date),
+        scheduled_time  = COALESCE(${scheduled_time ?? null}, scheduled_time)
+      WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
+  } else if (status !== undefined && after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET status=${status}, after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
     ;[row] = await sql`UPDATE appointments SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`

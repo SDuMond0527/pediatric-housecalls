@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule } from '../../lib/api'
+import { getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -171,6 +171,46 @@ export function AdminSchedule() {
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
     scheduled_time: '09:00', scheduled_date: format(new Date(), 'yyyy-MM-dd'),
   })
+  const [patientSearch, setPatientSearch] = useState('')
+  const [patientResults, setPatientResults] = useState<any[]>([])
+  const [patientSearching, setPatientSearching] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null)
+  const patientSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function onPatientSearchChange(q: string) {
+    setPatientSearch(q)
+    setSelectedPatient(null)
+    if (patientSearchTimer.current) clearTimeout(patientSearchTimer.current)
+    if (!q.trim()) { setPatientResults([]); return }
+    patientSearchTimer.current = setTimeout(async () => {
+      setPatientSearching(true)
+      const results = await searchChildren(q).catch(() => [])
+      setPatientResults(results)
+      setPatientSearching(false)
+    }, 300)
+  }
+
+  function selectPatient(child: any) {
+    setSelectedPatient(child)
+    setPatientSearch('')
+    setPatientResults([])
+    const dob = child.date_of_birth
+      ? String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0]
+      : ''
+    const zip = child.parent_zip || child.family_zip || ''
+    const address = [child.parent_address, child.parent_city].filter(Boolean).join(', ')
+    setForm(f => ({
+      ...f,
+      patientName: [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || '',
+      dob,
+      gender: child.gender || '',
+      phone: child.parent_phone || child.family_phone || '',
+      email: child.family_email || '',
+      address,
+      zip,
+      zone: zip ? (zipToZone[zip] || '') : '',
+    }))
+  }
 
   useEffect(() => {
     getProviders().then(data => setProviders((data ?? []) as Provider[])).catch(() => {})
@@ -348,6 +388,7 @@ export function AdminSchedule() {
     setModalOpen(false)
     fetchAppointments()
     setForm(f => ({ ...f, provider_id: '', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '' }))
+    setPatientSearch(''); setPatientResults([]); setSelectedPatient(null)
   }
 
   const grouped = providers
@@ -955,12 +996,61 @@ export function AdminSchedule() {
           </div>
 
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Patient information</div>
+
+          {/* Patient search */}
+          <div className="relative">
+            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Search existing patient</label>
+            {selectedPatient ? (
+              <div className="flex items-center justify-between px-3 py-2 border border-[#1D9E75] rounded-lg bg-[#F0FAF6]">
+                <div>
+                  <div className="text-[13px] font-medium text-[#1A1A2E]">
+                    {[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}
+                  </div>
+                  {selectedPatient.family_display_name && (
+                    <div className="text-[11px] text-[#999]">{selectedPatient.family_display_name}</div>
+                  )}
+                </div>
+                <button onClick={() => { setSelectedPatient(null); setForm(f => ({ ...f, patientName: '', dob: '', gender: '', phone: '', email: '', address: '', zip: '', zone: '' })) }}
+                  className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-2">× Clear</button>
+              </div>
+            ) : (
+              <>
+                <input type="text" placeholder="Type a child's name…" value={patientSearch}
+                  onChange={e => onPatientSearchChange(e.target.value)}
+                  onBlur={() => setTimeout(() => setPatientResults([]), 150)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD]" />
+                {patientSearching && (
+                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#999]">Searching…</div>
+                )}
+                {!patientSearching && patientSearch.trim() && patientResults.length === 0 && (
+                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#999]">No patients found</div>
+                )}
+                {!patientSearching && patientResults.length > 0 && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {patientResults.map(child => (
+                      <button key={child.id} type="button" onMouseDown={() => selectPatient(child)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
+                        <div className="text-[13px] font-medium text-[#1A1A2E]">
+                          {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
+                        </div>
+                        <div className="text-[11px] text-[#999]">
+                          {child.family_display_name || child.family_email || ''}
+                          {child.date_of_birth ? ` · DOB ${String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0]}` : ''}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name</label>
               <input type="text" placeholder="First and last name" value={form.patientName}
                 onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))}
-                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans" />
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD]" />
             </div>
             <div>
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>

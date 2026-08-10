@@ -921,16 +921,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
-    // ── Admin removed family from waitlist — notify family ───────────────────
+    // ── Family or admin removed from waitlist — notify family + providers ────
     if (body.type === 'waitlist_removed') {
-      const [entry] = await sql`SELECT family_id, zip, state, visit_type FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
+      const [entry] = await sql`SELECT family_id, zip, state, visit_type, practice_id FROM waitlist_entries WHERE id = ${body.waitlistEntryId}::uuid`
       if (!entry) return res.json({ ok: false, error: 'Entry not found' })
 
-      const [fam] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry.family_id}::uuid`
-      if (!fam) return res.json({ ok: true })
-
-      const greeting = fam.display_name ? `Hi ${fam.display_name.split(' ')[0]},` : 'Hi there,'
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+      // Notify family
+      if (entry.family_id) {
+        const [fam] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry.family_id}::uuid`
+        if (fam) {
+          const greeting = fam.display_name ? `Hi ${fam.display_name.split(' ')[0]},` : 'Hi there,'
+          const famHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
@@ -945,9 +946,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">Go to my portal</a>
 </td></tr>
 </table></td></tr></table></body></html>`
+          if (fam.email) await sendEmail(fam.email, `Waitlist update — ${PRACTICE_NAME}`, famHtml)
+          if (fam.phone) await sendSMS(fam.phone, `${PRACTICE_NAME}: Your waitlist spot has been removed. If you still need a visit, you can rebook at ${PORTAL_URL}/family/dashboard`)
+        }
+      }
 
-      if (fam.email) await sendEmail(fam.email, `Waitlist update — ${PRACTICE_NAME}`, html)
-      if (fam.phone) await sendSMS(fam.phone, `${PRACTICE_NAME}: Your waitlist spot has been removed. If you still need a visit, you can rebook at ${PORTAL_URL}/family/dashboard`)
+      // Notify providers in the patient's state
+      const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
+      const removedProviders = await sql`SELECT name, email, phone, states, role FROM providers WHERE role != 'admin' AND is_active = true AND practice_id = ${entry.practice_id}::uuid`
+      for (const prov of removedProviders) {
+        const provStates: string[] = (prov.states ?? []) as string[]
+        if (['MD', 'PNP'].includes(prov.role) && entry.state && provStates.length > 0 && !provStates.includes(entry.state)) continue
+        const provHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#EF9F27')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Waitlist update — ${stateLabel}</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">Hi ${prov.name},<br><br>
+  A family has removed themselves from the waitlist in <strong>${stateLabel}</strong>${entry.zip ? ` (zip ${entry.zip})` : ''}.</p>
+  <a href="${PORTAL_URL}/admin/waitlist" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View waitlist</a>
+</td></tr>
+</table></td></tr></table></body></html>`
+        if (prov.email) await sendEmail(prov.email, `[Waitlist] Family removed — ${stateLabel}`, provHtml).catch(() => {})
+        if (prov.phone) await sendSMS(prov.phone, `${PRACTICE_NAME}: A family has removed themselves from the waitlist in ${stateLabel}${entry.zip ? ` (zip ${entry.zip})` : ''}. View: ${PORTAL_URL}/admin/waitlist`).catch(() => {})
+      }
 
       return res.json({ ok: true })
     }
@@ -1378,13 +1404,101 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
+    // ── Appointment reassigned to a different provider ────────────────────────
+    if (body.type === 'appointment_reassigned') {
+      const { appointmentId, newProviderName, newProviderId, visitType, date, time } = body
+      const dateFormatted = new Date(String(date) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+
+      // Get appointment notes for family contact
+      const [appt] = await sql`SELECT notes FROM appointments WHERE id = ${String(appointmentId)}::uuid LIMIT 1`
+      const notes: string = appt?.notes || ''
+      const noteMap: Record<string, string> = {}
+      notes.split('|').forEach((part: string) => {
+        const colon = part.indexOf(':')
+        if (colon > 0) noteMap[part.slice(0, colon).trim()] = part.slice(colon + 1).trim()
+      })
+      let parentEmail: string | null = noteMap['PARENTEMAIL'] || null
+      let parentPhone: string | null = noteMap['PARENTPHONE'] || null
+
+      // Fall back to family_profiles via booking reference
+      const refMatch = notes.match(/Ref: ([A-Z0-9-]+)/)
+      if (refMatch && (!parentEmail || !parentPhone)) {
+        const [br] = await sql`
+          SELECT fp.email, fp.phone FROM booking_requests br
+          JOIN family_profiles fp ON fp.id = br.family_id
+          WHERE br.reference_code = ${refMatch[1]} LIMIT 1`
+        if (!parentEmail) parentEmail = br?.email || null
+        if (!parentPhone) parentPhone = br?.phone || null
+      }
+
+      // Notify family
+      const familySms = `${PRACTICE_NAME}: Your case has been assigned to ${newProviderName}. They will perform your ${visitType} at ${time}. Join the visit here: ${TELEMEDICINE_URL}`
+      const familyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#7F77DD')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Your provider has been updated</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">
+    Your case has been assigned to <strong>${newProviderName}</strong>. They will perform your <strong>${visitType}</strong> on ${dateFormatted} at <strong>${time}</strong>.
+  </p>
+  <div style="background:#EEEDFE;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+    <div style="font-size:12px;color:#7F77DD;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Join your visit</div>
+    <a href="${TELEMEDICINE_URL}" style="font-size:14px;color:#3C3489;font-weight:500;">${TELEMEDICINE_URL}</a>
+    <div style="font-size:12px;color:#666;margin-top:6px;">Use this link to meet your provider in the virtual waiting room at your appointment time.</div>
+  </div>
+  <p style="font-size:13px;color:#999;">Questions? Log in to your portal for details.</p>
+</td></tr>
+</table></td></tr></table></body></html>`
+
+      if (parentEmail) await sendEmail(parentEmail, `Your provider update — ${visitType} on ${dateFormatted}`, familyHtml)
+      if (parentPhone) await sendSMS(parentPhone, familySms)
+
+      // Notify new provider
+      const [newProv] = await sql`SELECT name, email, phone FROM providers WHERE id = ${String(newProviderId)}::uuid LIMIT 1`
+      const providerSms = `${PRACTICE_NAME}: A case has been assigned to you — ${visitType} on ${dateFormatted} at ${time}. View: ${PORTAL_URL}/today`
+      const providerHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;max-width:520px;">
+        <h2 style="font-size:18px;font-weight:600;">New case assigned to you</h2>
+        <p>A <strong>${visitType}</strong> has been assigned to you for <strong>${dateFormatted} at ${time}</strong>.</p>
+        <p>Please log in to the provider portal to view the patient details: <a href="${PORTAL_URL}/today" style="color:#7F77DD;">${PORTAL_URL}/today</a></p>
+      </div>`
+      if (newProv?.email) await sendEmail(newProv.email, `Case assigned to you — ${visitType} on ${dateFormatted}`, providerHtml)
+      if (newProv?.phone) await sendSMS(newProv.phone, providerSms)
+
+      return res.json({ ok: true })
+    }
+
+    // ── Shift claimed ─────────────────────────────────────────────────────────
+    if (body.type === 'shift_claimed') {
+      const { providerName, providerId, date, state } = body
+      const dateFormatted = new Date(String(date) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      const stateLabel = state === 'NC' ? 'North Carolina' : state === 'SC' ? 'South Carolina' : state === 'VA' ? 'Virginia' : String(state)
+      const [provRow] = await sql`SELECT practice_id FROM providers WHERE id = ${String(providerId)}::uuid LIMIT 1`
+      const shiftPracticeId: string | undefined = provRow?.practice_id ?? undefined
+      const desc = `the ${stateLabel} on-call shift for ${dateFormatted}`
+      const shiftSms = `${PRACTICE_NAME}: ${providerName} picked up ${desc}. View: ${PORTAL_URL}/shifts`
+      await notifyAllProviders(
+        sql,
+        shiftSms,
+        `[Shift Pickup] ${providerName} claimed ${desc}`,
+        (name) => pickupNotificationEmail({ recipientName: name, acceptedBy: String(providerName), description: desc }),
+        String(providerId) ?? null,
+        shiftPracticeId,
+      )
+      await notifyAdmins(sql, `${PRACTICE_NAME}: ${providerName} picked up ${desc}. View: ${PORTAL_URL}/admin/schedule`, shiftPracticeId)
+      return res.json({ ok: true })
+    }
+
     // ── Booking notification (default flow) ───────────────────────────────────
     const { bookingRequestId } = body
 
     const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
     if (!booking) throw new Error('Booking not found')
 
-    const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+    const [family] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${booking.family_id}::uuid`
     const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
 
     // Temporary debug — remove after confirming notifications work
@@ -1412,6 +1526,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (booking.visit_type === 'In-home IV fluids') {
         await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())
       }
+    }
+    if (family?.phone) {
+      await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${booking.visit_type} on ${formatDate(booking.preferred_date)} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`)
     }
 
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`

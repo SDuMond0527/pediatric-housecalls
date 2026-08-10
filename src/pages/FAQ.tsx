@@ -11,7 +11,7 @@ const FAQS = [
   },
   {
     q: 'What is e-prescribing and how does GoRoam Health use it?',
-    a: 'Electronic prescribing (e-prescribing) is the digital transmission of a prescription from a licensed prescriber directly to a pharmacy, replacing handwritten or fax-based prescriptions. GoRoam Health integrates with DoseSpot, a Surescripts-certified electronic prescribing platform, enabling providers to send prescriptions electronically to the patient\'s chosen pharmacy at the point of care — whether during an in-home visit or after a telehealth encounter.',
+    a: 'Electronic prescribing (e-prescribing) is the digital transmission of a prescription from a licensed prescriber directly to a pharmacy, replacing handwritten or fax-based prescriptions. GoRoam Health integrates with DoseSpot, enabling providers to send prescriptions electronically to the patient\'s chosen pharmacy at the point of care — whether during an in-home visit or after a telehealth encounter.',
   },
   {
     q: 'Does the prescriber choose the medication?',
@@ -23,7 +23,7 @@ const FAQS = [
   },
   {
     q: 'Which pharmacies can receive prescriptions sent through GoRoam Health?',
-    a: 'Prescriptions are transmitted via DoseSpot and the Surescripts network, which connects to over 60,000 retail, mail-order, and specialty pharmacies nationwide — including major chains such as CVS, Walgreens, Rite Aid, and Walmart as well as independent community pharmacies. Patients may choose any participating pharmacy in the Surescripts network.',
+    a: 'Prescriptions are transmitted electronically via DoseSpot to over 60,000 retail, mail-order, and specialty pharmacies nationwide — including major chains such as CVS, Walgreens, Rite Aid, and Walmart as well as independent community pharmacies.',
   },
   {
     q: 'Can controlled substances be prescribed electronically?',
@@ -35,19 +35,15 @@ const FAQS = [
   },
   {
     q: 'How is prescription and patient data protected?',
-    a: 'GoRoam Health is a HIPAA-compliant platform that processes Protected Health Information (PHI) under a Business Associate Agreement (BAA) with each practice. All data is encrypted in transit (TLS) and at rest. Prescription data transmitted through DoseSpot and the Surescripts network is subject to Surescripts\' certified security and compliance requirements.',
-  },
-  {
-    q: 'What is Surescripts?',
-    a: 'Surescripts is the nation\'s largest health information network, operating the infrastructure that enables electronic prescribing between licensed prescribers and pharmacies across the United States. Surescripts is certified by the DEA and meets national standards for prescription data transmission accuracy and security.',
+    a: 'GoRoam Health is a HIPAA-compliant platform that processes Protected Health Information (PHI) under a Business Associate Agreement (BAA) with each practice. All data is encrypted in transit (TLS) and at rest. Prescription data transmitted through DoseSpot is subject to DoseSpot\'s security and compliance requirements.',
   },
   {
     q: 'What is DoseSpot?',
-    a: 'DoseSpot is a Surescripts-certified electronic prescribing software provider. GoRoam Health integrates DoseSpot into the provider portal to enable licensed prescribers to generate and transmit electronic prescriptions without leaving their existing workflow.',
+    a: 'DoseSpot is an electronic prescribing software provider. GoRoam Health integrates DoseSpot into the provider portal to enable licensed prescribers to generate and transmit electronic prescriptions without leaving their existing workflow.',
   },
   {
     q: 'Where is GoRoam Health available?',
-    a: 'GoRoam Health currently supports practices operating in North Carolina, South Carolina, and Virginia, with expansion planned. The e-prescribing functionality via DoseSpot and Surescripts supports prescription transmission to participating pharmacies nationwide.',
+    a: 'GoRoam Health currently supports practices operating in North Carolina, South Carolina, and Virginia, with expansion planned. The e-prescribing functionality via DoseSpot supports prescription transmission to participating pharmacies nationwide.',
   },
   {
     q: 'How do I contact GoRoam Health?',

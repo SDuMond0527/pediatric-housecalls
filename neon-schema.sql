@@ -77,8 +77,11 @@ create table if not exists time_blocks (
   id uuid primary key default gen_random_uuid(),
   provider_id uuid references providers(id) on delete cascade not null,
   label text not null,
-  days text not null,
-  time_range text not null
+  days text,
+  time_range text,
+  date date,
+  start_time text,
+  end_time text
 );
 
 -- Visit type availability

@@ -53,5 +53,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } else {
     ;[row] = await sql`UPDATE waitlist_entries SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   }
+
+  // When family removes themselves from waitlist, notify all providers in that state
+  if (status === 'removed') {
+    const PORTAL_URL = process.env.PORTAL_URL || 'https://phc-team.com'
+    fetch(`${PORTAL_URL}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'waitlist_removed', waitlistEntryId: id }),
+    }).catch(() => {})
+  }
+
   res.json(row)
 }

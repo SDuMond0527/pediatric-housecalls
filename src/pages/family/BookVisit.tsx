@@ -664,6 +664,7 @@ export function BookVisit() {
     if (selectedChild) {
       const name = [selectedChild.first_name, selectedChild.last_name].filter(Boolean).join(' ') || selectedChild.display_label
       noteParts.push(`Patient: ${name}`)
+      if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
       if (selectedChild.date_of_birth) noteParts.push(`DOB: ${selectedChild.date_of_birth}`)
       if (selectedChild.allergies) noteParts.push(`Allergies: ${selectedChild.allergies}`)
       if (selectedChild.current_medications) noteParts.push(`Medications: ${selectedChild.current_medications}`)
@@ -1882,6 +1883,13 @@ export function BookVisit() {
                       </div>
                     )}
                     {profiledChildren.length === 1 && !waitlistChildId && (() => { setTimeout(() => setWaitlistChildId(profiledChildren[0].id), 0); return null })()}
+
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address <span className="text-[#ff3b30]">*</span></label>
+                      <input value={waitlistAddress} onChange={e => setWaitlistAddress(e.target.value)}
+                        placeholder="123 Main St, City, State"
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
+                    </div>
 
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Symptoms / chief complaint <span className="text-[#ff3b30]">*</span></label>

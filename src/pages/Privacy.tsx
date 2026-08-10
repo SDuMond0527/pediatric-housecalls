@@ -27,9 +27,8 @@ export function Privacy() {
           <p>We use the information on the Platform to:</p>
           <ul>
             <li>Provide scheduling, documentation, claims, and e-prescribing functionality to your practice.</li>
-            <li>Transmit prescriptions to pharmacies via DoseSpot and the Surescripts network.</li>
+            <li>Transmit prescriptions to pharmacies via DoseSpot.</li>
             <li>Send appointment and care notifications to patients and providers via email (Resend) and SMS (Twilio).</li>
-            <li>Sync clinical data with integrated EHR systems (Charm Health) as configured by your practice.</li>
             <li>Process payments and convenience fees via Square.</li>
             <li>Monitor platform security and investigate unauthorized access.</li>
             <li>Improve platform features and performance.</li>
@@ -43,8 +42,7 @@ export function Privacy() {
             <li><strong>Amazon Web Services (AWS)</strong> — authentication (Cognito) and cloud infrastructure. US-based.</li>
             <li><strong>Neon</strong> — PostgreSQL database hosting. Data stored in the United States.</li>
             <li><strong>Vercel</strong> — Platform hosting and edge infrastructure.</li>
-            <li><strong>Charm Health</strong> — EHR integration for patient record synchronization.</li>
-            <li><strong>DoseSpot / Surescripts</strong> — Electronic prescribing network. Surescripts is a certified e-prescribing network subject to its own regulatory compliance requirements.</li>
+            <li><strong>DoseSpot</strong> — Electronic prescribing network.</li>
             <li><strong>Resend</strong> — Transactional email delivery.</li>
             <li><strong>Twilio</strong> — SMS notifications.</li>
             <li><strong>Square</strong> — Payment processing for patient convenience fees.</li>

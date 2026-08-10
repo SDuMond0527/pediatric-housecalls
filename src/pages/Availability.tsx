@@ -89,12 +89,15 @@ export function Availability() {
   const { visitTypes, byType } = usePracticeVisitTypes()
 
   // Admin provider picker
-  const [allProviders, setAllProviders] = useState<{ id: string; name: string; role: string }[]>([])
+  const [allProviders, setAllProviders] = useState<{ id: string; name: string; role: string; zones: string[] }[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const viewingProviderId = isAdmin ? selectedProviderId : (provider?.id ?? '')
   const viewingProviderRole = isAdmin
     ? (allProviders.find(p => p.id === selectedProviderId)?.role ?? '')
     : (provider?.role ?? '')
+  const viewingProviderZones: string[] = isAdmin
+    ? (allProviders.find(p => p.id === selectedProviderId)?.zones ?? [])
+    : ((provider?.zones ?? []) as string[])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -431,7 +434,11 @@ export function Availability() {
               </div>
             ))}
           </div>
-          <Button variant="secondary" size="sm" className="mt-3" onClick={() => setZoneModal(true)}>
+          <Button variant="secondary" size="sm" className="mt-3" onClick={() => {
+              const firstAvailable = viewingProviderZones.find(z => !zoneRestrictions.some(r => r.zone === z)) ?? ''
+              setNewZone({ zone: firstAvailable, start: '8:00 AM', end: '12:00 PM' })
+              setZoneModal(true)
+            }}>
             <Plus size={13} /> Add zone restriction
           </Button>
         </div>
@@ -678,8 +685,18 @@ export function Availability() {
         <div className="space-y-4">
           <div>
             <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zone</label>
-            <input value={newZone.zone} onChange={e => setNewZone(p => ({ ...p, zone: e.target.value }))}
-              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="Zone name" />
+            {viewingProviderZones.length > 0 ? (
+              <select value={newZone.zone} onChange={e => setNewZone(p => ({ ...p, zone: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                <option value="">Select a zone…</option>
+                {viewingProviderZones
+                  .filter(z => !zoneRestrictions.some(r => r.zone === z))
+                  .map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            ) : (
+              <input value={newZone.zone} onChange={e => setNewZone(p => ({ ...p, zone: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" placeholder="Zone name" />
+            )}
           </div>
           <div className="flex gap-3">
             <div className="flex-1">

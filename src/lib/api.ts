@@ -371,6 +371,9 @@ export const setOnCallProvider = (date: string, state: string, provider_id: stri
 export const getCmaSchedule = (params?: { start?: string; end?: string }) =>
   apiFetch<Record<string, any[]>>(`/api/cma-schedule${params ? '?' + new URLSearchParams(params as Record<string, string>) : ''}`)
 
+export const claimShift = (date: string, state: string, startTime?: string, endTime?: string) =>
+  apiFetch<any>('/api/on-call-schedule', { method: 'POST', body: JSON.stringify({ date, state, start_time: startTime ?? null, end_time: endTime ?? null }) })
+
 export const getProvidersByState = (state: string) =>
   publicFetch<any[]>(`/api/providers?state=${encodeURIComponent(state)}`)
 

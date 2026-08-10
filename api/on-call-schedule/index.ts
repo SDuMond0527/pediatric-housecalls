@@ -22,9 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sql = neon(process.env.DATABASE_URL!)
-  const providerRows = await sql`SELECT id, is_admin, practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  const providerRows = await sql`SELECT id, is_admin, practice_id, role, states, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const { is_admin: isAdmin, practice_id: practiceId } = providerRows[0] as { id: string; is_admin: boolean; practice_id: string }
+  const { is_admin: isAdmin, practice_id: practiceId } = providerRows[0] as { id: string; is_admin: boolean; practice_id: string; role: string; states: string[]; name: string }
 
   if (req.method === 'GET') {
     const { start, end } = req.query as Record<string, string>
@@ -43,6 +43,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(rows)
   }
 
+  if (req.method === 'POST') {
+    // Non-admin provider self-claiming an on-call shift
+    const { id: providerId, role, states: providerStates, name: providerName } = providerRows[0] as any
+    const { date, state, start_time, end_time } = req.body as { date: string; state: string; start_time?: string | null; end_time?: string | null }
+    if (!date || !state) return res.status(400).json({ error: 'date and state required' })
+    if (role !== 'MD' && role !== 'PNP') return res.status(403).json({ error: 'Only MD/PNP providers can claim on-call shifts' })
+    const licStates = (providerStates || []) as string[]
+    if (!licStates.includes(state)) return res.status(403).json({ error: `You are not licensed in ${state}` })
+    const [row] = await sql`
+      INSERT INTO on_call_schedule (practice_id, date, state, provider_id, start_time, end_time)
+      VALUES (${practiceId}::uuid, ${date}::date, ${state}, ${providerId}::uuid, ${start_time ?? null}, ${end_time ?? null})
+      ON CONFLICT (practice_id, date, state, provider_id) DO UPDATE
+        SET start_time = EXCLUDED.start_time,
+            end_time   = EXCLUDED.end_time
+      RETURNING *`
+    return res.json({ ...row, provider_name: providerName })
+  }
+
   if (req.method === 'PUT') {
     if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
     const { date, state, provider_id } = req.body as { date: string; state: string; provider_id: string | null }
@@ -54,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [row] = await sql`
       INSERT INTO on_call_schedule (practice_id, date, state, provider_id)
       VALUES (${practiceId}::uuid, ${date}::date, ${state}, ${provider_id}::uuid)
-      ON CONFLICT (practice_id, date, state) DO UPDATE SET provider_id = EXCLUDED.provider_id
+      ON CONFLICT (practice_id, date, state, provider_id) DO NOTHING
       RETURNING *`
     return res.json(row)
   }

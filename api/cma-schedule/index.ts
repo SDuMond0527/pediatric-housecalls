@@ -33,9 +33,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const endDate = end || new Date(Date.now() + 13 * 86400000).toISOString().split('T')[0]
 
   const cmas = await sql`
-    SELECT id, name, initials, avatar_color, avatar_text_color, states
+    SELECT id, name, initials, avatar_color, avatar_text_color, states, role
     FROM providers
-    WHERE practice_id = ${practiceId}::uuid AND role = 'CMA' AND is_active = true
+    WHERE practice_id = ${practiceId}::uuid AND role IN ('CMA', 'RN') AND is_active = true
     ORDER BY name`
 
   if (!cmas.length) return res.json({})
@@ -102,6 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           avatar_color: cma.avatar_color,
           avatar_text_color: cma.avatar_text_color,
           states: cma.states ?? [],
+          role: cma.role,
           start_time,
           end_time,
         })

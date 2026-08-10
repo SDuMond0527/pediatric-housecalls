@@ -114,7 +114,7 @@ export function Landing() {
           As part of its complete, end-to-end EHR platform, GoRoam Health integrates with DoseSpot, a Surescripts-certified e-prescribing platform, to enable licensed providers to transmit prescriptions electronically to the patient's pharmacy of choice — directly from within the GoRoam Health provider portal.
         </p>
 
-        {/* Workflow callout — Surescripts requires this explicitly */}
+        {/* Prescribing workflow */}
         <div className="bg-[#EEEDFE] border border-[#C8C4F5] rounded-xl p-6 mb-8">
           <div className="text-[13px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-4">Prescribing workflow</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -148,7 +148,7 @@ export function Landing() {
             {
               step: '3',
               title: 'Prescription transmitted',
-              body: 'The prescription is sent electronically via DoseSpot and the Surescripts network to the patient\'s chosen pharmacy.',
+              body: 'The prescription is sent electronically via DoseSpot to the patient\'s chosen pharmacy.',
             },
           ].map(({ step, title, body }) => (
             <div key={step} className="bg-white border border-[#E8E8E4] rounded-xl p-5">
@@ -162,7 +162,7 @@ export function Landing() {
         <div className="mt-6 bg-white border border-[#E8E8E4] rounded-xl p-5">
           <div className="text-[13px] font-semibold text-[#1A1A2E] mb-1.5">Pharmacy network</div>
           <div className="text-[13px] text-[#666] leading-relaxed">
-            Prescriptions are transmitted via the Surescripts network, which connects to over 60,000 pharmacies nationwide — including CVS, Walgreens, Rite Aid, Walmart, and independent community pharmacies. Electronic prescribing for controlled substances (EPCS) is supported for eligible, DEA-credentialed prescribers in compliance with applicable federal and state law.
+            Prescriptions are transmitted electronically via DoseSpot to over 60,000 pharmacies nationwide — including CVS, Walgreens, Rite Aid, Walmart, and independent community pharmacies. Electronic prescribing for controlled substances (EPCS) is supported for eligible, DEA-credentialed prescribers in compliance with applicable federal and state law.
           </div>
         </div>
       </section>

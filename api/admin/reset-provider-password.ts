@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand, AdminGetUserCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, AdminSetUserPasswordCommand, AdminGetUserCommand, AdminUpdateUserAttributesCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { randomBytes } from 'crypto'
 
@@ -78,45 +78,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
-  // Cognito username is the email the account was created with.
-  // If email isn't stored in the DB, find it via Cognito ListUsers.
-  let cognitoUsername: string | undefined = target.email || undefined
-
-  if (!cognitoUsername) {
-    try {
-      const listResult = await client.send(new ListUsersCommand({
-        UserPoolId: userPoolId,
-        Filter: `sub = "${target.cognito_sub}"`,
-        Limit: 1,
-      }))
-      const found = listResult.Users?.[0]?.Username
-      if (!found) return res.status(404).json({ error: 'Could not find Cognito user — email not on file and sub lookup failed' })
-      cognitoUsername = found
-    } catch (e: any) {
-      return res.status(500).json({ error: 'Cognito lookup failed: ' + (e.message ?? String(e)) })
-    }
+  // Always look up the actual Cognito username (UUID) via sub — the user pool uses
+  // UUID usernames with email as an alias, so we can't use the email directly.
+  let actualUsername: string | undefined
+  try {
+    const listResult = await client.send(new ListUsersCommand({
+      UserPoolId: userPoolId,
+      Filter: `sub = "${target.cognito_sub}"`,
+      Limit: 1,
+    }))
+    actualUsername = listResult.Users?.[0]?.Username
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Cognito lookup failed: ' + (e.message ?? String(e)) })
   }
 
-  // This pool auto-generates UUID usernames with email as an alias.
-  // AdminSetUserPasswordCommand requires the actual username (UUID), not the email alias.
-  let actualUsername = cognitoUsername
-  try {
-    const userInfo = await client.send(new AdminGetUserCommand({
-      UserPoolId: userPoolId,
-      Username: cognitoUsername,
-    }))
-    actualUsername = userInfo.Username ?? cognitoUsername
-  } catch { /* fall back to cognitoUsername if lookup fails */ }
+  if (!actualUsername) {
+    return res.status(404).json({ error: 'Could not find Cognito user for this provider' })
+  }
 
   try {
     await client.send(new AdminSetUserPasswordCommand({
       UserPoolId: userPoolId,
       Username:   actualUsername,
       Password:   password,
-      Permanent:  false,
+      Permanent:  true,
     }))
   } catch (e: any) {
     return res.status(500).json({ error: 'Password reset failed: ' + (e.message ?? String(e)) })
+  }
+
+  // Mark email as verified so they can sign in using email alias
+  if (target.email) {
+    await client.send(new AdminUpdateUserAttributesCommand({
+      UserPoolId:     userPoolId,
+      Username:       actualUsername,
+      UserAttributes: [{ Name: 'email_verified', Value: 'true' }],
+    })).catch(() => {})
   }
 
   res.json({ password })
