@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
-import { MapPin, Clock, CheckCircle2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { MapPin, Clock, CheckCircle2, X, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import {
-  getWaitlistEntries, updateWaitlistEntry,
-  createAppointment, invokeNotifications,
+  apiFetch, getWaitlistEntries, updateWaitlistEntry,
+  createAppointment, invokeNotifications, createWaitlistEntry,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 import { TIME_SLOTS } from '../lib/zipData'
+import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 
 interface WaitlistEntry {
   id: string
@@ -29,8 +31,11 @@ interface WaitlistEntry {
   created_at: string
 }
 
+const EMPTY_ADD = { name: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+
 export function Waitlist() {
   const { provider } = useAuth()
+  const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState<WaitlistEntry | null>(null)
@@ -38,6 +43,98 @@ export function Waitlist() {
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [passed, setPassed] = useState<Set<string>>(new Set())
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState(EMPTY_ADD)
+  const [addSubmitting, setAddSubmitting] = useState(false)
+  const [nameQuery, setNameQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [selectedChild, setSelectedChild] = useState<any | null>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function setField(k: keyof typeof EMPTY_ADD, v: string) {
+    setAddForm(f => ({ ...f, [k]: v }))
+  }
+
+  useEffect(() => {
+    if (!nameQuery.trim() || selectedChild) { setSearchResults([]); setSearchOpen(false); return }
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(async () => {
+      const results = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(nameQuery.trim())}`).catch(() => [])
+      setSearchResults(results ?? [])
+      setSearchOpen(true)
+    }, 300)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [nameQuery, selectedChild])
+
+  function selectChild(child: any) {
+    const childName = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || ''
+    const phone = child.parent_phone || child.family_phone || ''
+    const address = [child.parent_address, child.parent_city].filter(Boolean).join(', ')
+    setSelectedChild(child)
+    setSearchOpen(false)
+    setAddForm(f => ({
+      ...f,
+      name: childName,
+      phone,
+      address,
+      zip: child.parent_zip || '',
+      state: child.parent_state || '',
+      allergies: child.allergies || '',
+      medications: child.current_medications || '',
+      pmh: child.medical_history || '',
+      pcp: child.pcp || '',
+      pharmacy: child.preferred_pharmacy || '',
+      insurance: child.insurance_provider || '',
+      memberId: child.insurance_member_id || '',
+      groupNum: child.insurance_group_number || '',
+    }))
+  }
+
+  function clearSelectedChild() {
+    setSelectedChild(null)
+    setNameQuery('')
+    setAddForm(EMPTY_ADD)
+    setSearchResults([])
+  }
+
+  function closeAddModal() {
+    setAddOpen(false)
+    setAddForm(EMPTY_ADD)
+    setNameQuery('')
+    setSelectedChild(null)
+    setSearchResults([])
+    setSearchOpen(false)
+  }
+
+  async function submitAdd() {
+    if (!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint) return
+    setAddSubmitting(true)
+    const noteParts: string[] = []
+    noteParts.push(`Patient: ${addForm.name}`)
+    if (addForm.phone) noteParts.push(`Phone: ${addForm.phone}`)
+    if (addForm.address) noteParts.push(`Address: ${addForm.address}`)
+    if (addForm.allergies) noteParts.push(`Allergies: ${addForm.allergies}`)
+    if (addForm.medications) noteParts.push(`Medications: ${addForm.medications}`)
+    if (addForm.pmh) noteParts.push(`PMH: ${addForm.pmh}`)
+    if (addForm.pcp) noteParts.push(`PCP: ${addForm.pcp}`)
+    if (addForm.pharmacy) noteParts.push(`Pharmacy: ${addForm.pharmacy}`)
+    if (addForm.insurance) noteParts.push(`Insurance: ${addForm.insurance}`)
+    if (addForm.memberId) noteParts.push(`Member ID: ${addForm.memberId}`)
+    if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
+    if (addForm.complaint) noteParts.push(`Complaint: ${addForm.complaint}`)
+    await createWaitlistEntry({
+      visit_type: addForm.visitType || null,
+      zip: addForm.zip,
+      state: addForm.state,
+      preferred_time_window: addForm.preferredTime || null,
+      notes: noteParts.join(' | '),
+    }).catch(() => {})
+    setAddSubmitting(false)
+    setAddOpen(false)
+    setAddForm(EMPTY_ADD)
+    fetchEntries()
+  }
 
   async function fetchEntries() {
     if (!provider) return
@@ -111,7 +208,12 @@ export function Waitlist() {
             Families in {provider.states?.join(' & ')} waiting for coverage — accept to add to your schedule
           </div>
         </div>
-        {visible.length > 0 && <Badge variant="amber">{visible.length} open</Badge>}
+        <div className="flex items-center gap-2">
+          {visible.length > 0 && <Badge variant="amber">{visible.length} open</Badge>}
+          <Button size="sm" variant="secondary" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false) }}>
+            <Plus size={13} /> Add patient
+          </Button>
+        </div>
       </div>
 
       <div className="p-6 max-w-2xl">
@@ -175,6 +277,143 @@ export function Waitlist() {
           ))}
         </div>
       </div>
+
+      {/* Add patient modal */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closeAddModal} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add patient to waitlist</h2>
+              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest">Patient info</div>
+
+              {/* Patient name search */}
+              <div className="relative">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name *</label>
+                {selectedChild ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 border border-[#AFA9EC] rounded-lg bg-[#F5F4FE]">
+                    <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
+                    {selectedChild.date_of_birth && (
+                      <span className="text-[12px] text-[#999] flex-shrink-0">
+                        DOB: {format(new Date(selectedChild.date_of_birth.replace(/-/g, '/')), 'MMM d, yyyy')}
+                      </span>
+                    )}
+                    <button type="button" onClick={clearSelectedChild} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      autoComplete="off"
+                      placeholder="Search by name..."
+                      value={nameQuery}
+                      onChange={e => { setNameQuery(e.target.value); setField('name', e.target.value) }}
+                      onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-[#E8E8E4] bg-white focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 text-[14px] text-[#1A1A2E] placeholder-[#999] outline-none transition-all"
+                    />
+                    {searchOpen && searchResults.length > 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {searchResults.map(child => {
+                          const cn = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || 'Unknown'
+                          const dob = child.date_of_birth ? format(new Date(child.date_of_birth.replace(/-/g, '/')), 'MMM d, yyyy') : null
+                          return (
+                            <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
+                              className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
+                              <div className="text-[14px] font-medium text-[#1A1A2E]">{cn}</div>
+                              {dob && <div className="text-[12px] text-[#999]">DOB: {dob}</div>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {searchOpen && nameQuery.trim().length > 1 && searchResults.length === 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#999]">
+                        No patients found — fill in manually below
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <Input label="Phone" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
+              <Input label="Visit address" placeholder="123 Main St, City, State" value={addForm.address} onChange={e => setField('address', e.target.value)} />
+
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Zip *" placeholder="28205" value={addForm.zip} onChange={e => setField('zip', e.target.value)} />
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State *</label>
+                  <select value={addForm.state} onChange={e => setField('state', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Select…</option>
+                    <option value="NC">North Carolina</option>
+                    <option value="SC">South Carolina</option>
+                    <option value="VA">Virginia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={addForm.visitType} onChange={e => setField('visitType', e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                  <option value="">Select…</option>
+                  {visitTypes.map(v => <option key={v.visit_type} value={v.visit_type}>{v.badge_label || v.visit_type}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Chief complaint *</label>
+                <textarea value={addForm.complaint} onChange={e => setField('complaint', e.target.value)}
+                  placeholder="Describe symptoms..." rows={2}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time</label>
+                <select value={addForm.preferredTime} onChange={e => setField('preferredTime', e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                  <option value="">Any time</option>
+                  <option>Morning (before noon)</option>
+                  <option>Afternoon (noon–5pm)</option>
+                  <option>After 5pm</option>
+                  <option>Weekdays only</option>
+                  <option>Weekends OK</option>
+                </select>
+              </div>
+
+              {!selectedChild && (
+                <>
+                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Clinical info</div>
+                  <Input label="Allergies" placeholder="e.g. Penicillin — or NKDA" value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
+                  <Input label="Current medications" placeholder="None, or list medications" value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
+                  <Input label="PMH" placeholder="Significant past medical history" value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
+                  <Input label="PCP" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
+                  <Input label="Pharmacy" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
+
+                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Insurance</div>
+                  <Input label="Insurance" placeholder="e.g. BCBS" value={addForm.insurance} onChange={e => setField('insurance', e.target.value)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="Member ID" value={addForm.memberId} onChange={e => setField('memberId', e.target.value)} />
+                    <Input label="Group #" value={addForm.groupNum} onChange={e => setField('groupNum', e.target.value)} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={closeAddModal}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={addSubmitting}
+                disabled={!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint}
+                onClick={submitAdd}>
+                Add to waitlist
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Accept modal */}
       {accepting && (
