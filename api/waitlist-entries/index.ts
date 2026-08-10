@@ -150,12 +150,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const b = req.body
-    const [row] = await sql`
-      INSERT INTO waitlist_entries (practice_id, family_id, visit_type, zip, state, complaint, status, notes, preferred_time_window)
-      VALUES (${practiceId}::uuid, ${b.family_id ?? null}, ${b.visit_type ?? null}, ${b.zip ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
-      RETURNING *`
-    await sendWaitlistNotifications(row as Record<string, unknown>, sql).catch(() => {})
-    return res.json(row)
+    try {
+      const [row] = await sql`
+        INSERT INTO waitlist_entries (practice_id, family_id, visit_type, zip, state, complaint, status, notes, preferred_time_window)
+        VALUES (${practiceId}::uuid, ${b.family_id ?? null}, ${b.visit_type ?? null}, ${b.zip ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
+        RETURNING *`
+      await sendWaitlistNotifications(row as Record<string, unknown>, sql).catch(() => {})
+      return res.json(row)
+    } catch (e: any) {
+      console.error('[waitlist POST]', e)
+      return res.status(500).json({ error: e?.message ?? String(e) })
+    }
   }
 
   res.status(405).json({ error: 'Method not allowed' })
