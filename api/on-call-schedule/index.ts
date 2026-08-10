@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const endDate = end || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
     const rows = await sql`
       SELECT oc.id, oc.date::text AS date, oc.state, oc.provider_id,
+             oc.start_time, oc.end_time,
              p.name AS provider_name, p.role AS provider_role,
              p.initials, p.avatar_color, p.avatar_text_color
       FROM on_call_schedule oc
