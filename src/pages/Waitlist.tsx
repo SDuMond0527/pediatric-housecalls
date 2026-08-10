@@ -56,16 +56,22 @@ export function Waitlist() {
     setAddForm(f => ({ ...f, [k]: v }))
   }
 
-  useEffect(() => {
-    if (!nameQuery.trim() || selectedChild) { setSearchResults([]); setSearchOpen(false); return }
+  function onNameQueryChange(q: string) {
+    setNameQuery(q)
+    setField('name', q)
     if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (!q.trim()) { setSearchResults([]); setSearchOpen(false); return }
     searchTimer.current = setTimeout(async () => {
-      const results = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(nameQuery.trim())}`).catch(() => [])
-      setSearchResults(results ?? [])
-      setSearchOpen(true)
+      try {
+        const results = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(q.trim())}`)
+        setSearchResults(Array.isArray(results) ? results : [])
+        setSearchOpen(true)
+      } catch {
+        setSearchResults([])
+        setSearchOpen(false)
+      }
     }, 300)
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
-  }, [nameQuery, selectedChild])
+  }
 
   function selectChild(child: any) {
     const childName = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || ''
@@ -310,7 +316,7 @@ export function Waitlist() {
                       autoComplete="off"
                       placeholder="Search by name..."
                       value={nameQuery}
-                      onChange={e => { setNameQuery(e.target.value); setField('name', e.target.value) }}
+                      onChange={e => onNameQueryChange(e.target.value)}
                       onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
                       className="w-full px-3 py-2.5 rounded-lg border border-[#E8E8E4] bg-white focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 text-[14px] text-[#1A1A2E] placeholder-[#999] outline-none transition-all"
                     />
