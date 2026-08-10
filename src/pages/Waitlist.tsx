@@ -31,7 +31,7 @@ interface WaitlistEntry {
   created_at: string
 }
 
-const EMPTY_ADD = { name: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
 
 function safeFormat(val: unknown, fmt: string): string {
   try {
@@ -83,17 +83,22 @@ export function Waitlist() {
 
   function selectChild(child: any) {
     const childName = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || ''
+    const rawDob = child.date_of_birth
+    const dob = rawDob ? String(rawDob instanceof Date ? rawDob.toISOString() : rawDob).split('T')[0] : ''
+    const email = child.parent_email || child.family_email || ''
     const phone = child.parent_phone || child.family_phone || ''
-    const address = [child.parent_address, child.parent_city].filter(Boolean).join(', ')
+    const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ')
     setSelectedChild(child)
     setSearchOpen(false)
     setAddForm(f => ({
       ...f,
       name: childName,
+      dob,
+      email,
       phone,
       address,
-      zip: child.parent_zip || '',
-      state: child.parent_state || '',
+      zip: child.parent_zip || child.family_zip || '',
+      state: child.parent_state || child.family_state || '',
       allergies: child.allergies || '',
       medications: child.current_medications || '',
       pmh: child.medical_history || '',
@@ -126,6 +131,8 @@ export function Waitlist() {
     setAddSubmitting(true)
     const noteParts: string[] = []
     noteParts.push(`Patient: ${addForm.name}`)
+    if (addForm.dob) noteParts.push(`DOB: ${addForm.dob}`)
+    if (addForm.email) noteParts.push(`Email: ${addForm.email}`)
     if (addForm.phone) noteParts.push(`Phone: ${addForm.phone}`)
     if (addForm.address) noteParts.push(`Address: ${addForm.address}`)
     if (addForm.allergies) noteParts.push(`Allergies: ${addForm.allergies}`)
@@ -311,11 +318,6 @@ export function Waitlist() {
                 {selectedChild ? (
                   <div className="flex items-center gap-2 px-3 py-2.5 border border-[#AFA9EC] rounded-lg bg-[#F5F4FE]">
                     <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
-                    {selectedChild.date_of_birth && (
-                      <span className="text-[12px] text-[#999] flex-shrink-0">
-                        DOB: {String(selectedChild.date_of_birth instanceof Date ? selectedChild.date_of_birth.toISOString() : selectedChild.date_of_birth).split('T')[0]}
-                      </span>
-                    )}
                     <button type="button" onClick={clearSelectedChild} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
                   </div>
                 ) : (
@@ -352,6 +354,14 @@ export function Waitlist() {
                 )}
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
+                  <input type="date" value={addForm.dob} onChange={e => setField('dob', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <Input label="Email" type="email" placeholder="parent@email.com" value={addForm.email} onChange={e => setField('email', e.target.value)} />
+              </div>
               <Input label="Phone" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
               <Input label="Visit address" placeholder="123 Main St, City, State" value={addForm.address} onChange={e => setField('address', e.target.value)} />
 

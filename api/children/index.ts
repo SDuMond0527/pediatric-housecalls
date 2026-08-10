@@ -101,9 +101,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const q = `%${search.trim()}%`
       const rows = await sql`
         SELECT c.*,
-               fp.display_name AS family_display_name,
-               fp.email        AS family_email,
-               fp.phone        AS family_phone
+               fp.display_name  AS family_display_name,
+               fp.email         AS family_email,
+               fp.phone         AS family_phone,
+               fp.address_line1 AS family_address_line1,
+               fp.city          AS family_city,
+               fp.state         AS family_state,
+               fp.zip           AS family_zip
         FROM children c
         LEFT JOIN family_profiles fp ON fp.id = c.family_id
         WHERE c.practice_id = ${practiceId}::uuid
