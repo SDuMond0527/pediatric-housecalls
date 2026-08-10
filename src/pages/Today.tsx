@@ -65,6 +65,7 @@ export function Today() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [viewDate, setViewDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [charmDetails, setCharmDetails] = useState<Record<string, any>>({})
+  const [childRecords, setChildRecords] = useState<Record<string, any>>({})
 
   // Add appointment
   const [adding, setAdding] = useState(false)
@@ -269,7 +270,7 @@ export function Today() {
     setBlocks((data ?? []) as ScheduleBlock[])
   }
 
-  useEffect(() => { fetchAppts(); fetchBlocks(); setExpanded(null); setCharmDetails({}) }, [provider, viewDate])
+  useEffect(() => { fetchAppts(); fetchBlocks(); setExpanded(null); setCharmDetails({}); setChildRecords({}) }, [provider, viewDate])
 
   useEffect(() => {
     if (!provider) return
@@ -728,7 +729,18 @@ export function Today() {
               return (
                 <div key={appt.id}
                   className={`border rounded-lg overflow-hidden transition-all cursor-pointer ${isExpanded ? 'border-[#7F77DD] bg-[#EEEDFE]/30' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
-                  onClick={() => { const next = isExpanded ? null : appt.id; setExpanded(next); if (next) fetchCharmDetails(appt) }}>
+                  onClick={() => {
+                    const next = isExpanded ? null : appt.id
+                    setExpanded(next)
+                    if (next) {
+                      fetchCharmDetails(appt)
+                      if (appt.child_id && !(appt.id in childRecords)) {
+                        apiFetch<any[]>(`/api/children?ids=${appt.child_id}`)
+                          .then(rows => { if (rows?.[0]) setChildRecords(prev => ({ ...prev, [appt.id]: rows[0] })) })
+                          .catch(() => {})
+                      }
+                    }
+                  }}>
 
                   <div className="flex items-center gap-3 px-4 py-3">
                     <div className="text-[13px] font-medium text-[#555] w-16 flex-shrink-0">{to12h(appt.scheduled_time)}</div>
@@ -793,87 +805,104 @@ export function Today() {
                         )
                       })()}
                       {(() => {
-                        const NOTE_LABELS: Record<string, string> = {
-                          PATIENT: 'Patient name', DOB: 'Date of birth',
-                          CC: 'Chief complaint', NOTES: 'Additional notes',
-                          ALLERGY: 'Allergies', MEDS: 'Medications', PMH: 'Medical history',
-                          VAX: 'Vaccination status', PCP: 'Primary care physician',
-                          PHARMACY: 'Preferred pharmacy', INSURANCE: 'Insurance',
-                          MEMBERID: 'Member ID', GROUPNUM: 'Group #',
-                          SUBSCRIBER: 'Subscriber name', SUBSCRIBERDOB: 'Subscriber DOB', SUBSCRIBERGENDER: 'Subscriber sex',
-                          CHILDREN: 'Children seen', PARENTEMAIL: 'Parent email',
-                          PARENTPHONE: 'Parent phone', GENDER: 'Sex',
-                          CARDFRONT: 'Insurance card front', CARDBACK: 'Insurance card back',
-                        }
-
-                        // Always parse clinical data from notes — no API needed
                         const noteMap: Record<string, string> = {}
                         ;(appt.notes || '').split('|').forEach((part: string) => {
                           const colon = part.indexOf(':')
                           if (colon > 0) {
                             const k = part.slice(0, colon).trim()
                             const v = part.slice(colon + 1).trim()
-                            if (!['Ref', 'ADDR'].includes(k) && v) noteMap[k] = v
+                            if (!['Ref', 'ADDR', 'CHARGED_CENTS'].includes(k) && v) noteMap[k] = v
                           }
                         })
-
                         const cd = charmDetails[appt.id]
-                        const p = cd?.patient || {}
+                        const cp = cd?.patient || {}
+                        const child = childRecords[appt.id]
+
+                        const name = [child?.first_name, child?.last_name].filter(Boolean).join(' ') || noteMap.PATIENT || (cp.first_name ? `${cp.first_name} ${cp.last_name}`.trim() : '')
+                        const familyName = child?.family_display_name || ''
+                        const dob = child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : (noteMap.DOB || cp.dob || '')
+                        const sex = child?.gender || noteMap.GENDER || cp.gender || ''
+                        const phone = child?.parent_phone || child?.family_phone || noteMap.PARENTPHONE || cp.phone || ''
+                        const email = child?.parent_email || child?.family_email || noteMap.PARENTEMAIL || ''
+                        const address = [child?.parent_address || child?.family_address_line1, child?.parent_city || child?.family_city].filter(Boolean).join(', ')
+                        const cc = noteMap.CC || ''
+                        const allergies = child?.allergies || noteMap.ALLERGY || cd?.allergies || ''
+                        const meds = child?.current_medications || noteMap.MEDS || ''
+                        const pmh = child?.medical_history || noteMap.PMH || ''
+                        const vax = noteMap.VAX || ''
+                        const pcp = child?.pcp || noteMap.PCP || ''
+                        const pharmacy = child?.preferred_pharmacy || noteMap.PHARMACY || ''
+                        const insurance = child?.insurance_provider || noteMap.INSURANCE || ''
+                        const memberId = child?.insurance_member_id || noteMap.MEMBERID || ''
+                        const groupNum = child?.insurance_group_number || noteMap.GROUPNUM || ''
+                        const subscriber = child?.insurance_subscriber_name || noteMap.SUBSCRIBER || ''
+                        const subscriberDob = child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : (noteMap.SUBSCRIBERDOB || '')
+                        const subscriberSex = child?.insurance_subscriber_gender || noteMap.SUBSCRIBERGENDER || ''
+                        const cardFront = noteMap.CARDFRONT || ''
+                        const cardBack = noteMap.CARDBACK || ''
+
+                        const F = ({ label, value }: { label: string; value: string }) => value ? (
+                          <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+                        ) : null
+
+                        const hasAnyData = name || dob || phone || email || cc || allergies || insurance
+                        if (!hasAnyData && !cd && !child) {
+                          return <div className="p-2 text-[11px] text-[#999] italic mb-3">Loading patient info…</div>
+                        }
 
                         return (
                           <div className="mb-3 space-y-2">
-                            {/* Patient demographics from Charm */}
-                            {cd && !cd.notFound && (
+                            {(name || familyName || dob || sex || phone || email || address) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
-                                {p.first_name && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Name </span><strong>{p.first_name} {p.last_name}</strong></div>}
-                                {p.dob && <div className="text-[13px]"><span className="text-[#999] text-[11px]">DOB </span>{p.dob}</div>}
-                                {p.gender && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Sex </span>{p.gender}</div>}
-                                {p.phone && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Phone </span>{p.phone}</div>}
-                                {cd.allergies && <div className="text-[13px]"><span className="text-[#999] text-[11px]">Allergies </span>{cd.allergies}</div>}
-                              </div>
-                            )}
-                            {/* Fallback: show patient info from notes when Charm hasn't synced */}
-                            {cd?.notFound && noteMap.PATIENT && (
-                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
-                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
-                                <div className="text-[13px]"><span className="text-[#999] text-[11px]">Name </span><strong>{noteMap.PATIENT}</strong></div>
-                                {noteMap.DOB && <div className="text-[13px]"><span className="text-[#999] text-[11px]">DOB </span>{noteMap.DOB}</div>}
-                              </div>
-                            )}
-                            {!cd && (
-                              <div className="p-2 text-[11px] text-[#999] italic">Loading patient info…</div>
-                            )}
-
-                            {noteMap.PARENTPHONE && (
-                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 flex items-center justify-between gap-3">
-                                <div>
-                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-0.5">Parent phone</div>
-                                  <div className="text-[14px] font-medium text-[#1A1A2E]">{noteMap.PARENTPHONE}</div>
-                                </div>
-                                <a href={`tel:${noteMap.PARENTPHONE}`} onClick={e => e.stopPropagation()}
-                                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">
-                                  Call
-                                </a>
-                              </div>
-                            )}
-
-                            {/* Clinical intake data from appointment notes — always shown */}
-                            {Object.keys(noteMap).filter(k => k !== 'PARENTPHONE').length > 0 ? (
-                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
-                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Visit details</div>
-                                {Object.entries(noteMap).filter(([k]) => k !== 'PARENTPHONE').map(([k, v]) => (
-                                  <div key={k} className="text-[13px]">
-                                    <span className="text-[#999] text-[11px] block">{NOTE_LABELS[k] || k}</span>
-                                    {(k === 'CARDFRONT' || k === 'CARDBACK') ? (
-                                      <a href={v} target="_blank" rel="noopener noreferrer">
-                                        <img src={v} alt={NOTE_LABELS[k]} className="mt-1 max-h-28 rounded border border-[#E8E8E4] object-contain" />
-                                      </a>
-                                    ) : v}
+                                {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+                                <F label="Family" value={familyName} />
+                                <F label="Date of birth" value={dob} />
+                                <F label="Sex" value={sex} />
+                                {phone && (
+                                  <div className="text-[13px]">
+                                    <span className="text-[#999] text-[11px] block">Phone</span>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>{phone}</span>
+                                      <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
+                                         className="px-2 py-0.5 rounded bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">Call</a>
+                                    </div>
                                   </div>
-                                ))}
+                                )}
+                                <F label="Email" value={email} />
+                                <F label="Address" value={address} />
                               </div>
-                            ) : (
+                            )}
+                            {(cc || allergies || meds || pmh || vax || pcp || pharmacy) && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Clinical</div>
+                                <F label="Chief complaint" value={cc} />
+                                <F label="Allergies" value={allergies} />
+                                <F label="Medications" value={meds} />
+                                <F label="Medical history / PMH" value={pmh} />
+                                <F label="Vaccination status" value={vax} />
+                                <F label="PCP" value={pcp} />
+                                <F label="Preferred pharmacy" value={pharmacy} />
+                              </div>
+                            )}
+                            {(insurance || memberId || groupNum || subscriber || subscriberDob || subscriberSex || cardFront || cardBack) && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Insurance</div>
+                                <F label="Insurance" value={insurance} />
+                                <F label="Member ID" value={memberId} />
+                                <F label="Group #" value={groupNum} />
+                                <F label="Subscriber name" value={subscriber} />
+                                <F label="Subscriber DOB" value={subscriberDob} />
+                                <F label="Subscriber sex" value={subscriberSex} />
+                                {(cardFront || cardBack) && (
+                                  <div className="flex gap-2 mt-1 flex-wrap">
+                                    {cardFront && <a href={cardFront} target="_blank" rel="noopener noreferrer"><img src={cardFront} alt="Insurance card front" className="max-h-28 rounded border border-[#E8E8E4] object-contain" /></a>}
+                                    {cardBack && <a href={cardBack} target="_blank" rel="noopener noreferrer"><img src={cardBack} alt="Insurance card back" className="max-h-28 rounded border border-[#E8E8E4] object-contain" /></a>}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {!hasAnyData && (
                               <div className="p-3 bg-[#EEEDFE] border border-[#AFA9EC] rounded-lg text-[12px] text-[#3C3489]">
                                 No intake data — this appointment was added manually or booked before intake tracking was enabled.
                               </div>

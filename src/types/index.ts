@@ -28,6 +28,7 @@ export interface Appointment {
   notes: string | null
   after_visit_instructions: string | null
   duration_minutes: number | null
+  child_id: string | null
   created_at: string
 }
 

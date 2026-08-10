@@ -12,6 +12,7 @@ interface WaitlistEntry {
   zip: string
   state: string | null
   preferred_time_window: string | null
+  complaint: string | null
   notes: string | null
   status: 'waiting' | 'contacted' | 'converted' | 'removed'
   created_at: string
@@ -131,9 +132,48 @@ export function AdminWaitlist() {
                 {e.children && e.children.length > 0 && (
                   <p className="text-[12px] text-[#555] mb-1">Children: {e.children.join(', ')}</p>
                 )}
-                {e.notes && (
-                  <p className="text-[12px] text-[#555] italic">{e.notes}</p>
-                )}
+                {(() => {
+                  const NOTE_LABELS: Record<string, string> = {
+                    Patient: 'Patient name', DOB: 'Date of birth', Email: 'Email', Phone: 'Phone',
+                    Address: 'Address', Allergies: 'Allergies', Medications: 'Medications',
+                    PMH: 'Medical history', PCP: 'PCP', Pharmacy: 'Preferred pharmacy',
+                    Insurance: 'Insurance', 'Member ID': 'Member ID', 'Group #': 'Group #',
+                    Complaint: 'Chief complaint',
+                  }
+                  const noteMap: Record<string, string> = {}
+                  ;(e.notes || '').split(' | ').forEach(part => {
+                    const colon = part.indexOf(': ')
+                    if (colon > 0) {
+                      const k = part.slice(0, colon).trim()
+                      const v = part.slice(colon + 2).trim()
+                      if (v) noteMap[k] = v
+                    }
+                  })
+                  const complaint = e.complaint || noteMap.Complaint || ''
+                  const entries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
+                  return (
+                    <div className="mt-2 space-y-1">
+                      {complaint && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Chief complaint: </span>
+                          <span className="text-[#1A1A2E] font-medium">{complaint}</span>
+                        </div>
+                      )}
+                      {noteMap.Patient && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Patient: </span>
+                          <span className="text-[#1A1A2E] font-medium">{noteMap.Patient}</span>
+                        </div>
+                      )}
+                      {entries.map(([k, v]) => (
+                        <div key={k} className="text-[12px]">
+                          <span className="text-[#999]">{NOTE_LABELS[k] || k}: </span>
+                          <span className="text-[#555]">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
 
               {e.status === 'waiting' && (
