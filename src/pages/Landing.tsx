@@ -111,7 +111,7 @@ export function Landing() {
       <section className="px-6 py-14 max-w-4xl mx-auto">
         <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-2">Electronic prescribing</h2>
         <p className="text-[14px] text-[#666] mb-8 leading-relaxed">
-          As part of its complete, end-to-end EHR platform, GoRoam Health integrates with DoseSpot, a Surescripts-certified e-prescribing platform, to enable licensed providers to transmit prescriptions electronically to the patient's pharmacy of choice — directly from within the GoRoam Health provider portal.
+          As part of its complete, end-to-end EHR platform, GoRoam Health integrates with DoseSpot, a certified e-prescribing platform, to enable licensed providers to transmit prescriptions electronically to the patient's pharmacy of choice — directly from within the GoRoam Health provider portal.
         </p>
 
         {/* Prescribing workflow */}
@@ -215,7 +215,7 @@ export function Landing() {
             { icon: <Smartphone size={15} className="text-[#7F77DD]" />, label: 'Family patient portal with online booking' },
             { icon: <ClipboardList size={15} className="text-[#7F77DD]" />, label: 'Encounter documentation and clinical notes, built in' },
             { icon: <Shield size={15} className="text-[#7F77DD]" />, label: 'Native patient charting and records storage' },
-            { icon: <Pill size={15} className="text-[#7F77DD]" />, label: 'Electronic prescribing via DoseSpot / Surescripts' },
+            { icon: <Pill size={15} className="text-[#7F77DD]" />, label: 'Electronic prescribing via DoseSpot' },
             { icon: <Building2 size={15} className="text-[#7F77DD]" />, label: 'Insurance claims management' },
             { icon: <MapPin size={15} className="text-[#7F77DD]" />, label: 'Zone-based provider routing and availability' },
             { icon: <Smartphone size={15} className="text-[#7F77DD]" />, label: 'Automated appointment notifications (email + SMS)' },
