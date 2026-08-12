@@ -94,7 +94,6 @@ export function Landing() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { label: 'Provider types', value: 'Physicians (MD), Physician Assistants (PA), Nurse Practitioners (NP), Speech Therapists, Occupational Therapists, Physical Therapists, Mental Health Clinicians, and more' },
-              { label: 'Care settings', value: 'In-home sick visits, in-home IV therapy, physicals, telehealth video visits, CMA + telemedicine hybrid visits' },
               { label: 'Patient population', value: 'Patients seen in the home by their practice\'s assigned provider' },
             ].map(({ label, value }) => (
               <div key={label} className="border border-[#E8E8E4] rounded-xl p-5">
