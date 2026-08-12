@@ -7,7 +7,7 @@ export function Landing() {
 
       {/* Top banner */}
       <div className="bg-[#1A1A2E] text-white text-center px-6 py-2.5 text-[13px] font-medium">
-        GoRoam Health is a complete, end-to-end Electronic Health Record (EHR) platform for mobile practices — independent of any other EHR system.
+        GoRoam Health is a complete end-to-end EHR and scheduling system designed for mobile practices
       </div>
 
       {/* Header */}
