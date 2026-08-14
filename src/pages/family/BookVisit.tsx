@@ -203,6 +203,7 @@ export function BookVisit() {
   const { byType } = usePracticeVisitTypes()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
+  const [expandedCprType, setExpandedCprType] = useState<string | null>(null)
   const [booking, setBooking] = useState<BookingState>({
     visitType: '', selectedChildIds: [], childIntakes: {},
     activeChildTab: '', ivFluidsIntake: emptyIvFluids(),
@@ -898,10 +899,10 @@ export function BookVisit() {
         status: 'upcoming',
         notes: noteParts.join('|'),
         duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
-        ...(isCmaVisit ? { state: booking.state } : {}),
+        ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
       }).catch(() => null)
-      // CMA+tele returns { cma, md }; all other visit types return the appointment row directly
-      appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : apptRecord?.id) || null
+      // CMA+tele returns { cma, md }; IV fluids returns { rn, md }; all other visit types return the appointment row directly
+      appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : isIvFluids ? apptRecord?.rn?.id : apptRecord?.id) || null
     }
 
     const newBooking = await familyCreateBookingRequest({
@@ -1063,19 +1064,40 @@ export function BookVisit() {
           {/* Visit type */}
           <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Visit type</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            {Object.entries(VISIT_TYPE_INFO).filter(([type]) => type !== 'CMA + telemedicine').map(([type, info]) => (
-              <button key={type} onClick={() => setBooking(b => ({ ...b, visitType: type }))}
-                className={`text-left p-4 rounded-xl border-2 transition-all ${booking.visitType === type ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0" style={{ background: info.bg }}>{info.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{type}</div>
-                    <div className="text-[11px] text-[#555] mt-0.5">{info.duration}</div>
+            {Object.entries(VISIT_TYPE_INFO).filter(([type]) => type !== 'CMA + telemedicine').map(([type, info]) => {
+              const infoAny = info as any
+              const displayName: string = infoAny.shortName ?? type
+              const details: string[] | undefined = infoAny.details
+              const isExpanded = expandedCprType === type
+              return (
+                <button key={type} onClick={() => setBooking(b => ({ ...b, visitType: type }))}
+                  className={`text-left p-4 rounded-xl border-2 transition-all ${booking.visitType === type ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0" style={{ background: info.bg }}>{info.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{displayName}</div>
+                      <div className="text-[11px] text-[#555] mt-0.5">{info.duration}</div>
+                      {details && (
+                        <span
+                          onClick={e => { e.stopPropagation(); setExpandedCprType(isExpanded ? null : type) }}
+                          className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] mt-1.5 hover:underline cursor-pointer select-none"
+                        >
+                          {isExpanded ? '▲ Hide details' : '▼ What\'s covered'}
+                        </span>
+                      )}
+                      {details && isExpanded && (
+                        <ul className="mt-2 space-y-0.5 pl-3 list-disc">
+                          {details.map((d, i) => (
+                            <li key={i} className="text-[11px] text-[#444] leading-relaxed">{d}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {booking.visitType === type && <div className="w-5 h-5 rounded-full bg-[#7F77DD] flex items-center justify-center flex-shrink-0"><Check size={10} className="text-white" /></div>}
                   </div>
-                  {booking.visitType === type && <div className="w-5 h-5 rounded-full bg-[#7F77DD] flex items-center justify-center flex-shrink-0"><Check size={10} className="text-white" /></div>}
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
 
           {/* Child selection — hidden for CPR */}
