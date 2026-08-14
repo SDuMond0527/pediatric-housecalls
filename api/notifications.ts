@@ -358,7 +358,7 @@ function cprConfirmationEmail(data: {
   ref: string
 }) {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
-  const isHeartsaver = data.visitType === 'In-home CPR class (Heartsaver)'
+  const isHeartsaver = data.visitType.startsWith('In-home CPR class (Heartsaver')
   const elearningUrl = isHeartsaver
     ? 'https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online'
     : 'https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online'

@@ -87,12 +87,12 @@ export const VISIT_TYPE_INFO = {
     duration: '60–90 min',
     note: 'Requires provider screening call first. Minimum weight 55 lbs.',
   },
-  'In-home CPR class (Heartsaver)': {
+  'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '❤️',
     duration: '3 hours · up to 6 people · $80/person',
     note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a Heartsaver e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $80 per person.`,
   },
-  'In-home CPR class (BLS)': {
+  'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '🫀',
     duration: '3 hours · up to 6 people · $80/person',
     note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a BLS e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $80 per person.`,

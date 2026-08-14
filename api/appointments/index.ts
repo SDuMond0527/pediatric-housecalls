@@ -30,6 +30,8 @@ const VISIT_DURATIONS: Record<string, number> = {
   'In-home IV fluids': 90,
   'In-home CPR class (Heartsaver)': 180,
   'In-home CPR class (BLS)': 180,
+  'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 180,
+  'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)': 180,
 }
 
 function blockEndTime(startTime: string, visitType: string, explicitMinutes?: number | null): string {
@@ -102,6 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const onCallRows = await sql`
           SELECT provider_id FROM on_call_schedule
           WHERE practice_id = ${practiceId}::uuid AND date = ${scheduled_date}::date AND state = ${state}
+            AND (start_time IS NULL OR start_time <= ${scheduled_time}::time)
+            AND (end_time IS NULL OR end_time > ${scheduled_time}::time)
           LIMIT 1`
         if (onCallRows.length) {
           const mdProviderId = onCallRows[0].provider_id as string
@@ -116,6 +120,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       return res.json({ cma: cmaRow, md: mdRow })
+    }
+
+    // In-home IV fluids family bookings: create RN appointment + auto-assign on-call MD/NP
+    if (visit_type === 'In-home IV fluids' && auth.type === 'family') {
+      const [rnRow] = await sql`
+        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
+        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+        RETURNING *`
+      await sql`
+        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (rnRow as any).id})`
+        .catch(() => {})
+
+      let mdRow: unknown = null
+      if (state) {
+        const onCallRows = await sql`
+          SELECT provider_id FROM on_call_schedule
+          WHERE practice_id = ${practiceId}::uuid AND date = ${scheduled_date}::date AND state = ${state}
+            AND (start_time IS NULL OR start_time <= ${scheduled_time}::time)
+            AND (end_time IS NULL OR end_time > ${scheduled_time}::time)
+          LIMIT 1`
+        if (onCallRows.length) {
+          const mdProviderId = onCallRows[0].provider_id as string
+          ;[mdRow] = await sql`
+            INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+            RETURNING *`
+          await sql`
+            INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
+            .catch(() => {})
+        }
+      }
+      return res.json({ rn: rnRow, md: mdRow })
     }
 
     const [row] = await sql`

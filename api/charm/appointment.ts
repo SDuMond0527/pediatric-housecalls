@@ -6,6 +6,8 @@ const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60, 'Sports physical': 60, 'CMA + telemedicine': 60,
   'In-home IV fluids': 90, 'Video telemedicine': 30, 'Text visit': 15,
   'In-home CPR class (Heartsaver)': 180, 'In-home CPR class (BLS)': 180,
+  'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 180,
+  'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)': 180,
 }
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
