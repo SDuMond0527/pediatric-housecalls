@@ -136,7 +136,7 @@ function parentConfirmationEmail(data: {
       <span style="font-size:12px;color:#5550A0;">Or copy this link: ${TELEMEDICINE_URL}</span>
     </div>` : isVirtual ? `
     <div style="background:#EEEDFE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#3C3489;">
-      <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time.
+      <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time via their secure messaging platform. That text message will come directly to your cell phone at the scheduled time.
     </div>` : isIVFluids ? `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
       <strong>IV fluids request received:</strong> One of our physicians or nurse practitioners will be reaching out to you shortly to arrange for a brief video telemedicine screening to determine that IV fluids are medically safe for your child in this scenario, and to determine the kind and volume of fluids that the nurse will administer. Once that video consult is completed, your nurse will reach back out to you to confirm her arrival time at your home.
@@ -145,9 +145,10 @@ function parentConfirmationEmail(data: {
       <strong>In-home visit:</strong> Your provider will arrive within 15 minutes of your scheduled time. Please be available at your address.
     </div>`}
 
+    ${!isVirtual ? `
     <div style="background:#FAEEDA;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:12px;color:#633806;">
       <strong>Cancellation policy:</strong> Cancellations within 2 hours of an in-person visit are subject to a $75 fee. To cancel, log in to your account at <a href="${PORTAL_URL}/family/dashboard" style="color:#633806;">${PORTAL_URL}</a>.
-    </div>
+    </div>` : ''}
 
     <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
   </td></tr>
@@ -359,7 +360,7 @@ function cprConfirmationEmail(data: {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const isHeartsaver = data.visitType === 'In-home CPR class (Heartsaver)'
   const elearningUrl = isHeartsaver
-    ? 'https://shopcpr.heart.org/courses/heartsaver-cpr-aed'
+    ? 'https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online'
     : 'https://shopcpr.heart.org/courses/bls'
   const courseLabel = isHeartsaver ? 'Heartsaver' : 'BLS'
   const totalCost = data.participantCount * 80
