@@ -358,11 +358,6 @@ function cprConfirmationEmail(data: {
   ref: string
 }) {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
-  const isHeartsaver = data.visitType.startsWith('In-home CPR class (Heartsaver')
-  const elearningUrl = isHeartsaver
-    ? 'https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online'
-    : 'https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online'
-  const courseLabel = isHeartsaver ? 'Heartsaver' : 'BLS'
   const totalCost = data.participantCount * 80
 
   return `<!DOCTYPE html>
@@ -370,7 +365,7 @@ function cprConfirmationEmail(data: {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<table width="100%" style="max-width:560px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
 
   <!-- Header -->
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
@@ -380,13 +375,13 @@ function cprConfirmationEmail(data: {
 
   <!-- Body -->
   <tr><td style="padding:32px;">
-    <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">${greeting}<br><br>
-    Your <strong>${data.visitType}</strong> is confirmed! We're excited to teach CPR skills to you and your family.</p>
+    <p style="font-size:15px;margin:0 0 8px;line-height:1.7;">${greeting}</p>
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">Thank you for registering for an in-home CPR class.</p>
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">The first part of the class is an online portion done at your own pace. The second portion is an in-home skills class where you can practice the skills. Prior to us meeting please complete the online portion. Please let me know if you have any difficulties accessing it.</p>
 
     <!-- Appointment details -->
-    <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;">
+    <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:28px;">
       <tr><td style="padding:20px;">
-        <div style="font-size:18px;font-weight:600;margin-bottom:16px;">${data.visitType}</div>
         ${row('📅', 'Date', data.date)}
         ${row('🕐', 'Time', data.time)}
         ${row('👩‍🏫', 'Instructor', 'Melissa Jesse')}
@@ -396,39 +391,66 @@ function cprConfirmationEmail(data: {
       </td></tr>
     </table>
 
-    <!-- E-learning -->
-    <div style="background:#FDEDEC;border-radius:12px;border:1px solid #F5B7B1;padding:18px 20px;margin-bottom:20px;">
-      <div style="font-size:14px;font-weight:600;color:#922B21;margin-bottom:8px;">📚 Complete your ${courseLabel} e-learning first</div>
-      <p style="font-size:13px;color:#922B21;margin:0 0 12px;line-height:1.55;">
-        <strong>All attendees must complete the online portion before class day.</strong> This typically takes about 1.5–2 hours. Please plan accordingly.
-      </p>
-      <a href="${elearningUrl}" style="display:inline-block;background:#E74C3C;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">
-        Start ${courseLabel} e-learning →
-      </a>
+    <!-- Online portion intro -->
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">There are 2 options for the online portion. Both links and descriptions are below. You can complete the one that best meets your needs. In the in-home skills portion we will practice all skills and can focus on what you would like to.</p>
+
+    <!-- Course 1: Heartsaver Pediatric -->
+    <div style="border:1px solid #E8E8E4;border-radius:12px;overflow:hidden;margin-bottom:16px;">
+      <div style="background:#FDEDEC;padding:16px 20px;border-bottom:1px solid #F5B7B1;">
+        <div style="font-size:15px;font-weight:700;color:#922B21;margin-bottom:2px;">Heartsaver® Pediatric First Aid CPR AED Online</div>
+        <a href="https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online" style="font-size:12px;color:#922B21;opacity:0.7;">shopcpr.heart.org</a>
+      </div>
+      <div style="padding:16px 20px;">
+        <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;color:#333;">
+          <li>Child and Infant CPR and AED use</li>
+          <li>Pediatric first aid basics</li>
+          <li>Pediatric medical emergencies (including choking)</li>
+          <li>Pediatric injury emergencies</li>
+          <li>Environmental emergencies</li>
+          <li>Preventing illness and injury</li>
+          <li>Opioid-associated life-threatening emergencies and how to use Naloxone</li>
+          <li>Optional modules in Adult CPR AED</li>
+        </ul>
+        <a href="https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online" style="display:inline-block;margin-top:14px;background:#E74C3C;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Start Heartsaver Pediatric →</a>
+      </div>
+    </div>
+
+    <!-- Course 2: Heartsaver Total -->
+    <div style="border:1px solid #E8E8E4;border-radius:12px;overflow:hidden;margin-bottom:28px;">
+      <div style="background:#FDEDEC;padding:16px 20px;border-bottom:1px solid #F5B7B1;">
+        <div style="font-size:15px;font-weight:700;color:#922B21;margin-bottom:2px;">Heartsaver® Total — First Aid CPR AED Online</div>
+        <a href="https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online" style="font-size:12px;color:#922B21;opacity:0.7;">shopcpr.heart.org</a>
+      </div>
+      <div style="padding:16px 20px;">
+        <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;color:#333;">
+          <li>Adult CPR and AED use</li>
+          <li>First aid basics</li>
+          <li>Medical emergencies (including choking)</li>
+          <li>Injury emergencies</li>
+          <li>Environmental emergencies</li>
+          <li>Preventing illness and injury</li>
+          <li>Opioid-associated life-threatening emergencies and how to use Naloxone</li>
+          <li>Recognizing the signs of mental health crisis in the workplace</li>
+          <li>Optional modules in Child CPR AED and Infant CPR AED</li>
+        </ul>
+        <a href="https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online" style="display:inline-block;margin-top:14px;background:#E74C3C;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Start Heartsaver Total →</a>
+      </div>
     </div>
 
     <!-- Payment -->
-    <div style="background:#E8F8F5;border-radius:12px;border:1px solid #A9DFBF;padding:18px 20px;margin-bottom:20px;">
+    <div style="background:#E8F8F5;border-radius:12px;border:1px solid #A9DFBF;padding:18px 20px;margin-bottom:28px;">
       <div style="font-size:14px;font-weight:600;color:#1E8449;margin-bottom:8px;">💳 Payment</div>
       <p style="font-size:13px;color:#1E8449;margin:0;line-height:1.55;">
         Please send <strong>$${totalCost}</strong> ($80 × ${data.participantCount} person${data.participantCount > 1 ? 's' : ''}) via Venmo to <strong>${VENMO_HANDLE}</strong> before your class.
       </p>
     </div>
 
-    <!-- Email Melissa -->
-    <div style="background:#EBF5FB;border-radius:12px;border:1px solid #AED6F1;padding:18px 20px;margin-bottom:24px;">
-      <div style="font-size:14px;font-weight:600;color:#1A5276;margin-bottom:8px;">📧 Send attendee names to Melissa</div>
-      <p style="font-size:13px;color:#1A5276;margin:0;line-height:1.55;">
-        Please email the full names of all attendees to Melissa at <a href="mailto:deeringmel@me.com" style="color:#1A5276;font-weight:600;">deeringmel@me.com</a> so she can prepare the right number of completion cards.
-      </p>
-    </div>
+    <!-- Sign-off -->
+    <p style="font-size:15px;margin:0 0 4px;line-height:1.7;">Thank you,</p>
+    <p style="font-size:15px;font-weight:600;margin:0 0 2px;">Melissa Jesse</p>
+    <p style="font-size:13px;color:#666;margin:0 0 24px;line-height:1.6;">Pediatric Nurse Practitioner and Certified BLS and Heartsaver CPR Instructor</p>
 
-    <!-- Instructor note -->
-    <div style="background:#F4ECF7;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:#6C3483;">
-      <strong>Note:</strong> Melissa will arrive <strong>30 minutes early</strong> to set up equipment. Please have a clear space in your home (a living room or large room works great).
-    </div>
-
-    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions? Reply to this email or reach Melissa directly at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions? Reach Melissa directly at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
   </td></tr>
 
   <!-- Footer -->
