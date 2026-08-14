@@ -361,7 +361,7 @@ function cprConfirmationEmail(data: {
   const isHeartsaver = data.visitType === 'In-home CPR class (Heartsaver)'
   const elearningUrl = isHeartsaver
     ? 'https://shopcpr.heart.org/heartsaver-pediatric-first-aid-cpr-aed-online'
-    : 'https://shopcpr.heart.org/courses/bls'
+    : 'https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online'
   const courseLabel = isHeartsaver ? 'Heartsaver' : 'BLS'
   const totalCost = data.participantCount * 80
 
