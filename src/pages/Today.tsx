@@ -851,8 +851,16 @@ export function Today() {
                           return <div className="p-2 text-[11px] text-[#999] italic mb-3">Loading patient info…</div>
                         }
 
+                        const partner = (appt.notes || '').split('|').find((p: string) => p.startsWith('PARTNER:'))?.replace('PARTNER:', '').trim() ?? ''
+
                         return (
                           <div className="mb-3 space-y-2">
+                            {partner && (
+                              <div className="bg-[#FEF3E8] border border-[#F9C784] rounded-lg px-3 py-2.5 flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-[#633806] uppercase tracking-wider flex-shrink-0">Partner provider</span>
+                                <span className="text-[13px] font-medium text-[#633806]">{partner}</span>
+                              </div>
+                            )}
                             {(name || familyName || dob || sex || phone || email || address) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>

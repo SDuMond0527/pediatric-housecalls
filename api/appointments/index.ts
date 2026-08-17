@@ -90,6 +90,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // CMA + telemedicine family bookings: create CMA appointment + auto-assign on-call MD/NP
     if (visit_type === 'CMA + telemedicine' && auth.type === 'family') {
+      const [cmaProvider] = await sql`SELECT name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
+      const cmaName = (cmaProvider?.name ?? '') as string
+
       const [cmaRow] = await sql`
         INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
         VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
@@ -102,17 +105,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let mdRow: unknown = null
       if (state) {
         const onCallRows = await sql`
-          SELECT provider_id FROM on_call_schedule
-          WHERE practice_id = ${practiceId}::uuid AND date = ${scheduled_date}::date AND state = ${state}
-            AND (start_time IS NULL OR start_time <= ${scheduled_time}::time)
-            AND (end_time IS NULL OR end_time > ${scheduled_time}::time)
+          SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
+          JOIN providers p ON p.id = oc.provider_id
+          WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
+            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
+            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
         if (onCallRows.length) {
           const mdProviderId = onCallRows[0].provider_id as string
+          const mdName = (onCallRows[0].provider_name ?? '') as string
+          const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${cmaName} (CMA)` : '')
+          const cmaNotes = ((cmaRow as any).notes ?? '') + (cmaName ? `|PARTNER:${mdName} (MD/NP — telemedicine)` : '')
           ;[mdRow] = await sql`
             INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${mdNotes}, ${duration_minutes ?? null})
             RETURNING *`
+          await sql`UPDATE appointments SET notes = ${cmaNotes} WHERE id = ${(cmaRow as any).id}::uuid`
           await sql`
             INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
             VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
@@ -124,6 +132,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // In-home IV fluids family bookings: create RN appointment + auto-assign on-call MD/NP
     if (visit_type === 'In-home IV fluids' && auth.type === 'family') {
+      const [rnProvider] = await sql`SELECT name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
+      const rnName = (rnProvider?.name ?? '') as string
+
       const [rnRow] = await sql`
         INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
         VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
@@ -136,17 +147,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let mdRow: unknown = null
       if (state) {
         const onCallRows = await sql`
-          SELECT provider_id FROM on_call_schedule
-          WHERE practice_id = ${practiceId}::uuid AND date = ${scheduled_date}::date AND state = ${state}
-            AND (start_time IS NULL OR start_time <= ${scheduled_time}::time)
-            AND (end_time IS NULL OR end_time > ${scheduled_time}::time)
+          SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
+          JOIN providers p ON p.id = oc.provider_id
+          WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
+            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
+            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
         if (onCallRows.length) {
           const mdProviderId = onCallRows[0].provider_id as string
+          const mdName = (onCallRows[0].provider_name ?? '') as string
+          const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${rnName} (RN — in-home)` : '')
+          const rnNotes = ((rnRow as any).notes ?? '') + (rnName ? `|PARTNER:${mdName} (MD/NP — telemedicine screening)` : '')
           ;[mdRow] = await sql`
             INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null})
+            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${mdNotes}, ${duration_minutes ?? null})
             RETURNING *`
+          await sql`UPDATE appointments SET notes = ${rnNotes} WHERE id = ${(rnRow as any).id}::uuid`
           await sql`
             INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
             VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
