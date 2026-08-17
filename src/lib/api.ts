@@ -311,6 +311,9 @@ export const getUnbilledNotes = () =>
 export const getClaims = (status?: string) =>
   apiFetch<any[]>(status ? `/api/claims?status=${status}` : '/api/claims')
 
+export const getEraCount = () =>
+  apiFetch<{ count: number }>('/api/claims?era_count=1')
+
 export const generateClaim = (encounter_note_id: string) =>
   apiFetch<any>('/api/claims', { method: 'POST', body: JSON.stringify({ encounter_note_id }) })
 

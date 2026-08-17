@@ -773,57 +773,123 @@ export function AdminClaims() {
               {submittedClaims.map(c => {
                 const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.submitted
                 const Icon = badge.icon
+                const isOpen = expanded === c.id
+                const patientBalance = [c.patient_deductible_era, c.patient_coinsurance_era, c.patient_copay_era, c.patient_non_covered_era]
+                  .reduce((s, v) => s + (parseFloat(v ?? 0) || 0), 0)
                 return (
-                  <div key={c.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
-                      <div>
-                        <div className="text-[14px] font-medium text-[#1A1A2E]">
-                          {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
-                          <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
+                  <div key={c.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+                    <button className="w-full p-4 flex items-center justify-between gap-4 text-left"
+                      onClick={() => setExpanded(isOpen ? null : c.id)}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
+                        <div>
+                          <div className="text-[14px] font-medium text-[#1A1A2E]">
+                            {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
+                            <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
+                            {c.era_received_at && (
+                              <span className="ml-2 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                                <Zap size={9} /> ERA received
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[12px] text-[#999] mt-0.5">
+                            {c.payer_name} · {fmtMoney(c.total_charge)}
+                            {c.stedi_claim_id && ` · Ref: ${c.stedi_claim_id}`}
+                          </div>
                         </div>
-                        <div className="text-[12px] text-[#999] mt-0.5">
-                          {c.payer_name} · {fmtMoney(c.total_charge)}
-                          {c.stedi_claim_id && ` · Ref: ${c.stedi_claim_id}`}
-                        </div>
-                        {c.submission_error && (
-                          <div className="text-[11px] text-[#DC2626] mt-1">{c.submission_error}</div>
-                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
-                        <Icon size={11} /> {badge.label}
-                      </span>
-                      <Button size="sm" variant="secondary"
-                        loading={reopening === c.id}
-                        onClick={() => handleReopen(c.id)}>
-                        Reopen
-                      </Button>
-                      <a
-                        href="https://portal.stedi.com/app/healthcare/claims"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap"
-                      >
-                        View in Stedi <ExternalLink size={10} />
-                      </a>
-                      <button
-                        onClick={() => setStatementClaim(c)}
-                        className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline whitespace-nowrap font-medium">
-                        <Receipt size={11} /> Statement
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
+                          <Icon size={11} /> {badge.label}
+                        </span>
+                        {isOpen ? <ChevronUp size={14} className="text-[#999]" /> : <ChevronDown size={14} className="text-[#999]" />}
+                      </div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-[#F1EFE8] px-4 pb-4 pt-3 space-y-4">
+                        {/* ERA payment breakdown */}
                         {c.era_received_at && (
-                          <span className="ml-1 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
-                            <Zap size={9} /> ERA
-                          </span>
+                          <div className="bg-[#E1F5EE] border border-[#A9DFBF] rounded-xl p-4">
+                            <div className="text-[11px] font-semibold text-[#085041] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                              <Zap size={11} /> ERA Payment Received · {fmtDate(c.era_received_at)}
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                              {c.amount_billed_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Billed amount</span>
+                                  <span className="font-medium">{fmtMoney(c.amount_billed_era)}</span>
+                                </div>
+                              )}
+                              {c.insurance_payment_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Insurance paid</span>
+                                  <span className="font-semibold text-[#085041]">{fmtMoney(c.insurance_payment_era)}</span>
+                                </div>
+                              )}
+                              {c.contractual_adjustment_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Contractual adjustment</span>
+                                  <span className="font-medium text-[#999]">({fmtMoney(c.contractual_adjustment_era)})</span>
+                                </div>
+                              )}
+                              {c.patient_deductible_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Patient deductible</span>
+                                  <span className="font-medium">{fmtMoney(c.patient_deductible_era)}</span>
+                                </div>
+                              )}
+                              {c.patient_coinsurance_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Patient coinsurance</span>
+                                  <span className="font-medium">{fmtMoney(c.patient_coinsurance_era)}</span>
+                                </div>
+                              )}
+                              {c.patient_copay_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Patient copay</span>
+                                  <span className="font-medium">{fmtMoney(c.patient_copay_era)}</span>
+                                </div>
+                              )}
+                              {c.patient_non_covered_era != null && (
+                                <div className="flex justify-between text-[12px]">
+                                  <span className="text-[#444]">Non-covered</span>
+                                  <span className="font-medium">{fmtMoney(c.patient_non_covered_era)}</span>
+                                </div>
+                              )}
+                            </div>
+                            {patientBalance > 0 && (
+                              <div className="mt-3 pt-3 border-t border-[#A9DFBF] flex justify-between text-[13px] font-semibold">
+                                <span className="text-[#085041]">Patient balance due</span>
+                                <span className="text-[#085041]">{fmtMoney(patientBalance)}</span>
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {c.statement_status === 'sent' || c.statement_status === 'paid' ? (
-                          <span className="ml-1 inline-flex items-center gap-0.5 bg-[#EEF6FB] text-[#2D7BA6] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
-                            <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
-                          </span>
-                        ) : null}
-                      </button>
-                    </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-3">
+                          <Button size="sm" variant="secondary"
+                            loading={reopening === c.id}
+                            onClick={() => handleReopen(c.id)}>
+                            Reopen
+                          </Button>
+                          <a href="https://portal.stedi.com/app/healthcare/claims" target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
+                            View in Stedi <ExternalLink size={10} />
+                          </a>
+                          <button onClick={() => setStatementClaim(c)}
+                            className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium">
+                            <Receipt size={11} /> Generate statement
+                          </button>
+                          {(c.statement_status === 'sent' || c.statement_status === 'paid') && (
+                            <span className="inline-flex items-center gap-0.5 bg-[#EEF6FB] text-[#2D7BA6] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                              <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}

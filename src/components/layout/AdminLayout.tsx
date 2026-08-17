@@ -4,6 +4,7 @@ import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBar
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
+import { getEraCount } from '../../lib/api'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -11,7 +12,7 @@ const NAV = [
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
-  { to: '/admin/claims',      icon: Receipt,       label: 'Claims' },
+  { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true },
   { to: '/admin/statements',  icon: FileText,      label: 'Statements' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
@@ -21,7 +22,7 @@ const NAV = [
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
 ]
 
-function SidebarContent({ provider, signOut, onNav }: { provider: any; signOut: () => void; onNav?: () => void }) {
+function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any; signOut: () => void; eraCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
@@ -48,7 +49,7 @@ function SidebarContent({ provider, signOut, onNav }: { provider: any; signOut: 
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon: Icon, label, eraBadge }) => (
           <NavLink key={to} to={to} onClick={onNav}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
@@ -56,6 +57,11 @@ function SidebarContent({ provider, signOut, onNav }: { provider: any; signOut: 
             }>
             <Icon size={16} className="opacity-70" />
             {label}
+            {eraBadge && eraCount > 0 && (
+              <span className="ml-auto bg-[#1D9E75] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                {eraCount}
+              </span>
+            )}
           </NavLink>
         ))}
         {provider?.is_super_admin && (
@@ -93,10 +99,20 @@ export function AdminLayout() {
   const { user, provider, loading, signOut } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [eraCount, setEraCount] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
   }, [user, loading])
+
+  useEffect(() => {
+    if (!user) return
+    getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
+    const interval = setInterval(() => {
+      getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [user])
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#FAFAF8]">
@@ -108,7 +124,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Desktop sidebar */}
       <div className="hidden md:fixed md:left-0 md:top-0 md:block md:z-40">
-        <SidebarContent provider={provider} signOut={signOut} />
+        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} />
       </div>
 
       {/* Mobile overlay sidebar */}
@@ -116,7 +132,7 @@ export function AdminLayout() {
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
           <div className="relative">
-            <SidebarContent provider={provider} signOut={signOut} onNav={() => setSidebarOpen(false)} />
+            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} onNav={() => setSidebarOpen(false)} />
           </div>
         </div>
       )}

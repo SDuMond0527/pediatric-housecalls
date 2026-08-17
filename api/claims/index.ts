@@ -105,7 +105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET — list claims
   if (req.method === 'GET') {
     try {
-      const { status } = req.query as Record<string, string>
+      const { status, era_count } = req.query as Record<string, string>
+
+      // Lightweight count of claims with unreviewed ERA payments
+      if (era_count === '1') {
+        const [row] = await sql`
+          SELECT COUNT(*)::int AS count FROM claims
+          WHERE practice_id = ${practiceId}::uuid
+            AND era_received_at IS NOT NULL
+            AND status = 'submitted'`
+        return res.json({ count: row?.count ?? 0 })
+      }
       const rows = status
         ? await sql`
             SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
