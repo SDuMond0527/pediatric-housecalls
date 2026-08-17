@@ -74,6 +74,8 @@ function buildStediPayload(claim: any, testMode = false): object {
   }))
 
   const isTelehealth = (claim.place_of_service ?? '12') === '10'
+  const CLIA_CPT_CODES = new Set(['87880', '87428', '81002', '82962'])
+  const needsClia = PRACTICE_CLIA && cptCodes.some((c: any) => CLIA_CPT_CODES.has(String(c.code)))
 
   const providerParts = (claim.rendering_provider_name ?? '').split(' ')
   const provFirst = providerParts[0] ?? ''
@@ -167,7 +169,7 @@ function buildStediPayload(claim: any, testMode = false): object {
         organizationName: PRACTICE_NAME,
         address: getFacilityAddress(claim.rendering_provider_name),
       },
-      ...(PRACTICE_CLIA ? { cliaNumber: PRACTICE_CLIA } : {}),
+      ...(needsClia ? { cliaNumber: PRACTICE_CLIA } : {}),
     },
   }
 }
