@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
@@ -541,6 +541,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [icdResults, setIcdResults] = useState<Diagnosis[]>([])
   const [icdSearching, setIcdSearching] = useState(false)
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [editingDx, setEditingDx] = useState(false)
+  const [savingDx, setSavingDx] = useState(false)
 
   // CPT codes
   const [cptCodes, setCptCodes] = useState<CptCode[]>([])
@@ -686,6 +688,21 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   function removeDiagnosis(code: string) {
     setDiagnoses(prev => prev.filter(d => d.code !== code))
+  }
+
+  async function saveDiagnosesEdit(updatedDiagnoses: Diagnosis[]) {
+    if (!noteId) return
+    setSavingDx(true)
+    try {
+      await updateEncounterNote(noteId, { diagnoses: updatedDiagnoses })
+      setEditingDx(false)
+      setIcdQuery('')
+      setIcdResults([])
+    } catch {
+      alert('Failed to save diagnoses')
+    } finally {
+      setSavingDx(false)
+    }
   }
 
   function buildNoteBody() {
@@ -1423,9 +1440,27 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
             {/* Assessment / Diagnoses */}
             <section>
-              <div className={sectionHeader}>Assessment / Diagnoses</div>
+              <div className="flex items-center justify-between mb-3">
+                <div className={sectionHeader} style={{marginBottom:0}}>Assessment / Diagnoses</div>
+                {readOnly && noteId && !editingDx && (
+                  <button onClick={() => setEditingDx(true)}
+                    className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
+                    <Pencil size={10} /> Edit
+                  </button>
+                )}
+                {editingDx && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => saveDiagnosesEdit(diagnoses)} disabled={savingDx}
+                      className="text-[11px] text-white bg-[#7F77DD] px-2.5 py-1 rounded-lg hover:bg-[#6B64C8] disabled:opacity-50">
+                      {savingDx ? 'Saving…' : 'Save'}
+                    </button>
+                    <button onClick={() => { setEditingDx(false); setIcdQuery(''); setIcdResults([]) }}
+                      className="text-[11px] text-[#999] hover:text-[#555]">Cancel</button>
+                  </div>
+                )}
+              </div>
 
-              {!readOnly && (
+              {(!readOnly || editingDx) && (
                 <div className="relative mb-3">
                   <div className="relative">
                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
@@ -1455,7 +1490,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   {diagnoses.map(dx => (
                     <span key={dx.code} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEEDFE] text-[#3C3489] rounded-full text-[12px] font-medium">
                       {dx.code} – {dx.name}
-                      {!readOnly && (
+                      {(!readOnly || editingDx) && (
                         <button onClick={() => removeDiagnosis(dx.code)}
                           className="hover:text-[#791F1F] transition-colors ml-0.5">
                           <X size={11} />

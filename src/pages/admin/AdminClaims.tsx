@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
@@ -55,6 +55,11 @@ export function AdminClaims() {
   const [cptTab, setCptTab] = useState<Record<string, string>>({})
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
   const [editCpt, setEditCpt] = useState<Record<string, any[]>>({})
+  const [editDx, setEditDx] = useState<Record<string, any[]>>({})
+  const [dxQuery, setDxQuery] = useState<Record<string, string>>({})
+  const [dxResults, setDxResults] = useState<Record<string, any[]>>({})
+  const [dxSearching, setDxSearching] = useState<Record<string, boolean>>({})
+  const dxTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [editPatient, setEditPatient] = useState<Record<string, {
     patient_first_name: string; patient_last_name: string; patient_dob: string; patient_gender: string;
     patient_address: string; patient_city: string; patient_state: string; patient_zip: string;
@@ -82,6 +87,35 @@ export function AdminClaims() {
     load()
     getFeeSchedule().then(data => setFeeSchedule(data ?? [])).catch(() => {})
   }, [])
+
+  function onDxQueryChange(claimId: string, q: string) {
+    setDxQuery(prev => ({ ...prev, [claimId]: q }))
+    if (dxTimers.current[claimId]) clearTimeout(dxTimers.current[claimId])
+    if (!q.trim()) { setDxResults(prev => ({ ...prev, [claimId]: [] })); return }
+    dxTimers.current[claimId] = setTimeout(async () => {
+      setDxSearching(prev => ({ ...prev, [claimId]: true }))
+      try {
+        const url = `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&df=code,name&terms=${encodeURIComponent(q)}&maxList=8`
+        const data = await fetch(url).then(r => r.json())
+        const codes: string[] = data[1] ?? []
+        const rows: string[][] = data[3] ?? []
+        setDxResults(prev => ({ ...prev, [claimId]: codes.map((code, i) => ({ code, name: rows[i]?.[1] ?? rows[i]?.[0] ?? '' })) }))
+      } catch { setDxResults(prev => ({ ...prev, [claimId]: [] })) }
+      setDxSearching(prev => ({ ...prev, [claimId]: false }))
+    }, 300)
+  }
+
+  async function saveDx(claimId: string) {
+    setSaving(claimId)
+    try {
+      const updated = await updateClaim(claimId, { diagnoses: editDx[claimId] })
+      setClaims(prev => prev.map(c => c.id === claimId ? { ...c, ...updated } : c))
+      setEditDx(prev => { const n = { ...prev }; delete n[claimId]; return n })
+      setDxQuery(prev => { const n = { ...prev }; delete n[claimId]; return n })
+      setDxResults(prev => { const n = { ...prev }; delete n[claimId]; return n })
+    } catch { alert('Failed to save diagnoses') }
+    finally { setSaving(null) }
+  }
 
   async function handleTest(claimId: string) {
     setTesting(claimId)
@@ -465,14 +499,68 @@ export function AdminClaims() {
                         {/* Diagnoses + CPT */}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">Diagnoses</div>
-                            <div className="space-y-1">
-                              {(c.diagnoses ?? []).map((d: any) => (
-                                <div key={d.code} className="text-[12px] text-[#1A1A2E]">
-                                  <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Diagnoses</div>
+                              {!editDx[c.id] && (
+                                <button onClick={() => setEditDx(prev => ({ ...prev, [c.id]: JSON.parse(JSON.stringify(c.diagnoses ?? [])) }))}
+                                  className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
+                                  <Pencil size={10} /> Edit
+                                </button>
+                              )}
+                              {editDx[c.id] && (
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => saveDx(c.id)} disabled={saving === c.id}
+                                    className="text-[11px] text-white bg-[#7F77DD] px-2 py-0.5 rounded hover:bg-[#6B64C8] disabled:opacity-50">
+                                    {saving === c.id ? 'Saving…' : 'Save'}
+                                  </button>
+                                  <button onClick={() => { setEditDx(prev => { const n={...prev}; delete n[c.id]; return n }); setDxQuery(prev => { const n={...prev}; delete n[c.id]; return n }); setDxResults(prev => { const n={...prev}; delete n[c.id]; return n }) }}
+                                    className="text-[11px] text-[#999] hover:text-[#555]">Cancel</button>
                                 </div>
-                              ))}
+                              )}
                             </div>
+                            {editDx[c.id] ? (
+                              <div>
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {editDx[c.id].map((d: any) => (
+                                    <span key={d.code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEEDFE] text-[#3C3489] rounded-full text-[11px] font-medium">
+                                      {d.code}
+                                      <button onClick={() => setEditDx(prev => ({ ...prev, [c.id]: prev[c.id].filter((x: any) => x.code !== d.code) }))}
+                                        className="hover:text-red-600 ml-0.5"><X size={9} /></button>
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="relative">
+                                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#999]" />
+                                  <input type="text" placeholder="Search ICD-10…" value={dxQuery[c.id] ?? ''}
+                                    onChange={e => onDxQueryChange(c.id, e.target.value)}
+                                    className="w-full pl-6 pr-2 py-1.5 border border-[#E8E8E4] rounded-lg text-[12px] outline-none focus:border-[#7F77DD]" />
+                                  {(dxSearching[c.id] || (dxResults[c.id] ?? []).length > 0) && (
+                                    <div className="absolute z-20 w-full mt-1 border border-[#E8E8E4] rounded-xl bg-white shadow-lg overflow-hidden">
+                                      {dxSearching[c.id] && <div className="px-3 py-2 text-[11px] text-[#999]">Searching…</div>}
+                                      {!dxSearching[c.id] && (dxResults[c.id] ?? []).map((dx: any) => (
+                                        <button key={dx.code} onClick={() => {
+                                          if (!editDx[c.id].find((x: any) => x.code === dx.code))
+                                            setEditDx(prev => ({ ...prev, [c.id]: [...prev[c.id], dx] }))
+                                          setDxQuery(prev => ({ ...prev, [c.id]: '' }))
+                                          setDxResults(prev => ({ ...prev, [c.id]: [] }))
+                                        }} className="w-full text-left px-3 py-1.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
+                                          <span className="text-[11px] font-semibold text-[#7F77DD]">{dx.code}</span>
+                                          <span className="text-[11px] text-[#1A1A2E] ml-1.5">{dx.name}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                {(c.diagnoses ?? []).map((d: any) => (
+                                  <div key={d.code} className="text-[12px] text-[#1A1A2E]">
+                                    <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
