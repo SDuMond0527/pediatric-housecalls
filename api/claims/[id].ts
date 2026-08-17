@@ -169,7 +169,14 @@ function buildStediPayload(claim: any, testMode = false): object {
         organizationName: PRACTICE_NAME,
         address: getFacilityAddress(claim.rendering_provider_name),
       },
-      ...(needsClia ? { cliaNumber: PRACTICE_CLIA } : {}),
+      ...(needsClia ? {
+        claimSupplementalInformation: {
+          referenceIdentification: [{
+            referenceIdentificationQualifier: 'X4',
+            referenceIdentification: PRACTICE_CLIA,
+          }],
+        },
+      } : {}),
     },
   }
 }
