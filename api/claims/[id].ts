@@ -23,6 +23,14 @@ const PRACTICE_ZIP   = process.env.PRACTICE_ZIP   || '28202'
 const PRACTICE_PHONE = (process.env.PRACTICE_PHONE || '7045550000').replace(/\D/g, '')
 const PRACTICE_CLIA  = process.env.PRACTICE_CLIA_NUMBER || ''
 
+function getFacilityAddress(renderingProviderName: string | null) {
+  const name = (renderingProviderName ?? '').toLowerCase()
+  if (name.includes('niu') || name.includes('santos')) {
+    return { address1: '11710 Plaza America Dr #200', city: 'Reston', state: 'VA', postalCode: '20190' }
+  }
+  return { address1: '5960 Fairview Rd Suite 400', city: 'Charlotte', state: 'NC', postalCode: '28210' }
+}
+
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
@@ -155,6 +163,10 @@ function buildStediPayload(claim: any, testMode = false): object {
       releaseInformationCode: 'Y',
       healthCareCodeInformation,
       serviceLines,
+      serviceFacilityLocation: {
+        organizationName: PRACTICE_NAME,
+        address: getFacilityAddress(claim.rendering_provider_name),
+      },
       ...(PRACTICE_CLIA ? { cliaNumber: PRACTICE_CLIA } : {}),
     },
   }
