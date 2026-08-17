@@ -48,7 +48,9 @@ export async function generateClaimForNote(
     : [null]
 
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
-  const cptCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
+  const cptCodes = allCptCodes.filter((c: any) =>
+    c.category !== 'Non-Covered Services' && /^[A-Z0-9]{5}$/i.test(String(c.code ?? ''))
+  )
   const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
   const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = child?.insurance_provider ?? null

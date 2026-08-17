@@ -33,7 +33,9 @@ function getFacilityAddress(renderingProviderName: string | null) {
 
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
-  const cptCodes  = Array.isArray(claim.cpt_codes)  ? claim.cpt_codes  : []
+  // Only include valid CPT codes (exactly 5 alphanumeric chars) — strips convenience fees and other internal codes
+  const cptCodes  = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : []).filter((c: any) => /^[A-Z0-9]{5}$/i.test(String(c.code ?? '')))
+  const billableTotal = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
 
   const fmtDate8 = (d: any) => {
     if (!d) return ''
@@ -156,7 +158,7 @@ function buildStediPayload(claim: any, testMode = false): object {
     claimInformation: {
       claimFilingCode,
       patientControlNumber,
-      claimChargeAmount: parseFloat(claim.total_charge ?? 0).toFixed(2),
+      claimChargeAmount: billableTotal.toFixed(2),
       placeOfServiceCode: claim.place_of_service ?? '12',
       claimFrequencyCode: '1',
       signatureIndicator: 'Y',
