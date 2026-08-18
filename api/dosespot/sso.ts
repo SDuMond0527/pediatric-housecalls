@@ -34,7 +34,7 @@ async function getDoseSpotToken(): Promise<string> {
     grant_type:    'password',
     client_id:     DS_CLINIC_ID,
     client_secret: DS_CLINIC_KEY,
-    username:      DS_ADMIN,
+    username:      DS_CLINICIAN,
     password:      DS_CLINIC_KEY,
     scope:         'api',
   })
