@@ -34,7 +34,7 @@ async function getDoseSpotToken(): Promise<string> {
     grant_type:    'password',
     client_id:     DS_CLINIC_ID,
     client_secret: DS_CLINIC_KEY,
-    username:      DS_CLINICIAN,
+    username:      DS_ADMIN,
     password:      DS_CLINIC_KEY,
     scope:         'api',
   })
@@ -202,7 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const sql = neon(process.env.DATABASE_URL!)
 
-    const [providerRow] = await sql`SELECT id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+    const [providerRow] = await sql`SELECT id, dosespot_clinician_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
     if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
 
     const [childRow] = await sql`
@@ -239,7 +239,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[dosespot/sso] patient sync error:', e.message)
     }
 
-    const ssoUrl = buildSsoUrl(DS_CLINICIAN, dsPatientId)
+    const clinicianId = (providerRow.dosespot_clinician_id as string | null) || DS_ADMIN
+    const ssoUrl = buildSsoUrl(clinicianId, dsPatientId)
     console.error('[dosespot/sso] final dsPatientId:', dsPatientId, '| URL includes PatientId:', ssoUrl.includes('PatientId'))
     return res.status(200).json({ ssoUrl, syncError, dsPatientId })
 
