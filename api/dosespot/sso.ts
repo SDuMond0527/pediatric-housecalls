@@ -44,6 +44,7 @@ async function getDoseSpotToken(): Promise<string> {
     headers: {
       'Content-Type':   'application/x-www-form-urlencoded',
       'Subscription-Key': DS_SUB_KEY,
+      'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
     },
     body: body.toString(),
   })
@@ -132,6 +133,7 @@ async function findOrCreateDoseSpotPatient(
     'Content-Type':     'application/json',
     Authorization:      `Bearer ${token}`,
     'Subscription-Key': DS_SUB_KEY,
+    'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
   }
 
   // If we already have a DoseSpot patient ID, verify it still exists
