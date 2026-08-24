@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarPlus, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
+import { CalendarPlus, Clock, X, AlertTriangle, Sparkles, ShieldAlert } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
 import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications, familyUpdateWaitlistEntry } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
@@ -42,6 +42,7 @@ export function FamilyDashboard() {
   const [acceptingOffer, setAcceptingOffer] = useState<string | null>(null)
   const [waitlistEntries, setWaitlistEntries] = useState<any[]>([])
   const [leavingWaitlist, setLeavingWaitlist] = useState<string | null>(null)
+  const [insuranceBannerDismissed, setInsuranceBannerDismissed] = useState(false)
 
   async function fetchOffers() {
     if (!family) return
@@ -130,6 +131,14 @@ export function FamilyDashboard() {
   const past = bookings.filter(b => b.status !== 'cancelled' && new Date(b.preferred_date + 'T23:59:59') < new Date())
   const cancelled = bookings.filter(b => b.status === 'cancelled').slice(0, 2)
 
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  const pastNonCancelled = bookings.filter(b => b.status !== 'cancelled' && new Date(b.preferred_date + 'T23:59:59') < new Date())
+  const mostRecentPastDate = pastNonCancelled.length
+    ? new Date(Math.max(...pastNonCancelled.map(b => new Date(b.preferred_date + 'T12:00:00').getTime())))
+    : null
+  const showInsuranceBanner = !insuranceBannerDismissed && !!mostRecentPastDate && mostRecentPastDate < oneYearAgo
+
   const feeWarning = cancelTarget
     && IN_PERSON_TYPES.includes(cancelTarget.visit_type)
     && isWithin2Hours(cancelTarget)
@@ -169,6 +178,28 @@ export function FamilyDashboard() {
           </div>
         )}
       </div>
+
+      {/* Insurance update banner */}
+      {showInsuranceBanner && (
+        <div className="bg-[#FFF8E6] border border-[#FAC775] rounded-xl p-4 flex items-start gap-3">
+          <ShieldAlert size={18} className="text-[#B45309] flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#92400E] mb-0.5">Please confirm your insurance information</p>
+            <p className="text-[13px] text-[#78350F] leading-relaxed">
+              We want to make sure we have the most up-to-date insurance information on record for your family.
+              Please confirm the existing policy on file is current, or update it if anything has changed.
+            </p>
+            <button
+              onClick={() => navigate('/family/profile')}
+              className="mt-2.5 text-[12px] font-semibold text-[#92400E] underline underline-offset-2 hover:text-[#78350F]">
+              Review insurance info →
+            </button>
+          </div>
+          <button onClick={() => setInsuranceBannerDismissed(true)} className="text-[#B45309]/60 hover:text-[#B45309] flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       {/* Slot offers */}
       {offers.length > 0 && (

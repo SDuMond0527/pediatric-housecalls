@@ -2,81 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-const PRACTICE_NAME = process.env.VITE_PRACTICE_NAME || 'Pediatric Housecalls'
-const PORTAL_URL    = process.env.VITE_PORTAL_URL    || 'https://phc-team.com'
-const RESEND_KEY    = process.env.RESEND_API_KEY      || ''
-const TWILIO_SID    = process.env.TWILIO_ACCOUNT_SID  || ''
-const TWILIO_KEY    = process.env.TWILIO_API_KEY_SID  || ''
-const TWILIO_SECRET = process.env.TWILIO_API_KEY_SECRET || ''
-const TWILIO_FROM   = process.env.TWILIO_FROM_NUMBER  || ''
-const FROM_EMAIL    = process.env.FROM_EMAIL           || 'appointments@phcbooking.com'
-
-async function maybeInsuranceReminder(sql: ReturnType<typeof neon>, childId: string, practiceId: string) {
-  try {
-    const oneYearAgo = new Date()
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-    const cutoff = oneYearAgo.toISOString().split('T')[0]
-
-    // Only remind if there's a prior completed visit but none in the last year
-    const [last] = await sql`
-      SELECT scheduled_date FROM appointments
-      WHERE child_id = ${childId}::uuid AND practice_id = ${practiceId}::uuid AND status = 'completed'
-      ORDER BY scheduled_date DESC LIMIT 1`
-    if (!last || last.scheduled_date >= cutoff) return
-
-    const [family] = await sql`
-      SELECT fp.email, fp.phone, fp.first_name, fp.last_name
-      FROM family_profiles fp
-      JOIN children c ON c.family_id = fp.id
-      WHERE c.id = ${childId}::uuid LIMIT 1`
-    if (!family) return
-
-    const subject = `Please confirm your insurance information — ${PRACTICE_NAME}`
-    const html = `
-      <div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;color:#1A1A2E;">
-        <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">Hi ${family.first_name || 'there'},</p>
-        <p style="font-size:15px;line-height:1.7;margin:0 0 16px;">
-          We want to make sure that we have the most up-to-date insurance information on record for your family.
-          Please log into your account and confirm the existing policy on file is current, or upload new insurance
-          information if applicable.
-        </p>
-        <div style="text-align:center;margin:28px 0;">
-          <a href="${PORTAL_URL}/family/dashboard"
-             style="background:#993556;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
-            Review Insurance Info
-          </a>
-        </div>
-        <p style="font-size:13px;line-height:1.6;color:#888;margin:0;">
-          Questions? Reply to this email or call/text us directly.<br/>
-          — ${PRACTICE_NAME}
-        </p>
-      </div>`
-
-    const sms = `${PRACTICE_NAME}: Please log in and confirm your insurance info is up to date before your upcoming visit. ${PORTAL_URL}/family/dashboard`
-
-    if (RESEND_KEY && family.email) {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: `${PRACTICE_NAME} <${FROM_EMAIL}>`, to: family.email, subject, html }),
-      }).catch(e => console.error('[insurance-reminder] email error:', e))
-    }
-
-    if (TWILIO_SID && TWILIO_KEY && family.phone) {
-      const form = new URLSearchParams({ From: TWILIO_FROM, To: family.phone, Body: sms })
-      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${Buffer.from(`${TWILIO_KEY}:${TWILIO_SECRET}`).toString('base64')}`,
-        },
-        body: form.toString(),
-      }).catch(e => console.error('[insurance-reminder] sms error:', e))
-    }
-  } catch (e) {
-    console.error('[insurance-reminder] error:', e)
-  }
-}
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; type: 'family' | 'provider' }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -203,7 +128,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .catch(() => {})
         }
       }
-      if (child_id) await maybeInsuranceReminder(sql, child_id, practiceId)
       return res.json({ cma: cmaRow, md: mdRow })
     }
 
@@ -246,7 +170,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .catch(() => {})
         }
       }
-      if (child_id) await maybeInsuranceReminder(sql, child_id, practiceId)
       return res.json({ rn: rnRow, md: mdRow })
     }
 
@@ -259,9 +182,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
       VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (row as any).id})`
       .catch(e => console.error('[appointments] schedule block error:', e))
-    if (auth.type === 'family' && child_id) {
-      await maybeInsuranceReminder(sql, child_id, practiceId)
-    }
     return res.json(row)
   }
 
