@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarPlus, Clock, X, AlertTriangle, Sparkles, ShieldAlert } from 'lucide-react'
+import { CalendarPlus, Clock, X, AlertTriangle, Sparkles, ShieldAlert, CreditCard } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
 import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications, familyUpdateWaitlistEntry } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
@@ -43,6 +43,7 @@ export function FamilyDashboard() {
   const [waitlistEntries, setWaitlistEntries] = useState<any[]>([])
   const [leavingWaitlist, setLeavingWaitlist] = useState<string | null>(null)
   const [insuranceBannerDismissed, setInsuranceBannerDismissed] = useState(false)
+  const [cardBannerDismissed, setCardBannerDismissed] = useState(false)
 
   async function fetchOffers() {
     if (!family) return
@@ -139,6 +140,14 @@ export function FamilyDashboard() {
     : null
   const showInsuranceBanner = !insuranceBannerDismissed && !!mostRecentPastDate && mostRecentPastDate < oneYearAgo
 
+  const now = new Date()
+  const cardExpired = !cardBannerDismissed && !!family.square_card_id && !!family.card_exp_year && !!family.card_exp_month && (
+    family.card_exp_year < now.getFullYear() ||
+    (family.card_exp_year === now.getFullYear() && family.card_exp_month < now.getMonth() + 1)
+  )
+  const cardExpiringThisMonth = !cardBannerDismissed && !cardExpired && !!family.square_card_id && !!family.card_exp_year && !!family.card_exp_month &&
+    family.card_exp_year === now.getFullYear() && family.card_exp_month === now.getMonth() + 1
+
   const feeWarning = cancelTarget
     && IN_PERSON_TYPES.includes(cancelTarget.visit_type)
     && isWithin2Hours(cancelTarget)
@@ -196,6 +205,29 @@ export function FamilyDashboard() {
             </button>
           </div>
           <button onClick={() => setInsuranceBannerDismissed(true)} className="text-[#B45309]/60 hover:text-[#B45309] flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* Expired / expiring card banner */}
+      {(cardExpired || cardExpiringThisMonth) && (
+        <div className={`border rounded-xl p-4 flex items-start gap-3 ${cardExpired ? 'bg-[#FCEBEB] border-[#F5C6C6]' : 'bg-[#FFF8E6] border-[#FAC775]'}`}>
+          <CreditCard size={18} className={`flex-shrink-0 mt-0.5 ${cardExpired ? 'text-[#991B1B]' : 'text-[#B45309]'}`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-[13px] font-semibold mb-0.5 ${cardExpired ? 'text-[#991B1B]' : 'text-[#92400E]'}`}>
+              {cardExpired ? 'Your card on file has expired' : 'Your card on file expires this month'}
+            </p>
+            <p className={`text-[13px] leading-relaxed ${cardExpired ? 'text-[#7F1D1D]' : 'text-[#78350F]'}`}>
+              Please update your payment method to avoid any issues with upcoming appointments.
+            </p>
+            <button
+              onClick={() => navigate('/family/add-card')}
+              className={`mt-2.5 text-[12px] font-semibold underline underline-offset-2 ${cardExpired ? 'text-[#991B1B] hover:text-[#7F1D1D]' : 'text-[#92400E] hover:text-[#78350F]'}`}>
+              Update card →
+            </button>
+          </div>
+          <button onClick={() => setCardBannerDismissed(true)} className={`flex-shrink-0 ${cardExpired ? 'text-[#991B1B]/60 hover:text-[#991B1B]' : 'text-[#B45309]/60 hover:text-[#B45309]'}`}>
             <X size={15} />
           </button>
         </div>

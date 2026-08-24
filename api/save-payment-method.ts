@@ -78,10 +78,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await sql`
       UPDATE family_profiles
-      SET square_customer_id = ${customerId}, square_card_id = ${card.id as string}
+      SET square_customer_id = ${customerId}, square_card_id = ${card.id as string},
+          card_exp_month = ${card.exp_month ?? null}, card_exp_year = ${card.exp_year ?? null}
       WHERE cognito_sub = ${sub}`
 
-    return res.json({ ok: true, cardBrand: card.card_brand, last4: card.last_4 })
+    return res.json({ ok: true, cardBrand: card.card_brand, last4: card.last_4, expMonth: card.exp_month, expYear: card.exp_year })
   } catch (e: any) {
     return res.status(400).json({ ok: false, error: e.message ?? String(e) })
   }

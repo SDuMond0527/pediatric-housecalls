@@ -11,6 +11,8 @@ export interface FamilyProfile {
   charm_synced_at: string | null
   square_customer_id: string | null
   square_card_id: string | null
+  card_exp_month: number | null
+  card_exp_year: number | null
   created_at: string
 }
 
