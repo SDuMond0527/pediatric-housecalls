@@ -42,17 +42,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const cmaIds = cmas.map((c: any) => c.id)
 
-  const [availRows, overrideRows] = await Promise.all([
-    sql`SELECT provider_id, day_of_week, is_active, start_time, end_time FROM availability WHERE provider_id = ANY(${cmaIds}::uuid[])`,
-    sql`SELECT provider_id, date, is_available, start_time, end_time FROM availability_overrides WHERE provider_id = ANY(${cmaIds}::uuid[]) AND date >= ${startDate}::date AND date <= ${endDate}::date`,
-  ])
-
-  // Build lookup maps
-  const availMap: Record<string, Record<number, any>> = {}
-  for (const a of availRows) {
-    if (!availMap[a.provider_id]) availMap[a.provider_id] = {}
-    availMap[a.provider_id][a.day_of_week] = a
-  }
+  // Only use explicit date overrides — no weekly schedule fallback, no built-in defaults
+  const overrideRows = await sql`
+    SELECT provider_id, date, is_available, start_time, end_time
+    FROM availability_overrides
+    WHERE provider_id = ANY(${cmaIds}::uuid[])
+      AND date >= ${startDate}::date
+      AND date <= ${endDate}::date
+      AND is_available = true
+      AND start_time IS NOT NULL
+      AND end_time IS NOT NULL`
 
   const overrideMap: Record<string, Record<string, any>> = {}
   for (const o of overrideRows) {
@@ -61,52 +60,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     overrideMap[o.provider_id][d] = o
   }
 
-  // Compute working CMAs for each date in range
+  // Only include CMAs/RNs who have explicitly marked themselves available for that date
   const result: Record<string, any[]> = {}
   const cur = new Date(startDate + 'T12:00:00')
   const last = new Date(endDate + 'T12:00:00')
 
   while (cur <= last) {
     const dateStr = cur.toISOString().slice(0, 10)
-    const dow = cur.getDay()
     result[dateStr] = []
 
     for (const cma of cmas) {
       const override = overrideMap[cma.id]?.[dateStr]
-      const weekly = availMap[cma.id]?.[dow]
+      if (!override) continue
 
-      let working: boolean
-      let start_time: string
-      let end_time: string
-
-      if (override) {
-        working = override.is_available
-        start_time = override.start_time || weekly?.start_time || '09:00'
-        end_time = override.end_time || weekly?.end_time || '17:00'
-      } else if (weekly) {
-        working = weekly.is_active
-        start_time = weekly.start_time || '09:00'
-        end_time = weekly.end_time || '17:00'
-      } else {
-        // No availability row set up — don't assume working
-        working = false
-        start_time = '09:00'
-        end_time = '17:00'
-      }
-
-      if (working) {
-        result[dateStr].push({
-          provider_id: cma.id,
-          name: cma.name,
-          initials: cma.initials,
-          avatar_color: cma.avatar_color,
-          avatar_text_color: cma.avatar_text_color,
-          states: cma.states ?? [],
-          role: cma.role,
-          start_time,
-          end_time,
-        })
-      }
+      result[dateStr].push({
+        provider_id: cma.id,
+        name: cma.name,
+        initials: cma.initials,
+        avatar_color: cma.avatar_color,
+        avatar_text_color: cma.avatar_text_color,
+        states: cma.states ?? [],
+        role: cma.role,
+        start_time: override.start_time,
+        end_time: override.end_time,
+      })
     }
 
     cur.setDate(cur.getDate() + 1)
