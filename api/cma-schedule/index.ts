@@ -42,9 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const cmaIds = cmas.map((c: any) => c.id)
 
-  const [availRows, overrideRows] = await Promise.all([
+  const [availRows, overrideRows, blockRows] = await Promise.all([
     sql`SELECT provider_id, day_of_week, is_active, start_time, end_time FROM availability WHERE provider_id = ANY(${cmaIds}::uuid[])`,
     sql`SELECT provider_id, date, is_available, start_time, end_time FROM availability_overrides WHERE provider_id = ANY(${cmaIds}::uuid[]) AND date >= ${startDate}::date AND date <= ${endDate}::date`,
+    sql`SELECT provider_id, start_date, end_date, all_day, start_time, end_time FROM schedule_blocks WHERE provider_id = ANY(${cmaIds}::uuid[]) AND end_date >= ${startDate}::date AND start_date <= ${endDate}::date`,
   ])
 
   // Build lookup maps
@@ -61,6 +62,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     overrideMap[o.provider_id][d] = o
   }
 
+  // Build set of provider+date pairs that are fully blocked
+  const blockedSet = new Set<string>()
+  for (const b of blockRows) {
+    const bStart = new Date((typeof b.start_date === 'string' ? b.start_date : (b.start_date as Date).toISOString()).slice(0, 10) + 'T12:00:00')
+    const bEnd   = new Date((typeof b.end_date   === 'string' ? b.end_date   : (b.end_date   as Date).toISOString()).slice(0, 10) + 'T12:00:00')
+    const d = new Date(bStart)
+    while (d <= bEnd) {
+      const dateStr = d.toISOString().slice(0, 10)
+      if (b.all_day) blockedSet.add(`${b.provider_id}:${dateStr}`)
+      d.setDate(d.getDate() + 1)
+    }
+  }
+
   // Compute working CMAs for each date in range
   const result: Record<string, any[]> = {}
   const cur = new Date(startDate + 'T12:00:00')
@@ -72,6 +86,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     result[dateStr] = []
 
     for (const cma of cmas) {
+      if (blockedSet.has(`${cma.id}:${dateStr}`)) continue
+
       const override = overrideMap[cma.id]?.[dateStr]
       const weekly = availMap[cma.id]?.[dow]
 
@@ -88,8 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         start_time = weekly.start_time || '09:00'
         end_time = weekly.end_time || '17:00'
       } else {
-        // No schedule row — weekdays on by default, weekends off
-        working = dow !== 0 && dow !== 6
+        // No availability row set up — don't assume working
+        working = false
         start_time = '09:00'
         end_time = '17:00'
       }
