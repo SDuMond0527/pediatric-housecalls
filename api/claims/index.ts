@@ -14,6 +14,7 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 const PAYER_IDS: Record<string, string> = {
+  'self pay': 'PP', 'self-pay': 'PP', 'selfpay': 'PP', 'self': 'PP',
   'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
   'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
   'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',

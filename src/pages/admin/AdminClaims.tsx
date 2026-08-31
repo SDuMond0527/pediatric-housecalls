@@ -16,6 +16,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = 
 }
 
 const KNOWN_PAYERS: Record<string, string> = {
+  'Self Pay': 'PP',
   'BCBS of NC': 'UPICO', 'Aetna': '60054', 'Cigna': '62308',
   'United Healthcare': '87726', 'UMR': '39026', 'Humana': '61101',
   'PHCS / MultiPlan': '52133', 'Coventry': '38217',
@@ -284,7 +285,7 @@ export function AdminClaims() {
               {reviewClaims.map(c => {
                 const isOpen = expanded === c.id
                 const ep = editPayer[c.id]
-                const isSelfPay = c.payer_name?.toLowerCase().includes('self')
+                const isSelfPay = c.payer_id === 'PP'
                 const missingPayer = !c.payer_id && !isSelfPay
                 const isError = c.status === 'error'
                 const stediError = (() => {
