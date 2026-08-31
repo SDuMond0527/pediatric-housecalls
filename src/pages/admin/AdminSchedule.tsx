@@ -115,6 +115,17 @@ function to12h(time24: string): string {
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
 }
 
+function safeFormatDate(val: any, pattern: string, fallback = 'Unknown date'): string {
+  if (!val) return fallback
+  try {
+    const d = val instanceof Date ? val : new Date(String(val).slice(0, 10) + 'T12:00:00')
+    if (isNaN(d.getTime())) return fallback
+    return format(d, pattern)
+  } catch {
+    return fallback
+  }
+}
+
 const TIME_SLOTS: { val: string; label: string }[] = []
 for (let i = 0; i < 68; i++) {
   const totalMin = 6 * 60 + i * 15
@@ -1091,7 +1102,7 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{cancelApptTarget.visit_type}</div>
-              <div className="text-[#999]">{format(new Date(cancelApptTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(cancelApptTarget.scheduled_time)}</div>
+              <div className="text-[#999]">{safeFormatDate(cancelApptTarget.scheduled_date, 'EEEE, MMMM d')} at {cancelApptTarget.scheduled_time ? to12h(cancelApptTarget.scheduled_time) : 'Unknown time'}</div>
               {cancelApptTarget.zone && <div className="text-[#999]">{cancelApptTarget.zone}</div>}
             </div>
             <p className="text-[13px] text-[#555] mb-4">The provider and family will be notified. Waitlist families in the same zone will be offered this slot.</p>
@@ -1116,7 +1127,7 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
-              <div className="text-[#999]">Currently: {rescheduleTarget.scheduled_date ? format(new Date(rescheduleTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d') : 'Unknown date'} at {rescheduleTarget.scheduled_time ? to12h(rescheduleTarget.scheduled_time) : 'Unknown time'}</div>
+              <div className="text-[#999]">Currently: {safeFormatDate(rescheduleTarget.scheduled_date, 'EEEE, MMMM d')} at {rescheduleTarget.scheduled_time ? to12h(rescheduleTarget.scheduled_time) : 'Unknown time'}</div>
             </div>
             <div className="space-y-3 mb-5">
               <div>
