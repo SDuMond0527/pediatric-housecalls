@@ -80,6 +80,19 @@ function timeStrToMinutes(t: string): number {
   return h * 60 + m
 }
 
+function toMin(t: string) { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+function fromMin(min: number) { return `${Math.floor(min / 60).toString().padStart(2, '0')}:${(min % 60).toString().padStart(2, '0')}` }
+function intersectWindows(
+  a: { start: string; end: string },
+  b: { start: string; end: string } | null
+): { start: string; end: string } | null {
+  if (!b || !b.start || !b.end) return a
+  const start = Math.max(toMin(a.start), toMin(b.start))
+  const end = Math.min(toMin(a.end), toMin(b.end))
+  if (end <= start) return null
+  return { start: fromMin(start), end: fromMin(end) }
+}
+
 function getAvailableSlots(leadMin: number, date: string): string[] {
   const today = new Date().toISOString().split('T')[0]
   if (date !== today) return TIME_SLOTS
@@ -492,7 +505,7 @@ export function BookVisit() {
     setSlotsChecking(true)
     try {
     const provRow = await getProviderByName(providerName)
-    if (!provRow) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
+    if (!provRow) { setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null); return }
 
     // Check day-of-week / override availability first
     const dayWindow = await getProviderDayWindow(provRow.id, date)
@@ -504,10 +517,15 @@ export function BookVisit() {
     // Fetch this provider's scheduling data for the selected visit type (includes visitTypeAvail + bookedTimes)
     const sched = await getSchedulingData(provRow.id, { date, visit_type: booking.visitType })
     const vtaRow = sched?.visitTypeAvail
-    // Visit type window takes precedence over day window; fall back to day window if no vta record
-    const window = vtaRow && vtaRow.is_active
+    // Intersect visit-type window with the day window — never let vta expand beyond the day's hours
+    const vtaWindow = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
       ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
-      : dayWindow
+      : null
+    const window = intersectWindows(dayWindow, vtaWindow)
+    if (!window) {
+      setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null)
+      return
+    }
     setVisitTypeWindow(window)
 
     const bookedSlotsList = sched?.bookedSlots ?? []
@@ -592,7 +610,11 @@ export function BookVisit() {
       if (!dayWindow) return null
       const sched = await getSchedulingData(provRow.id, { date, visit_type: booking.visitType })
       const vtaRow = sched?.visitTypeAvail
-      const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
+      const vtaWindow2 = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
+        ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
+        : null
+      const window = intersectWindows(dayWindow, vtaWindow2)
+      if (!window) return null
       const bookedList = sched?.bookedSlots ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
@@ -654,7 +676,11 @@ export function BookVisit() {
       if (!dayWindow) return null
       const sched = await getSchedulingData(provRow.id, { date, visit_type: 'CMA + telemedicine' })
       const vtaRow = sched?.visitTypeAvail
-      const window = vtaRow?.is_active ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : dayWindow
+      const vtaWindow3 = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
+        ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
+        : null
+      const window = intersectWindows(dayWindow, vtaWindow3)
+      if (!window) return null
       const bookedList = sched?.bookedSlots ?? []
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
