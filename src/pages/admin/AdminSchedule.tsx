@@ -115,6 +115,15 @@ function to12h(time24: string): string {
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
 }
 
+const TIME_SLOTS: { val: string; label: string }[] = []
+for (let i = 0; i < 68; i++) {
+  const totalMin = 6 * 60 + i * 15
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  const val = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+  TIME_SLOTS.push({ val, label: to12h(val) })
+}
+
 function t(time24: string): string {
   const [h, m] = time24.split(':').map(Number)
   if (isNaN(h)) return time24
@@ -1113,8 +1122,13 @@ export function AdminSchedule() {
               </div>
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">New time</label>
-                <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
+                <select value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                  <option value="">Select time...</option>
+                  {TIME_SLOTS.map(({ val, label }) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <p className="text-[12px] text-[#999] mb-4">The provider and family will be notified of the new time.</p>
