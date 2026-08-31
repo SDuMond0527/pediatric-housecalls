@@ -469,12 +469,22 @@ export function BookVisit() {
   async function getProviderDayWindow(providerId: string, date: string): Promise<{ start: string; end: string } | null> {
     const sched = await getSchedulingData(providerId, { date })
     const override = sched?.override
+    const avail = sched?.availability
+
+    // Date-specific override takes priority
     if (override) {
       if (!override.is_available) return null
-      return { start: override.start_time || '08:00', end: override.end_time || '17:00' }
+      // Use override times if both are present
+      if (override.start_time && override.end_time) {
+        return { start: override.start_time, end: override.end_time }
+      }
+      // Override marks day as available but has no specific times — fall through to weekly schedule
     }
-    // No calendar entry = not working that day
-    return null
+
+    // Fall back to weekly day-of-week availability
+    if (!avail || !avail.is_active) return null
+    if (!avail.start_time || !avail.end_time) return null
+    return { start: avail.start_time, end: avail.end_time }
   }
 
   async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
@@ -525,7 +535,7 @@ export function BookVisit() {
       setBooking(b => ({ ...b, time: freeSlots.includes(prevTime) ? prevTime : '' }))
     }
     } catch {
-      setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null)
+      setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null)
     }
   }
 
