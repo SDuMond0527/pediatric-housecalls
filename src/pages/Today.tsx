@@ -153,8 +153,8 @@ export function Today() {
   }
 
   async function openChartNote(appt: Appointment) {
-    let childId: string | null = null
-    if (appt.notes) {
+    let childId: string | null = (appt as any).child_id ?? null
+    if (!childId && appt.notes) {
       const refMatch = appt.notes.match(/Ref: (PUC-\d+)/)
       if (refMatch) {
         const bookings = await getBookingRequests({ reference_code: refMatch[1] }).catch(() => [] as any[])

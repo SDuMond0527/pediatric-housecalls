@@ -900,6 +900,7 @@ export function BookVisit() {
         status: 'upcoming',
         notes: noteParts.join('|'),
         duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
+        child_id: booking.selectedChildIds[0] || null,
         ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
       }).catch(() => null)
       // CMA+tele returns { cma, md }; IV fluids returns { rn, md }; all other visit types return the appointment row directly
