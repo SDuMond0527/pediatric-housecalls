@@ -68,10 +68,10 @@ export function Login() {
                     className="w-full text-left p-3 rounded-xl border border-[#E8E8E4] hover:border-[#7F77DD] hover:shadow-sm transition-all bg-white group">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: bg, color: tc }}>{role}</span>
-                      <span className="text-[11px] text-[#aaa] group-hover:text-[#7F77DD] transition-colors ml-auto">Click to pre-fill →</span>
+                      <span className="text-[11px] text-[#3C3489] group-hover:text-[#7F77DD] transition-colors ml-auto font-semibold">Click to pre-fill →</span>
                     </div>
                     <div className="text-[12px] text-[#777] mt-0.5">{desc}</div>
-                    <div className="text-[11px] text-[#aaa] mt-1.5 font-mono">{creds.email} · {creds.password}</div>
+                    <div className="text-[11px] text-[#333] mt-1.5 font-mono font-semibold">{creds.email} · {creds.password}</div>
                   </button>
                 ))}
               </div>
