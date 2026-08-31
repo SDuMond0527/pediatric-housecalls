@@ -105,13 +105,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       let mdRow: unknown = null
       if (state) {
-        const onCallRows = await sql`
+        // First try: find on-call MD/NP whose shift covers the appointment time
+        let onCallRows = await sql`
           SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
           JOIN providers p ON p.id = oc.provider_id
           WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
             AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
             AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
+        // Fallback: any on-call MD/NP for that date/state regardless of shift hours
+        if (!onCallRows.length) {
+          onCallRows = await sql`
+            SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
+            JOIN providers p ON p.id = oc.provider_id
+            WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
+            LIMIT 1`
+        }
         if (onCallRows.length) {
           const mdProviderId = onCallRows[0].provider_id as string
           const mdName = (onCallRows[0].provider_name ?? '') as string
@@ -147,13 +156,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       let mdRow: unknown = null
       if (state) {
-        const onCallRows = await sql`
+        // First try: find on-call MD/NP whose shift covers the appointment time
+        let onCallRows = await sql`
           SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
           JOIN providers p ON p.id = oc.provider_id
           WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
             AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
             AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
+        // Fallback: any on-call MD/NP for that date/state regardless of shift hours
+        if (!onCallRows.length) {
+          onCallRows = await sql`
+            SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
+            JOIN providers p ON p.id = oc.provider_id
+            WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
+            LIMIT 1`
+        }
         if (onCallRows.length) {
           const mdProviderId = onCallRows[0].provider_id as string
           const mdName = (onCallRows[0].provider_name ?? '') as string
