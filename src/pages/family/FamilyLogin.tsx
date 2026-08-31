@@ -48,10 +48,10 @@ export function FamilyLogin() {
                 className="w-full text-left p-3 rounded-xl border border-[#E8E8E4] hover:border-[#7F77DD] hover:shadow-sm transition-all bg-white group">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489]">Patient Family</span>
-                  <span className="text-[11px] text-[#aaa] group-hover:text-[#7F77DD] transition-colors ml-auto">Click to pre-fill →</span>
+                  <span className="text-[11px] text-[#666] group-hover:text-[#7F77DD] transition-colors ml-auto">Click to pre-fill →</span>
                 </div>
                 <div className="text-[12px] text-[#777] mt-0.5">Book visits, view appointment history, manage your family profile</div>
-                <div className="text-[11px] text-[#aaa] mt-1.5 font-mono">{DEMO_CREDS.family.email} · {DEMO_CREDS.family.password}</div>
+                <div className="text-[11px] text-[#555] mt-1.5 font-mono">{DEMO_CREDS.family.email} · {DEMO_CREDS.family.password}</div>
               </button>
             </div>
           )}
