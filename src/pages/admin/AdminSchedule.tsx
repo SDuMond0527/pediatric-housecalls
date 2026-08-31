@@ -148,6 +148,10 @@ export function AdminSchedule() {
   const [doneInstructions, setDoneInstructions] = useState('')
   const [cancelApptTarget, setCancelApptTarget] = useState<Appointment | null>(null)
   const [cancelApptBusy, setCancelApptBusy] = useState(false)
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [notes, setNotes] = useState<Record<string, any>>({})
@@ -363,6 +367,24 @@ export function AdminSchedule() {
     }
     setCancelApptTarget(null)
     setCancelApptBusy(false)
+  }
+
+  async function confirmReschedule() {
+    if (!rescheduleTarget || !rescheduleDate || !rescheduleTime) return
+    setRescheduleBusy(true)
+    try {
+      const updated = await updateAppointment(rescheduleTarget.id, {
+        scheduled_date: rescheduleDate,
+        scheduled_time: rescheduleTime,
+      })
+      setAppointments(prev => prev.map(a => a.id === rescheduleTarget.id ? { ...a, ...updated } : a))
+      invokeNotifications({ type: 'appointment_rescheduled', appointmentId: rescheduleTarget.id }).catch(() => {})
+      setRescheduleTarget(null)
+    } catch (e: any) {
+      alert(e.message ?? 'Failed to reschedule')
+    } finally {
+      setRescheduleBusy(false)
+    }
   }
 
   async function addAppointment() {
@@ -982,9 +1004,12 @@ export function AdminSchedule() {
                         </div>
 
                         {appt.status !== 'done' && appt.status !== 'cancelled' && (
-                          <div className="flex gap-2 mt-3">
+                          <div className="flex gap-2 mt-3 flex-wrap">
                             <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
                               <CheckCircle2 size={12} /> Mark complete
+                            </Button>
+                            <Button variant="secondary" size="xs" onClick={() => { setRescheduleTarget(appt); setRescheduleDate(appt.scheduled_date); setRescheduleTime(appt.scheduled_time) }}>
+                              Reschedule
                             </Button>
                             <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
                               <XCircle size={12} /> Cancel visit
@@ -1060,6 +1085,45 @@ export function AdminSchedule() {
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setCancelApptTarget(null)} disabled={cancelApptBusy}>Keep visit</Button>
               <Button variant="danger" className="flex-1" loading={cancelApptBusy} onClick={confirmCancelAppt}>Cancel visit</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reschedule modal ── */}
+      {rescheduleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !rescheduleBusy && setRescheduleTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#EEEDFE] flex items-center justify-center flex-shrink-0">
+                <Pencil size={18} className="text-[#7F77DD]" />
+              </div>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Reschedule visit</h2>
+            </div>
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
+              <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
+              <div className="text-[#999]">Currently: {format(new Date(rescheduleTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(rescheduleTarget.scheduled_time)}</div>
+            </div>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">New date</label>
+                <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">New time</label>
+                <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
+              </div>
+            </div>
+            <p className="text-[12px] text-[#999] mb-4">The provider and family will be notified of the new time.</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setRescheduleTarget(null)} disabled={rescheduleBusy}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={rescheduleBusy} onClick={confirmReschedule}
+                disabled={!rescheduleDate || !rescheduleTime}>
+                Save new time
+              </Button>
             </div>
           </div>
         </div>
