@@ -1112,7 +1112,7 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
-              <div className="text-[#999]">Currently: {format(new Date(rescheduleTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(rescheduleTarget.scheduled_time)}</div>
+              <div className="text-[#999]">Currently: {rescheduleTarget.scheduled_date ? format(new Date(rescheduleTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d') : 'Unknown date'} at {rescheduleTarget.scheduled_time ? to12h(rescheduleTarget.scheduled_time) : 'Unknown time'}</div>
             </div>
             <div className="space-y-3 mb-5">
               <div>
