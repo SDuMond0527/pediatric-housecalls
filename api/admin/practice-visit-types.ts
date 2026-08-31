@@ -70,6 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PATCH') {
     const { id, allowed_roles } = req.body as { id: string; allowed_roles: string[] | null }
     if (!id) return res.status(400).json({ error: 'Missing id' })
+    await sql`ALTER TABLE practice_visit_types ADD COLUMN IF NOT EXISTS allowed_roles jsonb`
     const [row] = await sql`
       UPDATE practice_visit_types
       SET allowed_roles = ${allowed_roles ? JSON.stringify(allowed_roles) : null}::jsonb
