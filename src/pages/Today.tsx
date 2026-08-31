@@ -827,18 +827,20 @@ export function Today() {
                         const email = child?.parent_email || child?.family_email || noteMap.PARENTEMAIL || ''
                         const address = [child?.parent_address || child?.family_address_line1, child?.parent_city || child?.family_city].filter(Boolean).join(', ')
                         const cc = noteMap.CC || ''
+                        const additionalNotes = noteMap.NOTES || ''
                         const allergies = child?.allergies || noteMap.ALLERGY || cd?.allergies || ''
                         const meds = child?.current_medications || noteMap.MEDS || ''
                         const pmh = child?.medical_history || noteMap.PMH || ''
-                        const vax = noteMap.VAX || ''
+                        const VAX_LABELS: Record<string, string> = { fully_vaccinated: 'Fully vaccinated', delayed: 'Delayed / alternative schedule', unvaccinated: 'We do not vaccinate' }
+                        const vax = VAX_LABELS[noteMap.VAX] || noteMap.VAX || ''
                         const pcp = child?.pcp || noteMap.PCP || ''
                         const pharmacy = child?.preferred_pharmacy || noteMap.PHARMACY || ''
                         const insurance = child?.insurance_provider || noteMap.INSURANCE || ''
-                        const memberId = child?.insurance_member_id || noteMap.MEMBERID || ''
-                        const groupNum = child?.insurance_group_number || noteMap.GROUPNUM || ''
-                        const subscriber = child?.insurance_subscriber_name || noteMap.SUBSCRIBER || ''
-                        const subscriberDob = child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : (noteMap.SUBSCRIBERDOB || '')
-                        const subscriberSex = child?.insurance_subscriber_gender || noteMap.SUBSCRIBERGENDER || ''
+                        const memberId = child?.insurance_member_id || noteMap.MID || ''
+                        const groupNum = child?.insurance_group_number || noteMap.GRP || ''
+                        const subscriber = child?.insurance_subscriber_name || noteMap.SUB || ''
+                        const subscriberDob = child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : (noteMap.SUBDOB || '')
+                        const subscriberSex = child?.insurance_subscriber_gender || noteMap.SUBGENDER || ''
                         const cardFront = noteMap.CARDFRONT || ''
                         const cardBack = noteMap.CARDBACK || ''
 
@@ -882,10 +884,11 @@ export function Today() {
                                 <F label="Address" value={address} />
                               </div>
                             )}
-                            {(cc || allergies || meds || pmh || vax || pcp || pharmacy) && (
+                            {(cc || additionalNotes || allergies || meds || pmh || vax || pcp || pharmacy) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Clinical</div>
                                 <F label="Chief complaint" value={cc} />
+                                <F label="Additional notes" value={additionalNotes} />
                                 <F label="Allergies" value={allergies} />
                                 <F label="Medications" value={meds} />
                                 <F label="Medical history / PMH" value={pmh} />
