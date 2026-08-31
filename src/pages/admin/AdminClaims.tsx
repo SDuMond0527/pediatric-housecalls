@@ -46,6 +46,7 @@ export function AdminClaims() {
   const [testing, setTesting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, any>>({})
   const [reopening, setReopening] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [statementClaim, setStatementClaim] = useState<any>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -163,6 +164,20 @@ export function AdminClaims() {
       alert(e.message || 'Submission failed')
     } finally {
       setSubmitting(null)
+    }
+  }
+
+  async function handleDelete(claimId: string) {
+    if (!confirm('Permanently delete this claim? This cannot be undone.')) return
+    setDeleting(claimId)
+    try {
+      await deleteClaim(claimId)
+      setClaims(prev => prev.filter(c => c.id !== claimId))
+      if (expanded === claimId) setExpanded(null)
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete claim')
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -741,6 +756,12 @@ export function AdminClaims() {
                               disabled={!!testing || missingPayer}
                               onClick={() => handleTest(c.id)}>
                               Test claim
+                            </Button>
+                            <Button variant="secondary" size="sm"
+                              loading={deleting === c.id}
+                              disabled={!!deleting}
+                              onClick={() => handleDelete(c.id)}>
+                              <Trash2 size={12} className="mr-1.5 text-[#DC2626]" /> Delete
                             </Button>
                           </div>
                           {isSelfPay ? (
