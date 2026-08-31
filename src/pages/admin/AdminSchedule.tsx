@@ -160,6 +160,8 @@ export function AdminSchedule() {
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduleVisitType, setRescheduleVisitType] = useState('')
+  const [rescheduleProviderId, setRescheduleProviderId] = useState('')
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
@@ -383,6 +385,8 @@ export function AdminSchedule() {
     setRescheduleBusy(true)
     try {
       const updated = await updateAppointment(rescheduleTarget.id, {
+        visit_type: rescheduleVisitType,
+        provider_id: rescheduleProviderId,
         scheduled_date: rescheduleDate,
         scheduled_time: rescheduleTime,
       })
@@ -1017,7 +1021,7 @@ export function AdminSchedule() {
                             <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
                               <CheckCircle2 size={12} /> Mark complete
                             </Button>
-                            <Button variant="secondary" size="xs" onClick={() => { setRescheduleTarget(appt); setRescheduleDate(appt.scheduled_date); setRescheduleTime(appt.scheduled_time) }}>
+                            <Button variant="secondary" size="xs" onClick={() => { setRescheduleTarget(appt); setRescheduleDate(appt.scheduled_date); setRescheduleTime(appt.scheduled_time); setRescheduleVisitType(appt.visit_type); setRescheduleProviderId(appt.provider_id) }}>
                               Reschedule
                             </Button>
                             <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
@@ -1116,6 +1120,20 @@ export function AdminSchedule() {
             </div>
             <div className="space-y-3 mb-5">
               <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={rescheduleVisitType} onChange={e => setRescheduleVisitType(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                  {visitTypes.map(vt => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Provider</label>
+                <select value={rescheduleProviderId} onChange={e => setRescheduleProviderId(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                  {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">New date</label>
                 <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
                   className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
@@ -1131,11 +1149,11 @@ export function AdminSchedule() {
                 </select>
               </div>
             </div>
-            <p className="text-[12px] text-[#999] mb-4">The provider and family will be notified of the new time.</p>
+            <p className="text-[12px] text-[#999] mb-4">The provider and family will be notified of the changes.</p>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setRescheduleTarget(null)} disabled={rescheduleBusy}>Cancel</Button>
               <Button variant="teal" className="flex-1" loading={rescheduleBusy} onClick={confirmReschedule}
-                disabled={!rescheduleDate || !rescheduleTime}>
+                disabled={!rescheduleDate || !rescheduleTime || !rescheduleVisitType || !rescheduleProviderId}>
                 Save new time
               </Button>
             </div>
