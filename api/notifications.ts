@@ -1522,7 +1522,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!booking) throw new Error('Booking not found')
 
     const [family] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${booking.family_id}::uuid`
-    const [provider] = await sql`SELECT id, name, phone, email FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
+    const [provider] = await sql`SELECT id, name, phone, email, practice_id FROM providers WHERE id = ${booking.confirmed_provider_id}::uuid`
 
     // Temporary debug — remove after confirming notifications work
     if (body._debug) {
@@ -1565,14 +1565,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     const smsBody = `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/today`
 
-    // Assigned provider
+    // Assigned provider (CMA/RN)
     if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml)
     if (provider?.phone) await sendSMS(provider.phone, smsBody)
 
-    // All admins — every booking, every provider
-    const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+    // For CMA+telemedicine or In-home IV fluids: notify the on-call MD/NP
+    let onCallProviderId: string | null = null
+    const practiceId = provider?.practice_id as string | undefined
+    if (
+      (booking.visit_type === 'CMA + telemedicine' || booking.visit_type === 'In-home IV fluids') &&
+      booking.state && booking.preferred_date && booking.preferred_time && practiceId
+    ) {
+      const onCallRows = await sql`
+        SELECT p.id, p.name, p.email, p.phone FROM on_call_schedule oc
+        JOIN providers p ON p.id = oc.provider_id
+        WHERE oc.practice_id = ${practiceId}::uuid
+          AND oc.date = ${booking.preferred_date}::date
+          AND oc.state = ${booking.state}
+          AND (oc.start_time IS NULL OR oc.start_time <= ${booking.preferred_time}::time)
+          AND (oc.end_time IS NULL OR oc.end_time > ${booking.preferred_time}::time)
+        LIMIT 1`
+      if (onCallRows.length) {
+        const onCall = onCallRows[0]
+        onCallProviderId = onCall.id as string
+        if (onCall.id !== provider?.id) {
+          if (onCall.email) await sendEmail(onCall.email as string, notifSubject, notifHtml)
+          if (onCall.phone) await sendSMS(onCall.phone as string, smsBody)
+        }
+      }
+    }
+
+    // All admins — every booking (is_admin covers both dedicated admins and admin MDs like Sara/Pam)
+    const admins = practiceId
+      ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
+      : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
     for (const admin of admins) {
-      if (admin.id === provider?.id) continue  // don't double-notify if admin is also the assigned provider
+      if (admin.id === provider?.id) continue       // don't double-notify assigned provider
+      if (admin.id === onCallProviderId) continue   // don't double-notify on-call MD/NP
       if (admin.email) await sendEmail(admin.email, notifSubject, notifHtml)
       if (admin.phone) await sendSMS(admin.phone, smsBody)
     }
