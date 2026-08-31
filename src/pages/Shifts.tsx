@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, X, Clock } from 'lucide-react'
+import { CheckCircle2, X, Clock, Pencil } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
-import { getOnCallSchedule, getCmaSchedule, claimShift, invokeNotifications, upsertAvailabilityOverride } from '../lib/api'
+import { getOnCallSchedule, getCmaSchedule, claimShift, updateShiftTimes, invokeNotifications, upsertAvailabilityOverride } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 
 interface OnCallEntry {
+  id: string
   date: string
   state: string
   provider_id: string
@@ -105,6 +106,15 @@ export function Shifts() {
     end: string
   } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [editing, setEditing] = useState<{
+    id: string
+    date: string
+    state: string
+    cmaStart: string
+    cmaEnd: string
+    start: string
+    end: string
+  } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -160,6 +170,18 @@ export function Shifts() {
         state: claiming.state,
       }).catch(() => {})
       setClaiming(null)
+      await load()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function confirmEdit() {
+    if (!editing) return
+    setSubmitting(true)
+    try {
+      await updateShiftTimes(editing.id, editing.start, editing.end)
+      setEditing(null)
       await load()
     } finally {
       setSubmitting(false)
@@ -276,7 +298,7 @@ export function Shifts() {
                             .slice()
                             .sort((a, b) => toMins(a.start_time ?? cmaStart) - toMins(b.start_time ?? cmaStart))
                             .map(oc => (
-                              <div key={oc.provider_id} className="flex items-center gap-2 px-3 py-2 border-b border-[#F1EFE8] last:border-b-0">
+                              <div key={oc.id} className="flex items-center gap-2 px-3 py-2 border-b border-[#F1EFE8] last:border-b-0">
                                 <div
                                   className="w-5 h-5 rounded-full text-[9px] font-semibold flex items-center justify-center flex-shrink-0"
                                   style={{ background: oc.avatar_color, color: oc.avatar_text_color }}
@@ -291,6 +313,22 @@ export function Shifts() {
                                     ? `${fmt12(oc.start_time)} – ${fmt12(oc.end_time)}`
                                     : 'Full shift'}
                                 </span>
+                                {(oc.provider_id === provider.id || provider.is_admin) && (
+                                  <button
+                                    onClick={() => setEditing({
+                                      id: oc.id,
+                                      date,
+                                      state,
+                                      cmaStart,
+                                      cmaEnd,
+                                      start: oc.start_time ?? cmaStart,
+                                      end: oc.end_time ?? cmaEnd,
+                                    })}
+                                    className="p-1 rounded hover:bg-[#F1EFE8] text-[#999] hover:text-[#7F77DD]"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                )}
                               </div>
                             ))}
 
@@ -407,6 +445,76 @@ export function Shifts() {
               </Button>
               <Button variant="teal" className="flex-1" loading={submitting} onClick={confirmClaim}>
                 <CheckCircle2 size={14} /> Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { if (!submitting) setEditing(null) }} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit shift hours</h2>
+              <button onClick={() => setEditing(null)} disabled={submitting}
+                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-1">
+              <div className="font-medium text-[#1A1A2E]">
+                {format(parseISO(editing.date), 'EEEE, MMMM d')} · {STATE_LABELS[editing.state] ?? editing.state}
+              </div>
+              <div className="text-[#999]">
+                Full coverage window: {fmt12(editing.cmaStart)}–{fmt12(editing.cmaEnd)}
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Clock size={13} className="text-[#7F77DD]" />
+                <span className="text-[12px] font-medium text-[#555] uppercase tracking-wider">Your hours</span>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-[11px] text-[#999] block mb-1">From</label>
+                  <select
+                    value={fmt12(editing.start)}
+                    onChange={e => {
+                      const newStart = fmt12to24(e.target.value)
+                      setEditing(p => {
+                        if (!p) return p
+                        const end = p.end > newStart ? p.end : p.cmaEnd
+                        return { ...p, start: newStart, end }
+                      })
+                    }}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans"
+                  >
+                    {buildTimeOptions(editing.cmaStart, editing.cmaEnd).map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-[11px] text-[#999] block mb-1">To</label>
+                  <select
+                    value={fmt12(editing.end)}
+                    onChange={e => setEditing(p => p ? { ...p, end: fmt12to24(e.target.value) } : p)}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans"
+                  >
+                    {buildTimeOptions(editing.cmaStart, editing.cmaEnd)
+                      .filter(t => fmt12to24(t) > editing.start)
+                      .map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditing(null)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button variant="teal" className="flex-1" loading={submitting} onClick={confirmEdit}>
+                <CheckCircle2 size={14} /> Save
               </Button>
             </div>
           </div>

@@ -55,9 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [row] = await sql`
       INSERT INTO on_call_schedule (practice_id, date, state, provider_id, start_time, end_time)
       VALUES (${practiceId}::uuid, ${date}::date, ${state}, ${providerId}::uuid, ${start_time ?? null}, ${end_time ?? null})
-      ON CONFLICT (practice_id, date, state, provider_id) DO UPDATE
-        SET start_time = EXCLUDED.start_time,
-            end_time   = EXCLUDED.end_time
+      ON CONFLICT (practice_id, date, state, provider_id, start_time) DO NOTHING
       RETURNING *`
     return res.json({ ...row, provider_name: providerName })
   }
@@ -74,6 +72,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       INSERT INTO on_call_schedule (practice_id, date, state, provider_id)
       VALUES (${practiceId}::uuid, ${date}::date, ${state}, ${provider_id}::uuid)
       ON CONFLICT (practice_id, date, state, provider_id) DO NOTHING
+      RETURNING *`
+    return res.json(row)
+  }
+
+  if (req.method === 'PATCH') {
+    const { id: currentProviderId } = providerRows[0] as any
+    const { id, start_time, end_time } = req.body as { id: string; start_time: string; end_time: string }
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const existing = await sql`SELECT provider_id FROM on_call_schedule WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    if (!existing.length) return res.status(404).json({ error: 'Shift not found' })
+    if (!isAdmin && existing[0].provider_id !== currentProviderId) return res.status(403).json({ error: 'Cannot edit another provider\'s shift' })
+    const [row] = await sql`
+      UPDATE on_call_schedule SET start_time = ${start_time ?? null}, end_time = ${end_time ?? null}
+      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`
     return res.json(row)
   }
