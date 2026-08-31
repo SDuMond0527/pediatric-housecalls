@@ -2,6 +2,26 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+async function alertNoOnCallMD(sql: ReturnType<typeof neon>, practiceId: string, visitType: string, scheduledDate: string, scheduledTime: string, state: string) {
+  try {
+    const RESEND_API_KEY = process.env.RESEND_API_KEY
+    if (!RESEND_API_KEY) return
+    const admins = await sql`SELECT email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid AND email IS NOT NULL`
+    if (!admins.length) return
+    const body = `<p>A <strong>${visitType}</strong> appointment was booked for <strong>${scheduledDate}</strong> at <strong>${scheduledTime}</strong> in state <strong>${state}</strong>, but <strong>no on-call MD/NP was found</strong> in the on-call schedule for that date, state, and time.</p><p>The MD/NP appointment was NOT created automatically. Please add it manually.</p><p><em>Debug info — practice_id queried: ${practiceId} | date: ${scheduledDate} | state: ${state} | time: ${scheduledTime}</em></p>`
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Roam Platform <noreply@phc-team.com>',
+        to: admins.map((a: any) => a.email),
+        subject: `⚠️ No on-call MD/NP found for ${visitType} booking on ${scheduledDate}`,
+        html: body,
+      }),
+    })
+  } catch {}
+}
+
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; type: 'family' | 'provider' }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -112,7 +132,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
             AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
-        if (onCallRows.length) {
+        if (!onCallRows.length) {
+          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
+        } else {
           const mdProviderId = onCallRows[0].provider_id as string
           const mdName = (onCallRows[0].provider_name ?? '') as string
           const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${cmaName} (CMA)` : '')
@@ -154,7 +176,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
             AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
           LIMIT 1`
-        if (onCallRows.length) {
+        if (!onCallRows.length) {
+          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
+        } else {
           const mdProviderId = onCallRows[0].provider_id as string
           const mdName = (onCallRows[0].provider_name ?? '') as string
           const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${rnName} (RN — in-home)` : '')
