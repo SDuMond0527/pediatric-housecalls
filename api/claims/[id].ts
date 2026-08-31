@@ -286,6 +286,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (key in fields) updates[key] = fields[key]
     }
 
+    // Empty strings for date fields must become null or PostgreSQL ::date cast throws
+    for (const dateField of ['subscriber_dob', 'patient_dob', 'service_date'] as const) {
+      if (updates[dateField] === '') updates[dateField] = null
+    }
+
     // Recalculate total_charge when cpt_codes are updated
     const newTotal = updates.cpt_codes != null
       ? (updates.cpt_codes as any[]).reduce((s: number, c: any) => s + parseFloat(c.charge_amount ?? 0), 0)
