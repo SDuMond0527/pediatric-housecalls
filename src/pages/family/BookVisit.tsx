@@ -129,6 +129,7 @@ interface BookingState {
   zone: string
   provider: string
   visitAddress: string
+  city: string
   date: string
   time: string
   participantCount: number
@@ -208,7 +209,7 @@ export function BookVisit() {
     visitType: '', selectedChildIds: [], childIntakes: {},
     activeChildTab: '', ivFluidsIntake: emptyIvFluids(),
     zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '',
-    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '',
+    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', date: '', time: '',
     participantCount: 1, participantNames: '',
   })
 
@@ -834,7 +835,7 @@ export function BookVisit() {
 
     if (providerUid) {
       const noteParts = [`Ref: ${ref}`]
-      if (booking.visitAddress) noteParts.push(`ADDR:${booking.visitAddress}`)
+      if (booking.visitAddress) noteParts.push(`ADDR:${booking.visitAddress}${booking.city ? `, ${booking.city}` : ''}${booking.state ? `, ${booking.state}` : ''}${booking.zip ? ` ${booking.zip}` : ''}`)
       noteParts.push(`PARENTEMAIL:${family!.email}`)
       if ((family as any)?.phone) noteParts.push(`PARENTPHONE:${(family as any).phone}`)
 
@@ -971,6 +972,14 @@ export function BookVisit() {
     ])
     await refreshFamily()
 
+    // Save contact info to family profile so providers can see it in the patient chart
+    const contactUpdate: Record<string, unknown> = {}
+    if (booking.visitAddress) contactUpdate.address_line1 = booking.visitAddress
+    if (booking.city)         contactUpdate.city          = booking.city
+    if (booking.state)        contactUpdate.state         = booking.state
+    if (booking.zip)          contactUpdate.zip           = booking.zip
+    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(() => {})
+
     if (referralSource.trim() && !(family as any)?.referral_source) {
       updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
     }
@@ -1040,7 +1049,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', date: '', time: '', participantCount: 1, participantNames: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', date: '', time: '', participantCount: 1, participantNames: '' })
           }}>Book another visit</Button>
         </div>
       </div>
@@ -1453,9 +1462,20 @@ export function BookVisit() {
               </label>
               <input value={booking.visitAddress}
                 onChange={e => setBooking(b => ({ ...b, visitAddress: e.target.value }))}
-                placeholder="123 Main St, Charlotte, NC 28078"
+                placeholder="123 Main St"
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
               <p className="text-[11px] text-[#aeaeb2] mt-1">Where should your provider come? This is shared with your provider for navigation.</p>
+            </div>
+          )}
+          {!isCpr && (byType[booking.visitType]?.is_in_home ?? true) && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                City <span className="text-[#ff3b30]">*</span>
+              </label>
+              <input value={booking.city}
+                onChange={e => setBooking(b => ({ ...b, city: e.target.value }))}
+                placeholder="Charlotte"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
             </div>
           )}
 
@@ -1744,7 +1764,7 @@ export function BookVisit() {
                    zoneProviders.length === 0 ||
                    (!booking.provider && zoneProviders.length > 0) ||
                    (booking.provider === '__first_available__' && !firstAvailResult) ||
-                   ((byType[booking.visitType]?.is_in_home ?? true) && !booking.visitAddress))
+                   ((byType[booking.visitType]?.is_in_home ?? true) && (!booking.visitAddress || !booking.city)))
             }
             onNext={() => setStep(STEP_CONFIRM)} />
         </Step>
