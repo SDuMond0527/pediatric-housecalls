@@ -7,6 +7,7 @@ interface BookingRow { id: string; status: string; visit_type: string; state: st
 interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null }
 interface ProviderRow { id: string; name: string; role: string }
 interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
+interface OnCallRow { provider_id: string; date: string; state: string }
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -51,6 +52,7 @@ export function AdminAnalytics() {
   const [waitlist, setWaitlist]     = useState<WaitlistRow[]>([])
   const [providers, setProviders]   = useState<ProviderRow[]>([])
   const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([])
+  const [onCallShifts, setOnCallShifts] = useState<OnCallRow[]>([])
   const [familyCount, setFamilyCount] = useState(0)
   const [loading, setLoading]       = useState(true)
 
@@ -64,6 +66,7 @@ export function AdminAnalytics() {
         setFamilyCount(result.familyProfiles?.length ?? 0)
         setProviders(result.providers ?? [])
         setBroadcasts(result.broadcasts ?? [])
+        setOnCallShifts(result.onCallShifts ?? [])
       }
       setLoading(false)
     }
@@ -182,6 +185,26 @@ export function AdminAnalytics() {
   const bVtMap: Record<string, number> = {}
   bookings.forEach(b => { bVtMap[b.visit_type] = (bVtMap[b.visit_type] ?? 0) + 1 })
   const bVtSorted = Object.entries(bVtMap).sort((a, b) => b[1] - a[1])
+
+  // On-call shifts by provider (all time)
+  const onCallByProvider: Record<string, number> = {}
+  onCallShifts.forEach(s => {
+    const provider = providers.find(p => p.id === s.provider_id)
+    const key = provider?.name ?? 'Unknown'
+    onCallByProvider[key] = (onCallByProvider[key] ?? 0) + 1
+  })
+  const onCallSorted = Object.entries(onCallByProvider).sort((a, b) => b[1] - a[1])
+  const maxOnCall = onCallSorted[0]?.[1] ?? 1
+
+  // On-call weekly counts (last 8 weeks)
+  const onCallWeekCounts = weeks.map(w => ({
+    label: w.label,
+    count: onCallShifts.filter(s => {
+      const d = new Date(s.date + 'T12:00:00')
+      return d >= w.start && d <= w.end
+    }).length,
+  }))
+  const maxOnCallWeek = Math.max(...onCallWeekCounts.map(w => w.count), 1)
 
   return (
     <div>
@@ -477,6 +500,43 @@ export function AdminAnalytics() {
             </div>
           </div>
         )}
+
+        {/* On-call shifts */}
+        <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">On-call shifts</h3>
+          <p className="text-[12px] text-[#999] mb-5">MD/NP on-call coverage — last 8 weeks</p>
+          <div className="flex items-end gap-2 h-36 mb-6">
+            {onCallWeekCounts.map(w => (
+              <div key={w.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                {w.count > 0 && <div className="text-[11px] text-[#1D9E75] font-semibold">{w.count}</div>}
+                <div className="w-full rounded-t-md transition-all duration-500"
+                  style={{
+                    height: `${Math.max((w.count / maxOnCallWeek) * 96, w.count > 0 ? 6 : 2)}px`,
+                    background: w.count > 0 ? '#1D9E75' : '#E8E8E4',
+                  }} />
+                <div className="text-[10px] text-[#999] text-center leading-tight">{w.label}</div>
+              </div>
+            ))}
+          </div>
+          {onCallSorted.length === 0 ? (
+            <p className="text-[13px] text-[#999]">No on-call shifts recorded yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {onCallSorted.map(([name, count]) => (
+                <div key={name}>
+                  <div className="flex items-center justify-between text-[13px] mb-1">
+                    <span className="text-[#1A1A2E]">{name}</span>
+                    <span className="font-semibold text-[#1D9E75] tabular-nums">{count} shift{count !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-[#1D9E75] transition-all duration-500"
+                      style={{ width: `${(count / maxOnCall) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Booking mix (from requests) */}
         {bVtSorted.length > 0 && (
