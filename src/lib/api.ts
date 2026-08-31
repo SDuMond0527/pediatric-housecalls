@@ -362,6 +362,9 @@ export const upsertPracticeVisitType = (body: Record<string, unknown>) =>
 export const deletePracticeVisitType = (id: string) =>
   apiFetch<void>(`/api/admin/practice-visit-types?id=${id}`, { method: 'DELETE' })
 
+export const patchPracticeVisitType = (id: string, fields: Record<string, unknown>) =>
+  apiFetch<any>('/api/admin/practice-visit-types', { method: 'PATCH', body: JSON.stringify({ id, ...fields }) })
+
 export const getProvidersByZone = (zone: string) =>
   publicFetch<any[]>(`/api/providers?zone=${encodeURIComponent(zone)}`)
 

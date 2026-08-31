@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 export interface PracticeVisitType {
   id: string
@@ -48,5 +48,11 @@ export function usePracticeVisitTypes() {
     if (cache) return
     load().then(d => { setData(d); setLoading(false) })
   }, [])
-  return { ...data, loading }
+  const refresh = useCallback(() => {
+    cache = null
+    pending = null
+    setLoading(true)
+    load().then(d => { setData(d); setLoading(false) })
+  }, [])
+  return { ...data, loading, refresh }
 }

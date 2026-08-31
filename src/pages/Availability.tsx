@@ -9,6 +9,7 @@ import {
   createZoneRestriction, deleteZoneRestriction,
   createTimeBlock, deleteTimeBlock,
   upsertVisitTypeAvailability,
+  patchPracticeVisitType,
   getProviders,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -86,7 +87,7 @@ function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): Vi
 export function Availability() {
   const { provider } = useAuth()
   const isAdmin = !!provider?.is_admin
-  const { visitTypes, byType } = usePracticeVisitTypes()
+  const { visitTypes, byType, refresh: refreshVisitTypes } = usePracticeVisitTypes()
 
   // Admin provider picker
   const [allProviders, setAllProviders] = useState<{ id: string; name: string; role: string; zones: string[] }[]>([])
@@ -139,12 +140,15 @@ export function Availability() {
   })
 
   const [savedVisitTypes, setSavedVisitTypes] = useState<VisitTypeAvail[]>([])
+  const [savedVtLoadedFor, setSavedVtLoadedFor] = useState<string>('')
 
   useEffect(() => {
     if (!viewingProviderId) return
+    setSavedVtLoadedFor('')
     getAvailability(viewingProviderId).then(({ overrides: ov, zoneRestrictions: zr, timeBlocks: tb, visitTypes: saved }) => {
       const savedVt = (saved ?? []) as VisitTypeAvail[]
       setSavedVisitTypes(savedVt)
+      setSavedVtLoadedFor(viewingProviderId)
       // Any saved entry with non-default hours is an explicit hour restriction
       setVtRestrictedTypes(new Set(savedVt.filter(v => isNonDefaultHours(v.start_time, v.end_time)).map(v => v.visit_type)))
       setZoneRestrictions((zr ?? []) as ZoneRestriction[])
@@ -153,16 +157,16 @@ export function Availability() {
     })
   }, [viewingProviderId])
 
-  // Re-merge whenever saved rows or practice visit types change
+  // Re-merge only after saved rows have actually loaded for this provider
   useEffect(() => {
-    if (!viewingProviderId || visitTypes.length === 0) return
+    if (!viewingProviderId || visitTypes.length === 0 || savedVtLoadedFor !== viewingProviderId) return
     const defaults = defaultVisitTypeAvail(viewingProviderId, visitTypes.map(v => v.visit_type))
     const merged = defaults.map(def => {
       const existing = savedVisitTypes.find(s => s.visit_type === def.visit_type)
       return existing ?? def
     })
     setVisitTypeAvail(merged)
-  }, [viewingProviderId, visitTypes, savedVisitTypes])
+  }, [viewingProviderId, visitTypes, savedVisitTypes, savedVtLoadedFor])
 
   function visibleVisitTypes() {
     const isMdOrPnp = viewingProviderRole === 'MD' || viewingProviderRole === 'PNP'
@@ -200,6 +204,19 @@ export function Availability() {
       v.visit_type === visitType ? { ...v, start_time: DEFAULT_START, end_time: DEFAULT_END } : v
     ))
     setVtRestrictedTypes(prev => { const s = new Set(prev); s.delete(visitType); return s })
+  }
+
+  const [cprRestricting, setCprRestricting] = useState<string | null>(null)
+  async function restrictCprToPnp(id: string) {
+    setCprRestricting(id)
+    try {
+      await patchPracticeVisitType(id, { allowed_roles: ['PNP'] })
+      refreshVisitTypes()
+    } catch (e) {
+      alert('Failed to restrict visit type: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    } finally {
+      setCprRestricting(null)
+    }
   }
 
   async function save() {
@@ -384,6 +401,28 @@ export function Availability() {
               )
             })}
           </div>
+          {isAdmin && visitTypes.some(vt => vt.is_cpr) && (
+            <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
+              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">CPR class role restrictions (practice-wide)</div>
+              <div className="space-y-1.5">
+                {visitTypes.filter(vt => vt.is_cpr).map(vt => (
+                  <div key={vt.id} className="flex items-center justify-between">
+                    <span className="text-[12px] text-[#555]">{vt.badge_label ?? vt.visit_type}</span>
+                    {vt.allowed_roles?.includes('PNP') ? (
+                      <span className="text-[11px] bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full font-medium">PNP only</span>
+                    ) : (
+                      <button
+                        onClick={() => restrictCprToPnp(vt.id)}
+                        disabled={cprRestricting === vt.id}
+                        className="text-[11px] text-[#7F77DD] hover:text-[#534AB7] hover:underline disabled:opacity-50">
+                        {cprRestricting === vt.id ? 'Saving…' : 'Restrict to PNP only →'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* VISIT TYPE–SPECIFIC HOURS */}

@@ -67,6 +67,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(row)
   }
 
+  if (req.method === 'PATCH') {
+    const { id, allowed_roles } = req.body as { id: string; allowed_roles: string[] | null }
+    if (!id) return res.status(400).json({ error: 'Missing id' })
+    const [row] = await sql`
+      UPDATE practice_visit_types
+      SET allowed_roles = ${allowed_roles ? JSON.stringify(allowed_roles) : null}::jsonb
+      WHERE id = ${id}::uuid AND practice_id = ${provider.practice_id}::uuid
+      RETURNING *`
+    if (!row) return res.status(404).json({ error: 'Visit type not found' })
+    return res.json(row)
+  }
+
   if (req.method === 'DELETE') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'Missing id' })
