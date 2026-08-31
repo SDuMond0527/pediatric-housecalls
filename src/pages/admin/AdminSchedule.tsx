@@ -1134,7 +1134,7 @@ export function AdminSchedule() {
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
                 <select value={rescheduleVisitType} onChange={e => setRescheduleVisitType(e.target.value)}
                   className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
-                  {visitTypes.map(vt => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
+                  {visitTypes.map(vt => <option key={vt.id} value={vt.visit_type}>{vt.visit_type}</option>)}
                 </select>
               </div>
               <div>
