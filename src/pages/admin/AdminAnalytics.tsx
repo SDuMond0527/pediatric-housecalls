@@ -7,7 +7,7 @@ interface BookingRow { id: string; status: string; visit_type: string; state: st
 interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null }
 interface ProviderRow { id: string; name: string; role: string }
 interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
-interface OnCallRow { provider_id: string; date: string; state: string }
+interface OnCallRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -186,23 +186,32 @@ export function AdminAnalytics() {
   bookings.forEach(b => { bVtMap[b.visit_type] = (bVtMap[b.visit_type] ?? 0) + 1 })
   const bVtSorted = Object.entries(bVtMap).sort((a, b) => b[1] - a[1])
 
-  // On-call shifts by provider (all time)
+  function shiftHours(s: OnCallRow): number {
+    if (!s.start_time || !s.end_time) return 0
+    const [sh, sm] = s.start_time.split(':').map(Number)
+    const [eh, em] = s.end_time.split(':').map(Number)
+    return Math.max(0, (eh + em / 60) - (sh + sm / 60))
+  }
+
+  // On-call hours by provider (all time)
   const onCallByProvider: Record<string, number> = {}
   onCallShifts.forEach(s => {
     const provider = providers.find(p => p.id === s.provider_id)
     const key = provider?.name ?? 'Unknown'
-    onCallByProvider[key] = (onCallByProvider[key] ?? 0) + 1
+    onCallByProvider[key] = (onCallByProvider[key] ?? 0) + shiftHours(s)
   })
-  const onCallSorted = Object.entries(onCallByProvider).sort((a, b) => b[1] - a[1])
+  const onCallSorted = Object.entries(onCallByProvider)
+    .map(([name, hrs]) => [name, Math.round(hrs * 10) / 10] as [string, number])
+    .sort((a, b) => b[1] - a[1])
   const maxOnCall = onCallSorted[0]?.[1] ?? 1
 
-  // On-call weekly counts (last 8 weeks)
+  // On-call weekly hours (last 8 weeks)
   const onCallWeekCounts = weeks.map(w => ({
     label: w.label,
-    count: onCallShifts.filter(s => {
+    count: Math.round(onCallShifts.filter(s => {
       const d = new Date(s.date + 'T12:00:00')
       return d >= w.start && d <= w.end
-    }).length,
+    }).reduce((sum, s) => sum + shiftHours(s), 0) * 10) / 10,
   }))
   const maxOnCallWeek = Math.max(...onCallWeekCounts.map(w => w.count), 1)
 
@@ -503,7 +512,7 @@ export function AdminAnalytics() {
 
         {/* On-call shifts */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">On-call shifts</h3>
+          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">On-call hours</h3>
           <p className="text-[12px] text-[#999] mb-5">MD/NP on-call coverage — last 8 weeks</p>
           <div className="flex items-end gap-2 h-36 mb-6">
             {onCallWeekCounts.map(w => (
@@ -526,7 +535,7 @@ export function AdminAnalytics() {
                 <div key={name}>
                   <div className="flex items-center justify-between text-[13px] mb-1">
                     <span className="text-[#1A1A2E]">{name}</span>
-                    <span className="font-semibold text-[#1D9E75] tabular-nums">{count} shift{count !== 1 ? 's' : ''}</span>
+                    <span className="font-semibold text-[#1D9E75] tabular-nums">{count} hrs</span>
                   </div>
                   <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
                     <div className="h-full rounded-full bg-[#1D9E75] transition-all duration-500"
