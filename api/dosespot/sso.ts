@@ -119,9 +119,11 @@ function formatDob(dob: any): string {
   return `${y}-${m}-${day}T00:00:00.000Z`
 }
 
-function cleanPhone(phone: string | null): string {
-  if (!phone) return '0000000000'
-  return phone.replace(/\D/g, '').slice(-10).padStart(10, '0')
+function cleanPhone(phone: string | null): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '').slice(-10)
+  if (digits.length < 10) return null
+  return digits
 }
 
 async function findOrCreateDoseSpotPatient(
@@ -146,6 +148,16 @@ async function findOrCreateDoseSpotPatient(
     // Stale ID — fall through to recreate
   }
 
+  // Validate required DoseSpot fields before calling API
+  const missing: string[] = []
+  if (!family.address_line1) missing.push('street address')
+  if (!family.city) missing.push('city')
+  const phone = cleanPhone(family.phone)
+  if (!phone) missing.push('phone number')
+  if (missing.length) {
+    throw new Error(`Patient is missing required info for DoseSpot: ${missing.join(', ')}. Please update the patient's contact information in their chart and try again.`)
+  }
+
   // Create patient
   const patientUrl = `${DS_BASE}/webapi/v2/api/patients`
   console.error('[dosespot/sso] calling:', patientUrl)
@@ -157,11 +169,11 @@ async function findOrCreateDoseSpotPatient(
       LastName:         child.last_name   || '',
       DateOfBirth:      child.date_of_birth ? formatDob(String(child.date_of_birth)) : '',
       Gender:           genderCode(child.gender),
-      Address1:         family.address_line1 || '',
-      City:             family.city          || '',
+      Address1:         family.address_line1,
+      City:             family.city,
       State:            family.state         || '',
       ZipCode:          family.zip           || '',
-      PrimaryPhone:     cleanPhone(family.phone),
+      PrimaryPhone:     phone,
       PrimaryPhoneType: 'Home',
       Active:           true,
       Weight:           0,
