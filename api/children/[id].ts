@@ -48,6 +48,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const b = req.body
 
+      // ── Archive / unarchive patient ──────────────────────────────────────────
+      if (b._action === 'archive') {
+        const [row] = await sql`
+          UPDATE children SET is_archived = true, archived_at = NOW()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+        if (!row) return res.status(404).json({ error: 'Not found' })
+        return res.json(row)
+      }
+
+      if (b._action === 'unarchive') {
+        const [row] = await sql`
+          UPDATE children SET is_archived = false, archived_at = NULL
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+        if (!row) return res.status(404).json({ error: 'Not found' })
+        return res.json(row)
+      }
+
       // ── Archive current insurance and clear it ────────────────────────────────
       if (b._action === 'archive_insurance') {
         const [current] = await sql`SELECT * FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`

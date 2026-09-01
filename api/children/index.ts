@@ -95,30 +95,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   practiceId = providerRows[0].practice_id as string
 
   if (req.method === 'GET') {
-    const { family_ids, ids, search } = req.query as Record<string, string>
+    const { family_ids, ids, search, include_archived } = req.query as Record<string, string>
+    const showArchived = include_archived === '1'
 
     if (search?.trim()) {
       const q = `%${search.trim()}%`
-      const rows = await sql`
-        SELECT c.*,
-               fp.display_name  AS family_display_name,
-               fp.email         AS family_email,
-               fp.phone         AS family_phone,
-               fp.address_line1 AS family_address_line1,
-               fp.city          AS family_city,
-               fp.state         AS family_state,
-               fp.zip           AS family_zip
-        FROM children c
-        LEFT JOIN family_profiles fp ON fp.id = c.family_id
-        WHERE c.practice_id = ${practiceId}::uuid
-          AND (
-            c.first_name ILIKE ${q}
-            OR c.last_name  ILIKE ${q}
-            OR (c.first_name || ' ' || c.last_name) ILIKE ${q}
-            OR c.display_label ILIKE ${q}
-          )
-        ORDER BY c.first_name, c.last_name
-        LIMIT 20`
+      const rows = showArchived
+        ? await sql`
+            SELECT c.*,
+                   fp.display_name  AS family_display_name,
+                   fp.email         AS family_email,
+                   fp.phone         AS family_phone,
+                   fp.address_line1 AS family_address_line1,
+                   fp.city          AS family_city,
+                   fp.state         AS family_state,
+                   fp.zip           AS family_zip
+            FROM children c
+            LEFT JOIN family_profiles fp ON fp.id = c.family_id
+            WHERE c.practice_id = ${practiceId}::uuid
+              AND c.is_archived = true
+              AND (
+                c.first_name ILIKE ${q}
+                OR c.last_name  ILIKE ${q}
+                OR (c.first_name || ' ' || c.last_name) ILIKE ${q}
+                OR c.display_label ILIKE ${q}
+              )
+            ORDER BY c.first_name, c.last_name
+            LIMIT 20`
+        : await sql`
+            SELECT c.*,
+                   fp.display_name  AS family_display_name,
+                   fp.email         AS family_email,
+                   fp.phone         AS family_phone,
+                   fp.address_line1 AS family_address_line1,
+                   fp.city          AS family_city,
+                   fp.state         AS family_state,
+                   fp.zip           AS family_zip
+            FROM children c
+            LEFT JOIN family_profiles fp ON fp.id = c.family_id
+            WHERE c.practice_id = ${practiceId}::uuid
+              AND (c.is_archived IS NULL OR c.is_archived = false)
+              AND (
+                c.first_name ILIKE ${q}
+                OR c.last_name  ILIKE ${q}
+                OR (c.first_name || ' ' || c.last_name) ILIKE ${q}
+                OR c.display_label ILIKE ${q}
+              )
+            ORDER BY c.first_name, c.last_name
+            LIMIT 20`
       return res.json(rows)
     }
 
@@ -144,17 +168,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}::uuid`
       return res.json(rows)
     }
-    // No filters — return all children for this practice
-    const rows = await sql`
-      SELECT c.*,
-             fp.display_name AS family_display_name,
-             fp.email        AS family_email,
-             fp.phone        AS family_phone
-      FROM children c
-      LEFT JOIN family_profiles fp ON fp.id = c.family_id
-      WHERE c.practice_id = ${practiceId}::uuid
-      ORDER BY c.first_name, c.last_name, c.display_label
-      LIMIT 200`
+    // No filters — return active or archived depending on flag
+    const rows = showArchived
+      ? await sql`
+          SELECT c.*,
+                 fp.display_name AS family_display_name,
+                 fp.email        AS family_email,
+                 fp.phone        AS family_phone
+          FROM children c
+          LEFT JOIN family_profiles fp ON fp.id = c.family_id
+          WHERE c.practice_id = ${practiceId}::uuid
+            AND c.is_archived = true
+          ORDER BY c.archived_at DESC, c.first_name, c.last_name
+          LIMIT 200`
+      : await sql`
+          SELECT c.*,
+                 fp.display_name AS family_display_name,
+                 fp.email        AS family_email,
+                 fp.phone        AS family_phone
+          FROM children c
+          LEFT JOIN family_profiles fp ON fp.id = c.family_id
+          WHERE c.practice_id = ${practiceId}::uuid
+            AND (c.is_archived IS NULL OR c.is_archived = false)
+          ORDER BY c.first_name, c.last_name, c.display_label
+          LIMIT 200`
     return res.json(rows)
   }
 

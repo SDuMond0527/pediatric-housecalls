@@ -169,14 +169,22 @@ export const familyArchiveChildInsurance = (id: string) =>
 export const deleteChild = (id: string) =>
   apiFetch<void>(`/api/children/${id}`, { method: 'DELETE' })
 
+export const archivePatient = (id: string) =>
+  apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify({ _action: 'archive' }) })
+
+export const unarchivePatient = (id: string) =>
+  apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify({ _action: 'unarchive' }) })
+
 export const getChildrenByIds = (ids: string[]) =>
   apiFetch<any[]>(`/api/children?ids=${ids.join(',')}`)
 
 export const getChildrenByFamilyIds = (familyIds: string[]) =>
   apiFetch<any[]>(`/api/children?family_ids=${familyIds.join(',')}`)
 
-export const searchChildren = (q: string) =>
-  apiFetch<any[]>(q.trim() ? `/api/children?search=${encodeURIComponent(q)}` : '/api/children')
+export const searchChildren = (q: string, includeArchived = false) => {
+  const base = q.trim() ? `/api/children?search=${encodeURIComponent(q)}` : '/api/children'
+  return apiFetch<any[]>(includeArchived ? `${base}${q.trim() ? '&' : '?'}include_archived=1` : base)
+}
 
 // ── Analytics ─────────────────────────────────────────────────
 export const getAnalytics = () => apiFetch<any>('/api/analytics')

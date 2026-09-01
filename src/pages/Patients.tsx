@@ -60,6 +60,7 @@ export function Patients() {
   const navigate = useNavigate()
   const location = useLocation()
   const isAdmin = location.pathname.startsWith('/admin')
+  const [tab, setTab] = useState<'active' | 'archived'>('active')
   const [allChildren, setAllChildren] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -121,16 +122,17 @@ export function Patients() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true)
+      setQuery('')
+      setSearchResults([])
       try {
-        // Load a broad initial set using the search endpoint
-        const rows = await searchChildren('').catch(() => [] as any[])
+        const rows = await searchChildren('', tab === 'archived').catch(() => [] as any[])
         setAllChildren(rows ?? [])
       } finally {
         setLoading(false)
       }
     }
     loadAll()
-  }, [])
+  }, [tab])
 
   function onQueryChange(q: string) {
     setQuery(q)
@@ -143,7 +145,7 @@ export function Patients() {
     searchTimer.current = setTimeout(async () => {
       setSearchLoading(true)
       try {
-        const rows = await searchChildren(q.trim())
+        const rows = await searchChildren(q.trim(), tab === 'archived')
         setSearchResults(rows ?? [])
       } catch (e: any) {
         setSearchResults([])
@@ -177,7 +179,19 @@ export function Patients() {
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Header */}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Patients</div>
+        <div className="flex items-center gap-4">
+          <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Patients</div>
+          <div className="flex gap-1">
+            <button onClick={() => setTab('active')}
+              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'active' ? 'bg-[#7F77DD] text-white' : 'text-[#999] hover:text-[#555]'}`}>
+              Active
+            </button>
+            <button onClick={() => setTab('archived')}
+              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'archived' ? 'bg-[#7F77DD] text-white' : 'text-[#999] hover:text-[#555]'}`}>
+              Archived
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-3">
           <div className="relative w-56">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
@@ -189,9 +203,11 @@ export function Patients() {
               className="w-full pl-8 pr-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans"
             />
           </div>
-          <Button variant="primary" size="sm" onClick={() => { setForm(EMPTY_FORM); setSaveError(''); setNewPatientOpen(true) }}>
-            <Plus size={13} /> New patient
-          </Button>
+          {tab === 'active' && (
+            <Button variant="primary" size="sm" onClick={() => { setForm(EMPTY_FORM); setSaveError(''); setNewPatientOpen(true) }}>
+              <Plus size={13} /> New patient
+            </Button>
+          )}
         </div>
       </div>
 
@@ -207,7 +223,7 @@ export function Patients() {
         ) : displayed.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-[#999] text-[14px]">
-              {isSearching ? 'No patients found matching your search.' : 'No patients on file.'}
+              {isSearching ? 'No patients found matching your search.' : tab === 'archived' ? 'No archived patients.' : 'No patients on file.'}
             </div>
           </div>
         ) : (
@@ -226,7 +242,10 @@ export function Patients() {
                     <span className="text-[12px] font-semibold text-[#7F77DD]">{initials(child)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-display text-[15px] font-medium text-[#1A1A2E]">{childName(child)}</div>
+                    <div className="font-display text-[15px] font-medium text-[#1A1A2E] flex items-center gap-2">
+                      {childName(child)}
+                      {child.is_archived && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F1EFE8] text-[#999]">Archived</span>}
+                    </div>
                     <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
                       {dob && <span>{formatDob(dob)}{age ? ` · ${age}` : ''}</span>}
                       {fam && <span className="text-[#555]">{fam}</span>}

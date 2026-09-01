@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
@@ -154,6 +154,9 @@ export function PatientChart() {
 
   const [archivingIns, setArchivingIns] = useState(false)
   const [pastInsOpen, setPastInsOpen] = useState(false)
+
+  const [archivingPatient, setArchivingPatient] = useState(false)
+  const [deletingPatient, setDeletingPatient] = useState(false)
 
   // Book appointment
   const [bookOpen, setBookOpen] = useState(false)
@@ -397,6 +400,35 @@ export function PatientChart() {
     }
   }
 
+  async function handleArchivePatient() {
+    if (!childId || !child) return
+    const isArchived = child.is_archived
+    const verb = isArchived ? 'unarchive' : 'archive'
+    if (!confirm(`${isArchived ? 'Unarchive' : 'Archive'} ${name}? ${isArchived ? 'They will appear in the active patient list.' : 'They will be hidden from the active patient list but no data will be deleted.'}`)) return
+    setArchivingPatient(true)
+    try {
+      const updated = isArchived ? await unarchivePatient(childId) : await archivePatient(childId)
+      setChild((prev: any) => ({ ...prev, ...updated }))
+    } catch (e: any) {
+      alert(e.message ?? `Failed to ${verb} patient`)
+    } finally {
+      setArchivingPatient(false)
+    }
+  }
+
+  async function handleDeletePatient() {
+    if (!childId || !child) return
+    if (!confirm(`Permanently delete ${name}?\n\nThis removes ALL records: appointments, encounter notes, and claims. This cannot be undone.\n\nConsider archiving instead if you may need this record in the future.`)) return
+    setDeletingPatient(true)
+    try {
+      await deleteChild(childId)
+      navigate(-1)
+    } catch (e: any) {
+      alert(e.message ?? 'Failed to delete patient')
+      setDeletingPatient(false)
+    }
+  }
+
   async function submitSibling() {
     if (!sibling.first_name.trim() || !sibling.last_name.trim() || !sibling.date_of_birth || !sibling.gender) return
     setSiblingSubmitting(true)
@@ -445,7 +477,12 @@ export function PatientChart() {
             <ChevronLeft size={18} />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">{name}</div>
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E] flex items-center gap-2">
+              {name}
+              {child?.is_archived && (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#999]">Archived</span>
+              )}
+            </div>
             {child && (
               <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
                 {dob && <span>DOB {formatDob(dob)} ({calcAge(dob)})</span>}
@@ -459,15 +496,31 @@ export function PatientChart() {
           </div>
           {child && (
             <div className="flex gap-2 flex-shrink-0">
+              {!child.is_archived && (
+                <>
+                  <button
+                    onClick={() => setBookOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
+                    <CalendarPlus size={13} /> Book appointment
+                  </button>
+                  <button
+                    onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
+                    <UserPlus size={13} /> Add sibling
+                  </button>
+                </>
+              )}
               <button
-                onClick={() => setBookOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
-                <CalendarPlus size={13} /> Book appointment
+                disabled={archivingPatient}
+                onClick={handleArchivePatient}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#F1EFE8] transition-colors disabled:opacity-50">
+                <Archive size={13} /> {child.is_archived ? 'Unarchive' : 'Archive'}
               </button>
               <button
-                onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
-                <UserPlus size={13} /> Add sibling
+                disabled={deletingPatient}
+                onClick={handleDeletePatient}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-lg hover:bg-[#FEE2E2] transition-colors disabled:opacity-50">
+                <Trash2 size={13} /> Delete
               </button>
             </div>
           )}
