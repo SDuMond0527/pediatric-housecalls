@@ -135,6 +135,36 @@ Patient/parent tolerated procedure well. No immediate adverse reaction.`,
   },
 }
 
+const VACCINE_NAMES = [
+  'Meningococcal polysaccharide (groups A, C, Y, W-135) TT conjugate',
+  'TDaP (tetanus diphtheria pertussis)',
+  'HPV 9-valent',
+  'Meningococcal group B',
+  'Seasonal influenza',
+] as const
+
+interface VaccineEntry {
+  id: string
+  vaccine_name: string
+  lot_number: string
+  expiration_date: string
+  dose_ml: string
+  route: string
+  site: string
+  admin_date: string
+  admin_time: string
+}
+
+function emptyVaccine(): VaccineEntry {
+  return {
+    id: Math.random().toString(36).slice(2),
+    vaccine_name: '', lot_number: '', expiration_date: '',
+    dose_ml: '', route: '', site: '',
+    admin_date: new Date().toISOString().split('T')[0],
+    admin_time: '',
+  }
+}
+
 function visitTypeToNoteType(visitType: string): NoteType {
   const v = visitType.toLowerCase()
   if (v.includes('screening') && (v.includes('iv') || v.includes('fluid'))) return 'IV fluids telemedicine screening'
@@ -486,6 +516,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   }
 
   function applyTemplate(type: NoteType) {
+    if (type === 'In-home vaccine administration') {
+      setSubjective(''); setObjective(''); setAssessment(''); setPlan('')
+      setVaccineEntries([emptyVaccine()])
+      setShowTemplatePrompt(false)
+      return
+    }
     const t = NOTE_TEMPLATES[type]
     setSubjective(t.subjective)
     setObjective(t.objective)
@@ -507,6 +543,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   }
 
   // Note fields
+  const [vaccineEntries, setVaccineEntries] = useState<VaccineEntry[]>([emptyVaccine()])
+
   const [chiefComplaint, setChiefComplaint] = useState('')
   const [subjective, setSubjective] = useState('')
   const [objective, setObjective] = useState('')
@@ -633,6 +671,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
         setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => ({ ...c, charge_amount: parseFloat(c.charge_amount) })) : [])
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
+        if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
+          setVaccineEntries(note.vaccine_administrations)
         if (note.note_type && NOTE_TYPES.includes(note.note_type)) setNoteType(note.note_type as NoteType)
         if (note.child_id && !childId) {
           resolvedChildId = note.child_id
@@ -644,11 +684,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       } else {
         // New note — auto-apply template
         const type = visitTypeToNoteType(appointment.visit_type)
-        const t = NOTE_TEMPLATES[type]
-        setSubjective(t.subjective)
-        setObjective(t.objective)
-        if (t.assessment != null) setAssessment(t.assessment)
-        if (t.plan) setPlan(t.plan)
+        if (type === 'In-home vaccine administration') {
+          setVaccineEntries([emptyVaccine()])
+        } else {
+          const t = NOTE_TEMPLATES[type]
+          setSubjective(t.subjective)
+          setObjective(t.objective)
+          if (t.assessment != null) setAssessment(t.assessment)
+          if (t.plan) setPlan(t.plan)
+        }
       }
       if (vitalsData) {
         setVitals({
@@ -732,10 +776,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       provider_id: providerId,
       note_type: noteType,
       chief_complaint: chiefComplaint || null,
-      subjective: subjective || null,
-      objective: objective || null,
-      assessment: assessment || null,
-      plan: plan || null,
+      subjective: noteType === 'In-home vaccine administration' ? null : (subjective || null),
+      objective: noteType === 'In-home vaccine administration' ? null : (objective || null),
+      assessment: noteType === 'In-home vaccine administration' ? null : (assessment || null),
+      plan: noteType === 'In-home vaccine administration' ? null : (plan || null),
+      vaccine_administrations: noteType === 'In-home vaccine administration' ? vaccineEntries : null,
       diagnoses,
       cpt_codes: cptCodes,
       photos,
@@ -1341,7 +1386,93 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               </section>
             )}
 
+            {/* Vaccine Administration */}
+            {noteType === 'In-home vaccine administration' && (
+              <section>
+                <div className={sectionHeader}>Vaccine Administration</div>
+                <div className="space-y-4">
+                  {vaccineEntries.map((entry, idx) => {
+                    function updateEntry(patch: Partial<VaccineEntry>) {
+                      setVaccineEntries(prev => prev.map(e => e.id === entry.id ? { ...e, ...patch } : e))
+                    }
+                    const fieldCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white disabled:bg-[#F8F8F6]`
+                    const lbl = (text: string) => <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">{text}</label>
+                    return (
+                      <div key={entry.id} className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+                        {vaccineEntries.length > 1 && (
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-[12px] font-semibold text-[#555]">Vaccine {idx + 1}</span>
+                            {!readOnly && (
+                              <button onClick={() => setVaccineEntries(prev => prev.filter(e => e.id !== entry.id))}
+                                className="text-[#999] hover:text-[#791F1F] transition-colors"><X size={14} /></button>
+                            )}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            {lbl('Vaccine name')}
+                            <select value={entry.vaccine_name} disabled={readOnly} onChange={e => updateEntry({ vaccine_name: e.target.value })} className={fieldCls}>
+                              <option value="">— select —</option>
+                              {VACCINE_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            {lbl('Lot number')}
+                            <input value={entry.lot_number} disabled={readOnly} onChange={e => updateEntry({ lot_number: e.target.value })} className={fieldCls} placeholder="e.g. 123456A" />
+                          </div>
+                          <div>
+                            {lbl('Expiration date')}
+                            <input type="date" value={entry.expiration_date} disabled={readOnly} onChange={e => updateEntry({ expiration_date: e.target.value })} className={fieldCls} />
+                          </div>
+                          <div>
+                            {lbl('Dose')}
+                            <div className="flex items-center gap-2">
+                              <input type="number" step="0.1" min="0" value={entry.dose_ml} disabled={readOnly} onChange={e => updateEntry({ dose_ml: e.target.value })} className={fieldCls} placeholder="0.5" />
+                              <span className="text-[13px] text-[#555] flex-shrink-0">mL</span>
+                            </div>
+                          </div>
+                          <div>
+                            {lbl('Administration route')}
+                            <select value={entry.route} disabled={readOnly} onChange={e => updateEntry({ route: e.target.value })} className={fieldCls}>
+                              <option value="">— select —</option>
+                              <option value="IM">IM</option>
+                              <option value="SQ">SQ</option>
+                            </select>
+                          </div>
+                          <div>
+                            {lbl('Site')}
+                            <select value={entry.site} disabled={readOnly} onChange={e => updateEntry({ site: e.target.value })} className={fieldCls}>
+                              <option value="">— select —</option>
+                              <option value="Right deltoid">Right deltoid</option>
+                              <option value="Left deltoid">Left deltoid</option>
+                              <option value="Right vastus lateralis">Right vastus lateralis</option>
+                              <option value="Left vastus lateralis">Left vastus lateralis</option>
+                            </select>
+                          </div>
+                          <div>
+                            {lbl('Administration date')}
+                            <input type="date" value={entry.admin_date} disabled={readOnly} onChange={e => updateEntry({ admin_date: e.target.value })} className={fieldCls} />
+                          </div>
+                          <div>
+                            {lbl('Administration time')}
+                            <input type="time" value={entry.admin_time} disabled={readOnly} onChange={e => updateEntry({ admin_time: e.target.value })} className={fieldCls} />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {!readOnly && (
+                  <button onClick={() => setVaccineEntries(prev => [...prev, emptyVaccine()])}
+                    className="mt-3 text-[12px] text-[#7F77DD] font-medium hover:underline">
+                    + Add another vaccine
+                  </button>
+                )}
+              </section>
+            )}
+
             {/* Subjective */}
+            {noteType !== 'In-home vaccine administration' && (
             <section>
               <div className={sectionHeader}>Subjective</div>
               <p className="text-[11px] text-[#999] mb-1.5">
@@ -1354,8 +1485,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 onChange={e => setSubjective(e.target.value)}
                 className={textareaCls} />
             </section>
+            )}
 
             {/* Objective */}
+            {noteType !== 'In-home vaccine administration' && (
             <section>
               <div className={sectionHeader}>Objective</div>
               <p className="text-[11px] text-[#999] mb-1.5">Physical exam findings, clinical observations</p>
@@ -1457,11 +1590,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 )}
               </div>
             </section>
+            )}
 
             {/* Assessment / Diagnoses */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <div className={sectionHeader} style={{marginBottom:0}}>Assessment / Diagnoses</div>
+                <div className={sectionHeader} style={{marginBottom:0}}>{noteType === 'In-home vaccine administration' ? 'ICD Code(s)' : 'Assessment / Diagnoses'}</div>
                 {readOnly && noteId && !editingDx && (
                   <button onClick={() => setEditingDx(true)}
                     className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
@@ -1540,11 +1674,13 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </div>
               )}
 
-              <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
-                placeholder="Clinical reasoning and assessment notes…" value={assessment}
-                disabled={readOnly}
-                onChange={e => setAssessment(e.target.value)}
-                className={textareaCls} />
+              {noteType !== 'In-home vaccine administration' && (
+                <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
+                  placeholder="Clinical reasoning and assessment notes…" value={assessment}
+                  disabled={readOnly}
+                  onChange={e => setAssessment(e.target.value)}
+                  className={textareaCls} />
+              )}
             </section>
 
             {/* CPT Codes / Procedures */}
@@ -1656,7 +1792,21 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               )}
             </section>
 
+            {/* Supervising Physician (vaccine notes only) */}
+            {noteType === 'In-home vaccine administration' && (
+              <section>
+                <div className={sectionHeader}>Supervising Physician</div>
+                <div className="flex items-center gap-3 px-4 py-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl">
+                  <div>
+                    <div className="text-[14px] font-medium text-[#1A1A2E]">Sara DuMond, MD</div>
+                    <div className="text-[12px] text-[#999] mt-0.5">NPI: 1376653576</div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Plan */}
+            {noteType !== 'In-home vaccine administration' && (
             <section>
               <div className={sectionHeader}>Plan</div>
               {noteType === 'IV fluids telemedicine screening' && !readOnly && (
@@ -1686,6 +1836,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 onChange={e => setPlan(e.target.value)}
                 className={textareaCls} />
             </section>
+            )}
 
           </div>
         )}
