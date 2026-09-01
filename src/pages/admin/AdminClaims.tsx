@@ -31,13 +31,15 @@ const KNOWN_PAYERS: Record<string, string> = {
   'Select Health': '53589', 'MedCost': '56196', 'Healthgram': '56162',
 }
 
-function fmtDate(d: string | null) {
+function fmtDate(d: any) {
   if (!d) return '—'
   try {
-    const s = String(d).split('T')[0]
-    const [y, m, day] = s.split('-').map(Number)
+    const s = d instanceof Date ? d.toISOString() : String(d)
+    const datePart = s.split('T')[0]
+    const [y, m, day] = datePart.split('-').map(Number)
+    if (isNaN(y) || isNaN(m) || isNaN(day)) return datePart || '—'
     return format(new Date(y, m - 1, day), 'MMM d, yyyy')
-  } catch { return d }
+  } catch { return String(d).split('T')[0] || '—' }
 }
 
 function fmtMoney(n: any) {
