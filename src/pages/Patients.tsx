@@ -348,7 +348,7 @@ export function Patients() {
           <div>
             <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Patient</div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Given name" required placeholder="Jane" {...field('first_name')} />
+              <Input label="Given first name" required placeholder="Jane" {...field('first_name')} />
               <Input label="Last name" required placeholder="Smith" {...field('last_name')} />
               <Input label="Nickname" placeholder="Optional" {...field('nickname')} />
               <Input label="Date of birth" required type="date" {...field('date_of_birth')} />
