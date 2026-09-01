@@ -546,14 +546,14 @@ export function AdminClaims() {
                                 <div className="space-y-1.5 mb-2">
                                   {editDx[c.id].map((d: any, i: number) => (
                                     <div key={d.code} className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[#E8E8E4] rounded-lg">
-                                      <div className="flex flex-col flex-shrink-0">
+                                      <div className="flex flex-col gap-0.5 flex-shrink-0">
                                         <button disabled={i === 0} onClick={() => setEditDx(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i - 1) }))}
-                                          className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
-                                          <ChevronUp size={11} />
+                                          className="w-5 h-5 flex items-center justify-center rounded bg-[#F1EFE8] hover:bg-[#EEEDFE] text-[#555] disabled:opacity-25 disabled:cursor-not-allowed">
+                                          <ChevronUp size={13} />
                                         </button>
                                         <button disabled={i === editDx[c.id].length - 1} onClick={() => setEditDx(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i + 1) }))}
-                                          className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
-                                          <ChevronDown size={11} />
+                                          className="w-5 h-5 flex items-center justify-center rounded bg-[#F1EFE8] hover:bg-[#EEEDFE] text-[#555] disabled:opacity-25 disabled:cursor-not-allowed">
+                                          <ChevronDown size={13} />
                                         </button>
                                       </div>
                                       <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{d.code}</span>
@@ -610,14 +610,14 @@ export function AdminClaims() {
                               <div className="space-y-1.5">
                                 {editCpt[c.id].map((cp: any, i: number) => (
                                   <div key={i} className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[#E8E8E4] rounded-lg">
-                                    <div className="flex flex-col flex-shrink-0">
+                                    <div className="flex flex-col gap-0.5 flex-shrink-0">
                                       <button disabled={i === 0} onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i - 1) }))}
-                                        className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
-                                        <ChevronUp size={11} />
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#F1EFE8] hover:bg-[#EEEDFE] text-[#555] disabled:opacity-25 disabled:cursor-not-allowed">
+                                        <ChevronUp size={13} />
                                       </button>
                                       <button disabled={i === editCpt[c.id].length - 1} onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i + 1) }))}
-                                        className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
-                                        <ChevronDown size={11} />
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#F1EFE8] hover:bg-[#EEEDFE] text-[#555] disabled:opacity-25 disabled:cursor-not-allowed">
+                                        <ChevronDown size={13} />
                                       </button>
                                     </div>
                                     <span className="text-[11px] font-semibold text-[#7F77DD] w-14 flex-shrink-0">{cp.code}</span>
