@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, MoreVertical } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
@@ -157,6 +157,16 @@ export function PatientChart() {
 
   const [archivingPatient, setArchivingPatient] = useState(false)
   const [deletingPatient, setDeletingPatient] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setActionsOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Book appointment
   const [bookOpen, setBookOpen] = useState(false)
@@ -495,7 +505,7 @@ export function PatientChart() {
             )}
           </div>
           {child && (
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-2 flex-shrink-0 items-center">
               {!child.is_archived && (
                 <>
                   <button
@@ -510,18 +520,31 @@ export function PatientChart() {
                   </button>
                 </>
               )}
-              <button
-                disabled={archivingPatient}
-                onClick={handleArchivePatient}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#F1EFE8] transition-colors disabled:opacity-50">
-                <Archive size={13} /> {child.is_archived ? 'Unarchive' : 'Archive'}
-              </button>
-              <button
-                disabled={deletingPatient}
-                onClick={handleDeletePatient}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-lg hover:bg-[#FEE2E2] transition-colors disabled:opacity-50">
-                <Trash2 size={13} /> Delete
-              </button>
+              {/* More actions menu */}
+              <div className="relative" ref={actionsRef}>
+                <button
+                  onClick={() => setActionsOpen(o => !o)}
+                  className="p-1.5 rounded-lg border border-[#E8E8E4] hover:bg-[#F1EFE8] text-[#555] transition-colors">
+                  <MoreVertical size={15} />
+                </button>
+                {actionsOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#E8E8E4] rounded-xl shadow-lg overflow-hidden z-30">
+                    <button
+                      disabled={archivingPatient}
+                      onClick={() => { setActionsOpen(false); handleArchivePatient() }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#555] hover:bg-[#FAFAF8] transition-colors disabled:opacity-50">
+                      <Archive size={14} /> {child.is_archived ? 'Unarchive patient' : 'Archive patient'}
+                    </button>
+                    <div className="h-px bg-[#F1EFE8]" />
+                    <button
+                      disabled={deletingPatient}
+                      onClick={() => { setActionsOpen(false); handleDeletePatient() }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#DC2626] hover:bg-[#FEF2F2] transition-colors disabled:opacity-50">
+                      <Trash2 size={14} /> Delete patient
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
