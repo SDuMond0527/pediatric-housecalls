@@ -58,9 +58,12 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
     : [null]
 
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
-  const cptCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
+  // Include all codes on the claim (convenience fees show for admin review).
+  // Non-Covered Services are stripped from the Stedi payload at submission time.
+  const cptCodes = allCptCodes
   const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
-  const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
+  const insuranceCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
+  const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = child?.insurance_provider ?? null
   const payerId = resolvePayer(payerName)
 

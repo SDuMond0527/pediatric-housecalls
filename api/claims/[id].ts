@@ -262,6 +262,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ test: true, accepted: true, acknowledgment: stediData })
       }
 
+      // Strip convenience / non-covered codes from the claim now that it's submitted to insurance
+      const insuranceCodes = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
+        .filter((c: any) => c.category !== 'Non-Covered Services')
+      const insuranceTotal = insuranceCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
+
       const [updated] = await sql`
         UPDATE claims SET
           status = 'submitted',
@@ -269,7 +274,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           stedi_response = ${JSON.stringify(stediData)}::jsonb,
           submission_error = NULL,
           submitted_at = now(),
-          updated_at = now()
+          updated_at = now(),
+          cpt_codes = ${JSON.stringify(insuranceCodes)}::jsonb,
+          total_charge = ${insuranceTotal}
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
       return res.json(updated)
     }
