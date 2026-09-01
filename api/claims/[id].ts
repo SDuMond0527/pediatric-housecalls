@@ -176,10 +176,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       },
       ...(needsClia ? {
         claimSupplementalInformation: {
-          referenceIdentification: [{
-            referenceIdentificationQualifier: 'X4',
-            referenceIdentification: PRACTICE_CLIA,
-          }],
+          cliaNumber: PRACTICE_CLIA,
         },
       } : {}),
     },
