@@ -204,6 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pcp, preferred_pharmacy,
       insurance_provider, insurance_member_id, insurance_group_number,
       insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
+      insurance_subscriber_relationship,
       insurance_card_front_url, insurance_card_back_url,
       nickname,
     } = req.body
@@ -218,6 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         pcp, preferred_pharmacy,
         insurance_provider, insurance_member_id, insurance_group_number,
         insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
+        insurance_subscriber_relationship,
         insurance_card_front_url, insurance_card_back_url,
         nickname
       )
@@ -244,6 +246,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${insurance_subscriber_name || null},
         ${insurance_subscriber_dob || null},
         ${insurance_subscriber_gender || null},
+        ${insurance_subscriber_relationship || null},
         ${insurance_card_front_url || null},
         ${insurance_card_back_url || null},
         ${nickname || null}

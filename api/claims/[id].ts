@@ -66,6 +66,16 @@ function buildStediPayload(claim: any, testMode = false): object {
     return 'U'
   }
 
+  const mapRelationship = (r: string | null | undefined): string => {
+    if (!r) return '19'
+    switch (r.toLowerCase()) {
+      case 'self':   return '18'
+      case 'spouse': return '01'
+      case 'child':  return '19'
+      default:       return 'G8'
+    }
+  }
+
   // BCBS payers require BL; others use CI
   const BCBS_PAYER_IDS = ['UPICO', 'BCSNC', 'NCBCBS', 'NCBLS', 'NCPNHP']
   const claimFilingCode = BCBS_PAYER_IDS.includes(claim.payer_id ?? '') ? 'BL' : 'CI'
@@ -134,7 +144,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       lastName:  claim.patient_last_name  ?? '',
       gender: mapGender(claim.patient_gender),
       dateOfBirth: fmtDate8(claim.patient_dob),
-      relationshipToSubscriberCode: '19',
+      relationshipToSubscriberCode: mapRelationship(claim.subscriber_relationship),
       ...(claim.patient_address ? {
         address: {
           address1: claim.patient_address,

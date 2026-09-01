@@ -12,6 +12,7 @@ const EMPTY_FORM = {
   parent_address: '', parent_city: '', parent_state: '', parent_zip: '',
   insurance_provider: '', insurance_member_id: '', insurance_group_number: '',
   insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '',
+  insurance_subscriber_relationship: '',
 }
 
 function Input({ label, required, ...props }: { label: string; required?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -132,9 +133,10 @@ export function Patients() {
 
   async function createPatient() {
     const checks: [string, string][] = [
-      [form.first_name.trim(), 'Given name is required'],
+      [form.first_name.trim(), 'Given first name is required'],
       [form.last_name.trim(), 'Last name is required'],
       [form.date_of_birth, 'Date of birth is required'],
+      [form.gender, 'Patient gender is required'],
       [form.parent_phone.trim(), 'Phone number is required'],
       [form.parent_email.trim(), 'Email is required'],
       [form.parent_address.trim(), 'Street address is required'],
@@ -146,6 +148,8 @@ export function Patients() {
       [form.insurance_group_number.trim(), 'Group number is required'],
       [form.insurance_subscriber_name.trim(), 'Subscriber name is required'],
       [form.insurance_subscriber_dob, 'Subscriber date of birth is required'],
+      [form.insurance_subscriber_gender, 'Subscriber gender is required'],
+      [form.insurance_subscriber_relationship, 'Subscriber relationship to patient is required'],
       [cardFront ? 'ok' : '', 'Front of insurance card is required'],
       [cardBack ? 'ok' : '', 'Back of insurance card is required'],
     ]
@@ -174,7 +178,8 @@ export function Patients() {
         insurance_group_number: form.insurance_group_number.trim(),
         insurance_subscriber_name: form.insurance_subscriber_name.trim(),
         insurance_subscriber_dob: form.insurance_subscriber_dob,
-        insurance_subscriber_gender: form.insurance_subscriber_gender || null,
+        insurance_subscriber_gender: form.insurance_subscriber_gender,
+        insurance_subscriber_relationship: form.insurance_subscriber_relationship,
       })
 
       const [frontUrl, backUrl] = await Promise.all([
@@ -352,7 +357,7 @@ export function Patients() {
               <Input label="Last name" required placeholder="Smith" {...field('last_name')} />
               <Input label="Nickname" placeholder="Optional" {...field('nickname')} />
               <Input label="Date of birth" required type="date" {...field('date_of_birth')} />
-              <Select label="Gender" {...field('gender')}>
+              <Select label="Gender" required {...field('gender')}>
                 <option value="">— select —</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -392,10 +397,17 @@ export function Patients() {
               <Input label="Group number" required {...field('insurance_group_number')} />
               <Input label="Subscriber name" required {...field('insurance_subscriber_name')} />
               <Input label="Subscriber DOB" required type="date" {...field('insurance_subscriber_dob')} />
-              <Select label="Subscriber gender" {...field('insurance_subscriber_gender')}>
+              <Select label="Subscriber gender" required {...field('insurance_subscriber_gender')}>
                 <option value="">— select —</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </Select>
+              <Select label="Subscriber relationship to patient" required {...field('insurance_subscriber_relationship')}>
+                <option value="">— select —</option>
+                <option value="Self">Self</option>
+                <option value="Spouse">Spouse</option>
+                <option value="Child">Child</option>
                 <option value="Other">Other</option>
               </Select>
             </div>
