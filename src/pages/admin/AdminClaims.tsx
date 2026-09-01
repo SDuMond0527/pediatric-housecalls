@@ -641,7 +641,7 @@ export function AdminClaims() {
                                         next[i] = { ...next[i], charge_amount: e.target.value }
                                         return { ...prev, [c.id]: next }
                                       })}
-                                      className="w-20 px-1.5 py-0.5 border border-[#E8E8E4] rounded text-[12px] outline-none focus:border-[#7F77DD]" />
+                                      className="w-20 px-1.5 py-0.5 border border-[#E8E8E4] rounded text-[12px] outline-none focus:border-[#7F77DD] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                                     <button onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: prev[c.id].filter((_: any, j: number) => j !== i) }))}
                                       className="text-[#DC2626] hover:opacity-70 flex-shrink-0">
                                       <Trash2 size={12} />
