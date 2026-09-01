@@ -12,6 +12,7 @@ const NOTE_TYPES = [
   'Text visit',
   'Sports physical',
   'RN IV fluids',
+  'In-home vaccine administration',
 ] as const
 type NoteType = typeof NOTE_TYPES[number]
 
@@ -114,6 +115,24 @@ Post-infusion: Patient tolerated fluids well. Improved hydration status.`,
 4. Return precautions discussed with family.
 5. Follow up with PCP or return to ED if symptoms worsen.`,
   },
+  'In-home vaccine administration': {
+    subjective: `Patient presenting for in-home vaccine administration per immunization schedule. No current illness or fever. No recent exposure to sick contacts. No known allergies to vaccine components. Parent denies any prior adverse vaccine reactions.`,
+    objective: `General: Alert, in no acute distress, well-nourished, well-hydrated child. No acute illness.
+Vital Signs: See above.
+
+Vaccine(s) administered:
+1. [Vaccine name] — Lot #: [___] · Exp: [___] · Site: [right / left] [deltoid / vastus lateralis / gluteus] · Route: [IM / SQ / intranasal]
+2. [Vaccine name] — Lot #: [___] · Exp: [___] · Site: [right / left] [deltoid / vastus lateralis / gluteus] · Route: [IM / SQ / intranasal]
+
+Patient/parent tolerated procedure well. No immediate adverse reaction.`,
+    assessment: `Patient presents for in-home vaccine administration. No contraindications to vaccination identified. Vaccines administered per current ACIP immunization schedule.`,
+    plan: `1. Vaccine(s) administered as documented above.
+2. Vaccine Information Statement(s) (VIS) provided and reviewed with parent prior to administration.
+3. Patient observed for 15 minutes post-vaccination — no adverse reactions noted.
+4. Next vaccines due: [age/date]
+5. Return precautions reviewed: local site reactions (redness, swelling, soreness) are common and expected. Administer age-appropriate dose of acetaminophen or ibuprofen for discomfort or low-grade fever as needed.
+6. Call 911 immediately for signs of anaphylaxis: difficulty breathing, swelling of face/throat, rapid heartbeat, dizziness, or loss of consciousness.`,
+  },
 }
 
 function visitTypeToNoteType(visitType: string): NoteType {
@@ -123,6 +142,7 @@ function visitTypeToNoteType(visitType: string): NoteType {
   if (v.includes('text')) return 'Text visit'
   if (v.includes('sports') || v.includes('physical')) return 'Sports physical'
   if (v.includes('iv') || v.includes('fluid')) return 'RN IV fluids'
+  if (v.includes('vaccine')) return 'In-home vaccine administration'
   return 'In-home sick visit'
 }
 
