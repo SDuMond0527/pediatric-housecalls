@@ -32,6 +32,16 @@ function t(time24: string): string {
   return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`
 }
 
+const RESCHEDULE_SLOTS: string[] = []
+for (let i = 0; i < 68; i++) {
+  const totalMin = 6 * 60 + i * 15
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  RESCHEDULE_SLOTS.push(`${h12}:${m.toString().padStart(2, '0')} ${ampm}`)
+}
+
 function parseTime(raw: string): string {
   const s = raw.trim().toUpperCase()
   const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/)
@@ -218,6 +228,7 @@ export function Today() {
         scheduled_date: editDate,
         scheduled_time: time24,
       })
+      invokeNotifications({ type: 'appointment_rescheduled', appointmentId: editTarget.id }).catch(() => {})
       if (providerChanged) {
         const newProv = allProviders.find(p => p.id === editProviderId)
         invokeNotifications({
@@ -793,7 +804,7 @@ export function Today() {
                             )}
                             {appt.status !== 'cancelled' && appt.status !== 'done' && (
                               <Button variant="secondary" size="sm" onClick={() => openEdit(appt)}>
-                                <Pencil size={13} /> Edit
+                                <Pencil size={13} /> Reschedule
                               </Button>
                             )}
                             {appt.status !== 'cancelled' && appt.status !== 'done' && (
@@ -1071,7 +1082,7 @@ export function Today() {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { if (!editSubmitting) setEditTarget(null) }} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit appointment</h2>
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Reschedule appointment</h2>
               <button onClick={() => setEditTarget(null)} disabled={editSubmitting}
                 className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
                 <X size={16} />
@@ -1112,23 +1123,17 @@ export function Today() {
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
                     Time {editLoadingSlots && <span className="text-[#999] font-normal normal-case">(loading…)</span>}
                   </label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {TIME_SLOTS.map(slot => {
-                      const taken = editTakenTimes.includes(slot)
-                      const selected = editTime === slot
-                      return (
-                        <button key={slot} disabled={taken} onClick={() => setEditTime(slot)}
-                          className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans
-                            ${selected ? 'bg-[#7F77DD] border-[#7F77DD] text-white' :
-                              taken ? 'border-[#E8E8E4] bg-[#F8F8F6] text-[#C0C0BB] cursor-not-allowed line-through' :
-                              'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'}`}>
-                          {slot}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <select value={editTime} onChange={e => setEditTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Select time...</option>
+                    {RESCHEDULE_SLOTS.map(slot => (
+                      <option key={slot} value={slot} disabled={editTakenTimes.includes(slot)}>
+                        {slot}{editTakenTimes.includes(slot) ? ' (booked)' : ''}
+                      </option>
+                    ))}
+                  </select>
                   {editTakenTimes.length > 0 && (
-                    <p className="text-[11px] text-[#999] mt-1.5">Strikethrough times are already booked for this provider.</p>
+                    <p className="text-[11px] text-[#999] mt-1.5">Times marked "booked" are already taken for this provider.</p>
                   )}
                 </div>
               )}
@@ -1137,7 +1142,7 @@ export function Today() {
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setEditTarget(null)} disabled={editSubmitting}>Cancel</Button>
               <Button variant="primary" className="flex-1" disabled={!editDate || !editTime || !editProviderId} loading={editSubmitting} onClick={saveEdit}>
-                Save changes
+                Save reschedule
               </Button>
             </div>
           </div>
