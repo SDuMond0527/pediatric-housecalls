@@ -1125,8 +1125,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Manual appointment added by provider ──────────────────────────────────
     if (body.type === 'appointment_added') {
-      const { visitType, parentEmail } = body
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added. View: ${PORTAL_URL}/admin/schedule`, undefined)
+      const { visitType, parentEmail, providerId, providerName, date, time } = body
+
+      const [assignedProvider] = providerId
+        ? await sql`SELECT name, email, phone FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
+        : [null]
+
+      const dateFormatted = date ? formatDate(date) : ''
+      const timeStr = (() => {
+        if (!time) return ''
+        const [h, m] = String(time).split(':').map(Number)
+        const ampm = h >= 12 ? 'PM' : 'AM'
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
+      })()
+
+      if (assignedProvider?.email) {
+        const html = providerNotificationEmail({ visitType, date: dateFormatted, time: timeStr, zone: body.zone ?? '', ref: '', providerName: assignedProvider.name })
+        await sendEmail(assignedProvider.email, `New appointment added — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, html)
+      }
+      if (assignedProvider?.phone) {
+        await sendSMS(assignedProvider.phone, `${PRACTICE_NAME}: New appointment added to your schedule — ${visitType}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`)
+      }
+
+      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, undefined)
 
       if (visitType === 'In-home IV fluids' && parentEmail) {
         await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())

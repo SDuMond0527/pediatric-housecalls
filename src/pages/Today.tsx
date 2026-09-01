@@ -473,6 +473,7 @@ export function Today() {
 
     invokeNotifications({
       type: 'appointment_added',
+      providerId,
       providerName: assignedProvider?.name || provider.name,
       visitType: addForm.visitType,
       zone: addForm.zone || addForm.address || 'Unspecified',
