@@ -5,6 +5,13 @@ import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr]
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
+  return next
+}
+
 type Tab = 'review' | 'submitted'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
@@ -536,13 +543,24 @@ export function AdminClaims() {
                             </div>
                             {editDx[c.id] ? (
                               <div>
-                                <div className="flex flex-wrap gap-1.5 mb-2">
-                                  {editDx[c.id].map((d: any) => (
-                                    <span key={d.code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEEDFE] text-[#3C3489] rounded-full text-[11px] font-medium">
-                                      {d.code}
+                                <div className="space-y-1.5 mb-2">
+                                  {editDx[c.id].map((d: any, i: number) => (
+                                    <div key={d.code} className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[#E8E8E4] rounded-lg">
+                                      <div className="flex flex-col flex-shrink-0">
+                                        <button disabled={i === 0} onClick={() => setEditDx(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i - 1) }))}
+                                          className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
+                                          <ChevronUp size={11} />
+                                        </button>
+                                        <button disabled={i === editDx[c.id].length - 1} onClick={() => setEditDx(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i + 1) }))}
+                                          className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
+                                          <ChevronDown size={11} />
+                                        </button>
+                                      </div>
+                                      <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{d.code}</span>
+                                      <span className="text-[11px] text-[#1A1A2E] flex-1 truncate">{d.name}</span>
                                       <button onClick={() => setEditDx(prev => ({ ...prev, [c.id]: prev[c.id].filter((x: any) => x.code !== d.code) }))}
-                                        className="hover:text-red-600 ml-0.5"><X size={9} /></button>
-                                    </span>
+                                        className="text-[#DC2626] hover:opacity-70 flex-shrink-0"><X size={11} /></button>
+                                    </div>
                                   ))}
                                 </div>
                                 <div className="relative">
@@ -592,6 +610,16 @@ export function AdminClaims() {
                               <div className="space-y-1.5">
                                 {editCpt[c.id].map((cp: any, i: number) => (
                                   <div key={i} className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-[#E8E8E4] rounded-lg">
+                                    <div className="flex flex-col flex-shrink-0">
+                                      <button disabled={i === 0} onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i - 1) }))}
+                                        className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
+                                        <ChevronUp size={11} />
+                                      </button>
+                                      <button disabled={i === editCpt[c.id].length - 1} onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: moveItem(prev[c.id], i, i + 1) }))}
+                                        className="text-[#999] hover:text-[#1A1A2E] disabled:opacity-20 leading-none">
+                                        <ChevronDown size={11} />
+                                      </button>
+                                    </div>
                                     <span className="text-[11px] font-semibold text-[#7F77DD] w-14 flex-shrink-0">{cp.code}</span>
                                     <span className="text-[11px] text-[#1A1A2E] flex-1 truncate">{cp.description}</span>
                                     <label className="text-[10px] text-[#999] whitespace-nowrap">Mod:</label>
