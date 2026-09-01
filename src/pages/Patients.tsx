@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Search, ChevronRight, Plus } from 'lucide-react'
+import { Search, ChevronRight, Plus, Upload, X } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { searchChildren, providerCreateChild } from '../lib/api'
+import { searchChildren, providerCreateChild, providerUpdateChild, providerUploadInsuranceCard } from '../lib/api'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 
 const EMPTY_FORM = {
-  first_name: '', last_name: '', date_of_birth: '', gender: '',
+  first_name: '', last_name: '', date_of_birth: '', gender: '', nickname: '',
   parent_name: '', parent_phone: '', parent_email: '',
   parent_address: '', parent_city: '', parent_state: '', parent_zip: '',
   insurance_provider: '', insurance_member_id: '', insurance_group_number: '',
   insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '',
 }
 
-function Input({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Input({ label, required, ...props }: { label: string; required?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div>
-      <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">{label}</label>
+      <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+        {label}{required && <span className="text-[#C0392B] ml-0.5">*</span>}
+      </label>
       <input
         className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white"
         {...props}
@@ -26,14 +28,58 @@ function Input({ label, ...props }: { label: string } & React.InputHTMLAttribute
   )
 }
 
-function Select({ label, children, ...props }: { label: string } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+function Select({ label, required, children, ...props }: { label: string; required?: boolean } & React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div>
-      <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">{label}</label>
+      <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+        {label}{required && <span className="text-[#C0392B] ml-0.5">*</span>}
+      </label>
       <select
         className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white"
         {...props}
       >{children}</select>
+    </div>
+  )
+}
+
+function CardUpload({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const preview = file ? URL.createObjectURL(file) : null
+
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+        {label}<span className="text-[#C0392B] ml-0.5">*</span>
+      </label>
+      <div
+        onClick={() => inputRef.current?.click()}
+        className="relative w-full h-28 border-2 border-dashed border-[#E8E8E4] rounded-lg overflow-hidden cursor-pointer hover:border-[#7F77DD] transition-colors bg-[#FAFAF8] flex items-center justify-center"
+      >
+        {preview ? (
+          <>
+            <img src={preview} alt={label} className="w-full h-full object-cover" />
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onChange(null) }}
+              className="absolute top-1 right-1 w-5 h-5 bg-white rounded-full shadow flex items-center justify-center hover:bg-red-50"
+            >
+              <X size={11} className="text-[#999]" />
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-[#bbb]">
+            <Upload size={18} />
+            <span className="text-[11px]">Click to upload</span>
+          </div>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={e => onChange(e.target.files?.[0] ?? null)}
+      />
     </div>
   )
 }
@@ -71,6 +117,8 @@ export function Patients() {
 
   const [newPatientOpen, setNewPatientOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [cardFront, setCardFront] = useState<File | null>(null)
+  const [cardBack, setCardBack] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
@@ -83,34 +131,65 @@ export function Patients() {
   }
 
   async function createPatient() {
-    if (!form.first_name.trim() && !form.last_name.trim()) {
-      setSaveError('First or last name is required.')
-      return
+    const checks: [string, string][] = [
+      [form.first_name.trim(), 'Given name is required'],
+      [form.last_name.trim(), 'Last name is required'],
+      [form.date_of_birth, 'Date of birth is required'],
+      [form.parent_phone.trim(), 'Phone number is required'],
+      [form.parent_email.trim(), 'Email is required'],
+      [form.parent_address.trim(), 'Street address is required'],
+      [form.parent_city.trim(), 'City is required'],
+      [form.parent_state.trim(), 'State is required'],
+      [form.parent_zip.trim(), 'Zip code is required'],
+      [form.insurance_provider.trim(), 'Insurance company is required'],
+      [form.insurance_member_id.trim(), 'Member ID is required'],
+      [form.insurance_group_number.trim(), 'Group number is required'],
+      [form.insurance_subscriber_name.trim(), 'Subscriber name is required'],
+      [form.insurance_subscriber_dob, 'Subscriber date of birth is required'],
+      [cardFront ? 'ok' : '', 'Front of insurance card is required'],
+      [cardBack ? 'ok' : '', 'Back of insurance card is required'],
+    ]
+    for (const [val, msg] of checks) {
+      if (!val) { setSaveError(msg); return }
     }
+
     setSaving(true)
     setSaveError('')
     try {
       const row = await providerCreateChild({
-        first_name: form.first_name.trim() || null,
-        last_name: form.last_name.trim() || null,
-        date_of_birth: form.date_of_birth || null,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        nickname: form.nickname.trim() || null,
+        date_of_birth: form.date_of_birth,
         gender: form.gender || null,
         parent_name: form.parent_name || null,
-        parent_phone: form.parent_phone || null,
-        parent_email: form.parent_email || null,
-        parent_address: form.parent_address || null,
-        parent_city: form.parent_city || null,
-        parent_state: form.parent_state || null,
-        parent_zip: form.parent_zip || null,
-        insurance_provider: form.insurance_provider || null,
-        insurance_member_id: form.insurance_member_id || null,
-        insurance_group_number: form.insurance_group_number || null,
-        insurance_subscriber_name: form.insurance_subscriber_name || null,
-        insurance_subscriber_dob: form.insurance_subscriber_dob || null,
+        parent_phone: form.parent_phone.trim(),
+        parent_email: form.parent_email.trim(),
+        parent_address: form.parent_address.trim(),
+        parent_city: form.parent_city.trim(),
+        parent_state: form.parent_state.trim(),
+        parent_zip: form.parent_zip.trim(),
+        insurance_provider: form.insurance_provider.trim(),
+        insurance_member_id: form.insurance_member_id.trim(),
+        insurance_group_number: form.insurance_group_number.trim(),
+        insurance_subscriber_name: form.insurance_subscriber_name.trim(),
+        insurance_subscriber_dob: form.insurance_subscriber_dob,
         insurance_subscriber_gender: form.insurance_subscriber_gender || null,
       })
+
+      const [frontUrl, backUrl] = await Promise.all([
+        providerUploadInsuranceCard(row.id, cardFront!, 'front'),
+        providerUploadInsuranceCard(row.id, cardBack!, 'back'),
+      ])
+      await providerUpdateChild(row.id, {
+        insurance_card_front_url: frontUrl,
+        insurance_card_back_url: backUrl,
+      })
+
       setNewPatientOpen(false)
       setForm(EMPTY_FORM)
+      setCardFront(null)
+      setCardBack(null)
       navigate(isAdmin ? `/admin/chart/${row.id}` : `/chart/${row.id}`)
     } catch (e: any) {
       setSaveError(e?.message || 'Failed to create patient.')
@@ -159,7 +238,10 @@ export function Patients() {
   const displayed = isSearching ? searchResults : allChildren
 
   function childName(c: any): string {
-    return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.display_label || 'Unknown'
+    const first = c.first_name || ''
+    const nick = c.nickname ? ` (${c.nickname})` : ''
+    const last = c.last_name || ''
+    return [first + nick, last].filter(Boolean).join(' ') || c.display_label || 'Unknown'
   }
 
   function familyLabel(c: any): string {
@@ -204,7 +286,7 @@ export function Patients() {
             />
           </div>
           {tab === 'active' && (
-            <Button variant="primary" size="sm" onClick={() => { setForm(EMPTY_FORM); setSaveError(''); setNewPatientOpen(true) }}>
+            <Button variant="primary" size="sm" onClick={() => { setForm(EMPTY_FORM); setCardFront(null); setCardBack(null); setSaveError(''); setNewPatientOpen(true) }}>
               <Plus size={13} /> New patient
             </Button>
           )}
@@ -260,13 +342,16 @@ export function Patients() {
       </div>
 
       <Modal open={newPatientOpen} onClose={() => setNewPatientOpen(false)} title="New patient" size="lg">
-        <div className="space-y-5">
+        <div className="space-y-6">
+
+          {/* Patient */}
           <div>
             <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Patient</div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="First name *" placeholder="Jane" {...field('first_name')} />
-              <Input label="Last name *" placeholder="Smith" {...field('last_name')} />
-              <Input label="Date of birth" type="date" {...field('date_of_birth')} />
+              <Input label="Given name" required placeholder="Jane" {...field('first_name')} />
+              <Input label="Last name" required placeholder="Smith" {...field('last_name')} />
+              <Input label="Nickname" placeholder="Optional" {...field('nickname')} />
+              <Input label="Date of birth" required type="date" {...field('date_of_birth')} />
               <Select label="Gender" {...field('gender')}>
                 <option value="">— select —</option>
                 <option value="Male">Male</option>
@@ -276,41 +361,47 @@ export function Patients() {
             </div>
           </div>
 
+          {/* Contact */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Parent / guardian</div>
+            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Contact</div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Name" placeholder="John Smith" {...field('parent_name')} />
-              <Input label="Phone" type="tel" placeholder="(704) 555-0100" {...field('parent_phone')} />
+              <Input label="Parent / guardian name" placeholder="John Smith" {...field('parent_name')} />
+              <Input label="Phone" required type="tel" placeholder="(704) 555-0100" {...field('parent_phone')} />
               <div className="col-span-2">
-                <Input label="Email" type="email" placeholder="parent@email.com" {...field('parent_email')} />
+                <Input label="Email" required type="email" placeholder="parent@email.com" {...field('parent_email')} />
               </div>
               <div className="col-span-2">
-                <Input label="Address" placeholder="123 Main St" {...field('parent_address')} />
+                <Input label="Street address" required placeholder="123 Main St" {...field('parent_address')} />
               </div>
-              <Input label="City" placeholder="Charlotte" {...field('parent_city')} />
+              <Input label="City" required placeholder="Charlotte" {...field('parent_city')} />
               <div className="grid grid-cols-2 gap-3">
-                <Input label="State" placeholder="NC" maxLength={2} {...field('parent_state')} />
-                <Input label="Zip" placeholder="28201" maxLength={10} {...field('parent_zip')} />
+                <Input label="State" required placeholder="NC" maxLength={2} {...field('parent_state')} />
+                <Input label="Zip" required placeholder="28201" maxLength={10} {...field('parent_zip')} />
               </div>
             </div>
           </div>
 
+          {/* Insurance */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Insurance <span className="text-[#bbb] normal-case font-normal">(optional)</span></div>
+            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Insurance</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Input label="Payer / insurance company" placeholder="BlueCross BlueShield" {...field('insurance_provider')} />
+                <Input label="Insurance company" required placeholder="BlueCross BlueShield" {...field('insurance_provider')} />
               </div>
-              <Input label="Member ID" {...field('insurance_member_id')} />
-              <Input label="Group number" {...field('insurance_group_number')} />
-              <Input label="Subscriber name" {...field('insurance_subscriber_name')} />
-              <Input label="Subscriber DOB" type="date" {...field('insurance_subscriber_dob')} />
+              <Input label="Member ID" required {...field('insurance_member_id')} />
+              <Input label="Group number" required {...field('insurance_group_number')} />
+              <Input label="Subscriber name" required {...field('insurance_subscriber_name')} />
+              <Input label="Subscriber DOB" required type="date" {...field('insurance_subscriber_dob')} />
               <Select label="Subscriber gender" {...field('insurance_subscriber_gender')}>
                 <option value="">— select —</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Other">Other</option>
               </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <CardUpload label="Front of card" file={cardFront} onChange={setCardFront} />
+              <CardUpload label="Back of card" file={cardBack} onChange={setCardBack} />
             </div>
           </div>
 

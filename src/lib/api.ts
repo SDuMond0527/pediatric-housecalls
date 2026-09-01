@@ -160,6 +160,29 @@ export const updateChild = (id: string, body: Record<string, unknown>) =>
 export const providerCreateChild = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
 
+export const providerUpdateChild = (id: string, body: Record<string, unknown>) =>
+  apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export async function providerUploadInsuranceCard(childId: string, file: File, side: 'front' | 'back'): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const data = reader.result as string
+        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
+        const filename = `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`
+        const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
+          method: 'POST',
+          body: JSON.stringify({ data, filename }),
+        })
+        resolve(json.url)
+      } catch (e) { reject(e) }
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export const archiveChildInsurance = (id: string) =>
   apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify({ _action: 'archive_insurance' }) })
 

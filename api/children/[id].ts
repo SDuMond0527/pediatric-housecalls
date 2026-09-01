@@ -134,7 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           parent_address       = COALESCE(${b.parent_address       ?? null}, parent_address),
           parent_city          = COALESCE(${b.parent_city          ?? null}, parent_city),
           parent_state         = COALESCE(${b.parent_state         ?? null}, parent_state),
-          parent_zip           = COALESCE(${b.parent_zip           ?? null}, parent_zip)
+          parent_zip           = COALESCE(${b.parent_zip           ?? null}, parent_zip),
+          nickname             = COALESCE(${b.nickname             ?? null}, nickname)
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
       return res.json(row)
