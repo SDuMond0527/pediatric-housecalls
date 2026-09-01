@@ -60,8 +60,7 @@ export function Login() {
               <p className="text-[11px] text-[#999] uppercase tracking-wider mb-2.5">Try a demo role</p>
               <div className="space-y-2">
                 {([
-                  { role: 'Admin', desc: 'Analytics, scheduling, patient & provider management', bg: '#FAEEDA', tc: '#633806', creds: DEMO_CREDS.admin },
-                  { role: 'Provider', desc: "Today's schedule, patient notes, availability settings", bg: '#E1F5EE', tc: '#085041', creds: DEMO_CREDS.provider },
+                  { role: 'Admin / Provider', desc: 'Full access: scheduling, patient notes, analytics, provider management', bg: '#FAEEDA', tc: '#633806', creds: DEMO_CREDS.admin },
                 ] as const).map(({ role, desc, bg, tc, creds }) => (
                   <button key={role} type="button"
                     onClick={() => { setEmail(creds.email); setPassword(creds.password); setError('') }}
