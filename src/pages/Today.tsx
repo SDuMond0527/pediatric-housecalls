@@ -32,6 +32,17 @@ function t(time24: string): string {
   return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`
 }
 
+function safeFormatDate(val: any, pattern: string, fallback = 'Unknown date'): string {
+  if (!val) return fallback
+  try {
+    const d = val instanceof Date ? val : new Date(String(val).slice(0, 10) + 'T12:00:00')
+    if (isNaN(d.getTime())) return fallback
+    return format(d, pattern)
+  } catch {
+    return fallback
+  }
+}
+
 const RESCHEDULE_SLOTS: string[] = []
 for (let i = 0; i < 68; i++) {
   const totalMin = 6 * 60 + i * 15
@@ -710,8 +721,8 @@ export function Today() {
                     {block.reason && <span>{block.reason}</span>}
                     {block.start_date !== block.end_date && (
                       <span>
-                        {format(new Date(block.start_date + 'T12:00:00'), 'MMM d')} –{' '}
-                        {format(new Date(block.end_date + 'T12:00:00'), 'MMM d')}
+                        {safeFormatDate(block.start_date, 'MMM d')} –{' '}
+                        {safeFormatDate(block.end_date, 'MMM d')}
                       </span>
                     )}
                   </div>
@@ -1194,7 +1205,7 @@ export function Today() {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !noteSending && setNoteTarget(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h2 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">Send a note to parent</h2>
-            <p className="text-[12px] text-[#999] mb-4">{noteTarget.visit_type} · {format(new Date(noteTarget.scheduled_date + 'T12:00:00'), 'MMM d')} at {to12h(noteTarget.scheduled_time)}</p>
+            <p className="text-[12px] text-[#999] mb-4">{noteTarget.visit_type} · {safeFormatDate(noteTarget.scheduled_date, 'MMM d')} at {noteTarget.scheduled_time ? to12h(noteTarget.scheduled_time) : ''}</p>
             {noteSent ? (
               <div className="text-center py-4 text-[#1D9E75] font-medium">Note sent!</div>
             ) : (
@@ -1232,7 +1243,7 @@ export function Today() {
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-3 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
               <div className="text-[#999]">
-                {format(new Date(cancelTarget.scheduled_date + 'T12:00:00'), 'EEEE, MMMM d')} at {to12h(cancelTarget.scheduled_time)}
+                {safeFormatDate(cancelTarget.scheduled_date, 'EEEE, MMMM d')} at {cancelTarget.scheduled_time ? to12h(cancelTarget.scheduled_time) : 'Unknown time'}
               </div>
               <div className="text-[#999]">{cancelTarget.zone}</div>
             </div>
