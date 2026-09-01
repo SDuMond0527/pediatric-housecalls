@@ -46,8 +46,9 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
   const [appt] = note.appointment_id
     ? await sql`SELECT * FROM appointments WHERE id = ${note.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
-  const [child] = note.child_id
-    ? await sql`SELECT * FROM children WHERE id = ${note.child_id}::uuid AND practice_id = ${practiceId}::uuid`
+  const resolvedChildId = note.child_id ?? appt?.child_id ?? null
+  const [child] = resolvedChildId
+    ? await sql`SELECT * FROM children WHERE id = ${resolvedChildId}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
   const [provider] = note.provider_id
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid AND practice_id = ${practiceId}::uuid`
@@ -75,7 +76,7 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
       patient_address, patient_city, patient_state, patient_zip
     ) VALUES (
       ${practiceId}::uuid, ${encounterNoteId}::uuid,
-      ${note.appointment_id ?? null}::uuid, ${note.child_id ?? null}::uuid, ${note.provider_id ?? null}::uuid,
+      ${note.appointment_id ?? null}::uuid, ${resolvedChildId}::uuid, ${note.provider_id ?? null}::uuid,
       ${payerName}, ${payerId},
       ${child?.insurance_subscriber_name ?? null}, ${child?.insurance_subscriber_dob ?? null},
       ${child?.insurance_subscriber_gender ?? null}, ${child?.insurance_member_id ?? null},
@@ -119,21 +120,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const rows = status
         ? await sql`
-            SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+            SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
+              c.first_name AS child_first_name, c.last_name AS child_last_name,
               fp.email AS family_email, fp.phone AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
             FROM claims cl
-            LEFT JOIN children c ON c.id = cl.child_id
+            LEFT JOIN appointments a ON a.id = cl.appointment_id
+            LEFT JOIN children c ON c.id = COALESCE(cl.child_id, a.child_id)
             LEFT JOIN family_profiles fp ON fp.id = c.family_id
             LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
             WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
             ORDER BY cl.created_at DESC`
         : await sql`
-            SELECT cl.*, c.first_name AS child_first_name, c.last_name AS child_last_name,
+            SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
+              c.first_name AS child_first_name, c.last_name AS child_last_name,
               fp.email AS family_email, fp.phone AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
             FROM claims cl
-            LEFT JOIN children c ON c.id = cl.child_id
+            LEFT JOIN appointments a ON a.id = cl.appointment_id
+            LEFT JOIN children c ON c.id = COALESCE(cl.child_id, a.child_id)
             LEFT JOIN family_profiles fp ON fp.id = c.family_id
             LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
             WHERE cl.practice_id = ${practiceId}::uuid

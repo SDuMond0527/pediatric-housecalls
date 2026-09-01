@@ -458,9 +458,9 @@ export function AdminClaims() {
                               <div><span className="text-[#999]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
                               <div><span className="text-[#999]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
                               <div><span className="text-[#999]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
-                              {c.child_id && (
+                              {(c.effective_child_id ?? c.child_id) && (
                                 <div><span className="text-[#999]">Encounter note: </span>
-                                  <Link to={`/admin/chart/${c.child_id}`} className="text-[#7F77DD] hover:underline inline-flex items-center gap-1 text-[13px]">
+                                  <Link to={`/admin/chart/${c.effective_child_id ?? c.child_id}`} className="text-[#7F77DD] hover:underline inline-flex items-center gap-1 text-[13px]">
                                     <FileText size={12} /> View in patient chart
                                   </Link>
                                 </div>
