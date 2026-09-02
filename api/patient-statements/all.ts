@@ -51,8 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.child_id,
         COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
         COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
-        COALESCE(ps.patient_dob,        c.patient_dob::text)                 AS patient_dob,
-        COALESCE(ps.date_of_service,    c.service_date::text)                AS service_date,
+        COALESCE(ps.patient_dob::text,  c.patient_dob::text)                 AS patient_dob,
+        COALESCE(ps.date_of_service::text, c.service_date::text)             AS service_date,
         NULLIF(TRIM(
           COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name, '') || ' ' ||
           COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name,  '')
