@@ -31,7 +31,7 @@ interface WaitlistEntry {
   created_at: string
 }
 
-const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredDate: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
 
 function safeFormat(val: unknown, fmt: string): string {
   try {
@@ -147,12 +147,17 @@ export function Waitlist() {
     if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
     if (addForm.complaint) noteParts.push(`Complaint: ${addForm.complaint}`)
     try {
+      const preferredWindow = [
+        addForm.preferredDate ? new Date(addForm.preferredDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+        addForm.preferredTime,
+      ].filter(Boolean).join(' — ') || null
+
       await createWaitlistEntry({
         visit_type: addForm.visitType || null,
         zip: addForm.zip,
         state: addForm.state,
         complaint: addForm.complaint,
-        preferred_time_window: addForm.preferredTime || null,
+        preferred_time_window: preferredWindow,
         notes: noteParts.join(' | '),
       })
       setAddSubmitting(false)
@@ -297,8 +302,8 @@ export function Waitlist() {
         </div>
         <div className="flex items-center gap-2">
           {visible.length > 0 && <Badge variant="amber">{visible.length} open</Badge>}
-          <Button size="sm" variant="secondary" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false) }}>
-            <Plus size={13} /> Add patient
+          <Button size="sm" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false) }}>
+            <Plus size={13} /> Add patient to waitlist
           </Button>
         </div>
       </div>
@@ -461,17 +466,25 @@ export function Waitlist() {
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD]" />
               </div>
 
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time</label>
-                <select value={addForm.preferredTime} onChange={e => setField('preferredTime', e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
-                  <option value="">Any time</option>
-                  <option>Morning (before noon)</option>
-                  <option>Afternoon (noon–5pm)</option>
-                  <option>After 5pm</option>
-                  <option>Weekdays only</option>
-                  <option>Weekends OK</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred date</label>
+                  <input type="date" value={addForm.preferredDate} onChange={e => setField('preferredDate', e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time</label>
+                  <select value={addForm.preferredTime} onChange={e => setField('preferredTime', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Any time</option>
+                    <option>Morning (before noon)</option>
+                    <option>Afternoon (noon–5pm)</option>
+                    <option>After 5pm</option>
+                    <option>Weekdays only</option>
+                    <option>Weekends OK</option>
+                  </select>
+                </div>
               </div>
 
               {!selectedChild && (
