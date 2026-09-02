@@ -37,7 +37,7 @@ export function AdminWaitlist() {
   const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'waiting' | 'all'>('waiting')
+  const [filter, setFilter] = useState<'waiting' | 'all'>('all')
 
   // Add patient modal
   const [addOpen, setAddOpen] = useState(false)
@@ -203,18 +203,10 @@ export function AdminWaitlist() {
           <div className="text-[12px] text-[#999] mt-0.5">Families waiting for an available appointment</div>
         </div>
         <div className="flex items-center gap-2">
-          {filter === 'waiting' && waitingCount > 0 && <Badge variant="amber">{waitingCount} waiting</Badge>}
+          {waitingCount > 0 && <Badge variant="amber">{waitingCount} waiting</Badge>}
           <Button size="sm" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false); setAddError(null) }}>
             <Plus size={13} /> Add patient to waitlist
           </Button>
-          <div className="flex gap-1 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-0.5">
-            {(['waiting', 'all'] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-[12px] font-medium capitalize transition-colors ${filter === f ? 'bg-white shadow-sm text-[#1A1A2E]' : 'text-[#999] hover:text-[#555]'}`}>
-                {f === 'waiting' ? 'Active' : 'All'}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
