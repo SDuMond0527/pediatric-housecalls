@@ -5,6 +5,8 @@ import { createAppointment, invokeNotifications, getProviders, getPracticeZones 
 import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 
+const DUAL_PROVIDER_TYPES = ['CMA + telemedicine', 'In-home IV fluids'] as const
+
 interface Props {
   child: any
   onClose: () => void
@@ -22,6 +24,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState({
     provider_id: '',
+    second_provider_id: '',
     visit_type: '',
     scheduled_date: today,
     scheduled_time: '9:00 AM',
@@ -30,6 +33,13 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isDual = DUAL_PROVIDER_TYPES.includes(form.visit_type as any)
+  const isCma = form.visit_type === 'CMA + telemedicine'
+  const firstLabel  = isCma ? 'CMA (in-home)' : 'RN (in-home)'
+  const secondLabel = 'MD / NP (telemedicine)'
+
+  const mdNpProviders = providers.filter(p => p.role === 'MD' || p.role === 'NP')
+
   useEffect(() => {
     getProviders().then(data => setProviders((data ?? []).filter((p: any) => p.is_active && p.role !== 'admin'))).catch(() => {})
     getPracticeZones().then(data => setZones((data ?? []).map((z: any) => z.zone_name))).catch(() => {})
@@ -37,6 +47,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
+  }
+
+  function onVisitTypeChange(vt: string) {
+    setForm(f => ({ ...f, visit_type: vt, provider_id: '', second_provider_id: '' }))
   }
 
   // Convert "9:00 AM" → "09:00"
@@ -53,19 +67,33 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
       setError('Please fill in all fields.')
       return
     }
+    if (isDual && !form.second_provider_id) {
+      setError(`Please select the ${secondLabel} for this visit.`)
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
-      const appt = await createAppointment({
-        provider_id: form.provider_id,
+      const base = {
         visit_type: form.visit_type,
         zone: form.zone,
         scheduled_date: form.scheduled_date,
         scheduled_time: to24h(form.scheduled_time),
         child_id: child.id,
         status: 'upcoming',
+      }
+      const appt = await createAppointment({
+        ...base,
+        provider_id: form.provider_id,
+        second_provider_id: isDual ? form.second_provider_id : undefined,
       })
-      await invokeNotifications({ type: 'admin_booked', appointmentId: appt.id })
+      // Notify primary provider
+      const primaryId = appt.primary?.id ?? appt.id
+      await invokeNotifications({ type: 'admin_booked', appointmentId: primaryId })
+      // Notify secondary provider if dual booking
+      if (appt.secondary?.id) {
+        await invokeNotifications({ type: 'admin_booked', appointmentId: appt.secondary.id })
+      }
       onBooked()
     } catch (e: any) {
       setError(e.message ?? 'Failed to book appointment')
@@ -93,22 +121,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Provider */}
-          <div>
-            <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">Provider</label>
-            <select value={form.provider_id} onChange={e => set('provider_id', e.target.value)} required
-              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
-              <option value="">— select —</option>
-              {providers.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
-              ))}
-            </select>
-          </div>
-
           {/* Visit type */}
           <div>
             <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">Visit Type</label>
-            <select value={form.visit_type} onChange={e => set('visit_type', e.target.value)} required
+            <select value={form.visit_type} onChange={e => onVisitTypeChange(e.target.value)} required
               className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
               <option value="">— select —</option>
               {vtLoading
@@ -117,6 +133,46 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
               }
             </select>
           </div>
+
+          {/* Provider(s) */}
+          {isDual ? (
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Providers</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-[#777] block mb-1">{firstLabel}</label>
+                  <select value={form.provider_id} onChange={e => set('provider_id', e.target.value)} required
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">— select —</option>
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-[#777] block mb-1">{secondLabel}</label>
+                  <select value={form.second_provider_id} onChange={e => set('second_provider_id', e.target.value)} required
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">— select —</option>
+                    {(mdNpProviders.length > 0 ? mdNpProviders : providers).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">Provider</label>
+              <select value={form.provider_id} onChange={e => set('provider_id', e.target.value)} required
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                <option value="">— select —</option>
+                {providers.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3">
