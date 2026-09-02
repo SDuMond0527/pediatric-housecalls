@@ -478,6 +478,9 @@ export const createLabOrder = (body: {
   notes?: string
 }) => apiFetch<any>('/api/labs/order', { method: 'POST', body: JSON.stringify(body) })
 
+export const emailLabOrder = (orderId: string) =>
+  apiFetch<{ sent: boolean; to: string }>(`/api/labs/${orderId}/email`, { method: 'POST' })
+
 // ── PHI Audit Log ─────────────────────────────────────────────
 export function logAudit(action: string, resource_type: string, resource_id?: string) {
   apiFetch<void>('/api/audit', { method: 'POST', body: JSON.stringify({ action, resource_type, resource_id }) })

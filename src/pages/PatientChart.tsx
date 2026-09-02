@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
@@ -188,6 +188,20 @@ export function PatientChart() {
   const [orderSubmitting, setOrderSubmitting] = useState(false)
   const [orderError, setOrderError] = useState<string | null>(null)
   const [testSearch, setTestSearch] = useState('')
+  const [emailingOrderId, setEmailingOrderId] = useState<string | null>(null)
+  const [emailOrderResult, setEmailOrderResult] = useState<Record<string, 'sent' | 'error'>>({})
+
+  async function handleEmailLabOrder(orderId: string) {
+    setEmailingOrderId(orderId)
+    try {
+      await emailLabOrder(orderId)
+      setEmailOrderResult(prev => ({ ...prev, [orderId]: 'sent' }))
+    } catch {
+      setEmailOrderResult(prev => ({ ...prev, [orderId]: 'error' }))
+    } finally {
+      setEmailingOrderId(null)
+    }
+  }
 
   async function loadLabs() {
     if (!childId) return
@@ -1503,6 +1517,25 @@ export function PatientChart() {
 
                         {order.labcorp_order_id && (
                           <div className="text-[11px] text-[#999] mt-1">Labcorp ID: <span className="font-mono">{order.labcorp_order_id}</span></div>
+                        )}
+
+                        {order.status === 'pending' && (
+                          <div className="mt-3 pt-3 border-t border-[#F1EFE8] flex items-center gap-3">
+                            <button
+                              onClick={() => handleEmailLabOrder(order.id)}
+                              disabled={emailingOrderId === order.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-[#7F77DD] text-[#7F77DD] rounded-lg hover:bg-[#7F77DD]/8 transition-colors disabled:opacity-50"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                              {emailingOrderId === order.id ? 'Sending…' : 'Email order to patient'}
+                            </button>
+                            {emailOrderResult[order.id] === 'sent' && (
+                              <span className="text-[12px] text-emerald-600 font-medium">Sent ✓</span>
+                            )}
+                            {emailOrderResult[order.id] === 'error' && (
+                              <span className="text-[12px] text-red-500">Failed — check patient email on file</span>
+                            )}
+                          </div>
                         )}
 
                         {order.results?.length > 0 && (
