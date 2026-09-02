@@ -642,6 +642,10 @@ export function BookVisit() {
     setFirstAvailResult({ provider: winner.name, time: winner.firstSlot })
     setBooking(b => ({ ...b, time: winner.firstSlot }))
     setFindingFirstAvail(false)
+    // Load the winner's full availability window so the slot grid
+    // correctly enforces that provider's hours. Without this, visitTypeWindow
+    // stays null and every time slot appears — including out-of-hours ones.
+    loadBookedTimes(winner.name, date, winner.firstSlot)
   }
 
   async function findCmaAvailability(date: string, zone: string) {
