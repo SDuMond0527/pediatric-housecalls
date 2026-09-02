@@ -49,21 +49,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   })
 
-  if (reactivate) {
-    await client.send(new AdminEnableUserCommand({ UserPoolId: userPoolId, Username: target.cognito_sub }))
-    const [updated] = await sql`
-      UPDATE providers SET is_active = true, updated_at = now()
-      WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
-      RETURNING *
-    `
-    return res.json(updated)
-  } else {
-    await client.send(new AdminDisableUserCommand({ UserPoolId: userPoolId, Username: target.cognito_sub }))
-    const [updated] = await sql`
-      UPDATE providers SET is_active = false, updated_at = now()
-      WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
-      RETURNING *
-    `
-    return res.json(updated)
+  // Only touch Cognito if the provider has a login account
+  if (target.cognito_sub) {
+    try {
+      if (reactivate) {
+        await client.send(new AdminEnableUserCommand({ UserPoolId: userPoolId, Username: target.cognito_sub }))
+      } else {
+        await client.send(new AdminDisableUserCommand({ UserPoolId: userPoolId, Username: target.cognito_sub }))
+      }
+    } catch (cognitoErr: any) {
+      // Log but don't block — still update the DB flag
+      console.error('Cognito toggle failed:', cognitoErr?.message ?? cognitoErr)
+    }
   }
+
+  const [updated] = await sql`
+    UPDATE providers SET is_active = ${!reactivate ? false : true}, updated_at = now()
+    WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
+    RETURNING *
+  `
+  return res.json(updated)
 }
