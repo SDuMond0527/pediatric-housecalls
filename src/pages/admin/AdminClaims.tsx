@@ -746,6 +746,11 @@ export function AdminClaims() {
                                 <div className="text-[12px] font-semibold text-[#1A1A2E] pt-1 border-t border-[#F1EFE8]">
                                   Total: {fmtMoney(c.total_charge)}
                                 </div>
+                                {c.clia_number && (
+                                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#E1F5EE] border border-[#A7F3D0] text-[11px] font-semibold text-[#085041]">
+                                    CLIA: {c.clia_number}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
