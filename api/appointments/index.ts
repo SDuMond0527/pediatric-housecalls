@@ -107,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { provider_id, second_provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state } = req.body
+    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state } = req.body
     const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
 
     // Server-side availability guard for family-originated bookings.
@@ -205,40 +205,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       return res.json({ rn: rnRow, md: mdRow })
-    }
-
-    // Admin/provider dual-provider bookings (CMA+tele or IV fluids with explicit second_provider_id)
-    if (auth.type === 'provider' && second_provider_id &&
-        (visit_type === 'CMA + telemedicine' || visit_type === 'In-home IV fluids')) {
-      const isCma = visit_type === 'CMA + telemedicine'
-      const [p1Row] = await sql`SELECT name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
-      const [p2Row] = await sql`SELECT name FROM providers WHERE id = ${second_provider_id}::uuid LIMIT 1`
-      const p1Name = (p1Row?.name ?? '') as string
-      const p2Name = (p2Row?.name ?? '') as string
-      const p1Role = isCma ? 'CMA' : 'RN — in-home'
-      const p2Role = 'MD/NP — telemedicine'
-      const p1Notes = (notes ?? '') + (p2Name ? `|PARTNER:${p2Name} (${p2Role})` : '')
-      const p2Notes = (notes ?? '') + (p1Name ? `|PARTNER:${p1Name} (${p1Role})` : '')
-
-      const [primaryRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${p1Notes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-        RETURNING *`
-      await sql`
-        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (primaryRow as any).id})`
-        .catch(() => {})
-
-      const [secondaryRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${second_provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${p2Notes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-        RETURNING *`
-      await sql`
-        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${second_provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`
-        .catch(() => {})
-
-      return res.json({ primary: primaryRow, secondary: secondaryRow })
     }
 
     const [row] = await sql`
