@@ -929,36 +929,50 @@ export function BookVisit() {
           `Available: ${iv.availableTimes}`,
         ].filter(Boolean).join(' | '))
       }
-      const apptRecord = await familyCreateAppointment({
-        provider_id: providerUid,
-        visit_type: booking.visitType,
-        zone: booking.zone,
-        scheduled_time: to24hr(booking.time),
-        scheduled_date: booking.date,
-        status: 'upcoming',
-        notes: noteParts.join('|'),
-        duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
-        child_id: booking.selectedChildIds[0] || null,
-        ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
-      }).catch(() => null)
+      let apptRecord: any = null
+      try {
+        apptRecord = await familyCreateAppointment({
+          provider_id: providerUid,
+          visit_type: booking.visitType,
+          zone: booking.zone,
+          scheduled_time: to24hr(booking.time),
+          scheduled_date: booking.date,
+          status: 'upcoming',
+          notes: noteParts.join('|'),
+          duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
+          child_id: booking.selectedChildIds[0] || null,
+          ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
+        })
+      } catch (e: any) {
+        setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
+        setSubmitting(false)
+        return
+      }
       // CMA+tele returns { cma, md }; IV fluids returns { rn, md }; all other visit types return the appointment row directly
       appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : isIvFluids ? apptRecord?.rn?.id : apptRecord?.id) || null
     }
 
-    const newBooking = await familyCreateBookingRequest({
-      family_id: family!.id,
-      child_ids: booking.selectedChildIds,
-      visit_type: booking.visitType,
-      preferred_provider: effectiveProvider || null,
-      zone: booking.zone || null,
-      state: booking.state || null,
-      preferred_date: booking.date,
-      preferred_time: booking.time,
-      status: 'confirmed',
-      confirmed_provider_id: providerUid,
-      reference_code: ref,
-      ...(convFee ? { convenience_fee: convFee.fee } : {}),
-    }).catch(() => null)
+    let newBooking: any = null
+    try {
+      newBooking = await familyCreateBookingRequest({
+        family_id: family!.id,
+        child_ids: booking.selectedChildIds,
+        visit_type: booking.visitType,
+        preferred_provider: effectiveProvider || null,
+        zone: booking.zone || null,
+        state: booking.state || null,
+        preferred_date: booking.date,
+        preferred_time: booking.time,
+        status: 'confirmed',
+        confirmed_provider_id: providerUid,
+        reference_code: ref,
+        ...(convFee ? { convenience_fee: convFee.fee } : {}),
+      })
+    } catch (e: any) {
+      setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
+      setSubmitting(false)
+      return
+    }
 
     if (!newBooking?.id) {
       setSubmitError('Something went wrong submitting your booking. Please try again or call us directly.')

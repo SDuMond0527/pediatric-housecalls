@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { validateProviderSlot } from '../_lib/validateProviderSlot'
 
 async function alertNoOnCallMD(sql: ReturnType<typeof neon>, practiceId: string, visitType: string, scheduledDate: string, scheduledTime: string, state: string) {
   try {
@@ -108,6 +109,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state } = req.body
     const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
+
+    // Server-side availability guard for family-originated bookings.
+    // Providers/admins may schedule outside normal hours intentionally.
+    if (auth.type === 'family' && provider_id && scheduled_time && scheduled_date) {
+      const slotError = await validateProviderSlot(
+        sql, provider_id, visit_type, scheduled_date, scheduled_time
+      )
+      if (slotError) return res.status(409).json({ error: slotError })
+    }
 
     // CMA + telemedicine family bookings: create CMA appointment + auto-assign on-call MD/NP
     if (visit_type === 'CMA + telemedicine' && auth.type === 'family') {
