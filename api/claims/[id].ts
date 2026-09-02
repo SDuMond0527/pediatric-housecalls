@@ -33,14 +33,14 @@ function getFacilityAddress(renderingProviderName: string | null) {
 
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
-  const QW_CODES = new Set(['87880', '87428'])
+  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
   // Only include valid CPT codes (exactly 5 alphanumeric chars, not starting with CV) — strips all convenience fees and internal codes
   const cptCodes  = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
     .filter((c: any) => {
       const code = String(c.code ?? '')
       return /^[A-Z0-9]{5}$/i.test(code) && !/^CV/i.test(code)
     })
-    .map((c: any) => QW_CODES.has(String(c.code)) ? { ...c, modifier: 'QW' } : c)
+    .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
   const billableTotal = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
 
   const fmtDate8 = (d: any) => {

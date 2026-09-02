@@ -387,6 +387,10 @@ interface CptCode {
   modifier?: string
 }
 
+const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
+const applyAutoModifier = (c: CptCode): CptCode =>
+  AUTO_MODIFIERS[c.code] ? { ...c, modifier: AUTO_MODIFIERS[c.code] } : c
+
 interface Props {
   appointment: Appointment
   childId: string | null
@@ -733,7 +737,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         if (durMatch) setTeleDuration(durMatch[1])
         setPlan(note.plan ?? '')
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
-        setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => ({ ...c, charge_amount: parseFloat(c.charge_amount) })) : [])
+        setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => applyAutoModifier({ ...c, charge_amount: parseFloat(c.charge_amount) })) : [])
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
         if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
           setVaccineEntries(note.vaccine_administrations)
@@ -2012,7 +2016,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                           .filter(c => !cptCodes.find(x => x.code === c.code))
                           .map(c => (
                             <button key={c.code}
-                              onClick={() => { setCptCodes(prev => [...prev, c]); }}
+                              onClick={() => { setCptCodes(prev => [...prev, applyAutoModifier(c)]); }}
                               className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F8F8F6] last:border-0 flex items-center justify-between gap-2 transition-colors">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{c.code}</span>

@@ -47,14 +47,14 @@ export async function generateClaimForNote(
     ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
 
-  const QW_CODES = new Set(['87880', '87428'])
+  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
   const cptCodes = allCptCodes
     .filter((c: any) => {
       const code = String(c.code ?? '')
       return c.category !== 'Non-Covered Services' && /^[A-Z0-9]{5}$/i.test(code) && !/^CV/i.test(code)
     })
-    .map((c: any) => QW_CODES.has(String(c.code)) ? { ...c, modifier: 'QW' } : c)
+    .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
   const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
   const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = child?.insurance_provider ?? null
