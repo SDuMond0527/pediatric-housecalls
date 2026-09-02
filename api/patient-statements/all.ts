@@ -30,7 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SELECT
         ps.id,
         ps.status,
-        ps.patient_name,
+        COALESCE(ps.patient_name, NULLIF(TRIM(COALESCE(ps.patient_first_name,'') || ' ' || COALESCE(ps.patient_last_name,'')), '')) AS patient_name,
+        ps.patient_first_name,
+        ps.patient_last_name,
+        ps.patient_dob,
+        ps.patient_email,
+        ps.patient_phone,
         ps.family_email,
         ps.family_phone,
         ps.date_of_service,
@@ -46,9 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ps.created_at,
         ps.claim_id,
         c.stedi_claim_id,
-        c.payer_name
+        c.payer_name,
+        c.child_id,
+        c.service_date,
+        ch.first_name AS child_first_name,
+        ch.last_name  AS child_last_name
       FROM patient_statements ps
       LEFT JOIN claims c ON c.id = ps.claim_id
+      LEFT JOIN children ch ON ch.id = c.child_id
       WHERE ps.practice_id = ${provider.practice_id}::uuid
         AND (${status ?? null}::text IS NULL OR ps.status = ${status ?? null})
       ORDER BY ps.created_at DESC
