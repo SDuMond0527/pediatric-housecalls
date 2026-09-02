@@ -37,7 +37,7 @@ export function AdminWaitlist() {
   const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'waiting' | 'all'>('all')
+  const [filter] = useState<'waiting' | 'all'>('all')
 
   // Add patient modal
   const [addOpen, setAddOpen] = useState(false)
