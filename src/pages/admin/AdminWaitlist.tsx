@@ -186,7 +186,7 @@ export function AdminWaitlist() {
     ].filter(Boolean).join(' — ') || null
 
     try {
-      await createWaitlistEntry({
+      const newEntry = await createWaitlistEntry({
         visit_type: addForm.visitType || null,
         zip: addForm.zip,
         state: addForm.state,
@@ -194,6 +194,9 @@ export function AdminWaitlist() {
         preferred_time_window: preferredWindow,
         notes: noteParts.join(' | '),
       })
+      if (newEntry?.id) {
+        invokeNotifications({ type: 'waitlist', waitlistEntryId: newEntry.id }).catch(() => {})
+      }
       closeAddModal()
       fetchEntries()
     } catch (err: any) {

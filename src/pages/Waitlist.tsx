@@ -213,7 +213,7 @@ export function Waitlist() {
         addForm.preferredTime,
       ].filter(Boolean).join(' — ') || null
 
-      await createWaitlistEntry({
+      const newEntry = await createWaitlistEntry({
         visit_type: addForm.visitType || null,
         zip: addForm.zip,
         state: addForm.state,
@@ -221,6 +221,9 @@ export function Waitlist() {
         preferred_time_window: preferredWindow,
         notes: noteParts.join(' | '),
       })
+      if (newEntry?.id) {
+        invokeNotifications({ type: 'waitlist', waitlistEntryId: newEntry.id }).catch(() => {})
+      }
       setAddSubmitting(false)
       setAddOpen(false)
       setAddForm(EMPTY_ADD)

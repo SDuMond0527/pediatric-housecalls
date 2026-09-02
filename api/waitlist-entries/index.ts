@@ -126,7 +126,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
       console.error('[waitlist] entry created:', row.id)
-      await sendWaitlistNotifications(row as Record<string, unknown>, sql).catch(e => console.error('[waitlist] notification error:', e))
       return res.json(row)
     }
 
@@ -192,7 +191,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO waitlist_entries (practice_id, family_id, visit_type, zip, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${b.family_id ?? null}, ${b.visit_type ?? null}, ${b.zip ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
-      await sendWaitlistNotifications(row as Record<string, unknown>, sql).catch(() => {})
       return res.json(row)
     } catch (e: any) {
       console.error('[waitlist POST]', e)

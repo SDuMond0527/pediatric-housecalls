@@ -815,7 +815,7 @@ export function BookVisit() {
       updateMyFamily({ phone: waitlistPhone }).catch(() => {})
     }
 
-    await familyCreateWaitlistEntry({
+    const waitlistEntry = await familyCreateWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
@@ -824,6 +824,10 @@ export function BookVisit() {
       notes: noteParts.join(' | '),
       status: 'waiting',
     }).catch(() => null)
+
+    if (waitlistEntry?.id) {
+      familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: waitlistEntry.id }).catch(() => {})
+    }
 
     setWaitlistSubmitting(false)
     setWaitlistOpen(false)
