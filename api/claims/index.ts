@@ -126,7 +126,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? await sql`
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
-              fp.email AS family_email, fp.phone AS family_phone,
+              fp.email AS family_email,
+              COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
             FROM claims cl
             LEFT JOIN appointments a ON a.id = cl.appointment_id
@@ -138,7 +139,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : await sql`
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
-              fp.email AS family_email, fp.phone AS family_phone,
+              fp.email AS family_email,
+              COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
             FROM claims cl
             LEFT JOIN appointments a ON a.id = cl.appointment_id
