@@ -47,6 +47,7 @@ export function Waitlist() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState<WaitlistEntry | null>(null)
+  const [acceptVisitType, setAcceptVisitType] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -248,7 +249,7 @@ export function Waitlist() {
     try {
       await createAppointment({
         provider_id: provider.id,
-        visit_type: accepting.visit_type || 'In-home sick visit',
+        visit_type: acceptVisitType || accepting.visit_type || 'In-home sick visit',
         zone: accepting.zip,
         scheduled_time: time24,
         scheduled_date: date,
@@ -357,7 +358,7 @@ export function Waitlist() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setDate(''); setTime('') }}>
+                  <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setAcceptVisitType(entry.visit_type || ''); setDate(''); setTime('') }}>
                     Accept and move to my schedule
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => passEntry(entry.id)}>
@@ -531,7 +532,6 @@ export function Waitlist() {
             </div>
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
-              <div className="font-medium text-[#1A1A2E]">{accepting.visit_type || 'Visit'}</div>
               <div className="flex items-center gap-1 text-[#999]">
                 <MapPin size={11} /> Zip {accepting.zip} · {stateLabel(accepting.state)}
               </div>
@@ -543,10 +543,18 @@ export function Waitlist() {
             </div>
 
             <p className="text-[13px] text-[#555] mb-4">
-              Pick a date and time. The family will be notified and the appointment will be added to your schedule.
+              Choose a visit type, date, and time. The family will be notified and the appointment will be added to your schedule.
             </p>
 
             <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={acceptVisitType} onChange={e => setAcceptVisitType(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                  <option value="">Select visit type…</option>
+                  {visitTypes.map(v => <option key={v.visit_type} value={v.visit_type}>{v.badge_label || v.visit_type}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
                 <input type="date" value={date} min={new Date().toISOString().split('T')[0]}
@@ -580,7 +588,7 @@ export function Waitlist() {
             )}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
-              <Button variant="teal" className="flex-1" disabled={!date || !time} loading={submitting} onClick={acceptEntry}>
+              <Button variant="teal" className="flex-1" disabled={!acceptVisitType || !date || !time} loading={submitting} onClick={acceptEntry}>
                 <CheckCircle2 size={14} /> Confirm
               </Button>
             </div>
