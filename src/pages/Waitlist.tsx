@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MapPin, Clock, CheckCircle2, X, Plus } from 'lucide-react'
+import { MapPin, Clock, CheckCircle2, X, Plus, Phone, XCircle, Pencil } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
@@ -33,12 +33,45 @@ interface WaitlistEntry {
 
 const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredDate: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
 
+const NOTE_ORDER = ['Patient', 'DOB', 'Email', 'Phone', 'Address', 'Allergies', 'Medications', 'PMH', 'PCP', 'Pharmacy', 'Insurance', 'Member ID', 'Group #', 'Complaint']
+
+function parseNotes(notes: string | null): Record<string, string> {
+  const map: Record<string, string> = {}
+  ;(notes || '').split(' | ').forEach(part => {
+    const colon = part.indexOf(': ')
+    if (colon > 0) {
+      const k = part.slice(0, colon).trim()
+      const v = part.slice(colon + 2).trim()
+      if (v) map[k] = v
+    }
+  })
+  return map
+}
+
+function rebuildNotes(map: Record<string, string>): string {
+  const parts: string[] = []
+  for (const k of NOTE_ORDER) {
+    if (map[k]) parts.push(`${k}: ${map[k]}`)
+  }
+  for (const [k, v] of Object.entries(map)) {
+    if (!NOTE_ORDER.includes(k) && v) parts.push(`${k}: ${v}`)
+  }
+  return parts.join(' | ')
+}
+
 function safeFormat(val: unknown, fmt: string): string {
   try {
     const d = val instanceof Date ? val : new Date(String(val))
     if (!isValid(d)) return ''
     return format(d, fmt)
   } catch { return '' }
+}
+
+const STATUS_COLORS: Record<string, { variant: 'amber' | 'blue' | 'teal' | 'gray'; label: string }> = {
+  waiting:   { variant: 'amber', label: 'Waiting' },
+  contacted: { variant: 'blue',  label: 'Contacted' },
+  converted: { variant: 'teal',  label: 'Converted' },
+  removed:   { variant: 'gray',  label: 'Removed' },
 }
 
 export function Waitlist() {
@@ -52,7 +85,6 @@ export function Waitlist() {
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
-  const [passed, setPassed] = useState<Set<string>>(new Set())
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ADD)
@@ -62,6 +94,34 @@ export function Waitlist() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [selectedChild, setSelectedChild] = useState<any | null>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Edit contact modal
+  const [editEntry, setEditEntry] = useState<WaitlistEntry | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
+  function openEdit(e: WaitlistEntry) {
+    const map = parseNotes(e.notes)
+    setEditEntry(e)
+    setEditName(map['Patient'] || e.family_name || '')
+    setEditPhone(e.family_phone || map['Phone'] || '')
+    setEditEmail(e.family_email || map['Email'] || '')
+  }
+
+  async function saveEdit() {
+    if (!editEntry) return
+    setEditSubmitting(true)
+    const map = parseNotes(editEntry.notes)
+    if (editName) map['Patient'] = editName; else delete map['Patient']
+    if (editPhone) map['Phone'] = editPhone; else delete map['Phone']
+    if (editEmail) map['Email'] = editEmail; else delete map['Email']
+    await updateWaitlistEntry(editEntry.id, { notes: rebuildNotes(map) })
+    setEditEntry(null)
+    setEditSubmitting(false)
+    fetchEntries()
+  }
 
   function setField(k: keyof typeof EMPTY_ADD, v: string) {
     setAddForm(f => ({ ...f, [k]: v }))
@@ -202,38 +262,43 @@ export function Waitlist() {
   async function fetchEntries() {
     if (!provider) return
     setLoading(true)
-    const data = await getWaitlistEntries({ status: 'waiting' })
-    const enriched = ((data ?? []) as WaitlistEntry[]).map(e => {
-      const notesFamily  = e.notes?.match(/Family:\s*([^|]+)/)?.[1]?.trim() ?? null
-      const notesPatient = e.notes?.match(/Patient:\s*([^|]+)/)?.[1]?.trim() ?? null
-      const notesEmail   = e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? null
-      const notesPhone   = e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? null
-      return {
-        ...e,
-        family_name: e.family_name || notesFamily || notesPatient || notesEmail || 'Unknown family',
-        family_email: e.family_email || notesEmail || null,
-        family_phone: e.family_phone || notesPhone || null,
-      }
-    })
+    const data = await getWaitlistEntries({})
+    const enriched = ((data ?? []) as WaitlistEntry[])
+      .filter(e => e.status !== 'removed' && e.status !== 'converted')
+      .map(e => {
+        const notesFamily  = e.notes?.match(/Family:\s*([^|]+)/)?.[1]?.trim() ?? null
+        const notesPatient = e.notes?.match(/Patient:\s*([^|]+)/)?.[1]?.trim() ?? null
+        const notesEmail   = e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? null
+        const notesPhone   = e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? null
+        return {
+          ...e,
+          family_name: e.family_name || notesFamily || notesPatient || notesEmail || 'Unknown family',
+          family_email: e.family_email || notesEmail || null,
+          family_phone: e.family_phone || notesPhone || null,
+        }
+      })
     setEntries(enriched)
     setLoading(false)
   }
 
   useEffect(() => { fetchEntries() }, [provider])
 
+  async function updateStatus(id: string, status: string) {
+    await updateWaitlistEntry(id, { status })
+    fetchEntries()
+  }
+
   async function acceptEntry() {
     if (!accepting || !provider || !date || !time) return
     setSubmitting(true)
     setAcceptError(null)
 
-    // Convert time to 24hr
     const [t, ampm] = time.split(' ')
     let [h, m] = t.split(':').map(Number)
     if (ampm === 'PM' && h !== 12) h += 12
     if (ampm === 'AM' && h === 12) h = 0
     const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
-    // Convert waitlist note labels to appointment note keys
     const LABEL_TO_KEY: Record<string, string> = {
       Patient: 'PATIENT', DOB: 'DOB', Email: 'PARENTEMAIL', Phone: 'PARENTPHONE',
       Allergies: 'ALLERGY', Medications: 'MEDS', PMH: 'PMH',
@@ -269,10 +334,8 @@ export function Waitlist() {
         notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
       })
 
-      // Mark waitlist entry as converted, recording which provider accepted it
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
-      // Notify the family via edge function
       invokeNotifications({
         type: 'waitlist_accepted',
         waitlistEntryId: accepting.id,
@@ -293,12 +356,6 @@ export function Waitlist() {
     }
   }
 
-  function passEntry(id: string) {
-    setPassed(prev => new Set([...prev, id]))
-  }
-
-  const visible = entries.filter(e => !passed.has(e.id))
-
   const stateLabel = (s: string | null) =>
     s === 'NC' ? 'North Carolina' : s === 'SC' ? 'South Carolina' : s === 'VA' ? 'Virginia' : s || '—'
 
@@ -310,78 +367,125 @@ export function Waitlist() {
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Waitlist</div>
           <div className="text-[12px] text-[#999] mt-0.5">
-            Families in {provider.states?.join(' & ')} waiting for coverage — accept to add to your schedule
+            Families waiting for an available appointment
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {visible.length > 0 && <Badge variant="amber">{visible.length} open</Badge>}
+          {entries.length > 0 && <Badge variant="amber">{entries.length} waiting</Badge>}
           <Button size="sm" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false) }}>
             <Plus size={13} /> Add patient to waitlist
           </Button>
         </div>
       </div>
 
-      <div className="p-6 max-w-2xl">
-        <div className="p-3 bg-[#EEEDFE] border border-[#AFA9EC] rounded-lg text-[13px] text-[#3C3489] mb-5 leading-relaxed">
-          These families are outside our current service zones but within your licensed state
-          ({provider.states?.join(', ')}). You can accept any entry regardless of zip code.
-        </div>
-
+      <div className="p-6 space-y-3 max-w-3xl">
         {loading && <div className="text-[#999] text-[13px]">Loading...</div>}
 
-        {!loading && visible.length === 0 && (
+        {!loading && entries.length === 0 && (
           <div className="text-center py-16">
             <CheckCircle2 size={24} className="text-[#aeaeb2] mx-auto mb-2" />
-            <p className="text-[14px] text-[#999]">No open waitlist entries in your state right now.</p>
+            <p className="text-[14px] text-[#999]">No open waitlist entries right now.</p>
           </div>
         )}
 
-        <div className="space-y-3">
-          {visible.map(entry => (
-            <div key={entry.id} className="border border-[#E8E8E4] rounded-xl p-4 bg-white shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                      {entry.family_name || entry.family_email || 'Unknown family'}
-                    </span>
-                    <Badge variant={entry.state === 'NC' ? 'purple' : entry.state === 'SC' ? 'teal' : 'amber'}>
-                      {stateLabel(entry.state)}
-                    </Badge>
-                    {entry.visit_type && <Badge variant="gray">{entry.visit_type}</Badge>}
-                  </div>
-
-                  {entry.notes && (
-                    <div className="mt-1 mb-2 space-y-1">
-                      {entry.notes.split(' | ').map((part, i) => {
-                        const [label, ...rest] = part.split(': ')
-                        const value = rest.join(': ')
-                        return value
-                          ? <p key={i} className="text-[13px] text-[#1A1A2E]"><span className="text-[#999]">{label}: </span>{value}</p>
-                          : <p key={i} className="text-[13px] text-[#555]">{part}</p>
-                      })}
-                    </div>
+        {entries.map(entry => (
+          <div key={entry.id} className="border border-[#E8E8E4] rounded-xl p-5 bg-white shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
+                    {entry.family_name || 'Unknown family'}
+                  </span>
+                  {entry.status && STATUS_COLORS[entry.status] && (
+                    <Badge variant={STATUS_COLORS[entry.status].variant}>{STATUS_COLORS[entry.status].label}</Badge>
                   )}
+                  {entry.visit_type && <Badge variant="gray">{entry.visit_type}</Badge>}
+                </div>
 
-                  <div className="flex items-center gap-3 text-[12px] text-[#999] flex-wrap">
-                    <span className="flex items-center gap-1"><MapPin size={11} /> Zip {entry.zip}</span>
-                    {entry.preferred_time_window && <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window}</span>}
-                    <span>Waiting since {safeFormat(entry.created_at, 'MMM d, h:mm a')}</span>
-                  </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#999] mb-2">
+                  <span className="flex items-center gap-1"><MapPin size={11} /> Zip {entry.zip}{entry.state && ` · ${stateLabel(entry.state)}`}</span>
+                  {entry.family_phone && (
+                    <a href={`tel:${entry.family_phone}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
+                      <Phone size={11} /> {entry.family_phone}
+                    </a>
+                  )}
+                  {entry.family_email && (
+                    <a href={`mailto:${entry.family_email}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
+                      {entry.family_email}
+                    </a>
+                  )}
+                  {entry.preferred_time_window && <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window}</span>}
+                  <span>Waiting since {safeFormat(entry.created_at, 'MMM d, yyyy')}</span>
                 </div>
-                <div className="flex flex-col gap-1.5 flex-shrink-0">
+
+                {(() => {
+                  const noteMap = parseNotes(entry.notes)
+                  const complaint = entry.complaint || noteMap.Complaint || ''
+                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
+                  return (
+                    <div className="mt-1 space-y-1">
+                      {complaint && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Chief complaint: </span>
+                          <span className="text-[#1A1A2E] font-medium">{complaint}</span>
+                        </div>
+                      )}
+                      {noteMap.Patient && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Patient: </span>
+                          <span className="text-[#1A1A2E] font-medium">{noteMap.Patient}</span>
+                        </div>
+                      )}
+                      {noteEntries.map(([k, v]) => (
+                        <div key={k} className="text-[12px]">
+                          <span className="text-[#999]">{k}: </span>
+                          <span className="text-[#555]">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="flex flex-col gap-1.5 flex-shrink-0">
+                <Button variant="ghost" size="xs" onClick={() => openEdit(entry)}>
+                  <Pencil size={11} /> Edit contact
+                </Button>
+                {entry.status === 'waiting' && (
                   <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setAcceptVisitType(entry.visit_type || ''); setDate(''); setTime('') }}>
-                    Accept and move to my schedule
+                    <CheckCircle2 size={11} /> Accept to schedule
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => passEntry(entry.id)}>
-                    Pass
-                  </Button>
-                </div>
+                )}
+                <Button variant="danger" size="xs" onClick={() => updateStatus(entry.id, 'removed')}>
+                  <XCircle size={11} /> Remove
+                </Button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
+
+      {/* Edit contact modal */}
+      {editEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setEditEntry(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit contact info</h2>
+              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <div className="space-y-3">
+              <Input label="Patient name" value={editName} onChange={e => setEditName(e.target.value)} />
+              <Input label="Phone" placeholder="(704) 555-0000" value={editPhone} onChange={e => setEditPhone(e.target.value)} />
+              <Input label="Email" type="email" placeholder="parent@email.com" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditEntry(null)}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={editSubmitting} onClick={saveEdit}>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add patient modal */}
       {addOpen && (
@@ -396,7 +500,6 @@ export function Waitlist() {
             <div className="space-y-3">
               <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest">Patient info</div>
 
-              {/* Patient name search */}
               <div className="relative">
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name *</label>
                 {selectedChild ? (
@@ -544,6 +647,7 @@ export function Waitlist() {
             </div>
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
+              <div className="font-medium text-[#1A1A2E]">{accepting.family_name}</div>
               <div className="flex items-center gap-1 text-[#999]">
                 <MapPin size={11} /> Zip {accepting.zip} · {stateLabel(accepting.state)}
               </div>
@@ -596,7 +700,7 @@ export function Waitlist() {
             </div>
 
             {acceptError && (
-              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2">{acceptError}</div>
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{acceptError}</div>
             )}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>

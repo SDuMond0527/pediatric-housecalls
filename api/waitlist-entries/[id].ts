@@ -45,23 +45,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { id } = req.query as { id: string }
-  const { status, converted_provider_id } = req.body
+  const { status, converted_provider_id, notes } = req.body
 
   let row: unknown
-  if (converted_provider_id) {
-    ;[row] = await sql`UPDATE waitlist_entries SET status=${status}, converted_provider_id=${converted_provider_id}::uuid WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
-  } else {
-    ;[row] = await sql`UPDATE waitlist_entries SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
-  }
 
-  // When family removes themselves from waitlist, notify all providers in that state
-  if (status === 'removed') {
-    const PORTAL_URL = process.env.PORTAL_URL || 'https://phc-team.com'
-    fetch(`${PORTAL_URL}/api/notifications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'waitlist_removed', waitlistEntryId: id }),
-    }).catch(() => {})
+  if (notes !== undefined) {
+    // Notes-only update (editing contact info)
+    ;[row] = await sql`
+      UPDATE waitlist_entries SET notes=${notes}
+      WHERE id=${id}::uuid AND (practice_id=${practiceId}::uuid OR practice_id IS NULL)
+      RETURNING *`
+  } else if (converted_provider_id) {
+    ;[row] = await sql`
+      UPDATE waitlist_entries SET status=${status}, converted_provider_id=${converted_provider_id}::uuid
+      WHERE id=${id}::uuid AND (practice_id=${practiceId}::uuid OR practice_id IS NULL)
+      RETURNING *`
+  } else {
+    ;[row] = await sql`
+      UPDATE waitlist_entries SET status=${status}
+      WHERE id=${id}::uuid AND (practice_id=${practiceId}::uuid OR practice_id IS NULL)
+      RETURNING *`
   }
 
   res.json(row)

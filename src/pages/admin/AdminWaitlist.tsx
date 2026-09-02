@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clock, CheckCircle2, Phone, XCircle, Plus, X } from 'lucide-react'
+import { Clock, CheckCircle2, Phone, XCircle, Plus, X, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds, invokeNotifications, createWaitlistEntry, apiFetch } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
@@ -33,6 +33,32 @@ const STATUS_COLORS = {
 
 const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredDate: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
 
+const NOTE_ORDER = ['Patient', 'DOB', 'Email', 'Phone', 'Address', 'Allergies', 'Medications', 'PMH', 'PCP', 'Pharmacy', 'Insurance', 'Member ID', 'Group #', 'Complaint']
+
+function parseNotes(notes: string | null): Record<string, string> {
+  const map: Record<string, string> = {}
+  ;(notes || '').split(' | ').forEach(part => {
+    const colon = part.indexOf(': ')
+    if (colon > 0) {
+      const k = part.slice(0, colon).trim()
+      const v = part.slice(colon + 2).trim()
+      if (v) map[k] = v
+    }
+  })
+  return map
+}
+
+function rebuildNotes(map: Record<string, string>): string {
+  const parts: string[] = []
+  for (const k of NOTE_ORDER) {
+    if (map[k]) parts.push(`${k}: ${map[k]}`)
+  }
+  for (const [k, v] of Object.entries(map)) {
+    if (!NOTE_ORDER.includes(k) && v) parts.push(`${k}: ${v}`)
+  }
+  return parts.join(' | ')
+}
+
 export function AdminWaitlist() {
   const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
@@ -49,6 +75,34 @@ export function AdminWaitlist() {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Edit contact modal
+  const [editEntry, setEditEntry] = useState<WaitlistEntry | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
+  function openEdit(e: WaitlistEntry) {
+    const map = parseNotes(e.notes)
+    setEditEntry(e)
+    setEditName(map['Patient'] || e.family_name || '')
+    setEditPhone(e.family_phone || map['Phone'] || '')
+    setEditEmail(e.family_email || map['Email'] || '')
+  }
+
+  async function saveEdit() {
+    if (!editEntry) return
+    setEditSubmitting(true)
+    const map = parseNotes(editEntry.notes)
+    if (editName) map['Patient'] = editName; else delete map['Patient']
+    if (editPhone) map['Phone'] = editPhone; else delete map['Phone']
+    if (editEmail) map['Email'] = editEmail; else delete map['Email']
+    await updateWaitlistEntry(editEntry.id, { notes: rebuildNotes(map) })
+    setEditEntry(null)
+    setEditSubmitting(false)
+    fetchEntries()
+  }
 
   function setField(k: keyof typeof EMPTY_ADD, v: string) {
     setAddForm(f => ({ ...f, [k]: v }))
@@ -166,7 +220,6 @@ export function AdminWaitlist() {
     const enriched = entries.map(e => {
       const fam = (families as any[]).find(f => f.id === e.family_id)
       const childNames = (kids as any[]).filter(k => k.family_id === e.family_id).map((k: any) => k.display_label) || []
-      // Parse useful fields from notes regardless of source
       const notesPatient  = e.notes?.match(/Patient:\s*([^|]+)/)?.[1]?.trim() ?? null
       const notesFamily   = e.notes?.match(/Family:\s*([^|]+)/)?.[1]?.trim() ?? null
       const notesEmail    = e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? null
@@ -195,6 +248,14 @@ export function AdminWaitlist() {
   }
 
   const waitingCount = entries.filter(e => e.status === 'waiting').length
+
+  const NOTE_LABELS: Record<string, string> = {
+    Patient: 'Patient name', DOB: 'Date of birth', Email: 'Email', Phone: 'Phone',
+    Address: 'Address', Allergies: 'Allergies', Medications: 'Medications',
+    PMH: 'Medical history', PCP: 'PCP', Pharmacy: 'Preferred pharmacy',
+    Insurance: 'Insurance', 'Member ID': 'Member ID', 'Group #': 'Group #',
+    Complaint: 'Chief complaint',
+  }
 
   return (
     <div>
@@ -248,13 +309,6 @@ export function AdminWaitlist() {
                   <p className="text-[12px] text-[#555] mb-1">Children: {e.children.join(', ')}</p>
                 )}
                 {(() => {
-                  const NOTE_LABELS: Record<string, string> = {
-                    Patient: 'Patient name', DOB: 'Date of birth', Email: 'Email', Phone: 'Phone',
-                    Address: 'Address', Allergies: 'Allergies', Medications: 'Medications',
-                    PMH: 'Medical history', PCP: 'PCP', Pharmacy: 'Preferred pharmacy',
-                    Insurance: 'Insurance', 'Member ID': 'Member ID', 'Group #': 'Group #',
-                    Complaint: 'Chief complaint',
-                  }
                   const noteMap: Record<string, string> = {}
                   ;(e.notes || '').split(' | ').forEach(part => {
                     const colon = part.indexOf(': ')
@@ -293,11 +347,9 @@ export function AdminWaitlist() {
 
               {e.status !== 'removed' && (
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  {(e.status === 'waiting' || !e.status) && (
-                    <Button variant="secondary" size="xs" onClick={() => updateStatus(e.id, 'contacted')}>
-                      <Phone size={11} /> Mark contacted
-                    </Button>
-                  )}
+                  <Button variant="ghost" size="xs" onClick={() => openEdit(e)}>
+                    <Pencil size={11} /> Edit contact
+                  </Button>
                   {e.status !== 'converted' && (
                     <Button variant="teal" size="xs" onClick={() => updateStatus(e.id, 'converted')}>
                       <CheckCircle2 size={11} /> Converted
@@ -312,6 +364,28 @@ export function AdminWaitlist() {
           </div>
         ))}
       </div>
+
+      {/* Edit contact modal */}
+      {editEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setEditEntry(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit contact info</h2>
+              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <div className="space-y-3">
+              <Input label="Patient name" value={editName} onChange={e => setEditName(e.target.value)} />
+              <Input label="Phone" placeholder="(704) 555-0000" value={editPhone} onChange={e => setEditPhone(e.target.value)} />
+              <Input label="Email" type="email" placeholder="parent@email.com" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditEntry(null)}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={editSubmitting} onClick={saveEdit}>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add patient to waitlist modal */}
       {addOpen && (
