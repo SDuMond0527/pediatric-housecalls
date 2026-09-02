@@ -100,11 +100,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (auth.isFamily) {
     const profileRows = await sql`SELECT id, practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
     if (!profileRows.length) return res.json([])
-    const practiceId = profileRows[0].practice_id as string
     const familyProfileId = profileRows[0].id as string
+    // Fallback: if family profile has no practice_id, resolve from providers table
+    let practiceId = profileRows[0].practice_id as string | null
+    if (!practiceId) {
+      const [p] = await sql`SELECT practice_id FROM providers WHERE is_admin = true LIMIT 1`
+      practiceId = p?.practice_id ?? null
+    }
+    if (!practiceId) return res.status(500).json({ error: 'Practice not configured' })
 
     if (req.method === 'GET') {
-      const rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${familyProfileId}::uuid AND practice_id = ${practiceId}::uuid AND status = 'waiting'`
+      const rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${familyProfileId}::uuid AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status = 'waiting'`
       return res.json(rows)
     }
 
@@ -135,15 +141,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { status, family_id } = req.query as Record<string, string>
     let rows: unknown[]
     if (family_id) {
-      rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${family_id}::uuid AND practice_id = ${practiceId}::uuid AND status = 'waiting'`
+      rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${family_id}::uuid AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status = 'waiting'`
     } else if (status) {
       if (!isAdmin && providerStates.length > 0) {
-        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND practice_id = ${practiceId}::uuid AND (state = ANY(${providerStates}::text[]) OR state IS NULL) ORDER BY created_at ASC`
+        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND (state = ANY(${providerStates}::text[]) OR state IS NULL) ORDER BY created_at ASC`
       } else {
-        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND practice_id = ${practiceId}::uuid ORDER BY created_at ASC`
+        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) ORDER BY created_at ASC`
       }
     } else {
-      rows = await sql`SELECT * FROM waitlist_entries WHERE practice_id = ${practiceId}::uuid ORDER BY created_at DESC`
+      rows = await sql`SELECT * FROM waitlist_entries WHERE (practice_id = ${practiceId}::uuid OR practice_id IS NULL) ORDER BY created_at DESC`
     }
     return res.json(rows)
   }
