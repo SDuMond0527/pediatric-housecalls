@@ -20,24 +20,60 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
+function fmt(val: string | null | undefined): string {
+  return val?.trim() || '—'
+}
+
+function fmtDate(val: string | null | undefined): string {
+  if (!val) return '—'
+  try { return new Date(val).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }) } catch { return val }
+}
+
 async function buildOrderPdf(opts: {
-  patientName: string
+  // patient
+  patientFirstName: string
+  patientLastName: string
+  patientDob: string | null
+  patientGender: string | null
+  patientPhone: string | null
+  patientEmail: string | null
+  patientAddress: string | null
+  patientCity: string | null
+  patientState: string | null
+  patientZip: string | null
+  // insurance
+  memberId: string | null
+  groupNumber: string | null
+  subscriberName: string | null
+  subscriberDob: string | null
+  subscriberGender: string | null
+  // provider
   providerName: string
   providerRole: string | null
   providerNpi: string | null
+  // order
   orderedDate: string
   tests: { code: string; name: string }[]
   diagnoses: string[]
   priority: string
   notes: string | null
 }): Promise<Uint8Array> {
-  const { patientName, providerName, providerRole, providerNpi, orderedDate, tests, diagnoses, priority, notes } = opts
+  const {
+    patientFirstName, patientLastName, patientDob, patientGender,
+    patientPhone, patientEmail, patientAddress, patientCity, patientState, patientZip,
+    memberId, groupNumber, subscriberName, subscriberDob, subscriberGender,
+    providerName, providerRole, providerNpi,
+    orderedDate, tests, diagnoses, priority, notes,
+  } = opts
+
+  const patientName = [patientFirstName, patientLastName].filter(Boolean).join(' ')
+  const addressLine = [patientAddress, patientCity, patientState, patientZip].filter(Boolean).join(', ')
 
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([612, 792]) // US Letter
   const { width, height } = page.getSize()
 
-  const bold   = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const italic  = await pdfDoc.embedFont(StandardFonts.HelveticaOblique)
 
@@ -49,7 +85,7 @@ async function buildOrderPdf(opts: {
   const red    = rgb(0.80, 0.10, 0.10)
   const white  = rgb(1, 1, 1)
 
-  const margin = 48
+  const margin   = 48
   const contentW = width - margin * 2
   let y = height - margin
 
@@ -57,11 +93,7 @@ async function buildOrderPdf(opts: {
   page.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: navy })
   page.drawText(PRACTICE_NAME, { x: margin, y: height - 38, font: bold, size: 18, color: white })
   page.drawText('LABORATORY ORDER FORM', { x: margin, y: height - 58, font: regular, size: 10, color: rgb(0.63, 0.63, 0.75) })
-
-  // Account # top-right
-  page.drawText(`Labcorp Account #: ${LABCORP_ACCOUNT}`, {
-    x: width - margin - 160, y: height - 38, font: bold, size: 9, color: white,
-  })
+  page.drawText(`Labcorp Account #: ${LABCORP_ACCOUNT}`, { x: width - margin - 160, y: height - 38, font: bold, size: 9, color: white })
   if (PRACTICE_PHONE) {
     page.drawText(PRACTICE_PHONE, { x: width - margin - 160, y: height - 54, font: regular, size: 9, color: rgb(0.63, 0.63, 0.75) })
   }
@@ -72,13 +104,13 @@ async function buildOrderPdf(opts: {
   if (priority === 'stat') {
     page.drawRectangle({ x: margin, y: y - 20, width: contentW, height: 24, color: rgb(0.99, 0.93, 0.93) })
     page.drawRectangle({ x: margin, y: y - 20, width: contentW, height: 24, borderColor: rgb(0.85, 0.20, 0.20), borderWidth: 1 })
-    page.drawText('⚠  STAT ORDER — Patient should proceed to Labcorp immediately', {
+    page.drawText('STAT ORDER — Patient should proceed to Labcorp immediately', {
       x: margin + 10, y: y - 13, font: bold, size: 9, color: red,
     })
     y -= 34
   }
 
-  // ── Section helper ────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────
   function sectionHeader(label: string) {
     page.drawRectangle({ x: margin, y: y - 18, width: contentW, height: 20, color: light })
     page.drawRectangle({ x: margin, y: y - 18, width: contentW, height: 20, borderColor: border, borderWidth: 0.5 })
@@ -86,70 +118,95 @@ async function buildOrderPdf(opts: {
     y -= 26
   }
 
-  function labelValue(label: string, value: string, xOffset = 0, colWidth = contentW) {
-    page.drawText(label, { x: margin + xOffset, y, font: bold, size: 9, color: gray })
-    page.drawText(value || '—', { x: margin + xOffset + 90, y, font: regular, size: 9, color: navy })
-    y -= 16
-    _ = colWidth // suppress unused warning
+  // Two-column row: label left, value right of label; optional second pair offset at midpoint
+  function row2(
+    label1: string, value1: string,
+    label2?: string, value2?: string,
+  ) {
+    const half = contentW / 2
+    page.drawText(label1, { x: margin + 4, y, font: bold, size: 8, color: gray })
+    page.drawText(value1, { x: margin + 4 + 90, y, font: regular, size: 9, color: navy })
+    if (label2 !== undefined && value2 !== undefined) {
+      page.drawText(label2, { x: margin + half + 4, y, font: bold, size: 8, color: gray })
+      page.drawText(value2, { x: margin + half + 4 + 90, y, font: regular, size: 9, color: navy })
+    }
+    y -= 15
   }
-  let _ = 0
 
-  function drawHRule(gap = 10) {
-    y -= gap / 2
-    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.5, color: border })
-    y -= gap / 2
+  function row1(label: string, value: string) {
+    page.drawText(label, { x: margin + 4, y, font: bold, size: 8, color: gray })
+    page.drawText(value, { x: margin + 4 + 90, y, font: regular, size: 9, color: navy })
+    y -= 15
+  }
+
+  function gap(n = 6) { y -= n }
+
+  function hRule() {
+    gap(8)
+    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: border })
+    gap(8)
   }
 
   // ── Patient Information ───────────────────────────────────────────────────
-  y -= 8
+  gap(6)
   sectionHeader('Patient Information')
-  labelValue('Patient Name:', patientName)
-  labelValue('Date Ordered:', orderedDate)
-  y -= 4
+  row2('Name:', fmt(patientName),           'Date of Birth:', fmtDate(patientDob))
+  row2('Gender:', fmt(patientGender),       'Phone:', fmt(patientPhone))
+  row2('Email:', fmt(patientEmail))
+  row1('Address:', fmt(addressLine))
+  gap(4)
+
+  // ── Insurance Information ─────────────────────────────────────────────────
+  hRule()
+  sectionHeader('Insurance Information')
+  row2('Member ID:', fmt(memberId),         'Group #:', fmt(groupNumber))
+  row2('Subscriber Name:', fmt(subscriberName))
+  row2('Subscriber DOB:', fmtDate(subscriberDob), 'Subscriber Gender:', fmt(subscriberGender))
+  gap(4)
 
   // ── Ordering Provider ────────────────────────────────────────────────────
-  drawHRule(16)
+  hRule()
   sectionHeader('Ordering Provider')
-  labelValue('Provider:', `${providerName}${providerRole ? ', ' + providerRole : ''}`)
-  if (providerNpi) labelValue('NPI:', providerNpi)
-  y -= 4
+  row2('Provider:', fmt(`${providerName}${providerRole ? ', ' + providerRole : ''}`),
+       'NPI:', fmt(providerNpi))
+  row1('Date Ordered:', orderedDate)
+  gap(4)
 
   // ── Diagnoses ─────────────────────────────────────────────────────────────
   if (diagnoses.length > 0) {
-    drawHRule(16)
-    sectionHeader('Diagnosis Codes / Indications')
+    hRule()
+    sectionHeader('Diagnosis / Indication')
     for (const dx of diagnoses) {
       page.drawText(`•  ${dx}`, { x: margin + 8, y, font: regular, size: 9, color: navy })
-      y -= 14
+      y -= 13
     }
-    y -= 4
+    gap(4)
   }
 
   // ── Tests Ordered ─────────────────────────────────────────────────────────
-  drawHRule(16)
+  hRule()
   sectionHeader('Tests Ordered')
 
-  // Table header row
+  // Table header
   page.drawRectangle({ x: margin, y: y - 16, width: contentW, height: 18, color: rgb(0.88, 0.87, 0.96) })
   page.drawText('TEST NAME', { x: margin + 8, y: y - 10, font: bold, size: 8, color: accent })
-  page.drawText('CODE', { x: margin + contentW - 80, y: y - 10, font: bold, size: 8, color: accent })
+  page.drawText('CODE', { x: margin + contentW - 70, y: y - 10, font: bold, size: 8, color: accent })
   y -= 20
 
   for (let i = 0; i < tests.length; i++) {
-    const rowColor = i % 2 === 0 ? white : light
-    page.drawRectangle({ x: margin, y: y - 14, width: contentW, height: 16, color: rowColor })
+    const rowBg = i % 2 === 0 ? white : light
+    page.drawRectangle({ x: margin, y: y - 14, width: contentW, height: 16, color: rowBg })
     page.drawRectangle({ x: margin, y: y - 14, width: contentW, height: 16, borderColor: border, borderWidth: 0.3 })
     page.drawText(tests[i].name, { x: margin + 8, y: y - 7, font: regular, size: 9, color: navy })
-    page.drawText(tests[i].code, { x: margin + contentW - 75, y: y - 7, font: regular, size: 9, color: gray })
+    page.drawText(tests[i].code, { x: margin + contentW - 65, y: y - 7, font: regular, size: 9, color: gray })
     y -= 16
   }
-  y -= 4
+  gap(4)
 
-  // ── Notes ─────────────────────────────────────────────────────────────────
+  // ── Clinical Notes ────────────────────────────────────────────────────────
   if (notes) {
-    drawHRule(16)
+    hRule()
     sectionHeader('Clinical Notes')
-    // Wrap notes text
     const words = notes.split(' ')
     let line = ''
     for (const word of words) {
@@ -162,29 +219,21 @@ async function buildOrderPdf(opts: {
         line = candidate
       }
     }
-    if (line) {
-      page.drawText(line, { x: margin + 8, y, font: regular, size: 9, color: navy })
-      y -= 13
-    }
-    y -= 4
+    if (line) { page.drawText(line, { x: margin + 8, y, font: regular, size: 9, color: navy }); y -= 13 }
+    gap(4)
   }
 
-  // ── Signature ─────────────────────────────────────────────────────────────
-  drawHRule(24)
+  // ── Provider Signature ────────────────────────────────────────────────────
+  hRule()
   sectionHeader('Provider Signature')
-  y -= 4
+  gap(4)
   page.drawText(`${providerName}${providerRole ? ', ' + providerRole : ''}`, {
     x: margin + 8, y, font: italic, size: 16, color: navy,
   })
   y -= 18
-  if (providerNpi) {
-    page.drawText(`NPI: ${providerNpi}`, { x: margin + 8, y, font: regular, size: 9, color: gray })
-    y -= 14
-  }
+  if (providerNpi) { page.drawText(`NPI: ${providerNpi}`, { x: margin + 8, y, font: regular, size: 9, color: gray }); y -= 14 }
   page.drawText(`Date: ${orderedDate}`, { x: margin + 8, y, font: regular, size: 9, color: gray })
-  y -= 20
-
-  // Signature underline
+  y -= 16
   page.drawLine({ start: { x: margin + 8, y }, end: { x: margin + 280, y }, thickness: 0.75, color: border })
 
   // ── Footer ────────────────────────────────────────────────────────────────
@@ -223,7 +272,7 @@ async function sendEmailWithAttachment(to: string, subject: string, html: string
   }
 }
 
-function buildEmailBody(patientFirstName: string, practiceName: string, practicePhone: string): string {
+function buildEmailBody(patientFirstName: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -232,7 +281,7 @@ function buildEmailBody(patientFirstName: string, practiceName: string, practice
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
         <tr><td style="background:#1a1a2e;border-radius:12px 12px 0 0;padding:24px 32px;">
-          <div style="font-size:20px;font-weight:700;color:#fff;">${practiceName}</div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">${PRACTICE_NAME}</div>
           <div style="font-size:13px;color:#a0a0c0;margin-top:4px;">Lab Order</div>
         </td></tr>
         <tr><td style="background:#fff;padding:28px 32px;">
@@ -247,12 +296,10 @@ function buildEmailBody(patientFirstName: string, practiceName: string, practice
             <div style="font-size:13px;font-weight:600;color:#1e40af;margin-bottom:4px;">Find a Labcorp Location</div>
             <div style="font-size:13px;color:#1e40af;">Visit <a href="https://www.labcorp.com/labs-and-appointments/find-lab" style="color:#2563eb;">labcorp.com</a> to find the nearest patient service center. Most locations accept walk-ins.</div>
           </div>
-          <p style="margin:0;font-size:13px;color:#777;line-height:1.6;">
-            Questions? Contact us${practicePhone ? ' at ' + practicePhone : ''}.
-          </p>
+          <p style="margin:0;font-size:13px;color:#777;">Questions? Contact us${PRACTICE_PHONE ? ' at ' + PRACTICE_PHONE : ''}.</p>
         </td></tr>
         <tr><td style="background:#f5f4ef;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#aaa;">${practiceName} · This email contains protected health information.</p>
+          <p style="margin:0;font-size:12px;color:#aaa;">${PRACTICE_NAME} · This email contains protected health information.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -282,7 +329,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         o.id, o.tests, o.diagnoses, o.priority, o.notes, o.created_at,
         p.name AS provider_name, p.role AS provider_role, p.npi AS provider_npi,
         ch.first_name AS child_first_name, ch.last_name AS child_last_name,
-        COALESCE(fp.email, ch.parent_email) AS family_email
+        ch.date_of_birth AS patient_dob, ch.gender AS patient_gender,
+        ch.insurance_member_id, ch.insurance_group_number,
+        ch.insurance_subscriber_name, ch.insurance_subscriber_dob, ch.insurance_subscriber_gender,
+        COALESCE(fp.phone, ch.parent_phone)   AS patient_phone,
+        COALESCE(fp.email, ch.parent_email)   AS family_email,
+        fp.address_line1 AS patient_address,
+        fp.city AS patient_city, fp.state AS patient_state, fp.zip AS patient_zip
       FROM lab_orders o
       JOIN providers p ON p.id = o.provider_id AND p.practice_id = ${provider.practice_id}::uuid
       JOIN children ch ON ch.id = o.child_id
@@ -298,21 +351,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const orderedDate = new Date(order.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
     const pdfBytes = await buildOrderPdf({
-      patientName,
-      providerName: order.provider_name,
-      providerRole: order.provider_role ?? null,
-      providerNpi: order.provider_npi ?? null,
+      patientFirstName:   order.child_first_name ?? '',
+      patientLastName:    order.child_last_name ?? '',
+      patientDob:         order.patient_dob ?? null,
+      patientGender:      order.patient_gender ?? null,
+      patientPhone:       order.patient_phone ?? null,
+      patientEmail:       email,
+      patientAddress:     order.patient_address ?? null,
+      patientCity:        order.patient_city ?? null,
+      patientState:       order.patient_state ?? null,
+      patientZip:         order.patient_zip ?? null,
+      memberId:           order.insurance_member_id ?? null,
+      groupNumber:        order.insurance_group_number ?? null,
+      subscriberName:     order.insurance_subscriber_name ?? null,
+      subscriberDob:      order.insurance_subscriber_dob ?? null,
+      subscriberGender:   order.insurance_subscriber_gender ?? null,
+      providerName:       order.provider_name,
+      providerRole:       order.provider_role ?? null,
+      providerNpi:        order.provider_npi ?? null,
       orderedDate,
-      tests: Array.isArray(order.tests) ? order.tests : [],
+      tests:     Array.isArray(order.tests)     ? order.tests     : [],
       diagnoses: Array.isArray(order.diagnoses) ? order.diagnoses : [],
-      priority: order.priority ?? 'routine',
-      notes: order.notes ?? null,
+      priority:  order.priority ?? 'routine',
+      notes:     order.notes ?? null,
     })
 
-    const emailHtml = buildEmailBody(order.child_first_name ?? 'there', PRACTICE_NAME, PRACTICE_PHONE)
     const filename = `Lab-Order-${patientName.replace(/\s+/g, '-')}-${orderedDate.replace(/\s+/g, '-')}.pdf`
-
-    await sendEmailWithAttachment(email, `Lab Order — ${patientName}`, emailHtml, pdfBytes, filename)
+    await sendEmailWithAttachment(email, `Lab Order — ${patientName}`, buildEmailBody(order.child_first_name ?? 'there'), pdfBytes, filename)
 
     return res.status(200).json({ sent: true, to: email })
   } catch (err: any) {
