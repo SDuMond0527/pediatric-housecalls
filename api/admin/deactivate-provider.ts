@@ -63,10 +63,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  const [updated] = await sql`
-    UPDATE providers SET is_active = ${!reactivate ? false : true}, updated_at = now()
-    WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
-    RETURNING *
-  `
-  return res.json(updated)
+  try {
+    const [updated] = await sql`
+      UPDATE providers SET is_active = ${reactivate ? true : false}
+      WHERE id = ${provider_id}::uuid AND practice_id = ${caller.practice_id}::uuid
+      RETURNING *
+    `
+    return res.json(updated)
+  } catch (e: any) {
+    console.error('deactivate-provider DB error:', e?.message ?? e)
+    return res.status(500).json({ error: e?.message ?? 'Database update failed' })
+  }
 }
