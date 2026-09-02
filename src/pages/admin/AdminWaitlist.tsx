@@ -290,25 +290,18 @@ export function AdminWaitlist() {
                 })()}
               </div>
 
-              {e.status === 'waiting' && (
+              {e.status !== 'removed' && (
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  <Button variant="secondary" size="xs" onClick={() => updateStatus(e.id, 'contacted')}>
-                    <Phone size={11} /> Mark contacted
-                  </Button>
-                  <Button variant="teal" size="xs" onClick={() => updateStatus(e.id, 'converted')}>
-                    <CheckCircle2 size={11} /> Converted
-                  </Button>
-                  <Button variant="danger" size="xs" onClick={() => updateStatus(e.id, 'removed')}>
-                    <XCircle size={11} /> Remove
-                  </Button>
-                </div>
-              )}
-
-              {e.status === 'contacted' && (
-                <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  <Button variant="teal" size="xs" onClick={() => updateStatus(e.id, 'converted')}>
-                    <CheckCircle2 size={11} /> Converted
-                  </Button>
+                  {(e.status === 'waiting' || !e.status) && (
+                    <Button variant="secondary" size="xs" onClick={() => updateStatus(e.id, 'contacted')}>
+                      <Phone size={11} /> Mark contacted
+                    </Button>
+                  )}
+                  {e.status !== 'converted' && (
+                    <Button variant="teal" size="xs" onClick={() => updateStatus(e.id, 'converted')}>
+                      <CheckCircle2 size={11} /> Converted
+                    </Button>
+                  )}
                   <Button variant="danger" size="xs" onClick={() => updateStatus(e.id, 'removed')}>
                     <XCircle size={11} /> Remove
                   </Button>
