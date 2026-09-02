@@ -213,7 +213,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function BookVisit() {
-  const { family, children, refreshFamily } = useFamilyAuth()
+  const { user, family, children, refreshFamily } = useFamilyAuth()
   const { zipToZone, zipToState, waitlistZones } = usePracticeZones()
   const { byType } = usePracticeVisitTypes()
   const navigate = useNavigate()
@@ -1102,7 +1102,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', date: '', time: '', participantCount: 1, participantNames: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '' })
           }}>Book another visit</Button>
         </div>
       </div>
