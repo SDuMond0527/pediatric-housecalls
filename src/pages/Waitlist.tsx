@@ -190,7 +190,7 @@ export function Waitlist() {
   }
 
   async function submitAdd() {
-    if (!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint) return
+    if (!addForm.name || !addForm.phone || !addForm.zip || !addForm.state || !addForm.complaint) return
     setAddSubmitting(true)
     const noteParts: string[] = []
     noteParts.push(`Patient: ${addForm.name}`)
@@ -549,7 +549,7 @@ export function Waitlist() {
                 </div>
                 <Input label="Email" type="email" placeholder="parent@email.com" value={addForm.email} onChange={e => setField('email', e.target.value)} />
               </div>
-              <Input label="Phone" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
+              <Input label="Phone *" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
               <Input label="Visit address" placeholder="123 Main St, City, State" value={addForm.address} onChange={e => setField('address', e.target.value)} />
 
               <div className="grid grid-cols-2 gap-3">
@@ -625,7 +625,7 @@ export function Waitlist() {
             <div className="flex gap-2 mt-5">
               <Button variant="secondary" className="flex-1" onClick={closeAddModal}>Cancel</Button>
               <Button variant="teal" className="flex-1" loading={addSubmitting}
-                disabled={!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint}
+                disabled={!addForm.name || !addForm.phone || !addForm.zip || !addForm.state || !addForm.complaint}
                 onClick={submitAdd}>
                 Add to waitlist
               </Button>
