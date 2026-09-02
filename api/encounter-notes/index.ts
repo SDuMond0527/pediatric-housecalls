@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations } = req.body
+    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration } = req.body
     if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
 
     const diagnosesVal = diagnoses ?? []
@@ -62,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const photosVal    = photos     ?? []
 
     const [row] = await sql`
-      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations)
+      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration)
       VALUES (
         ${practiceId}::uuid,
         ${appointment_id}::uuid,
@@ -77,7 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${JSON.stringify(diagnosesVal)}::jsonb,
         ${JSON.stringify(cptCodesVal)}::jsonb,
         ${JSON.stringify(photosVal)}::jsonb,
-        ${vaccine_administrations ? JSON.stringify(vaccine_administrations) : null}::jsonb
+        ${vaccine_administrations ? JSON.stringify(vaccine_administrations) : null}::jsonb,
+        ${iv_administration ? JSON.stringify(iv_administration) : null}::jsonb
       )
       RETURNING *`
     if (child_id) {

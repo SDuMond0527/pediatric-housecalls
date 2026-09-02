@@ -165,6 +165,60 @@ function emptyVaccine(): VaccineEntry {
   }
 }
 
+interface IVFluidsRNForm {
+  orderingProvider: string
+  symptoms: string[]
+  symptomsOther: string
+  generalAppearance: string[]
+  generalAppearanceOther: string
+  hydrationStatus: string[]
+  hydrationStatusOther: string
+  ivSite: string
+  ivGauge: string
+  ivAttempts: string
+  fluidType: string
+  totalVolume: string
+  startTime: string
+  endTime: string
+  midTemp: string
+  midHR: string
+  midRR: string
+  midSystolic: string
+  midDiastolic: string
+  midSpO2: string
+  patientResponse: string[]
+  patientResponseOther: string
+  postAssessment: string[]
+  postAssessmentOther: string
+  postTemp: string
+  postHR: string
+  postRR: string
+  postSystolic: string
+  postDiastolic: string
+  postSpO2: string
+  disposition: string
+  rnName: string
+  noteDateTime: string
+}
+
+function emptyIVFluidsRN(): IVFluidsRNForm {
+  return {
+    orderingProvider: '',
+    symptoms: [], symptomsOther: '',
+    generalAppearance: [], generalAppearanceOther: '',
+    hydrationStatus: [], hydrationStatusOther: '',
+    ivSite: '', ivGauge: '', ivAttempts: '',
+    fluidType: '', totalVolume: '', startTime: '', endTime: '',
+    midTemp: '', midHR: '', midRR: '', midSystolic: '', midDiastolic: '', midSpO2: '',
+    patientResponse: [], patientResponseOther: '',
+    postAssessment: [], postAssessmentOther: '',
+    postTemp: '', postHR: '', postRR: '', postSystolic: '', postDiastolic: '', postSpO2: '',
+    disposition: 'Stable',
+    rnName: '',
+    noteDateTime: '',
+  }
+}
+
 function visitTypeToNoteType(visitType: string): NoteType {
   const v = visitType.toLowerCase()
   if (v.includes('screening') && (v.includes('iv') || v.includes('fluid'))) return 'IV fluids telemedicine screening'
@@ -516,6 +570,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   }
 
   function applyTemplate(type: NoteType) {
+    if (type === 'RN IV fluids') {
+      setIVFluidsRN(emptyIVFluidsRN())
+      setSubjective('')
+      setObjective('')
+      setAssessment('')
+      setPlan('')
+      setShowTemplatePrompt(false)
+      return
+    }
     if (type === 'In-home vaccine administration') {
       setSubjective(''); setObjective(''); setAssessment(''); setPlan('')
       setVaccineEntries([emptyVaccine()])
@@ -544,6 +607,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   // Note fields
   const [vaccineEntries, setVaccineEntries] = useState<VaccineEntry[]>([emptyVaccine()])
+  const [ivFluidsRN, setIVFluidsRN] = useState<IVFluidsRNForm>(emptyIVFluidsRN())
 
   const [chiefComplaint, setChiefComplaint] = useState('')
   const [subjective, setSubjective] = useState('')
@@ -673,6 +737,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
         if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
           setVaccineEntries(note.vaccine_administrations)
+        if (note.iv_administration) setIVFluidsRN(note.iv_administration)
         if (note.note_type && NOTE_TYPES.includes(note.note_type)) setNoteType(note.note_type as NoteType)
         if (note.child_id && !childId) {
           resolvedChildId = note.child_id
@@ -776,11 +841,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       provider_id: providerId,
       note_type: noteType,
       chief_complaint: chiefComplaint || null,
-      subjective: noteType === 'In-home vaccine administration' ? null : (subjective || null),
-      objective: noteType === 'In-home vaccine administration' ? null : (objective || null),
-      assessment: noteType === 'In-home vaccine administration' ? null : (assessment || null),
-      plan: noteType === 'In-home vaccine administration' ? null : (plan || null),
+      subjective: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : (subjective || null),
+      objective: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : (objective || null),
+      assessment: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : (assessment || null),
+      plan: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : (plan || null),
       vaccine_administrations: noteType === 'In-home vaccine administration' ? vaccineEntries : null,
+      iv_administration: noteType === 'RN IV fluids' ? ivFluidsRN : null,
       diagnoses,
       cpt_codes: cptCodes,
       photos,
@@ -1092,7 +1158,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             </section>
 
             {/* Vitals */}
-            {noteType !== 'In-home vaccine administration' && <section>
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && <section>
               <div className={sectionHeader}>Vitals</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
@@ -1155,7 +1221,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             </section>}
 
             {/* Chief Complaint */}
-            {noteType !== 'In-home vaccine administration' && <section>
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && <section>
               <div className={sectionHeader}>Chief Complaint</div>
               <input type="text" placeholder="e.g. Fever for 2 days" value={chiefComplaint}
                 disabled={readOnly}
@@ -1471,8 +1537,180 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               </section>
             )}
 
+            {/* RN IV Fluids structured form */}
+            {noteType === 'RN IV fluids' && (() => {
+              const fieldCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white disabled:bg-[#F8F8F6]`
+              const lbl = (text: string, required?: boolean) => (
+                <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+                  {text}{required && <span className="text-[#E05252] ml-0.5">*</span>}
+                </label>
+              )
+              const subHead = (text: string) => (
+                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">{text}</div>
+              )
+              function CheckGroup({ label, options, selected, onChange, otherValue, onOtherChange }: {
+                label: string
+                options: string[]
+                selected: string[]
+                onChange: (v: string[]) => void
+                otherValue: string
+                onOtherChange: (v: string) => void
+              }) {
+                const hasOther = selected.includes('Other')
+                return (
+                  <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+                    <div className="text-[12px] font-semibold text-[#1A1A2E] mb-2">{label} <span className="text-[#E05252]">*</span></div>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
+                      {options.map(opt => (
+                        <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                          <input type="checkbox" checked={selected.includes(opt)} disabled={readOnly}
+                            onChange={() => onChange(selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt])}
+                            className="w-3.5 h-3.5 accent-[#7F77DD]" />
+                          <span className="text-[13px] text-[#1A1A2E]">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {hasOther && (
+                      <input value={otherValue} disabled={readOnly}
+                        onChange={e => onOtherChange(e.target.value)}
+                        placeholder="Describe other…"
+                        className="mt-2 w-full px-3 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] bg-white disabled:bg-[#F8F8F6]" />
+                    )}
+                  </div>
+                )
+              }
+              return (
+                <>
+                  {/* Subjective */}
+                  <section>
+                    <div className={sectionHeader}>Subjective</div>
+                    <div className="space-y-3">
+                      <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+                        <p className="text-[13px] text-[#555] mb-2">Provider evaluation has been completed by</p>
+                        <input value={ivFluidsRN.orderingProvider} disabled={readOnly}
+                          onChange={e => setIVFluidsRN(f => ({ ...f, orderingProvider: e.target.value }))}
+                          placeholder="Provider name"
+                          className={fieldCls} />
+                        <p className="text-[13px] text-[#999] mt-2">Order received for IV fluids. Informed consent obtained.</p>
+                      </div>
+                      <CheckGroup
+                        label="Patient's current symptoms (check all that apply)"
+                        options={['Dehydration', 'Vomiting', 'Diarrhea', 'Poor oral intake', 'Febrile illness', 'Viral illness', 'Other']}
+                        selected={ivFluidsRN.symptoms}
+                        onChange={symptoms => setIVFluidsRN(f => ({ ...f, symptoms }))}
+                        otherValue={ivFluidsRN.symptomsOther}
+                        onOtherChange={symptomsOther => setIVFluidsRN(f => ({ ...f, symptomsOther }))}
+                      />
+                    </div>
+                  </section>
+
+                  {/* Objective */}
+                  <section>
+                    <div className={sectionHeader}>Objective</div>
+                    <div className="space-y-3">
+                      <CheckGroup
+                        label="General appearance (check all that apply)"
+                        options={['Well appearing', 'Tired', 'Irritable', 'Lethargic', 'Ill appearing', 'Other']}
+                        selected={ivFluidsRN.generalAppearance}
+                        onChange={generalAppearance => setIVFluidsRN(f => ({ ...f, generalAppearance }))}
+                        otherValue={ivFluidsRN.generalAppearanceOther}
+                        onOtherChange={generalAppearanceOther => setIVFluidsRN(f => ({ ...f, generalAppearanceOther }))}
+                      />
+                      <CheckGroup
+                        label="Hydration status (check all that apply)"
+                        options={['Moist mucous membranes', 'Dry mucous membranes', 'Normal tears', 'Decreased tears', 'Cap refill < 2 seconds', 'Cap refill > 2 seconds', 'Skin turgor normal', 'Poor skin turgor', 'Other']}
+                        selected={ivFluidsRN.hydrationStatus}
+                        onChange={hydrationStatus => setIVFluidsRN(f => ({ ...f, hydrationStatus }))}
+                        otherValue={ivFluidsRN.hydrationStatusOther}
+                        onOtherChange={hydrationStatusOther => setIVFluidsRN(f => ({ ...f, hydrationStatusOther }))}
+                      />
+
+                      {/* IV Access */}
+                      <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+                        {subHead('IV Access')}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>{lbl('Site')}<input value={ivFluidsRN.ivSite} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, ivSite: e.target.value }))} placeholder="e.g. Right AC" className={fieldCls} /></div>
+                          <div>{lbl('Gauge')}<input value={ivFluidsRN.ivGauge} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, ivGauge: e.target.value }))} placeholder="e.g. 22g" className={fieldCls} /></div>
+                          <div>{lbl('Attempts')}<input type="number" min="1" value={ivFluidsRN.ivAttempts} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, ivAttempts: e.target.value }))} placeholder="1" className={fieldCls} /></div>
+                        </div>
+                      </div>
+
+                      {/* IV Fluid Administration */}
+                      <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
+                        {subHead('IV Fluid Administration')}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>{lbl('Fluid Type')}<input value={ivFluidsRN.fluidType} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, fluidType: e.target.value }))} placeholder="e.g. Normal saline" className={fieldCls} /></div>
+                          <div>{lbl('Total Volume')}<input value={ivFluidsRN.totalVolume} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, totalVolume: e.target.value }))} placeholder="e.g. 500 mL" className={fieldCls} /></div>
+                          <div>{lbl('Start Time')}<input type="time" value={ivFluidsRN.startTime} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, startTime: e.target.value }))} className={fieldCls} /></div>
+                          <div>{lbl('End Time')}<input type="time" value={ivFluidsRN.endTime} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, endTime: e.target.value }))} className={fieldCls} /></div>
+                        </div>
+                      </div>
+
+                      {/* Monitoring During Infusion */}
+                      <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8] space-y-4">
+                        {subHead('Monitoring During Infusion')}
+
+                        <div>
+                          <div className="text-[11px] font-medium text-[#555] mb-2">Vital Signs Mid-Way Through Infusion</div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>{lbl('Temp (°F)')}<input type="number" step="0.1" value={ivFluidsRN.midTemp} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midTemp: e.target.value }))} placeholder="98.6" className={fieldCls} /></div>
+                            <div>{lbl('HR (bpm)')}<input type="number" value={ivFluidsRN.midHR} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midHR: e.target.value }))} placeholder="80" className={fieldCls} /></div>
+                            <div>{lbl('RR (br/min)')}<input type="number" value={ivFluidsRN.midRR} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midRR: e.target.value }))} placeholder="16" className={fieldCls} /></div>
+                            <div>{lbl('BP Systolic')}<input type="number" value={ivFluidsRN.midSystolic} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midSystolic: e.target.value }))} placeholder="120" className={fieldCls} /></div>
+                            <div>{lbl('BP Diastolic')}<input type="number" value={ivFluidsRN.midDiastolic} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midDiastolic: e.target.value }))} placeholder="80" className={fieldCls} /></div>
+                            <div>{lbl('SpO2 (%)')}<input type="number" value={ivFluidsRN.midSpO2} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, midSpO2: e.target.value }))} placeholder="99" className={fieldCls} /></div>
+                          </div>
+                        </div>
+
+                        <CheckGroup
+                          label="Patient response (check all that apply)"
+                          options={['Tolerated well', 'Mild discomfort', 'Nausea', 'Infiltration', 'Other']}
+                          selected={ivFluidsRN.patientResponse}
+                          onChange={patientResponse => setIVFluidsRN(f => ({ ...f, patientResponse }))}
+                          otherValue={ivFluidsRN.patientResponseOther}
+                          onOtherChange={patientResponseOther => setIVFluidsRN(f => ({ ...f, patientResponseOther }))}
+                        />
+
+                        <CheckGroup
+                          label="Post-infusion assessment (check all that apply)"
+                          options={['Improved alertness', 'Improved color', 'Improved oral intake', 'Improved activity', 'No change', 'Worsening symptoms', 'Other']}
+                          selected={ivFluidsRN.postAssessment}
+                          onChange={postAssessment => setIVFluidsRN(f => ({ ...f, postAssessment }))}
+                          otherValue={ivFluidsRN.postAssessmentOther}
+                          onOtherChange={postAssessmentOther => setIVFluidsRN(f => ({ ...f, postAssessmentOther }))}
+                        />
+
+                        <div>
+                          <div className="text-[11px] font-medium text-[#555] mb-2">Vital Signs Post-Infusion</div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>{lbl('Temp (°F)')}<input type="number" step="0.1" value={ivFluidsRN.postTemp} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postTemp: e.target.value }))} placeholder="98.6" className={fieldCls} /></div>
+                            <div>{lbl('HR (bpm)')}<input type="number" value={ivFluidsRN.postHR} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postHR: e.target.value }))} placeholder="80" className={fieldCls} /></div>
+                            <div>{lbl('RR (br/min)')}<input type="number" value={ivFluidsRN.postRR} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postRR: e.target.value }))} placeholder="16" className={fieldCls} /></div>
+                            <div>{lbl('BP Systolic')}<input type="number" value={ivFluidsRN.postSystolic} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postSystolic: e.target.value }))} placeholder="120" className={fieldCls} /></div>
+                            <div>{lbl('BP Diastolic')}<input type="number" value={ivFluidsRN.postDiastolic} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postDiastolic: e.target.value }))} placeholder="80" className={fieldCls} /></div>
+                            <div>{lbl('SpO2 (%)')}<input type="number" value={ivFluidsRN.postSpO2} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, postSpO2: e.target.value }))} placeholder="99" className={fieldCls} /></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Assessment & Plan */}
+                  <section>
+                    <div className={sectionHeader}>Assessment &amp; Plan</div>
+                    <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8] space-y-3">
+                      <p className="text-[13px] text-[#555] italic">IV removed. Site is without redness, swelling, or severe bleeding. Dressing applied.</p>
+                      <div>{lbl('Disposition')}<input value={ivFluidsRN.disposition} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, disposition: e.target.value }))} className={fieldCls} /></div>
+                      <div>{lbl('RN Name')}<input value={ivFluidsRN.rnName} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, rnName: e.target.value }))} placeholder="Registered nurse name" className={fieldCls} /></div>
+                      <div>{lbl('Date / Time')}<input type="datetime-local" value={ivFluidsRN.noteDateTime} disabled={readOnly} onChange={e => setIVFluidsRN(f => ({ ...f, noteDateTime: e.target.value }))} className={fieldCls} /></div>
+                    </div>
+                  </section>
+                </>
+              )
+            })()}
+
             {/* Subjective */}
-            {noteType !== 'In-home vaccine administration' && (
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Subjective</div>
               <p className="text-[11px] text-[#999] mb-1.5">
@@ -1488,7 +1726,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             )}
 
             {/* Objective */}
-            {noteType !== 'In-home vaccine administration' && (
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Objective</div>
               <p className="text-[11px] text-[#999] mb-1.5">Physical exam findings, clinical observations</p>
@@ -1595,7 +1833,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {/* Assessment / Diagnoses */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <div className={sectionHeader} style={{marginBottom:0}}>{noteType === 'In-home vaccine administration' ? 'ICD Code(s)' : 'Assessment / Diagnoses'}</div>
+                <div className={sectionHeader} style={{marginBottom:0}}>{(noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? 'ICD Code(s)' : 'Assessment / Diagnoses'}</div>
                 {readOnly && noteId && !editingDx && (
                   <button onClick={() => setEditingDx(true)}
                     className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
@@ -1674,7 +1912,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </div>
               )}
 
-              {noteType !== 'In-home vaccine administration' && (
+              {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
                 <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
                   placeholder="Clinical reasoning and assessment notes…" value={assessment}
                   disabled={readOnly}
@@ -1792,8 +2030,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               )}
             </section>
 
-            {/* Supervising Physician (vaccine notes only) */}
-            {noteType === 'In-home vaccine administration' && (
+            {/* Supervising Physician */}
+            {(noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') && (
               <section>
                 <div className={sectionHeader}>Supervising Physician</div>
                 <div className="flex items-center gap-3 px-4 py-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl">
@@ -1806,7 +2044,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             )}
 
             {/* Plan */}
-            {noteType !== 'In-home vaccine administration' && (
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Plan</div>
               {noteType === 'IV fluids telemedicine screening' && !readOnly && (
