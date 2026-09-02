@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { apiFetch, getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren } from '../../lib/api'
+import { apiFetch, getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -175,6 +175,10 @@ export function AdminSchedule() {
   const [rescheduleVisitType, setRescheduleVisitType] = useState('')
   const [rescheduleProviderId, setRescheduleProviderId] = useState('')
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
+  const [waitlistTarget, setWaitlistTarget] = useState<Appointment | null>(null)
+  const [waitlistState, setWaitlistState] = useState('NC')
+  const [waitlistBusy, setWaitlistBusy] = useState(false)
+  const [waitlistError, setWaitlistError] = useState<string | null>(null)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
   const [eligibility, setEligibility] = useState<Record<string, { loading: boolean; data: any | null; error: string | null }>>({})
   const [notes, setNotes] = useState<Record<string, any>>({})
@@ -412,6 +416,46 @@ export function AdminSchedule() {
       alert(e.message ?? 'Failed to reschedule')
     } finally {
       setRescheduleBusy(false)
+    }
+  }
+
+  async function moveToWaitlist() {
+    if (!waitlistTarget) return
+    setWaitlistBusy(true)
+    setWaitlistError(null)
+    try {
+      const noteMap: Record<string, string> = {}
+      ;(waitlistTarget.notes || '').split('|').forEach((part: string) => {
+        const colon = part.indexOf(':')
+        if (colon > 0) noteMap[part.slice(0, colon).trim()] = part.slice(colon + 1).trim()
+      })
+      const KEY_TO_LABEL: Record<string, string> = {
+        PATIENT: 'Patient', DOB: 'DOB', GENDER: 'Gender',
+        PARENTPHONE: 'Phone', PARENTEMAIL: 'Email',
+        ALLERGY: 'Allergies', MEDS: 'Medications', PMH: 'PMH',
+        PCP: 'PCP', PHARMACY: 'Pharmacy',
+        INSURANCE: 'Insurance', MEMBERID: 'Member ID', GROUPNUM: 'Group #',
+      }
+      const noteParts: string[] = []
+      for (const [key, label] of Object.entries(KEY_TO_LABEL)) {
+        if (noteMap[key]) noteParts.push(`${label}: ${noteMap[key]}`)
+      }
+      if (noteMap.ADDR) noteParts.push(`Address: ${noteMap.ADDR}`)
+
+      await createWaitlistEntry({
+        visit_type: waitlistTarget.visit_type,
+        zip: noteMap.ZIP || null,
+        state: waitlistState || null,
+        complaint: noteMap.CC || null,
+        notes: noteParts.join(' | ') || null,
+      })
+      await updateAppointment(waitlistTarget.id, { status: 'cancelled' })
+      setAppointments(prev => prev.map(a => a.id === waitlistTarget!.id ? { ...a, status: 'cancelled' } : a))
+      setWaitlistTarget(null)
+    } catch (e: any) {
+      setWaitlistError(e?.message ?? 'Failed to move to waitlist')
+    } finally {
+      setWaitlistBusy(false)
     }
   }
 
@@ -1048,6 +1092,9 @@ export function AdminSchedule() {
                             <Button variant="secondary" size="xs" onClick={() => { setRescheduleTarget(appt); setRescheduleDate(appt.scheduled_date); setRescheduleTime(appt.scheduled_time); setRescheduleVisitType(appt.visit_type); setRescheduleProviderId(appt.provider_id) }}>
                               Reschedule
                             </Button>
+                            <Button variant="secondary" size="xs" onClick={() => { setWaitlistTarget(appt); setWaitlistState('NC'); setWaitlistError(null) }}>
+                              Move to waitlist
+                            </Button>
                             <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
                               <XCircle size={12} /> Cancel visit
                             </Button>
@@ -1179,6 +1226,51 @@ export function AdminSchedule() {
               <Button variant="teal" className="flex-1" loading={rescheduleBusy} onClick={confirmReschedule}
                 disabled={!rescheduleDate || !rescheduleTime || !rescheduleVisitType || !rescheduleProviderId}>
                 Save new time
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Move to waitlist modal ── */}
+      {waitlistTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !waitlistBusy && setWaitlistTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#FEF3E8] flex items-center justify-center flex-shrink-0">
+                <Navigation size={18} className="text-[#D97706]" />
+              </div>
+              <div>
+                <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Move to waitlist</h2>
+                <p className="text-[12px] text-[#999]">Appointment will be cancelled and patient added to waitlist</p>
+              </div>
+            </div>
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
+              <div className="font-medium text-[#1A1A2E]">{waitlistTarget.visit_type}</div>
+              <div className="text-[#999]">{safeFormatDate(waitlistTarget.scheduled_date, 'EEEE, MMMM d')} at {waitlistTarget.scheduled_time ? to12h(waitlistTarget.scheduled_time) : 'Unknown time'}</div>
+              {(() => {
+                const nm = waitlistTarget.notes?.split('|').find(p => p.startsWith('PATIENT:'))?.replace('PATIENT:', '').trim()
+                return nm ? <div className="text-[#555]">Patient: <strong>{nm}</strong></div> : null
+              })()}
+            </div>
+            <div className="mb-4">
+              <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">State</label>
+              <select value={waitlistState} onChange={e => setWaitlistState(e.target.value)}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                <option value="NC">North Carolina</option>
+                <option value="SC">South Carolina</option>
+                <option value="VA">Virginia</option>
+              </select>
+            </div>
+            <p className="text-[12px] text-[#999] mb-4">All providers licensed in {waitlistState} and all admins will be notified immediately.</p>
+            {waitlistError && (
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{waitlistError}</div>
+            )}
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setWaitlistTarget(null)} disabled={waitlistBusy}>Cancel</Button>
+              <Button variant="danger" className="flex-1" loading={waitlistBusy} onClick={moveToWaitlist}>
+                Move to waitlist
               </Button>
             </div>
           </div>
