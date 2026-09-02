@@ -64,6 +64,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         explanations,
       } = req.body
 
+      const num = (v: any) => (v === '' || v == null ? null : Number(v))
+
       const [row] = await sql`
         INSERT INTO patient_statements (
           practice_id,
@@ -92,23 +94,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ) VALUES (
           ${practiceId}::uuid,
           ${claim_id},
-          ${patient_first_name ?? null},
-          ${patient_last_name ?? null},
-          ${patient_dob ?? null},
-          ${date_of_service ?? null},
+          ${patient_first_name || null},
+          ${patient_last_name || null},
+          ${patient_dob || null},
+          ${date_of_service || null},
           ${JSON.stringify(cpt_codes ?? [])}::jsonb,
-          ${patient_email ?? null},
-          ${patient_phone ?? null},
-          ${amount_billed ?? null},
-          ${insurance_payment ?? null},
-          ${contractual_adjustment ?? null},
-          ${patient_copay ?? null},
-          ${patient_deductible ?? null},
-          ${patient_coinsurance ?? null},
-          ${patient_non_covered ?? null},
-          ${remaining_balance ?? null},
-          ${prior_balance ?? null},
-          ${total_amount_due ?? null},
+          ${patient_email || null},
+          ${patient_phone || null},
+          ${num(amount_billed)},
+          ${num(insurance_payment)},
+          ${num(contractual_adjustment)},
+          ${num(patient_copay)},
+          ${num(patient_deductible)},
+          ${num(patient_coinsurance)},
+          ${num(patient_non_covered)},
+          ${num(remaining_balance)},
+          ${num(prior_balance)},
+          ${num(total_amount_due)},
           ${JSON.stringify(explanations ?? [])}::jsonb,
           'draft',
           NOW(),

@@ -55,25 +55,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       explanations,
     } = req.body
 
+    const num = (v: any) => (v === '' || v == null ? null : Number(v))
+
     const [updated] = await sql`
       UPDATE patient_statements SET
-        patient_first_name   = COALESCE(${patient_first_name ?? null}, patient_first_name),
-        patient_last_name    = COALESCE(${patient_last_name ?? null}, patient_last_name),
-        patient_dob          = COALESCE(${patient_dob ?? null}, patient_dob),
-        date_of_service      = COALESCE(${date_of_service ?? null}, date_of_service),
+        patient_first_name   = COALESCE(${patient_first_name || null}, patient_first_name),
+        patient_last_name    = COALESCE(${patient_last_name || null}, patient_last_name),
+        patient_dob          = COALESCE(${patient_dob || null}, patient_dob),
+        date_of_service      = COALESCE(${date_of_service || null}, date_of_service),
         cpt_codes            = COALESCE(${cpt_codes != null ? JSON.stringify(cpt_codes) : null}::jsonb, cpt_codes),
-        patient_email        = COALESCE(${patient_email ?? null}, patient_email),
-        patient_phone        = COALESCE(${patient_phone ?? null}, patient_phone),
-        amount_billed        = COALESCE(${amount_billed ?? null}, amount_billed),
-        insurance_payment    = COALESCE(${insurance_payment ?? null}, insurance_payment),
-        contractual_adjustment = COALESCE(${contractual_adjustment ?? null}, contractual_adjustment),
-        patient_copay        = COALESCE(${patient_copay ?? null}, patient_copay),
-        patient_deductible   = COALESCE(${patient_deductible ?? null}, patient_deductible),
-        patient_coinsurance  = COALESCE(${patient_coinsurance ?? null}, patient_coinsurance),
-        patient_non_covered  = COALESCE(${patient_non_covered ?? null}, patient_non_covered),
-        remaining_balance    = COALESCE(${remaining_balance ?? null}, remaining_balance),
-        prior_balance        = COALESCE(${prior_balance ?? null}, prior_balance),
-        total_amount_due     = COALESCE(${total_amount_due ?? null}, total_amount_due),
+        patient_email        = COALESCE(${patient_email || null}, patient_email),
+        patient_phone        = COALESCE(${patient_phone || null}, patient_phone),
+        amount_billed        = COALESCE(${num(amount_billed)}, amount_billed),
+        insurance_payment    = COALESCE(${num(insurance_payment)}, insurance_payment),
+        contractual_adjustment = COALESCE(${num(contractual_adjustment)}, contractual_adjustment),
+        patient_copay        = COALESCE(${num(patient_copay)}, patient_copay),
+        patient_deductible   = COALESCE(${num(patient_deductible)}, patient_deductible),
+        patient_coinsurance  = COALESCE(${num(patient_coinsurance)}, patient_coinsurance),
+        patient_non_covered  = COALESCE(${num(patient_non_covered)}, patient_non_covered),
+        remaining_balance    = COALESCE(${num(remaining_balance)}, remaining_balance),
+        prior_balance        = COALESCE(${num(prior_balance)}, prior_balance),
+        total_amount_due     = COALESCE(${num(total_amount_due)}, total_amount_due),
         explanations         = COALESCE(${explanations != null ? JSON.stringify(explanations) : null}::jsonb, explanations),
         updated_at           = NOW()
       WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid
