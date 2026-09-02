@@ -1635,13 +1635,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ref: booking.reference_code,
           displayName: family.display_name,
         })
-      )
+      ).catch(e => console.error('Family confirmation email failed:', e))
       if (booking.visit_type === 'In-home IV fluids') {
-        await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())
+        await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids email failed:', e))
       }
     }
     if (family?.phone) {
-      await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${booking.visit_type} on ${formatDate(booking.preferred_date)} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`)
+      await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${booking.visit_type} on ${formatDate(booking.preferred_date)} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Family confirmation SMS failed:', e))
     }
 
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`
@@ -1656,8 +1656,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const smsBody = `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/today`
 
     // Assigned provider (CMA/RN)
-    if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml)
-    if (provider?.phone) await sendSMS(provider.phone, smsBody)
+    if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml).catch(e => console.error('Provider email failed:', e))
+    if (provider?.phone) await sendSMS(provider.phone, smsBody).catch(e => console.error('Provider SMS failed:', e))
 
     // For CMA+telemedicine or In-home IV fluids: notify the on-call MD/NP
     let onCallProviderId: string | null = null
@@ -1679,8 +1679,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const onCall = onCallRows[0]
         onCallProviderId = onCall.id as string
         if (onCall.id !== provider?.id) {
-          if (onCall.email) await sendEmail(onCall.email as string, notifSubject, notifHtml)
-          if (onCall.phone) await sendSMS(onCall.phone as string, smsBody)
+          if (onCall.email) await sendEmail(onCall.email as string, notifSubject, notifHtml).catch(e => console.error('On-call email failed:', e))
+          if (onCall.phone) await sendSMS(onCall.phone as string, smsBody).catch(e => console.error('On-call SMS failed:', e))
         }
       }
     }
@@ -1692,8 +1692,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const admin of admins) {
       if (admin.id === provider?.id) continue       // don't double-notify assigned provider
       if (admin.id === onCallProviderId) continue   // don't double-notify on-call MD/NP
-      if (admin.email) await sendEmail(admin.email, notifSubject, notifHtml)
-      if (admin.phone) await sendSMS(admin.phone, smsBody)
+      if (admin.email) await sendEmail(admin.email, notifSubject, notifHtml).catch(e => console.error('Admin email failed:', e))
+      if (admin.phone) await sendSMS(admin.phone, smsBody).catch(e => console.error('Admin SMS failed:', e))
     }
 
     return res.json({ ok: true })
