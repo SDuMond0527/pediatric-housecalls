@@ -42,6 +42,7 @@ async function buildOrderPdf(opts: {
   patientState: string | null
   patientZip: string | null
   // insurance
+  insuranceProvider: string | null
   memberId: string | null
   groupNumber: string | null
   subscriberName: string | null
@@ -61,7 +62,7 @@ async function buildOrderPdf(opts: {
   const {
     patientFirstName, patientLastName, patientDob, patientGender,
     patientPhone, patientEmail, patientAddress, patientCity, patientState, patientZip,
-    memberId, groupNumber, subscriberName, subscriberDob, subscriberGender,
+    insuranceProvider, memberId, groupNumber, subscriberName, subscriberDob, subscriberGender,
     providerName, providerRole, providerNpi,
     orderedDate, tests, diagnoses, priority, notes,
   } = opts
@@ -93,12 +94,17 @@ async function buildOrderPdf(opts: {
   page.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: navy })
   page.drawText(PRACTICE_NAME, { x: margin, y: height - 38, font: bold, size: 18, color: white })
   page.drawText('LABORATORY ORDER FORM', { x: margin, y: height - 58, font: regular, size: 10, color: rgb(0.63, 0.63, 0.75) })
-  page.drawText(`Labcorp Account #: ${LABCORP_ACCOUNT}`, { x: width - margin - 160, y: height - 38, font: bold, size: 9, color: white })
   if (PRACTICE_PHONE) {
-    page.drawText(PRACTICE_PHONE, { x: width - margin - 160, y: height - 54, font: regular, size: 9, color: rgb(0.63, 0.63, 0.75) })
+    page.drawText(PRACTICE_PHONE, { x: width - margin - 100, y: height - 58, font: regular, size: 9, color: rgb(0.63, 0.63, 0.75) })
   }
 
-  y = height - 100
+  // ── Labcorp account banner ────────────────────────────────────────────────
+  page.drawRectangle({ x: 0, y: height - 110, width, height: 30, color: accent })
+  const acctLabel = `${PRACTICE_NAME}  ·  Labcorp Account #: ${LABCORP_ACCOUNT}`
+  const acctW = bold.widthOfTextAtSize(acctLabel, 11)
+  page.drawText(acctLabel, { x: (width - acctW) / 2, y: height - 101, font: bold, size: 11, color: white })
+
+  y = height - 120
 
   // STAT banner
   if (priority === 'stat') {
@@ -159,6 +165,7 @@ async function buildOrderPdf(opts: {
   // ── Insurance Information ─────────────────────────────────────────────────
   hRule()
   sectionHeader('Insurance Information')
+  row1('Insurance Company:', fmt(insuranceProvider))
   row2('Member ID:', fmt(memberId),         'Group #:', fmt(groupNumber))
   row2('Subscriber Name:', fmt(subscriberName))
   row2('Subscriber DOB:', fmtDate(subscriberDob), 'Subscriber Gender:', fmt(subscriberGender))
@@ -330,6 +337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         p.name AS provider_name, p.role AS provider_role, p.npi AS provider_npi,
         ch.first_name AS child_first_name, ch.last_name AS child_last_name,
         ch.date_of_birth AS patient_dob, ch.gender AS patient_gender,
+        ch.insurance_provider,
         ch.insurance_member_id, ch.insurance_group_number,
         ch.insurance_subscriber_name, ch.insurance_subscriber_dob, ch.insurance_subscriber_gender,
         COALESCE(fp.phone, ch.parent_phone)   AS patient_phone,
@@ -361,6 +369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patientCity:        order.patient_city ?? null,
       patientState:       order.patient_state ?? null,
       patientZip:         order.patient_zip ?? null,
+      insuranceProvider:  order.insurance_provider ?? null,
       memberId:           order.insurance_member_id ?? null,
       groupNumber:        order.insurance_group_number ?? null,
       subscriberName:     order.insurance_subscriber_name ?? null,
