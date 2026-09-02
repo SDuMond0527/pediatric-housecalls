@@ -212,7 +212,7 @@ export function FamilyProfile() {
   }
 
   async function addChild() {
-    if (!newFirst.trim() && !newLast.trim()) return
+    if (!newFirst.trim() || !newLast.trim()) return
     setAddingChildSaving(true)
     setAddChildError('')
     try {
@@ -520,9 +520,9 @@ export function FamilyProfile() {
         {addingChild && (
           <div className="mt-3 p-4 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8]">
             <div className="grid grid-cols-2 gap-3 mb-2">
-              <Input label="First name" placeholder="Emma"
+              <Input label="First name *" placeholder="Emma"
                 value={newFirst} onChange={e => setNewFirst(e.target.value)} />
-              <Input label="Last name" placeholder="Smith"
+              <Input label="Last name *" placeholder="Smith"
                 value={newLast} onChange={e => setNewLast(e.target.value)} />
             </div>
             <div className="mb-3">
@@ -532,7 +532,7 @@ export function FamilyProfile() {
             {addChildError && <div className="mb-3 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addChildError}</div>}
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" disabled={addingChildSaving} onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob(''); setAddChildError('') }}>Cancel</Button>
-              <Button size="sm" loading={addingChildSaving} onClick={addChild}>Add</Button>
+              <Button size="sm" loading={addingChildSaving} disabled={!newFirst.trim() || !newLast.trim()} onClick={addChild}>Add</Button>
             </div>
           </div>
         )}

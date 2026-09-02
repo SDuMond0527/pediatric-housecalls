@@ -428,7 +428,8 @@ export function BookVisit() {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
-  const [newChildLabel, setNewChildLabel] = useState('')
+  const [newChildFirst, setNewChildFirst] = useState('')
+  const [newChildLast, setNewChildLast] = useState('')
 
   // ─── Child selection ─────────────────────────────────────────────────────────
 
@@ -453,13 +454,14 @@ export function BookVisit() {
   }
 
   async function addNewChild() {
-    if (!newChildLabel.trim() || !family) return
-    const data = await createChild({ display_label: newChildLabel.trim(), family_id: family.id }).catch(() => null)
+    if (!newChildFirst.trim() || !newChildLast.trim() || !family) return
+    const data = await createChild({ first_name: newChildFirst.trim(), last_name: newChildLast.trim(), family_id: family.id }).catch(() => null)
     if (data) {
       await refreshFamily()
-      toggleChild(data.id, data.display_label, false)
+      toggleChild(data.id, data.display_label || `${newChildFirst} ${newChildLast}`, false)
     }
-    setNewChildLabel('')
+    setNewChildFirst('')
+    setNewChildLast('')
     setAddingChild(false)
   }
 
@@ -1277,14 +1279,15 @@ export function BookVisit() {
             {/* Add new child inline */}
             {addingChild ? (
               <div className="p-3.5 border-2 border-[#7F77DD] rounded-xl bg-[#EEEDFE]">
-                <div className="flex items-center gap-2 mb-2">
-                  <Input placeholder="Name or label (e.g. Emma, my son)"
-                    value={newChildLabel} onChange={e => setNewChildLabel(e.target.value)}
-                    className="flex-1" />
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <Input placeholder="First name *"
+                    value={newChildFirst} onChange={e => setNewChildFirst(e.target.value)} />
+                  <Input placeholder="Last name *"
+                    value={newChildLast} onChange={e => setNewChildLast(e.target.value)} />
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewChildLabel('') }}>Cancel</Button>
-                  <Button size="sm" disabled={!newChildLabel.trim()} onClick={addNewChild}>Add & select</Button>
+                  <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewChildFirst(''); setNewChildLast('') }}>Cancel</Button>
+                  <Button size="sm" disabled={!newChildFirst.trim() || !newChildLast.trim()} onClick={addNewChild}>Add & select</Button>
                 </div>
               </div>
             ) : (
