@@ -763,7 +763,11 @@ export function AdminSchedule() {
                           {!(appt.id in notes) ? (
                             <div className="px-3 py-2 text-[12px] text-[#999]">Loading…</div>
                           ) : !notes[appt.id] ? (
-                            <div className="px-3 py-2 text-[12px] text-[#999]">No encounter note on file.</div>
+                            <button
+                              onClick={() => { setNoteModalChildId(appt.child_id ?? null); setNoteModalAppt(appt) }}
+                              className="w-full px-3 py-3 text-left text-[12px] text-[#7F77DD] font-medium hover:bg-[#EEEDFE] transition-colors">
+                              + Add encounter note
+                            </button>
                           ) : (() => {
                             const n = notes[appt.id]
                             const v = vitals[appt.id]
