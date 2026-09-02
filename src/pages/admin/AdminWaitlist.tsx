@@ -157,7 +157,7 @@ export function AdminWaitlist() {
     const entries = await getWaitlistEntries(params).catch(() => null)
     if (!entries) { setLoading(false); return }
 
-    const familyIds = [...new Set(entries.map(e => e.family_id))]
+    const familyIds = [...new Set(entries.map(e => e.family_id).filter(Boolean))]
     const [families, kids] = await Promise.all([
       familyIds.length ? getFamiliesByIds(familyIds).catch(() => []) : Promise.resolve([]),
       familyIds.length ? getChildrenByFamilyIds(familyIds).catch(() => []) : Promise.resolve([]),
@@ -166,11 +166,15 @@ export function AdminWaitlist() {
     const enriched = entries.map(e => {
       const fam = (families as any[]).find(f => f.id === e.family_id)
       const childNames = (kids as any[]).filter(k => k.family_id === e.family_id).map((k: any) => k.display_label) || []
+      // For admin-added entries (no family account), parse name from notes field
+      const notesName = !e.family_id && e.notes
+        ? (e.notes.match(/(?:^|[\|])Patient:\s*([^|]+)/)?.[1]?.trim() ?? null)
+        : null
       return {
         ...e,
-        family_email: fam?.email,
-        family_name: fam?.display_name || fam?.email || 'Unknown family',
-        family_phone: fam?.phone,
+        family_email: fam?.email ?? (e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? undefined),
+        family_name: fam?.display_name || fam?.email || notesName || 'Unknown family',
+        family_phone: fam?.phone ?? (e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? undefined),
         children: childNames,
       }
     })
