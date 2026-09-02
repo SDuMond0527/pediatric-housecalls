@@ -143,6 +143,7 @@ interface BookingState {
   provider: string
   visitAddress: string
   city: string
+  phone: string
   date: string
   time: string
   participantCount: number
@@ -222,7 +223,8 @@ export function BookVisit() {
     visitType: '', selectedChildIds: [], childIntakes: {},
     activeChildTab: '', ivFluidsIntake: emptyIvFluids(),
     zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '',
-    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', date: '', time: '',
+    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '',
+    phone: (family as any)?.phone || '', date: '', time: '',
     participantCount: 1, participantNames: '',
   })
 
@@ -1015,7 +1017,21 @@ export function BookVisit() {
     if (booking.city)         contactUpdate.city          = booking.city
     if (booking.state)        contactUpdate.state         = booking.state
     if (booking.zip)          contactUpdate.zip           = booking.zip
+    if (booking.phone)        contactUpdate.phone         = booking.phone
     if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(() => {})
+
+    // Mirror parent contact onto each child's patient record
+    const parentContactPatch: Record<string, unknown> = {}
+    if (family?.display_name)      parentContactPatch.parent_name    = family.display_name
+    if (user?.email || family?.email) parentContactPatch.parent_email = user?.email || family?.email
+    if (booking.phone || (family as any)?.phone) parentContactPatch.parent_phone = booking.phone || (family as any)?.phone
+    if (booking.visitAddress)      parentContactPatch.parent_address = booking.visitAddress
+    if (booking.city)              parentContactPatch.parent_city    = booking.city
+    if (booking.state)             parentContactPatch.parent_state   = booking.state
+    if (booking.zip)               parentContactPatch.parent_zip     = booking.zip
+    if (Object.keys(parentContactPatch).length) {
+      booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
+    }
 
     if (referralSource.trim() && !(family as any)?.referral_source) {
       updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
@@ -1512,6 +1528,17 @@ export function BookVisit() {
               <input value={booking.city}
                 onChange={e => setBooking(b => ({ ...b, city: e.target.value }))}
                 placeholder="Charlotte"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
+            </div>
+          )}
+          {!isCpr && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Contact phone number <span className="text-[#ff3b30]">*</span>
+              </label>
+              <input type="tel" value={booking.phone}
+                onChange={e => setBooking(b => ({ ...b, phone: e.target.value }))}
+                placeholder="(704) 555-0000"
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 outline-none" />
             </div>
           )}
