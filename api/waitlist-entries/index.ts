@@ -146,12 +146,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!isAdmin && providerStates.length > 0) {
         rows = await sql`
           SELECT we.*,
-            COALESCE(fp.display_name, fp.email) AS family_name,
-            COALESCE(fp.email, we.notes) AS family_email,
+            COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
+            COALESCE(fp.email) AS family_email,
             COALESCE(fp.phone, ch.parent_phone) AS family_phone
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
-          LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+          LEFT JOIN children ch ON ch.family_id = fp.id
           WHERE we.status = ${status}
             AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
             AND (we.state = ANY(${providerStates}::text[]) OR we.state IS NULL)
@@ -159,12 +159,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         rows = await sql`
           SELECT we.*,
-            COALESCE(fp.display_name, fp.email) AS family_name,
+            COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
             COALESCE(fp.email) AS family_email,
             COALESCE(fp.phone, ch.parent_phone) AS family_phone
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
-          LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+          LEFT JOIN children ch ON ch.family_id = fp.id
           WHERE we.status = ${status}
             AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
           ORDER BY we.created_at ASC`
@@ -172,12 +172,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       rows = await sql`
         SELECT we.*,
-          COALESCE(fp.display_name, fp.email) AS family_name,
+          COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
           COALESCE(fp.email) AS family_email,
           COALESCE(fp.phone, ch.parent_phone) AS family_phone
         FROM waitlist_entries we
         LEFT JOIN family_profiles fp ON fp.id = we.family_id
-        LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+        LEFT JOIN children ch ON ch.family_id = fp.id
         WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
           AND we.status NOT IN ('removed', 'converted')
         ORDER BY we.created_at DESC`
