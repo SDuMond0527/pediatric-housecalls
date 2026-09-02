@@ -50,6 +50,7 @@ export function Waitlist() {
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
   const [passed, setPassed] = useState<Set<string>>(new Set())
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
@@ -205,6 +206,7 @@ export function Waitlist() {
   async function acceptEntry() {
     if (!accepting || !provider || !date || !time) return
     setSubmitting(true)
+    setAcceptError(null)
 
     // Convert time to 24hr
     const [t, ampm] = time.split(' ')
@@ -238,34 +240,39 @@ export function Waitlist() {
       }
     })
 
-    await createAppointment({
-      provider_id: provider.id,
-      visit_type: accepting.visit_type || 'In-home sick visit',
-      zone: accepting.zip,
-      scheduled_time: time24,
-      scheduled_date: date,
-      status: 'upcoming',
-      notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
-    })
+    try {
+      await createAppointment({
+        provider_id: provider.id,
+        visit_type: accepting.visit_type || 'In-home sick visit',
+        zone: accepting.zip,
+        scheduled_time: time24,
+        scheduled_date: date,
+        status: 'upcoming',
+        notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
+      })
 
-    // Mark waitlist entry as converted, recording which provider accepted it
-    await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
+      // Mark waitlist entry as converted, recording which provider accepted it
+      await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
-    // Notify the family via edge function
-    invokeNotifications({
-      type: 'waitlist_accepted',
-      waitlistEntryId: accepting.id,
-      providerName: provider.name,
-      providerId: provider.id,
-      date,
-      time,
-    }).catch(() => {})
+      // Notify the family via edge function
+      invokeNotifications({
+        type: 'waitlist_accepted',
+        waitlistEntryId: accepting.id,
+        providerName: provider.name,
+        providerId: provider.id,
+        date,
+        time,
+      }).catch(() => {})
 
-    setSubmitting(false)
-    setAccepting(null)
-    setDate('')
-    setTime('')
-    fetchEntries()
+      setAccepting(null)
+      setDate('')
+      setTime('')
+      fetchEntries()
+    } catch (e: any) {
+      setAcceptError(e?.message ?? 'Failed to book appointment. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function passEntry(id: string) {
@@ -555,6 +562,9 @@ export function Waitlist() {
               )}
             </div>
 
+            {acceptError && (
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2">{acceptError}</div>
+            )}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
               <Button variant="teal" className="flex-1" disabled={!date || !time} loading={submitting} onClick={acceptEntry}>
