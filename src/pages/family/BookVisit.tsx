@@ -272,6 +272,8 @@ export function BookVisit() {
   const [bookedSlots, setBookedSlots] = useState<{ time: string; duration: number }[]>([])
   const [allSlotsBooked, setAllSlotsBooked] = useState(false)
   const [slotsChecking, setSlotsChecking] = useState(false)
+  const [forwardAvail, setForwardAvail] = useState<{ date: string; firstSlot: string }[]>([])
+  const [forwardChecking, setForwardChecking] = useState(false)
   const [visitTypeWindow, setVisitTypeWindow] = useState<{ start: string; end: string } | null>(null)
   const [firstAvailResult, setFirstAvailResult] = useState<{ provider: string; time: string } | null>(null)
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
@@ -503,8 +505,9 @@ export function BookVisit() {
   }
 
   async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
-    if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); return }
+    if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); setForwardAvail([]); return }
     setSlotsChecking(true)
+    setForwardAvail([])
     try {
     const provRow = await getProviderByName(providerName)
     if (!provRow) { setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null); return }
@@ -550,12 +553,58 @@ export function BookVisit() {
     })
     setAllSlotsBooked(freeSlots.length === 0)
     setSlotsChecking(false)
+    if (freeSlots.length === 0) findForwardAvailability(providerName, date, booking.visitType)
     // If caller preserved a previously chosen time, keep it only if it's still open for this provider
     if (prevTime !== undefined) {
       setBooking(b => ({ ...b, time: freeSlots.includes(prevTime) ? prevTime : '' }))
     }
     } catch {
       setBookedSlots([]); setAllSlotsBooked(true); setSlotsChecking(false); setVisitTypeWindow(null)
+    }
+  }
+
+  async function findForwardAvailability(providerName: string, fromDate: string, visitType: string) {
+    setForwardChecking(true)
+    try {
+      const provRow = await getProviderByName(providerName)
+      if (!provRow) return
+      const dates = [1, 2, 3].map(d => {
+        const dt = new Date(fromDate + 'T12:00:00')
+        dt.setDate(dt.getDate() + d)
+        return dt.toISOString().slice(0, 10)
+      })
+      const results = await Promise.all(dates.map(async dateStr => {
+        try {
+          const dayWindow = await getProviderDayWindow(provRow.id, dateStr)
+          if (!dayWindow) return null
+          const sched = await getSchedulingData(provRow.id, { date: dateStr, visit_type: visitType })
+          const vtaRow = sched?.visitTypeAvail
+          const vtaWindow = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
+            ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
+            : null
+          const window = intersectWindows(dayWindow, vtaWindow)
+          if (!window) return null
+          const bookedSlotsList = sched?.bookedSlots ?? []
+          const freeSlots = TIME_SLOTS.filter(slot => {
+            const [t, ampm] = slot.split(' ')
+            let [h, m] = t.split(':').map(Number)
+            if (ampm === 'PM' && h !== 12) h += 12
+            if (ampm === 'AM' && h === 12) h = 0
+            const slotMin = h * 60 + m
+            const [wsh, wsm] = window.start.split(':').map(Number)
+            const [weh, wem] = window.end.split(':').map(Number)
+            if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
+            return !bookedSlotsList.some(({ time: bt, duration }) => {
+              const bookedMin = timeStrToMinutes(bt)
+              return slotMin >= bookedMin && slotMin < bookedMin + duration
+            })
+          })
+          return freeSlots.length > 0 ? { date: dateStr, firstSlot: freeSlots[0] } : null
+        } catch { return null }
+      }))
+      setForwardAvail(results.filter((r): r is { date: string; firstSlot: string } => r !== null))
+    } finally {
+      setForwardChecking(false)
     }
   }
 
@@ -1741,13 +1790,40 @@ export function BookVisit() {
                     <p className="text-[13px] text-[#999]">Checking availability…</p>
                   </div>
                 ) : availableSlots.length === 0 ? (
-                  <div className="text-center py-5 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8]">
-                    <p className="text-[13px] text-[#999]">
+                  <div className="py-5 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8] px-4">
+                    <p className="text-[13px] text-[#999] text-center">
                       {allSlotsBooked ? 'No availability on this date.' : 'No more same-day slots available.'}
                     </p>
-                    <p className="text-[12px] text-[#bbb] mt-1">
-                      {allSlotsBooked ? 'This provider is not available on the selected date. Try a different date.' : 'Please select a future date to continue.'}
+                    <p className="text-[12px] text-[#bbb] mt-1 text-center">
+                      {allSlotsBooked ? 'This provider is not available on the selected date.' : 'Please select a future date to continue.'}
                     </p>
+                    {allSlotsBooked && (forwardChecking || forwardAvail.length > 0) && (
+                      <div className="mt-3 border-t border-[#EEEEE9] pt-3">
+                        <p className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-2 text-center">Upcoming availability</p>
+                        {forwardChecking ? (
+                          <p className="text-[12px] text-[#bbb] text-center">Checking…</p>
+                        ) : forwardAvail.length === 0 ? (
+                          <p className="text-[12px] text-[#bbb] text-center">No openings in the next 3 days.</p>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {forwardAvail.map(({ date: fd, firstSlot }) => {
+                              const dt = new Date(fd + 'T12:00:00')
+                              const today2 = new Date(); today2.setHours(0,0,0,0)
+                              const diffDays = Math.round((dt.getTime() - today2.getTime()) / 86400000)
+                              const label = diffDays === 1 ? 'Tomorrow' : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                              return (
+                                <button key={fd}
+                                  onClick={() => { setBooking(b => ({ ...b, date: fd, time: '' })); loadBookedTimes(booking.provider, fd) }}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-[#C8C4F0] bg-[#F2F1FB] hover:bg-[#E8E5F7] transition-colors">
+                                  <span className="text-[13px] font-semibold text-[#5B54C7]">{label}</span>
+                                  <span className="text-[12px] text-[#7F77DD]">from {firstSlot}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-4 gap-1.5">
