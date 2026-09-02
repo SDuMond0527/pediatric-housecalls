@@ -60,6 +60,8 @@ export function AdminBookings() {
           time: booking.preferred_time,
           zone: booking.zone || '',
           familyName: booking.family?.display_name || booking.family?.email || 'A family',
+          parentEmail: booking.family?.email || null,
+          parentPhone: booking.family?.phone || null,
         }).catch(() => {})
       }
       // Notify waitlisted families in the same zone that the slot opened

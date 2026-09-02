@@ -118,6 +118,8 @@ export function FamilyDashboard() {
         time: cancelTarget.preferred_time,
         zone: cancelTarget.zone || '',
         familyName: family?.display_name || family?.email || 'A family',
+        parentEmail: family?.email || null,
+        parentPhone: family?.phone || null,
       }).catch(() => {})
     }
 

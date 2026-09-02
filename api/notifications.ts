@@ -1427,9 +1427,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Notify admins
       const adminSms = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
       const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const adminIds = admins.map((a: any) => a.id)
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
         if (admin.phone) await sendSMS(admin.phone, adminSms)
+      }
+
+      // Notify assigned provider (if not already notified as admin)
+      if (appt.provider_id && !adminIds.includes(appt.provider_id)) {
+        if (appt.provider_email) await sendEmail(appt.provider_email, `Appointment cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: appt.provider_name || 'Provider', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
+        if (appt.provider_phone) await sendSMS(appt.provider_phone, adminSms)
       }
 
       return res.json({ ok: true })
@@ -1437,10 +1444,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Appointment cancelled — notify provider + admins ──────────────────────
     if (body.type === 'booking_cancelled') {
-      const { providerId, visitType, date, time, zone, familyName } = body
+      const { providerId, visitType, date, time, zone, familyName, parentEmail, parentPhone } = body
       const dateFormatted = formatDate(date)
       const subject = `Appointment cancelled — ${visitType} on ${dateFormatted}`
       const smsText = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
+
+      // Notify parent (confirmation of their cancellation)
+      if (parentEmail) await sendEmail(parentEmail, `Your appointment has been cancelled — ${visitType} on ${dateFormatted}`, appointmentCancelledByProviderEmail({ displayName: familyName, visitType, date: dateFormatted, time, zone: zone || '' }))
+      if (parentPhone) await sendSMS(parentPhone, `${PRACTICE_NAME}: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`)
 
       if (providerId) {
         const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid`
