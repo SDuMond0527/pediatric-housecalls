@@ -61,7 +61,10 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
         const stmt = await getPatientStatement(claim.id)
         if (stmt) {
           setStatement(stmt)
-          populateFromStatement(stmt)
+          // If the saved statement is missing contact info, backfill from family profile
+          const resolvedEmail = stmt.patient_email || claim.family_email || ''
+          const resolvedPhone = stmt.patient_phone || stmt.family_phone || claim.family_phone || ''
+          populateFromStatement({ ...stmt, patient_email: resolvedEmail, patient_phone: resolvedPhone, family_phone: resolvedPhone })
         } else {
           // No statement yet — pre-fill contact from family profile
           if (claim.family_email) setPatientEmail(claim.family_email)

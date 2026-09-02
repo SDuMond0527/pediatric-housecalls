@@ -30,10 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = await sql`
         SELECT ps.*,
           COALESCE(fp.email, '') as family_email,
-          COALESCE(fp.phone, '') as family_phone
+          COALESCE(fp.phone, ch.parent_phone, '') as family_phone
         FROM patient_statements ps
         LEFT JOIN claims c ON c.id = ps.claim_id
-        LEFT JOIN children ch ON ch.id = c.child_id
+        LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
         LEFT JOIN family_profiles fp ON fp.id = ch.family_id
         WHERE ps.claim_id = ${claimId} AND ps.practice_id = ${practiceId}::uuid
         LIMIT 1
