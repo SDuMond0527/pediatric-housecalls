@@ -741,6 +741,11 @@ export function AdminSchedule() {
                           <div className="flex items-center gap-2 px-3 py-2 bg-[#FAFAF8] border-b border-[#E8E8E4]">
                             <FileText size={13} className="text-[#7F77DD]" />
                             <span className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Encounter Note</span>
+                            <button
+                              onClick={() => { setNoteModalChildId(appt.child_id ?? null); setNoteModalAppt(appt) }}
+                              className="text-[11px] font-medium px-2 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors">
+                              {notes[appt.id] ? 'Edit note' : 'Add note'}
+                            </button>
                             <div className="ml-auto flex items-center gap-2">
                               {notes[appt.id]?.is_signed && (
                                 <span className="text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] px-2 py-0.5 rounded-full">Signed</span>
@@ -753,11 +758,6 @@ export function AdminSchedule() {
                                   {unlockingNote === appt.id ? 'Unlocking…' : 'Unlock note'}
                                 </button>
                               )}
-                              <button
-                                onClick={() => { setNoteModalChildId(appt.child_id ?? null); setNoteModalAppt(appt) }}
-                                className="text-[11px] font-medium px-2 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors">
-                                {notes[appt.id] ? 'Edit note' : 'Add note'}
-                              </button>
                             </div>
                           </div>
                           {!(appt.id in notes) ? (
