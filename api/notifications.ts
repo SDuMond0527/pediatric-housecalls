@@ -43,12 +43,19 @@ async function sendEmail(to: string, subject: string, html: string) {
 
 // ── SMS via Twilio ────────────────────────────────────────────────────────────
 
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
+  return phone
+}
+
 async function sendSMS(to: string, body: string) {
   if (!TWILIO_SID || !TWILIO_API_KEY) {
     console.log(`[SMS SKIPPED — no credentials] To: ${to} | Body: ${body}`)
     return
   }
-  const formData = new URLSearchParams({ From: TWILIO_FROM, To: to, Body: body })
+  const formData = new URLSearchParams({ From: TWILIO_FROM, To: normalizePhone(to), Body: body })
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
     method: 'POST',
     headers: {
