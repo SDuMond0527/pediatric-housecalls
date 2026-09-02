@@ -751,6 +751,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         const type = visitTypeToNoteType(appointment.visit_type)
         if (type === 'In-home vaccine administration') {
           setVaccineEntries([emptyVaccine()])
+        } else if (type === 'RN IV fluids') {
+          setIVFluidsRN(emptyIVFluidsRN())
         } else {
           const t = NOTE_TEMPLATES[type]
           setSubjective(t.subjective)
