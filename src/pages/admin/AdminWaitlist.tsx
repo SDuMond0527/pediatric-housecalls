@@ -166,15 +166,16 @@ export function AdminWaitlist() {
     const enriched = entries.map(e => {
       const fam = (families as any[]).find(f => f.id === e.family_id)
       const childNames = (kids as any[]).filter(k => k.family_id === e.family_id).map((k: any) => k.display_label) || []
-      // For admin-added entries (no family account), parse name from notes field
-      const notesName = !e.family_id && e.notes
-        ? (e.notes.match(/(?:^|[\|])Patient:\s*([^|]+)/)?.[1]?.trim() ?? null)
-        : null
+      // Parse useful fields from notes regardless of source
+      const notesPatient  = e.notes?.match(/Patient:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesFamily   = e.notes?.match(/Family:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesEmail    = e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesPhone    = e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? null
       return {
         ...e,
-        family_email: fam?.email ?? (e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? undefined),
-        family_name: fam?.display_name || fam?.email || notesName || 'Unknown family',
-        family_phone: fam?.phone ?? (e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? undefined),
+        family_email: fam?.email ?? notesEmail ?? undefined,
+        family_name: fam?.display_name || notesFamily || notesPatient || fam?.email || notesEmail || 'Unknown family',
+        family_phone: fam?.phone ?? notesPhone ?? undefined,
         children: childNames,
       }
     })
