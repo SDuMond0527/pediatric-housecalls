@@ -285,6 +285,12 @@ export function BookVisit() {
 
   const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
 
+  // Pre-fill waitlist phone from family profile once it loads
+  useEffect(() => {
+    if ((family as any)?.phone && !waitlistPhone) setWaitlistPhone((family as any).phone)
+  }, [(family as any)?.phone])
+
+
   useEffect(() => {
     const isIv = booking.visitType === 'In-home IV fluids'
     const isCma = booking.visitType === 'CMA + telemedicine'
@@ -761,10 +767,12 @@ export function BookVisit() {
     if (!family) return
     setWaitlistSubmitting(true)
 
+    const effectivePhone = waitlistPhone || (family as any).phone || ''
+
     const noteParts: string[] = []
     noteParts.push(`Family: ${family.display_name || family.email}`)
     noteParts.push(`Email: ${family.email}`)
-    if ((family as any).phone) noteParts.push(`Phone: ${(family as any).phone}`)
+    if (effectivePhone) noteParts.push(`Phone: ${effectivePhone}`)
 
     // If a known child was selected, pull their info from the profile
     const selectedChild = waitlistChildId ? children.find(c => c.id === waitlistChildId) : null
@@ -784,7 +792,6 @@ export function BookVisit() {
     } else {
       if (waitlistPatient) noteParts.push(`Patient: ${waitlistPatient}`)
       if (waitlistDOB) noteParts.push(`DOB: ${waitlistDOB}`)
-      if (waitlistPhone) noteParts.push(`Phone: ${waitlistPhone}`)
       if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
       if (waitlistAllergies) noteParts.push(`Allergies: ${waitlistAllergies}`)
       if (waitlistMedications) noteParts.push(`Medications: ${waitlistMedications}`)
@@ -800,6 +807,11 @@ export function BookVisit() {
     if (waitlistComplaint) noteParts.push(`Complaint: ${waitlistComplaint}`)
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
+
+    // Persist phone back to family profile so it's visible everywhere
+    if (waitlistPhone && !(family as any).phone) {
+      updateMyFamily({ phone: waitlistPhone }).catch(() => {})
+    }
 
     await familyCreateWaitlistEntry({
       family_id: family.id,
