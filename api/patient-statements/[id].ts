@@ -75,7 +75,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         patient_non_covered  = COALESCE(${num(patient_non_covered)}, patient_non_covered),
         remaining_balance    = COALESCE(${num(remaining_balance)}, remaining_balance),
         prior_balance        = COALESCE(${num(prior_balance)}, prior_balance),
-        total_amount_due     = COALESCE(${num(total_amount_due)}, total_amount_due),
+        total_amount_due      = COALESCE(${num(total_amount_due)}, total_amount_due),
+        total_amount_due_text = COALESCE(${num(total_amount_due) != null ? String(num(total_amount_due)) : null}, total_amount_due_text),
         explanations         = COALESCE(${explanations != null ? JSON.stringify(explanations) : null}::jsonb, explanations),
         updated_at           = NOW()
       WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid

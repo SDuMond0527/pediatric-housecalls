@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ps.cpt_codes,
         ps.visit_type,
         ps.provider_name,
-        ps.total_amount_due_text  AS total_amount_due,
+        COALESCE(NULLIF(ps.total_amount_due_text, ''), ps.total_amount_due::text) AS total_amount_due,
         ps.amount_billed,
         ps.insurance_payment,
         ps.square_payment_link_url AS square_payment_url,
