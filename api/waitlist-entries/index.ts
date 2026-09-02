@@ -144,12 +144,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       rows = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${family_id}::uuid AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status = 'waiting'`
     } else if (status) {
       if (!isAdmin && providerStates.length > 0) {
-        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND (state = ANY(${providerStates}::text[]) OR state IS NULL) ORDER BY created_at ASC`
+        rows = await sql`
+          SELECT we.*,
+            COALESCE(fp.display_name, fp.email) AS family_name,
+            COALESCE(fp.email, we.notes) AS family_email,
+            COALESCE(fp.phone, ch.parent_phone) AS family_phone
+          FROM waitlist_entries we
+          LEFT JOIN family_profiles fp ON fp.id = we.family_id
+          LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+          WHERE we.status = ${status}
+            AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
+            AND (we.state = ANY(${providerStates}::text[]) OR we.state IS NULL)
+          ORDER BY we.created_at ASC`
       } else {
-        rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) ORDER BY created_at ASC`
+        rows = await sql`
+          SELECT we.*,
+            COALESCE(fp.display_name, fp.email) AS family_name,
+            COALESCE(fp.email) AS family_email,
+            COALESCE(fp.phone, ch.parent_phone) AS family_phone
+          FROM waitlist_entries we
+          LEFT JOIN family_profiles fp ON fp.id = we.family_id
+          LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+          WHERE we.status = ${status}
+            AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
+          ORDER BY we.created_at ASC`
       }
     } else {
-      rows = await sql`SELECT * FROM waitlist_entries WHERE (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status NOT IN ('removed', 'converted') ORDER BY created_at DESC`
+      rows = await sql`
+        SELECT we.*,
+          COALESCE(fp.display_name, fp.email) AS family_name,
+          COALESCE(fp.email) AS family_email,
+          COALESCE(fp.phone, ch.parent_phone) AS family_phone
+        FROM waitlist_entries we
+        LEFT JOIN family_profiles fp ON fp.id = we.family_id
+        LEFT JOIN children ch ON ch.family_id = fp.id AND ch.id = (we.child_ids[1])
+        WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
+          AND we.status NOT IN ('removed', 'converted')
+        ORDER BY we.created_at DESC`
     }
     return res.json(rows)
   }

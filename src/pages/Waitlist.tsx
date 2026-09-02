@@ -203,7 +203,19 @@ export function Waitlist() {
     if (!provider) return
     setLoading(true)
     const data = await getWaitlistEntries({ status: 'waiting' })
-    setEntries((data ?? []) as WaitlistEntry[])
+    const enriched = ((data ?? []) as WaitlistEntry[]).map(e => {
+      const notesFamily  = e.notes?.match(/Family:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesPatient = e.notes?.match(/Patient:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesEmail   = e.notes?.match(/Email:\s*([^|]+)/)?.[1]?.trim() ?? null
+      const notesPhone   = e.notes?.match(/Phone:\s*([^|]+)/)?.[1]?.trim() ?? null
+      return {
+        ...e,
+        family_name: e.family_name || notesFamily || notesPatient || notesEmail || 'Unknown family',
+        family_email: e.family_email || notesEmail || null,
+        family_phone: e.family_phone || notesPhone || null,
+      }
+    })
+    setEntries(enriched)
     setLoading(false)
   }
 
