@@ -1092,7 +1092,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             </section>
 
             {/* Vitals */}
-            <section>
+            {noteType !== 'In-home vaccine administration' && <section>
               <div className={sectionHeader}>Vitals</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
@@ -1152,16 +1152,16 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                     className={inputCls} />
                 </div>
               </div>
-            </section>
+            </section>}
 
             {/* Chief Complaint */}
-            <section>
+            {noteType !== 'In-home vaccine administration' && <section>
               <div className={sectionHeader}>Chief Complaint</div>
               <input type="text" placeholder="e.g. Fever for 2 days" value={chiefComplaint}
                 disabled={readOnly}
                 onChange={e => setChiefComplaint(e.target.value)}
                 className={inputCls} />
-            </section>
+            </section>}
 
             {/* IV Fluids Telemedicine Screening Form */}
             {noteType === 'IV fluids telemedicine screening' && !readOnly && (() => {
