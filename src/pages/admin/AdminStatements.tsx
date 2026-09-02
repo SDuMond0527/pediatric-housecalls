@@ -189,7 +189,7 @@ export function AdminStatements() {
                               service_date: stmt.service_date,
                               family_email: stmt.patient_email || stmt.family_email,
                               family_phone: stmt.patient_phone || stmt.family_phone,
-                              cpt_codes: [],
+                              cpt_codes: stmt.cpt_codes ?? [],
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">
                             Edit

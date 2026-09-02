@@ -69,7 +69,10 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
           // No statement yet — pre-fill contact from family profile
           if (claim.family_email) setPatientEmail(claim.family_email)
           if (claim.family_phone) setPatientPhone(claim.family_phone)
-          // Pre-fill financial fields from ERA if already received
+          // Auto-compute total from CPT code charge amounts
+          const computed = cptTotal(claim.cpt_codes ?? [])
+          if (computed > 0) { setAmountBilled(String(computed)); setTotalAmountDue(String(computed)) }
+          // Pre-fill financial fields from ERA if already received (overrides CPT total)
           if (claim.era_received_at) {
             if (claim.amount_billed_era != null)        setAmountBilled(String(claim.amount_billed_era))
             if (claim.insurance_payment_era != null)    setInsurancePayment(String(claim.insurance_payment_era))
@@ -91,15 +94,18 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claim.id])
 
+  function cptTotal(cptCodes: any[]): number {
+    return (cptCodes ?? []).reduce((sum: number, c: any) =>
+      sum + (c.charge_amount != null ? parseFloat(String(c.charge_amount)) : 0), 0)
+  }
+
   function populateFromStatement(stmt: any) {
-    // Use family contact as fallback if patient-specific not set
     const fe = stmt.family_email ?? ''
     const fp = stmt.family_phone ?? ''
     setFamilyEmail(fe)
     setFamilyPhone(fp)
     setPatientEmail(stmt.patient_email ?? fe)
     setPatientPhone(stmt.patient_phone ?? fp)
-    setAmountBilled(stmt.amount_billed ?? '')
     setInsurancePayment(stmt.insurance_payment ?? '')
     setContractualAdjustment(stmt.contractual_adjustment ?? '')
     setPatientCopay(stmt.patient_copay ?? '')
@@ -108,7 +114,12 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     setPatientNonCovered(stmt.patient_non_covered ?? '')
     setRemainingBalance(stmt.remaining_balance ?? '')
     setPriorBalance(stmt.prior_balance ?? '')
-    setTotalAmountDue(stmt.total_amount_due ?? '')
+    // Auto-compute from CPT codes when statement amounts are blank/zero
+    const computed = cptTotal(claim.cpt_codes ?? stmt.cpt_codes)
+    const billed = parseFloat(stmt.amount_billed) || 0
+    const due    = parseFloat(stmt.total_amount_due) || 0
+    setAmountBilled(billed   > 0 ? String(billed)   : computed > 0 ? String(computed) : '')
+    setTotalAmountDue(due    > 0 ? String(due)       : computed > 0 ? String(computed) : '')
   }
 
   function buildPayload() {

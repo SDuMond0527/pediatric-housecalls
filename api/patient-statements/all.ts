@@ -34,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ps.patient_phone,
         ps.family_email,
         ps.family_phone,
+        ps.cpt_codes,
         ps.visit_type,
         ps.provider_name,
         ps.total_amount_due_text  AS total_amount_due,
