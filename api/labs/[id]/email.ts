@@ -2,10 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const FROM_EMAIL     = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
-const PRACTICE_NAME  = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
-const PRACTICE_PHONE = process.env.PRACTICE_PHONE || ''
+const RESEND_API_KEY    = process.env.RESEND_API_KEY || ''
+const FROM_EMAIL        = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
+const PRACTICE_NAME     = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
+const PRACTICE_PHONE    = process.env.PRACTICE_PHONE || ''
+const LABCORP_ACCOUNT   = process.env.LABCORP_ACCOUNT_NUMBER || '32834485'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -37,13 +38,15 @@ async function sendEmail(to: string, subject: string, html: string) {
 function buildLabOrderEmail(opts: {
   patientName: string
   providerName: string
+  providerRole: string | null
+  providerNpi: string | null
   orderedDate: string
   tests: { code: string; name: string }[]
   diagnoses: string[]
   priority: string
   notes?: string | null
 }): string {
-  const { patientName, providerName, orderedDate, tests, diagnoses, priority, notes } = opts
+  const { patientName, providerName, providerRole, providerNpi, orderedDate, tests, diagnoses, priority, notes } = opts
 
   const testRows = tests.map(t =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #f0ede6;font-size:14px;color:#1a1a2e;">${t.name}</td><td style="padding:8px 12px;border-bottom:1px solid #f0ede6;font-size:13px;color:#777;font-family:monospace;">${t.code}</td></tr>`
@@ -87,8 +90,10 @@ function buildLabOrderEmail(opts: {
           <!-- Order details -->
           <div style="background:#fafaf8;border:1px solid #e8e8e4;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
             <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Patient:</strong> ${patientName}</p>
-            <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Ordering Provider:</strong> ${providerName}</p>
-            <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Order Date:</strong> ${orderedDate}</p>
+            <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Ordering Provider:</strong> ${providerName}${providerRole ? ', ' + providerRole : ''}</p>
+            ${providerNpi ? `<p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Provider NPI:</strong> ${providerNpi}</p>` : ''}
+            <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Date Ordered:</strong> ${orderedDate}</p>
+            <p style="margin:0 0 6px;font-size:13px;color:#555;"><strong>Labcorp Account #:</strong> ${LABCORP_ACCOUNT}</p>
             ${dxSection}
             ${notesSection}
           </div>
@@ -112,9 +117,17 @@ function buildLabOrderEmail(opts: {
             <div style="font-size:13px;color:#1e40af;">Visit <a href="https://www.labcorp.com/labs-and-appointments/find-lab" style="color:#2563eb;">labcorp.com</a> to find the nearest patient service center. Most locations accept walk-ins.</div>
           </div>
 
-          <p style="margin:0;font-size:13px;color:#777;line-height:1.6;">
+          <p style="margin:0 0 28px;font-size:13px;color:#777;line-height:1.6;">
             If you have questions, contact us${PRACTICE_PHONE ? ' at ' + PRACTICE_PHONE : ''}.
           </p>
+
+          <!-- Signature block -->
+          <div style="border-top:1px solid #e8e8e4;padding-top:20px;">
+            <div style="font-size:13px;color:#555;margin-bottom:8px;"><strong>Electronically ordered by:</strong></div>
+            <div style="font-size:20px;font-style:italic;color:#1a1a2e;font-family:Georgia,'Times New Roman',serif;margin-bottom:6px;">${providerName}${providerRole ? ', ' + providerRole : ''}</div>
+            ${providerNpi ? `<div style="font-size:12px;color:#888;margin-bottom:4px;">NPI: ${providerNpi}</div>` : ''}
+            <div style="font-size:12px;color:#888;">Date: ${orderedDate}</div>
+          </div>
         </td></tr>
 
         <!-- Footer -->
@@ -149,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [order] = await sql`
       SELECT
         o.id, o.tests, o.diagnoses, o.priority, o.notes, o.created_at,
-        p.name AS provider_name,
+        p.name AS provider_name, p.role AS provider_role, p.npi AS provider_npi,
         ch.first_name AS child_first_name, ch.last_name AS child_last_name,
         COALESCE(fp.email, ch.parent_email) AS family_email
       FROM lab_orders o
@@ -169,6 +182,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const html = buildLabOrderEmail({
       patientName,
       providerName: order.provider_name,
+      providerRole: order.provider_role ?? null,
+      providerNpi: order.provider_npi ?? null,
       orderedDate,
       tests: Array.isArray(order.tests) ? order.tests : [],
       diagnoses: Array.isArray(order.diagnoses) ? order.diagnoses : [],
