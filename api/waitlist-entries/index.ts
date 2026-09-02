@@ -149,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rows = await sql`SELECT * FROM waitlist_entries WHERE status = ${status} AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) ORDER BY created_at ASC`
       }
     } else {
-      rows = await sql`SELECT * FROM waitlist_entries WHERE (practice_id = ${practiceId}::uuid OR practice_id IS NULL) ORDER BY created_at DESC`
+      rows = await sql`SELECT * FROM waitlist_entries WHERE (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status NOT IN ('removed', 'converted') ORDER BY created_at DESC`
     }
     return res.json(rows)
   }

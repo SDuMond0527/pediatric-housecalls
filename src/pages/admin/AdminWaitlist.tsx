@@ -179,7 +179,7 @@ export function AdminWaitlist() {
       }
     })
 
-    setEntries(enriched as WaitlistEntry[])
+    setEntries((enriched as WaitlistEntry[]).filter(e => e.status !== 'removed' && e.status !== 'converted'))
     setLoading(false)
   }
 
@@ -188,8 +188,8 @@ export function AdminWaitlist() {
   async function updateStatus(id: string, status: WaitlistEntry['status']) {
     await updateWaitlistEntry(id, { status })
     fetchEntries()
-    if (status === 'removed') {
-      invokeNotifications({ type: 'waitlist_removed', waitlistEntryId: id }).catch(() => {})
+    if (status === 'converted') {
+      invokeNotifications({ type: 'waitlist_converted', waitlistEntryId: id }).catch(() => {})
     }
   }
 
