@@ -11,6 +11,7 @@ export function AdminPcps() {
   const [editFax, setEditFax] = useState('')
   const [editName, setEditName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newFax, setNewFax] = useState('')
@@ -31,10 +32,13 @@ export function AdminPcps() {
 
   async function save(id: string) {
     setSaving(true)
+    setSaveError(null)
     try {
       const updated = await updatePcp(id, { name: editName.trim() || undefined, fax_number: editFax.trim() || undefined })
       setPcps(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
       setEditingId(null)
+    } catch (e: any) {
+      setSaveError(e?.message ?? 'Save failed')
     } finally { setSaving(false) }
   }
 
@@ -103,7 +107,8 @@ export function AdminPcps() {
                 {missing.map((p, i) => (
                   <PcpRow key={p.id} p={p} editing={editingId === p.id} editFax={editFax} editName={editName}
                     onEditFax={setEditFax} onEditName={setEditName} onStart={() => startEdit(p)}
-                    onSave={() => save(p.id)} onCancel={() => setEditingId(null)} saving={saving}
+                    onSave={() => save(p.id)} onCancel={() => { setEditingId(null); setSaveError(null) }} saving={saving}
+                    saveError={editingId === p.id ? saveError : null}
                     onToggleActive={() => toggleActive(p)}
                     border={i < missing.length - 1} />
                 ))}
@@ -121,7 +126,8 @@ export function AdminPcps() {
                 {hasFax.map((p, i) => (
                   <PcpRow key={p.id} p={p} editing={editingId === p.id} editFax={editFax} editName={editName}
                     onEditFax={setEditFax} onEditName={setEditName} onStart={() => startEdit(p)}
-                    onSave={() => save(p.id)} onCancel={() => setEditingId(null)} saving={saving}
+                    onSave={() => save(p.id)} onCancel={() => { setEditingId(null); setSaveError(null) }} saving={saving}
+                    saveError={editingId === p.id ? saveError : null}
                     onToggleActive={() => toggleActive(p)}
                     border={i < hasFax.length - 1} />
                 ))}
@@ -136,7 +142,8 @@ export function AdminPcps() {
                 {inactive.map((p, i) => (
                   <PcpRow key={p.id} p={p} editing={editingId === p.id} editFax={editFax} editName={editName}
                     onEditFax={setEditFax} onEditName={setEditName} onStart={() => startEdit(p)}
-                    onSave={() => save(p.id)} onCancel={() => setEditingId(null)} saving={saving}
+                    onSave={() => save(p.id)} onCancel={() => { setEditingId(null); setSaveError(null) }} saving={saving}
+                    saveError={editingId === p.id ? saveError : null}
                     onToggleActive={() => toggleActive(p)}
                     border={i < inactive.length - 1} />
                 ))}
@@ -149,11 +156,11 @@ export function AdminPcps() {
   )
 }
 
-function PcpRow({ p, editing, editFax, editName, onEditFax, onEditName, onStart, onSave, onCancel, saving, onToggleActive, border }: {
+function PcpRow({ p, editing, editFax, editName, onEditFax, onEditName, onStart, onSave, onCancel, saving, saveError, onToggleActive, border }: {
   p: any; editing: boolean; editFax: string; editName: string
   onEditFax: (v: string) => void; onEditName: (v: string) => void
   onStart: () => void; onSave: () => void; onCancel: () => void
-  saving: boolean; onToggleActive: () => void; border: boolean
+  saving: boolean; saveError: string | null; onToggleActive: () => void; border: boolean
 }) {
   return (
     <div className={`px-4 py-3 bg-white ${border ? 'border-b border-[#F1EFE8]' : ''}`}>
@@ -168,6 +175,7 @@ function PcpRow({ p, editing, editFax, editName, onEditFax, onEditName, onStart,
             <Button size="sm" loading={saving} onClick={onSave}>Save</Button>
             <button onClick={onCancel} className="p-2 text-[#999] hover:text-[#555]"><X size={14} /></button>
           </div>
+          {saveError && <div className="text-[12px] text-[#991B1B]">{saveError}</div>}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-4">

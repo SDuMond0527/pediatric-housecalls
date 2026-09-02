@@ -23,18 +23,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PATCH') {
     const { name, fax_number, aliases, state, is_active } = req.body ?? {}
-    const [row] = await sql`
-      UPDATE pcps SET
-        name       = COALESCE(${name       ?? null}, name),
-        fax_number = COALESCE(${fax_number ?? null}, fax_number),
-        aliases    = COALESCE(${aliases    != null ? JSON.stringify(aliases) : null}::text[], aliases),
-        state      = COALESCE(${state      ?? null}, state),
-        is_active  = COALESCE(${is_active  ?? null}, is_active),
-        updated_at = now()
-      WHERE id = ${id}::uuid
-      RETURNING *`
-    if (!row) return res.status(404).json({ error: 'Not found' })
-    return res.json(row)
+    try {
+      const [row] = await sql`
+        UPDATE pcps SET
+          name       = COALESCE(${name       ?? null}, name),
+          fax_number = COALESCE(${fax_number ?? null}, fax_number),
+          aliases    = COALESCE(${aliases    != null ? JSON.stringify(aliases) : null}::text[], aliases),
+          state      = COALESCE(${state      ?? null}, state),
+          is_active  = COALESCE(${is_active  ?? null}, is_active)
+        WHERE id = ${id}::uuid
+        RETURNING *`
+      if (!row) return res.status(404).json({ error: 'Not found' })
+      return res.json(row)
+    } catch (e: any) {
+      console.error('pcps PATCH error:', e?.message ?? e)
+      return res.status(500).json({ error: e?.message ?? 'Database update failed' })
+    }
   }
 
   if (req.method === 'DELETE') {
