@@ -30,15 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SELECT
         ps.id,
         ps.status,
-        COALESCE(ps.patient_name, NULLIF(TRIM(COALESCE(ps.patient_first_name,'') || ' ' || COALESCE(ps.patient_last_name,'')), '')) AS patient_name,
-        ps.patient_first_name,
-        ps.patient_last_name,
-        ps.patient_dob,
         ps.patient_email,
         ps.patient_phone,
         ps.family_email,
         ps.family_phone,
-        ps.date_of_service,
         ps.visit_type,
         ps.provider_name,
         ps.total_amount_due_text  AS total_amount_due,
@@ -53,12 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.stedi_claim_id,
         c.payer_name,
         c.child_id,
-        c.service_date,
-        ch.first_name AS child_first_name,
-        ch.last_name  AS child_last_name
+        COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
+        COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
+        COALESCE(ps.patient_dob,        c.patient_dob::text)                 AS patient_dob,
+        COALESCE(ps.date_of_service,    c.service_date::text)                AS service_date,
+        NULLIF(TRIM(
+          COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name, '') || ' ' ||
+          COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name,  '')
+        ), '') AS patient_name
       FROM patient_statements ps
       LEFT JOIN claims c ON c.id = ps.claim_id
-      LEFT JOIN children ch ON ch.id = c.child_id
+      LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
       WHERE ps.practice_id = ${provider.practice_id}::uuid
         AND (${status ?? null}::text IS NULL OR ps.status = ${status ?? null})
       ORDER BY ps.created_at DESC

@@ -185,12 +185,10 @@ export function AdminStatements() {
                               payer_name: stmt.payer_name,
                               patient_first_name: stmt.patient_first_name,
                               patient_last_name: stmt.patient_last_name,
-                              child_first_name: stmt.child_first_name,
-                              child_last_name: stmt.child_last_name,
                               patient_dob: stmt.patient_dob,
-                              service_date: stmt.service_date ?? stmt.date_of_service,
-                              family_email: stmt.family_email,
-                              family_phone: stmt.family_phone,
+                              service_date: stmt.service_date,
+                              family_email: stmt.patient_email || stmt.family_email,
+                              family_phone: stmt.patient_phone || stmt.family_phone,
                               cpt_codes: [],
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">
