@@ -5,6 +5,7 @@ import { apiFetch, getProviders, getAppointments, createAppointment, updateAppoi
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
+import { EncounterNoteModal } from '../../components/EncounterNoteModal'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import type { Appointment, Provider } from '../../types'
@@ -193,6 +194,9 @@ export function AdminSchedule() {
   const [cptPickerTab, setCptPickerTab] = useState<'Procedure' | 'Non-Covered Services'>('Procedure')
   const [cptPickerSearch, setCptPickerSearch] = useState('')
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [noteModalAppt, setNoteModalAppt] = useState<Appointment | null>(null)
+  const [noteModalChildId, setNoteModalChildId] = useState<string | null>(null)
+
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
     zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
@@ -749,6 +753,11 @@ export function AdminSchedule() {
                                   {unlockingNote === appt.id ? 'Unlocking…' : 'Unlock note'}
                                 </button>
                               )}
+                              <button
+                                onClick={() => { setNoteModalChildId(appt.child_id ?? null); setNoteModalAppt(appt) }}
+                                className="text-[11px] font-medium px-2 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors">
+                                {notes[appt.id] ? 'Edit note' : 'Add note'}
+                              </button>
                             </div>
                           </div>
                           {!(appt.id in notes) ? (
@@ -1328,6 +1337,15 @@ export function AdminSchedule() {
           <Button size="sm" onClick={addAppointment} disabled={!form.provider_id || !form.zone}>Add appointment</Button>
         </div>
       </Modal>
+
+      {noteModalAppt && (
+        <EncounterNoteModal
+          appointment={noteModalAppt}
+          childId={noteModalChildId}
+          providerId={noteModalAppt.provider_id}
+          onClose={() => setNoteModalAppt(null)}
+        />
+      )}
     </div>
   )
 }
