@@ -116,6 +116,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const b = req.body
+      // Prevent duplicate active entries for the same family
+      const existing = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${familyProfileId}::uuid AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status IN ('waiting', 'contacted') LIMIT 1`
+      if (existing.length) return res.json(existing[0])
       const childIds: string[] = b.child_ids ?? []
       const childIdsPg = `{${childIds.join(',')}}`
       const [row] = await sql`
@@ -146,12 +149,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!isAdmin && providerStates.length > 0) {
         rows = await sql`
           SELECT we.*,
-            COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
-            COALESCE(fp.email) AS family_email,
-            COALESCE(fp.phone, ch.parent_phone) AS family_phone
+            COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
+            fp.email AS family_email,
+            COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
-          LEFT JOIN children ch ON ch.family_id = fp.id
           WHERE we.status = ${status}
             AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
             AND (we.state = ANY(${providerStates}::text[]) OR we.state IS NULL)
@@ -159,12 +161,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         rows = await sql`
           SELECT we.*,
-            COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
-            COALESCE(fp.email) AS family_email,
-            COALESCE(fp.phone, ch.parent_phone) AS family_phone
+            COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
+            fp.email AS family_email,
+            COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
-          LEFT JOIN children ch ON ch.family_id = fp.id
           WHERE we.status = ${status}
             AND (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
           ORDER BY we.created_at ASC`
@@ -172,12 +173,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       rows = await sql`
         SELECT we.*,
-          COALESCE(fp.display_name, ch.last_name || ' Family', fp.email) AS family_name,
-          COALESCE(fp.email) AS family_email,
-          COALESCE(fp.phone, ch.parent_phone) AS family_phone
+          COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
+          fp.email AS family_email,
+          COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
         FROM waitlist_entries we
         LEFT JOIN family_profiles fp ON fp.id = we.family_id
-        LEFT JOIN children ch ON ch.family_id = fp.id
         WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)
           AND we.status NOT IN ('removed', 'converted')
         ORDER BY we.created_at DESC`
