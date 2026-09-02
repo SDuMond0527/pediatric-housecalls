@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
-import { Clock, CheckCircle2, Phone, XCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Clock, CheckCircle2, Phone, XCircle, Plus, X } from 'lucide-react'
 import { format } from 'date-fns'
-import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds, invokeNotifications } from '../../lib/api'
+import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds, invokeNotifications, createWaitlistEntry, apiFetch } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 
 interface WaitlistEntry {
   id: string
@@ -26,13 +28,126 @@ const STATUS_COLORS = {
   waiting:   { variant: 'amber' as const,   label: 'Waiting' },
   contacted: { variant: 'blue' as const,    label: 'Contacted' },
   converted: { variant: 'teal' as const,    label: 'Converted' },
-  removed:   { variant: 'gray' as const,  label: 'Removed' },
+  removed:   { variant: 'gray' as const,    label: 'Removed' },
 }
 
+const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredDate: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+
 export function AdminWaitlist() {
+  const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'waiting' | 'all'>('waiting')
+
+  // Add patient modal
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState(EMPTY_ADD)
+  const [addSubmitting, setAddSubmitting] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [selectedChild, setSelectedChild] = useState<any | null>(null)
+  const [nameQuery, setNameQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function setField(k: keyof typeof EMPTY_ADD, v: string) {
+    setAddForm(f => ({ ...f, [k]: v }))
+  }
+
+  function onNameQueryChange(q: string) {
+    setNameQuery(q)
+    setField('name', q)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (!q.trim()) { setSearchResults([]); setSearchOpen(false); return }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const results = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(q.trim())}`)
+        setSearchResults(Array.isArray(results) ? results : [])
+        setSearchOpen(true)
+      } catch {
+        setSearchResults([])
+        setSearchOpen(false)
+      }
+    }, 300)
+  }
+
+  function selectChild(child: any) {
+    const childName = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || ''
+    const rawDob = child.date_of_birth
+    const dob = rawDob ? String(rawDob instanceof Date ? rawDob.toISOString() : rawDob).split('T')[0] : ''
+    setSelectedChild(child)
+    setSearchOpen(false)
+    setAddForm(f => ({
+      ...f,
+      name: childName,
+      dob,
+      email: child.parent_email || child.family_email || '',
+      phone: child.parent_phone || child.family_phone || '',
+      address: [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', '),
+      zip: child.parent_zip || child.family_zip || '',
+      state: child.parent_state || child.family_state || '',
+      allergies: child.allergies || '',
+      medications: child.current_medications || '',
+      pmh: child.medical_history || '',
+      pcp: child.pcp || '',
+      pharmacy: child.preferred_pharmacy || '',
+      insurance: child.insurance_provider || '',
+      memberId: child.insurance_member_id || '',
+      groupNum: child.insurance_group_number || '',
+    }))
+  }
+
+  function closeAddModal() {
+    setAddOpen(false)
+    setAddForm(EMPTY_ADD)
+    setNameQuery('')
+    setSelectedChild(null)
+    setSearchResults([])
+    setSearchOpen(false)
+    setAddError(null)
+  }
+
+  async function submitAdd() {
+    if (!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint) return
+    setAddSubmitting(true)
+    setAddError(null)
+    const noteParts: string[] = []
+    noteParts.push(`Patient: ${addForm.name}`)
+    if (addForm.dob) noteParts.push(`DOB: ${addForm.dob}`)
+    if (addForm.email) noteParts.push(`Email: ${addForm.email}`)
+    if (addForm.phone) noteParts.push(`Phone: ${addForm.phone}`)
+    if (addForm.address) noteParts.push(`Address: ${addForm.address}`)
+    if (addForm.allergies) noteParts.push(`Allergies: ${addForm.allergies}`)
+    if (addForm.medications) noteParts.push(`Medications: ${addForm.medications}`)
+    if (addForm.pmh) noteParts.push(`PMH: ${addForm.pmh}`)
+    if (addForm.pcp) noteParts.push(`PCP: ${addForm.pcp}`)
+    if (addForm.pharmacy) noteParts.push(`Pharmacy: ${addForm.pharmacy}`)
+    if (addForm.insurance) noteParts.push(`Insurance: ${addForm.insurance}`)
+    if (addForm.memberId) noteParts.push(`Member ID: ${addForm.memberId}`)
+    if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
+
+    const preferredWindow = [
+      addForm.preferredDate ? new Date(addForm.preferredDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+      addForm.preferredTime,
+    ].filter(Boolean).join(' — ') || null
+
+    try {
+      await createWaitlistEntry({
+        visit_type: addForm.visitType || null,
+        zip: addForm.zip,
+        state: addForm.state,
+        complaint: addForm.complaint,
+        preferred_time_window: preferredWindow,
+        notes: noteParts.join(' | '),
+      })
+      closeAddModal()
+      fetchEntries()
+    } catch (err: any) {
+      setAddError(err?.message || 'Failed to add patient to waitlist')
+    } finally {
+      setAddSubmitting(false)
+    }
+  }
 
   async function fetchEntries() {
     setLoading(true)
@@ -85,6 +200,9 @@ export function AdminWaitlist() {
         </div>
         <div className="flex items-center gap-2">
           {filter === 'waiting' && waitingCount > 0 && <Badge variant="amber">{waitingCount} waiting</Badge>}
+          <Button size="sm" onClick={() => { setAddOpen(true); setAddForm(EMPTY_ADD); setNameQuery(''); setSelectedChild(null); setSearchResults([]); setSearchOpen(false); setAddError(null) }}>
+            <Plus size={13} /> Add patient to waitlist
+          </Button>
           <div className="flex gap-1 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-0.5">
             {(['waiting', 'all'] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)}
@@ -150,7 +268,7 @@ export function AdminWaitlist() {
                     }
                   })
                   const complaint = e.complaint || noteMap.Complaint || ''
-                  const entries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
+                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
                   return (
                     <div className="mt-2 space-y-1">
                       {complaint && (
@@ -165,7 +283,7 @@ export function AdminWaitlist() {
                           <span className="text-[#1A1A2E] font-medium">{noteMap.Patient}</span>
                         </div>
                       )}
-                      {entries.map(([k, v]) => (
+                      {noteEntries.map(([k, v]) => (
                         <div key={k} className="text-[12px]">
                           <span className="text-[#999]">{NOTE_LABELS[k] || k}: </span>
                           <span className="text-[#555]">{v}</span>
@@ -204,6 +322,152 @@ export function AdminWaitlist() {
           </div>
         ))}
       </div>
+
+      {/* Add patient to waitlist modal */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closeAddModal} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add patient to waitlist</h2>
+              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest">Patient info</div>
+
+              {/* Patient name search */}
+              <div className="relative">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name *</label>
+                {selectedChild ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 border border-[#AFA9EC] rounded-lg bg-[#F5F4FE]">
+                    <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
+                    <button type="button" onClick={() => { setSelectedChild(null); setNameQuery(''); setAddForm(EMPTY_ADD) }} className="text-[#999] hover:text-[#555]"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <>
+                    <input autoComplete="off" placeholder="Search by name..."
+                      value={nameQuery}
+                      onChange={e => onNameQueryChange(e.target.value)}
+                      onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-[#E8E8E4] bg-white focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 text-[14px] text-[#1A1A2E] placeholder-[#999] outline-none transition-all"
+                    />
+                    {searchOpen && searchResults.length > 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {searchResults.map(child => {
+                          const cn = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || 'Unknown'
+                          const dob = child.date_of_birth ? String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0] : null
+                          return (
+                            <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
+                              className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
+                              <div className="text-[14px] font-medium text-[#1A1A2E]">{cn}</div>
+                              {dob && <div className="text-[12px] text-[#999]">DOB: {dob}</div>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {searchOpen && nameQuery.trim().length > 1 && searchResults.length === 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#999]">
+                        No patients found — fill in manually below
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
+                  <input type="date" value={addForm.dob} onChange={e => setField('dob', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <Input label="Email" type="email" placeholder="parent@email.com" value={addForm.email} onChange={e => setField('email', e.target.value)} />
+              </div>
+              <Input label="Phone" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
+              <Input label="Visit address" placeholder="123 Main St, City, State" value={addForm.address} onChange={e => setField('address', e.target.value)} />
+
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Zip *" placeholder="28205" value={addForm.zip} onChange={e => setField('zip', e.target.value)} />
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State *</label>
+                  <select value={addForm.state} onChange={e => setField('state', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Select…</option>
+                    <option value="NC">North Carolina</option>
+                    <option value="SC">South Carolina</option>
+                    <option value="VA">Virginia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                <select value={addForm.visitType} onChange={e => setField('visitType', e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                  <option value="">Select…</option>
+                  {visitTypes.map(v => <option key={v.visit_type} value={v.visit_type}>{v.badge_label || v.visit_type}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Chief complaint *</label>
+                <textarea value={addForm.complaint} onChange={e => setField('complaint', e.target.value)}
+                  placeholder="Describe symptoms..." rows={2}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred date</label>
+                  <input type="date" value={addForm.preferredDate} onChange={e => setField('preferredDate', e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time</label>
+                  <select value={addForm.preferredTime} onChange={e => setField('preferredTime', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Any time</option>
+                    <option>Morning (before noon)</option>
+                    <option>Afternoon (noon–5pm)</option>
+                    <option>After 5pm</option>
+                    <option>Weekdays only</option>
+                    <option>Weekends OK</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Clinical info</div>
+              <Input label="Allergies" placeholder="e.g. Penicillin — or NKDA" value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
+              <Input label="Current medications" placeholder="None, or list medications" value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
+              <Input label="PMH" placeholder="Significant past medical history" value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
+              <Input label="PCP" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
+              <Input label="Pharmacy" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
+
+              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Insurance</div>
+              <Input label="Insurance" placeholder="e.g. BCBS" value={addForm.insurance} onChange={e => setField('insurance', e.target.value)} />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Member ID" value={addForm.memberId} onChange={e => setField('memberId', e.target.value)} />
+                <Input label="Group #" value={addForm.groupNum} onChange={e => setField('groupNum', e.target.value)} />
+              </div>
+            </div>
+
+            {addError && (
+              <div className="mt-3 text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2">{addError}</div>
+            )}
+
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={closeAddModal}>Cancel</Button>
+              <Button variant="teal" className="flex-1" loading={addSubmitting}
+                disabled={!addForm.name || !addForm.zip || !addForm.state || !addForm.complaint}
+                onClick={submitAdd}>
+                Add to waitlist
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
