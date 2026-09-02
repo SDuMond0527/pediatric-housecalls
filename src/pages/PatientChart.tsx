@@ -7,10 +7,23 @@ import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
 
+interface VaccineEntry {
+  vaccine_name: string
+  cvx_code?: string
+  manufacturer?: string
+  lot_number?: string
+  expiration_date?: string
+  dose?: string
+  route?: string
+  site?: string
+  administered_by?: string
+}
+
 interface NoteWithVisit {
   id: string
   appointment_id: string
   child_id: string
+  note_type: string | null
   chief_complaint: string | null
   subjective: string | null
   objective: string | null
@@ -26,6 +39,7 @@ interface NoteWithVisit {
   scheduled_time: string
   zone: string
   provider_name: string | null
+  vaccine_administrations?: VaccineEntry[]
 }
 
 function calcAge(dob: string): string {
@@ -118,7 +132,7 @@ export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines'>('overview')
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -298,10 +312,14 @@ export function PatientChart() {
   const showGrowthTab = childAgeYears != null && childAgeYears >= 2 && childAgeYears <= 20
   const isMale = (child?.gender ?? '').toUpperCase().startsWith('M')
 
+  const vaccineNotes = notes.filter(n => n.note_type === 'In-home vaccine administration' && n.is_signed && n.vaccine_administrations?.length)
+  const vaccineCount = vaccineNotes.reduce((sum, n) => sum + (n.vaccine_administrations?.length ?? 0), 0)
+
   const tabs = [
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
+    { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
@@ -1599,6 +1617,56 @@ export function PatientChart() {
                       style={{ height: 'calc(100vh - 220px)', minHeight: 600, border: 'none' }}
                       allow="clipboard-write"
                     />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'vaccines' && (
+              <div>
+                {vaccineNotes.length === 0 ? (
+                  <div className="text-center py-16 text-[#999] text-[14px]">No vaccine administrations on file.</div>
+                ) : (
+                  <div className="space-y-6">
+                    {vaccineNotes.map(note => (
+                      <div key={note.id}>
+                        <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">
+                          {format(parseISO(note.scheduled_date), 'MMMM d, yyyy')}
+                          {note.provider_name && <span className="ml-2 font-normal normal-case">· {note.provider_name}</span>}
+                        </div>
+                        <div className="border border-[#E8E8E4] rounded-xl overflow-hidden bg-white">
+                          <table className="w-full text-[13px]">
+                            <thead>
+                              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Vaccine</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Lot #</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Exp</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Dose</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Route</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Site</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Given by</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(note.vaccine_administrations ?? []).map((v, i) => (
+                                <tr key={i} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
+                                  <td className="px-4 py-3 font-medium text-[#1A1A2E]">
+                                    {v.vaccine_name}
+                                    {v.manufacturer && <div className="text-[11px] text-[#999] font-normal">{v.manufacturer}</div>}
+                                  </td>
+                                  <td className="px-4 py-3 text-[#555]">{v.lot_number || '—'}</td>
+                                  <td className="px-4 py-3 text-[#555]">{v.expiration_date || '—'}</td>
+                                  <td className="px-4 py-3 text-[#555]">{v.dose || '—'}</td>
+                                  <td className="px-4 py-3 text-[#555]">{v.route || '—'}</td>
+                                  <td className="px-4 py-3 text-[#555]">{v.site || '—'}</td>
+                                  <td className="px-4 py-3 text-[#555]">{v.administered_by || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
