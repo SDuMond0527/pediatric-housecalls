@@ -953,6 +953,7 @@ export function BookVisit() {
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
   async function submit() {
+    if (submitting) return
     setSubmitting(true)
     const ref = 'PUC-' + Math.floor(10000 + Math.random() * 90000)
 

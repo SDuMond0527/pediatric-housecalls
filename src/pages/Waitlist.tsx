@@ -267,7 +267,7 @@ export function Waitlist() {
   }
 
   async function acceptEntry() {
-    if (!accepting || !provider || !date || !time) return
+    if (!accepting || !provider || !date || !time || submitting) return
     setSubmitting(true)
     setAcceptError(null)
 
