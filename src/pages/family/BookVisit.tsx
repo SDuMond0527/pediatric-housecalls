@@ -1797,7 +1797,7 @@ export function BookVisit() {
                   {zoneLookahead.map(({ date: ld, firstSlot, providerCount }) => {
                     const dt = new Date(ld + 'T12:00:00')
                     const today2 = new Date(); today2.setHours(0, 0, 0, 0)
-                    const diffDays = Math.round((dt.getTime() - today2.getTime()) / 86400000)
+                    const diffDays = Math.floor((dt.getTime() - today2.getTime()) / 86400000)
                     const label = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : format(dt, 'EEE, MMM d')
                     return (
                       <button key={ld}
