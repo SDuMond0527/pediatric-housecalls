@@ -336,18 +336,19 @@ export function Waitlist() {
           if (match) {
             const insRaw = noteMap['Insurance'] || ''
             await updateChild(match.id, {
-              allergies:                   noteMap['Allergies']   || null,
-              current_medications:         noteMap['Medications'] || null,
-              medical_history:             noteMap['PMH']         || null,
-              preferred_pharmacy:          noteMap['Pharmacy']    || null,
-              pcp:                         noteMap['PCP']         || null,
-              insurance_provider:          insRaw.split(' | ')[0] || null,
-              insurance_member_id:         noteMap['Member ID']   || null,
-              insurance_group_number:      noteMap['Group #']     || null,
-              parent_phone:                noteMap['Phone']       || accepting.family_phone || null,
-              parent_email:                noteMap['Email']       || accepting.family_email || null,
-              parent_address:              noteMap['Address']     || null,
-              parent_zip:                  accepting.zip          || null,
+              allergies:                   noteMap['Allergies']        || null,
+              current_medications:         noteMap['Medications']      || null,
+              medical_history:             noteMap['PMH']              || null,
+              preferred_pharmacy:          noteMap['Pharmacy']         || null,
+              pcp:                         noteMap['PCP']              || null,
+              vaccination_status:          noteMap['Vaccination']      || null,
+              insurance_provider:          insRaw.split(' | ')[0]     || null,
+              insurance_member_id:         noteMap['Member ID']        || null,
+              insurance_group_number:      noteMap['Group #']          || null,
+              parent_phone:                noteMap['Phone']            || accepting.family_phone || null,
+              parent_email:                noteMap['Email']            || accepting.family_email || null,
+              parent_address:              noteMap['Address']          || null,
+              parent_zip:                  accepting.zip               || null,
             })
           }
         } catch { /* non-blocking */ }

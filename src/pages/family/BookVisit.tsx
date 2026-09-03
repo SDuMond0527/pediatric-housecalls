@@ -907,6 +907,35 @@ export function BookVisit() {
       familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: waitlistEntry.id }).catch(() => {})
     }
 
+    // Ensure child has a saved profile — create one for new patients, update existing
+    if (selectedChild) {
+      updateChild(selectedChild.id, { vaccination_status: (selectedChild as any).vaccination_status || null }).catch(() => {})
+    } else if (waitlistPatient) {
+      const [firstName, ...rest] = waitlistPatient.trim().split(' ')
+      const lastName = rest.join(' ')
+      createChild({
+        family_id: family.id,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        date_of_birth: waitlistDOB || null,
+        allergies: waitlistAllergies || null,
+        current_medications: waitlistMedications || null,
+        medical_history: waitlistPMH || null,
+        preferred_pharmacy: waitlistPharmacy || null,
+        pcp: waitlistPCP || null,
+        insurance_provider: waitlistInsurance || null,
+        insurance_member_id: waitlistInsuranceMemberId || null,
+        insurance_group_number: waitlistInsuranceGroupNum || null,
+        insurance_subscriber_name: waitlistInsuranceSubscriber || null,
+        parent_name: family.display_name || null,
+        parent_email: family.email || null,
+        parent_phone: effectivePhone || null,
+        parent_address: waitlistAddress || null,
+        parent_zip: booking.zip || null,
+        parent_state: booking.state || null,
+      }).catch(() => {})
+    }
+
     setWaitlistSubmitting(false)
     setWaitlistOpen(false)
     setWaitlistDone(true)
@@ -1155,6 +1184,7 @@ export function BookVisit() {
           allergies: intake.allergies || null,
           current_medications: intake.currentMedications || null,
           medical_history: intake.medicalHistory || null,
+          vaccination_status: intake.vaccinationStatus || null,
         }
         if (!intake.hasProfile) {
           Object.assign(update, {

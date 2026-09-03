@@ -816,6 +816,7 @@ export function PatientChart() {
                         {[
                           { label: 'Current medications', value: child?.current_medications },
                           { label: 'Medical history', value: child?.medical_history },
+                          { label: 'Vaccination status', value: child?.vaccination_status },
                           { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
                         ].map(({ label, value }) => (
                           <div key={label}>
