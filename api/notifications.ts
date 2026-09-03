@@ -621,8 +621,8 @@ async function notifyAllProviders(
     : await sql`SELECT id, name, phone, email FROM providers WHERE is_active = true OR role = 'admin'`
   for (const prov of providers) {
     if (excludeId && prov.id === excludeId) continue
-    if (prov.email) await sendEmail(prov.email, emailSubject, makeHtml(prov.name))
-    if (prov.phone) await sendSMS(prov.phone, smsBody)
+    if (prov.email) await sendEmail(prov.email, emailSubject, makeHtml(prov.name)).catch(e => console.error('notifyAllProviders email failed:', e))
+    if (prov.phone) await sendSMS(prov.phone, smsBody).catch(e => console.error('notifyAllProviders SMS failed:', e))
   }
 }
 
@@ -670,7 +670,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (prov.phone) await sendSMS(prov.phone, providerSmsBody).catch(err => console.error('[notifications] SMS failed for', prov.name, err))
       }
 
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
       console.error('[notifications] admins found:', admins.length)
       for (const admin of admins) {
         console.error('[notifications] notifying admin email:', !!admin.email, 'phone:', !!admin.phone)
@@ -702,8 +702,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </div>
 </td></tr>
 </table></td></tr></table></body></html>`
-        if (family?.email) await sendEmail(family.email, `You're on the ${PRACTICE_NAME} waitlist`, familyHtml)
-        if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: You've been added to the waitlist. We'll text you as soon as a provider is available. Questions? Log in at ${PORTAL_URL}/family/dashboard`)
+        if (family?.email) await sendEmail(family.email, `You're on the ${PRACTICE_NAME} waitlist`, familyHtml).catch(e => console.error('Waitlist family confirmation email failed:', e))
+        if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: You've been added to the waitlist. We'll text you as soon as a provider is available. Questions? Log in at ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Waitlist family confirmation SMS failed:', e))
       }
 
       return res.json({ ok: true })
@@ -743,10 +743,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </table></td></tr></table></body></html>`
 
       if (family?.email) {
-        await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html)
+        await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html).catch(e => console.error('Waitlist accepted family email failed:', e))
       }
       if (family?.phone) {
-        await sendSMS(family.phone, `${PRACTICE_NAME}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`)
+        await sendSMS(family.phone, `${PRACTICE_NAME}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Waitlist accepted family SMS failed:', e))
       }
 
       const waitlistPracticeId: string | undefined = entry.practice_id ?? undefined
@@ -839,7 +839,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-        await sendEmail(fam.email, `A slot opened up — ${dateFormatted} at ${time} with ${providerName}`, html)
+        await sendEmail(fam.email, `A slot opened up — ${dateFormatted} at ${time} with ${providerName}`, html).catch(e => console.error('Slot opened family email failed:', e))
       }
 
       return res.json({ ok: true, notified: entries.length })
@@ -911,10 +911,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-        await sendEmail(fam.email, `Confirmed: ${offer.visit_type || 'Appointment'} on ${dateFormatted}`, html)
+        await sendEmail(fam.email, `Confirmed: ${offer.visit_type || 'Appointment'} on ${dateFormatted}`, html).catch(e => console.error('Slot offer accepted family email failed:', e))
       }
       if (fam?.phone) {
-        await sendSMS(fam.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${offer.visit_type || 'visit'} on ${dateFormatted} at ${offer.offered_time} with ${offer.provider_name}. View details: ${PORTAL_URL}/family/dashboard`)
+        await sendSMS(fam.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${offer.visit_type || 'visit'} on ${dateFormatted} at ${offer.offered_time} with ${offer.provider_name}. View details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Slot offer accepted family SMS failed:', e))
       }
 
       const [offerProv] = await sql`SELECT email, phone FROM providers WHERE id = ${offer.provider_id}::uuid`
@@ -930,10 +930,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ref: offer.id.slice(0, 8).toUpperCase(),
             providerName: offer.provider_name,
           })
-        )
+        ).catch(e => console.error('Slot offer accepted provider email failed:', e))
       }
       if (offerProv?.phone) {
-        await sendSMS(offerProv.phone, `${PRACTICE_NAME}: A waitlist family has claimed your open slot on ${dateFormatted} at ${offer.offered_time}. View your schedule: ${PORTAL_URL}`)
+        await sendSMS(offerProv.phone, `${PRACTICE_NAME}: A waitlist family has claimed your open slot on ${dateFormatted} at ${offer.offered_time}. View your schedule: ${PORTAL_URL}`).catch(e => console.error('Slot offer accepted provider SMS failed:', e))
       }
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: Waitlist slot claimed — ${offer.visit_type || 'visit'} on ${dateFormatted} at ${offer.offered_time} with ${offer.provider_name}. View: ${PORTAL_URL}/admin/schedule`, offerPracticeId ?? undefined)
@@ -976,8 +976,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">Go to my portal</a>
 </td></tr>
 </table></td></tr></table></body></html>`
-          if (fam.email) await sendEmail(fam.email, `Waitlist update — ${PRACTICE_NAME}`, famHtml)
-          if (fam.phone) await sendSMS(fam.phone, `${PRACTICE_NAME}: Your waitlist spot has been removed. If you still need a visit, you can rebook at ${PORTAL_URL}/family/dashboard`)
+          if (fam.email) await sendEmail(fam.email, `Waitlist update — ${PRACTICE_NAME}`, famHtml).catch(e => console.error('Waitlist removed family email failed:', e))
+          if (fam.phone) await sendSMS(fam.phone, `${PRACTICE_NAME}: Your waitlist spot has been removed. If you still need a visit, you can rebook at ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Waitlist removed family SMS failed:', e))
         }
       }
 
@@ -1198,9 +1198,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <a href="${PORTAL_URL}/broadcasts" style="display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View &amp; accept broadcast</a>
 </td></tr>
 </table></td></tr></table></body></html>`
-          await sendEmail(prov.email, `${bc.is_urgent ? '[URGENT] ' : ''}Broadcast: ${bc.patient_first_name} ${bc.patient_last_name} — ${bc.request_type}`, html)
+          await sendEmail(prov.email, `${bc.is_urgent ? '[URGENT] ' : ''}Broadcast: ${bc.patient_first_name} ${bc.patient_last_name} — ${bc.request_type}`, html).catch(e => console.error('Broadcast provider email failed:', e))
         }
-        if (prov.phone) await sendSMS(prov.phone, smsBody)
+        if (prov.phone) await sendSMS(prov.phone, smsBody).catch(e => console.error('Broadcast provider SMS failed:', e))
       }
 
       return res.json({ ok: true })
@@ -1247,16 +1247,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <p>At that time, please log into the ${PRACTICE_NAME} virtual waiting room and the provider will begin your video visit from there:</p>
           <p><a href="${TELEMEDICINE_URL}" style="color:#7F77DD;font-weight:600;">${TELEMEDICINE_URL}</a></p>
         </div>`
-        if (familyPhone) await sendSMS(familyPhone, parentSms)
-        if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml)
+        if (familyPhone) await sendSMS(familyPhone, parentSms).catch(e => console.error('Broadcast accepted family SMS failed:', e))
+        if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml).catch(e => console.error('Broadcast accepted family email failed:', e))
       } else {
         const parentSms = `${PRACTICE_NAME}: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will come to your home for a house call visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>Please have your child ready at that time.</p>
         </div>`
-        if (familyPhone) await sendSMS(familyPhone, parentSms)
-        if (familyEmail) await sendEmail(familyEmail, `Your house call visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml)
+        if (familyPhone) await sendSMS(familyPhone, parentSms).catch(e => console.error('Broadcast accepted family SMS failed:', e))
+        if (familyEmail) await sendEmail(familyEmail, `Your house call visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml).catch(e => console.error('Broadcast accepted family email failed:', e))
       }
 
       return res.json({ ok: true })
@@ -1327,7 +1327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           dateFormatted,
           instructions: instructions || null,
         })
-      )
+      ).catch(e => console.error('Post-visit email failed:', e))
 
       return res.json({ ok: true })
     }
@@ -1364,7 +1364,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             participantNames,
             ref: booking.reference_code,
           })
-        )
+        ).catch(e => console.error('CPR family confirmation email failed:', e))
       }
 
       await sendEmail(
@@ -1381,7 +1381,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           familyEmail: family?.email || '',
           ref: booking.reference_code,
         })
-      )
+      ).catch(e => console.error('CPR Melissa email failed:', e))
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`, booking.practice_id ?? undefined)
 
@@ -1428,22 +1428,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const smsToParent = `${PRACTICE_NAME}: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`
 
       // Notify parent
-      if (parentEmail) await sendEmail(parentEmail, subject, appointmentCancelledByProviderEmail({ displayName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '' }))
-      if (parentPhone) await sendSMS(parentPhone, smsToParent)
+      if (parentEmail) await sendEmail(parentEmail, subject, appointmentCancelledByProviderEmail({ displayName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '' })).catch(e => console.error('Appt cancelled parent email failed:', e))
+      if (parentPhone) await sendSMS(parentPhone, smsToParent).catch(e => console.error('Appt cancelled parent SMS failed:', e))
 
       // Notify admins
       const adminSms = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
       const adminIds = admins.map((a: any) => a.id)
       for (const admin of admins) {
-        if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
-        if (admin.phone) await sendSMS(admin.phone, adminSms)
+        if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' })).catch(e => console.error('Appt cancelled admin email failed:', e))
+        if (admin.phone) await sendSMS(admin.phone, adminSms).catch(e => console.error('Appt cancelled admin SMS failed:', e))
       }
 
       // Notify assigned provider (if not already notified as admin)
       if (appt.provider_id && !adminIds.includes(appt.provider_id)) {
-        if (appt.provider_email) await sendEmail(appt.provider_email, `Appointment cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: appt.provider_name || 'Provider', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' }))
-        if (appt.provider_phone) await sendSMS(appt.provider_phone, adminSms)
+        if (appt.provider_email) await sendEmail(appt.provider_email, `Appointment cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: appt.provider_name || 'Provider', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' })).catch(e => console.error('Appt cancelled provider email failed:', e))
+        if (appt.provider_phone) await sendSMS(appt.provider_phone, adminSms).catch(e => console.error('Appt cancelled provider SMS failed:', e))
       }
 
       return res.json({ ok: true })
@@ -1457,20 +1457,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const smsText = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
 
       // Notify parent (confirmation of their cancellation)
-      if (parentEmail) await sendEmail(parentEmail, `Your appointment has been cancelled — ${visitType} on ${dateFormatted}`, appointmentCancelledByProviderEmail({ displayName: familyName, visitType, date: dateFormatted, time, zone: zone || '' }))
-      if (parentPhone) await sendSMS(parentPhone, `${PRACTICE_NAME}: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`)
+      if (parentEmail) await sendEmail(parentEmail, `Your appointment has been cancelled — ${visitType} on ${dateFormatted}`, appointmentCancelledByProviderEmail({ displayName: familyName, visitType, date: dateFormatted, time, zone: zone || '' })).catch(e => console.error('Booking cancelled parent email failed:', e))
+      if (parentPhone) await sendSMS(parentPhone, `${PRACTICE_NAME}: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`).catch(e => console.error('Booking cancelled parent SMS failed:', e))
 
       if (providerId) {
         const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid`
         const providerName = prov?.name || 'Provider'
-        if (prov?.email) await sendEmail(prov.email, subject, cancellationNotificationEmail({ recipientName: providerName, visitType, date: dateFormatted, time, zone: zone || '', familyName }))
-        if (prov?.phone) await sendSMS(prov.phone, smsText)
+        if (prov?.email) await sendEmail(prov.email, subject, cancellationNotificationEmail({ recipientName: providerName, visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled provider email failed:', e))
+        if (prov?.phone) await sendSMS(prov.phone, smsText).catch(e => console.error('Booking cancelled provider SMS failed:', e))
       }
 
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+      const admins = await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
       for (const admin of admins) {
-        if (admin.email) await sendEmail(admin.email, `[Admin] ${subject}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType, date: dateFormatted, time, zone: zone || '', familyName }))
-        if (admin.phone) await sendSMS(admin.phone, smsText)
+        if (admin.email) await sendEmail(admin.email, `[Admin] ${subject}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled admin email failed:', e))
+        if (admin.phone) await sendSMS(admin.phone, smsText).catch(e => console.error('Booking cancelled admin SMS failed:', e))
       }
 
       return res.json({ ok: true })
@@ -1520,7 +1520,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <div style="background:#F9F9F7;border:1px solid #E8E8E4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:15px;line-height:1.6;white-space:pre-wrap;">${message.trim()}</div>
           <p style="font-size:13px;color:#999;">If you have questions, please reply to this email or contact us through the portal.</p>
         </div>`
-      await sendEmail(parentEmail, `A note from ${providerName} — ${PRACTICE_NAME}`, html)
+      await sendEmail(parentEmail, `A note from ${providerName} — ${PRACTICE_NAME}`, html).catch(e => console.error('Provider note email failed:', e))
       return res.json({ ok: true })
     }
 
@@ -1574,8 +1574,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-      if (parentEmail) await sendEmail(parentEmail, `Your provider update — ${visitType} on ${dateFormatted}`, familyHtml)
-      if (parentPhone) await sendSMS(parentPhone, familySms)
+      if (parentEmail) await sendEmail(parentEmail, `Your provider update — ${visitType} on ${dateFormatted}`, familyHtml).catch(e => console.error('Reassigned family email failed:', e))
+      if (parentPhone) await sendSMS(parentPhone, familySms).catch(e => console.error('Reassigned family SMS failed:', e))
 
       // Notify new provider
       const [newProv] = await sql`SELECT name, email, phone FROM providers WHERE id = ${String(newProviderId)}::uuid LIMIT 1`
@@ -1585,8 +1585,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <p>A <strong>${visitType}</strong> has been assigned to you for <strong>${dateFormatted} at ${time}</strong>.</p>
         <p>Please log in to the provider portal to view the patient details: <a href="${PORTAL_URL}/today" style="color:#7F77DD;">${PORTAL_URL}/today</a></p>
       </div>`
-      if (newProv?.email) await sendEmail(newProv.email, `Case assigned to you — ${visitType} on ${dateFormatted}`, providerHtml)
-      if (newProv?.phone) await sendSMS(newProv.phone, providerSms)
+      if (newProv?.email) await sendEmail(newProv.email, `Case assigned to you — ${visitType} on ${dateFormatted}`, providerHtml).catch(e => console.error('Reassigned provider email failed:', e))
+      if (newProv?.phone) await sendSMS(newProv.phone, providerSms).catch(e => console.error('Reassigned provider SMS failed:', e))
 
       return res.json({ ok: true })
     }
