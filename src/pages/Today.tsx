@@ -239,19 +239,11 @@ export function Today() {
         scheduled_date: editDate,
         scheduled_time: time24,
       })
-      invokeNotifications({ type: 'appointment_rescheduled', appointmentId: editTarget.id }).catch(() => {})
-      if (providerChanged) {
-        const newProv = allProviders.find(p => p.id === editProviderId)
-        invokeNotifications({
-          type: 'appointment_reassigned',
-          appointmentId: editTarget.id,
-          newProviderName: newProv?.name ?? '',
-          newProviderId: editProviderId,
-          visitType: editVisitType,
-          date: editDate,
-          time: editTime,
-        }).catch(() => {})
-      }
+      invokeNotifications({
+        type: 'appointment_rescheduled',
+        appointmentId: editTarget.id,
+        oldProviderId: providerChanged ? editTarget.provider_id : undefined,
+      }).catch(() => {})
       setEditTarget(null)
       fetchAppts()
     } finally {

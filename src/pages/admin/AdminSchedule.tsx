@@ -410,7 +410,11 @@ export function AdminSchedule() {
         scheduled_time: rescheduleTime,
       })
       setAppointments(prev => prev.map(a => a.id === rescheduleTarget.id ? { ...a, ...updated } : a))
-      invokeNotifications({ type: 'appointment_rescheduled', appointmentId: rescheduleTarget.id }).catch(() => {})
+      invokeNotifications({
+        type: 'appointment_rescheduled',
+        appointmentId: rescheduleTarget.id,
+        oldProviderId: rescheduleProviderId !== rescheduleTarget.provider_id ? rescheduleTarget.provider_id : undefined,
+      }).catch(() => {})
       setRescheduleTarget(null)
     } catch (e: any) {
       alert(e.message ?? 'Failed to reschedule')

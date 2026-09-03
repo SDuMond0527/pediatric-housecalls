@@ -1137,12 +1137,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [family] = child?.family_id
         ? await sql`SELECT email, phone, display_name FROM family_profiles WHERE id = ${child.family_id}::uuid LIMIT 1`
         : [null]
-      const [provider] = appt.provider_id
-        ? await sql`SELECT name, email, phone FROM providers WHERE id = ${appt.provider_id}::uuid LIMIT 1`
+      // appt.provider_id is the NEW provider after the update
+      const [newProvider] = appt.provider_id
+        ? await sql`SELECT id, name, email, phone FROM providers WHERE id = ${appt.provider_id}::uuid LIMIT 1`
+        : [null]
+      // oldProviderId passed from UI before the update — only present when provider changed
+      const oldProviderId: string | null = body.oldProviderId ?? null
+      const providerChanged = oldProviderId && oldProviderId !== appt.provider_id
+      const [oldProvider] = providerChanged
+        ? await sql`SELECT id, name, email, phone FROM providers WHERE id = ${oldProviderId}::uuid LIMIT 1`
         : [null]
 
       const childName = child ? `${child.first_name} ${child.last_name}`.trim() : 'your child'
-      const providerName = provider?.name ?? 'Your provider'
+      const newProviderName = newProvider?.name ?? 'Your provider'
       const dateFormatted = formatDate(appt.scheduled_date)
       const timeStr = (() => {
         const t = appt.scheduled_time ?? ''
@@ -1152,6 +1159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
       })()
 
+      // 1. Family — one notification with the full updated picture
       const familyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
@@ -1165,7 +1173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   Your appointment for <strong>${childName}</strong> has been rescheduled. Here are the updated details:</p>
   <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;"><tr><td style="padding:20px;">
     <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Visit Type</span><br><span style="font-size:14px;font-weight:500;">${appt.visit_type}</span></div>
-    <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Provider</span><br><span style="font-size:14px;font-weight:500;">${providerName}</span></div>
+    <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">Provider</span><br><span style="font-size:14px;font-weight:500;">${newProviderName}</span></div>
     <div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;text-transform:uppercase;">New Date</span><br><span style="font-size:14px;font-weight:500;">${dateFormatted}</span></div>
     ${timeStr ? `<div><span style="font-size:12px;color:#999;text-transform:uppercase;">New Time</span><br><span style="font-size:14px;font-weight:500;">${timeStr}</span></div>` : ''}
   </td></tr></table>
@@ -1174,13 +1182,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </table></td></tr></table></body></html>`
 
       if (family?.email) await sendEmail(family.email, `Appointment rescheduled — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml).catch(e => console.error('Reschedule family email failed:', e))
-      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment for ${childName} has been rescheduled to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}.`).catch(e => console.error('Reschedule family SMS failed:', e))
-      if (provider?.email) {
-        const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName })
-        await sendEmail(provider.email, `Appointment rescheduled: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml).catch(e => console.error('Reschedule provider email failed:', e))
+      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment for ${childName} has been rescheduled to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${newProviderName}.`).catch(e => console.error('Reschedule family SMS failed:', e))
+
+      // 2. New provider
+      if (newProvider?.email) {
+        const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName: newProviderName })
+        await sendEmail(newProvider.email, `Appointment rescheduled to you: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml).catch(e => console.error('Reschedule new provider email failed:', e))
       }
-      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: Appointment rescheduled — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`).catch(e => console.error('Reschedule provider SMS failed:', e))
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/admin/schedule`, undefined)
+      if (newProvider?.phone) await sendSMS(newProvider.phone, `${PRACTICE_NAME}: Appointment rescheduled to your schedule — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Reschedule new provider SMS failed:', e))
+
+      // 3. Old provider — only when provider changed
+      if (providerChanged && oldProvider) {
+        const oldProvHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:28px 32px;">
+  <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#7F77DD')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Schedule update</div>
+</td></tr>
+<tr><td style="padding:32px;">
+  <p style="font-size:15px;margin:0 0 16px;line-height:1.6;">Hi ${oldProvider.name},<br><br>
+  <strong>${childName}</strong>'s ${appt.visit_type} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} has been moved to ${newProviderName}'s schedule.</p>
+  <a href="${PORTAL_URL}/today" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my schedule</a>
+</td></tr>
+</table></td></tr></table></body></html>`
+        if (oldProvider.email) await sendEmail(oldProvider.email, `Patient moved off your schedule — ${childName}`, oldProvHtml).catch(e => console.error('Reschedule old provider email failed:', e))
+        if (oldProvider.phone) await sendSMS(oldProvider.phone, `${PRACTICE_NAME}: ${childName}'s ${appt.visit_type} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} has been moved to ${newProviderName}'s schedule.`).catch(e => console.error('Reschedule old provider SMS failed:', e))
+      }
+
+      // 4. Admins
+      const adminMsg = providerChanged
+        ? `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} — moved from ${oldProvider?.name ?? 'previous provider'} to ${newProviderName}. View: ${PORTAL_URL}/admin/schedule`
+        : `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/admin/schedule`
+      await notifyAdmins(sql, adminMsg, undefined)
       return res.json({ ok: true })
     }
 
