@@ -274,6 +274,9 @@ export function BookVisit() {
   const [slotsChecking, setSlotsChecking] = useState(false)
   const [forwardAvail, setForwardAvail] = useState<{ date: string; firstSlot: string }[]>([])
   const [forwardChecking, setForwardChecking] = useState(false)
+  const [zoneLookahead, setZoneLookahead] = useState<{ date: string; firstSlot: string; providerCount: number }[]>([])
+  const [zoneLookaheadLoading, setZoneLookaheadLoading] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [visitTypeWindow, setVisitTypeWindow] = useState<{ start: string; end: string } | null>(null)
   const [firstAvailResult, setFirstAvailResult] = useState<{ provider: string; time: string } | null>(null)
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
@@ -404,6 +407,21 @@ export function BookVisit() {
       findCmaAvailability(booking.date, booking.zone)
     }
   }, [booking.date, booking.zone, regularZoneProviders.length, booking.visitType])
+
+  // Proactive 3-day look-ahead: fires when zone providers load for in-home visit types
+  useEffect(() => {
+    const isInHome = !isCpr && !isTelemedicine(booking.visitType) &&
+      booking.visitType !== 'CMA + telemedicine' && booking.visitType !== 'In-home IV fluids'
+    if (!isInHome || regularZoneProviders.length === 0) {
+      setZoneLookahead([])
+      setZoneLookaheadLoading(false)
+      return
+    }
+    setZoneLookahead([])
+    setShowDatePicker(false)
+    setBooking(b => ({ ...b, date: '', time: '', provider: '' }))
+    loadZoneLookahead(regularZoneProviders, booking.visitType)
+  }, [regularZoneProviders.length, booking.visitType, booking.zone])
 
   useEffect(() => {
     if (step !== STEP_CONFIRM) return
@@ -763,6 +781,61 @@ export function BookVisit() {
       available.sort((a, b) => slotMin(a.firstSlot) - slotMin(b.firstSlot))
       setCmaAvailResult(available[0])
     }
+  }
+
+  async function loadZoneLookahead(providers: typeof regularZoneProviders, visitType: string) {
+    if (!providers.length) return
+    setZoneLookaheadLoading(true)
+    const leadMin = byType[visitType]?.lead_minutes ?? 60
+    const slotMin = (slot: string) => {
+      const [t, ampm] = slot.split(' ')
+      let [h, m] = t.split(':').map(Number)
+      if (ampm === 'PM' && h !== 12) h += 12
+      if (ampm === 'AM' && h === 12) h = 0
+      return h * 60 + m
+    }
+    const today = new Date().toISOString().split('T')[0]
+    const dates = [0, 1, 2].map(d => {
+      const dt = new Date(today + 'T12:00:00')
+      dt.setDate(dt.getDate() + d)
+      return dt.toISOString().slice(0, 10)
+    })
+    const dayResults = await Promise.all(dates.map(async dateStr => {
+      const leadSlots = getAvailableSlots(leadMin, dateStr)
+      if (leadSlots.length === 0) return null
+      const provResults = await Promise.all(providers.map(async p => {
+        try {
+          const provRow = await getProviderByName(p.name)
+          if (!provRow) return null
+          const dayWindow = await getProviderDayWindow(provRow.id, dateStr)
+          if (!dayWindow) return null
+          const sched = await getSchedulingData(provRow.id, { date: dateStr, visit_type: visitType })
+          const vtaRow = sched?.visitTypeAvail
+          const vtaWin = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
+            ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string } : null
+          const win = intersectWindows(dayWindow, vtaWin)
+          if (!win) return null
+          const booked = sched?.bookedSlots ?? []
+          const free = leadSlots.filter(slot => {
+            const sm = slotMin(slot)
+            const [wsh, wsm] = win.start.split(':').map(Number)
+            const [weh, wem] = win.end.split(':').map(Number)
+            if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
+            return !booked.some(({ time: bt, duration }) => {
+              const bm = timeStrToMinutes(bt)
+              return sm >= bm && sm < bm + duration
+            })
+          })
+          return free.length > 0 ? { firstSlot: free[0] } : null
+        } catch { return null }
+      }))
+      const available = provResults.filter(Boolean) as { firstSlot: string }[]
+      if (available.length === 0) return null
+      available.sort((a, b) => slotMin(a.firstSlot) - slotMin(b.firstSlot))
+      return { date: dateStr, firstSlot: available[0].firstSlot, providerCount: available.length }
+    }))
+    setZoneLookahead(dayResults.filter(Boolean) as { date: string; firstSlot: string; providerCount: number }[])
+    setZoneLookaheadLoading(false)
   }
 
   async function submitWaitlist() {
@@ -1699,10 +1772,53 @@ export function BookVisit() {
           {/* 3a. Date picker — shown before provider for all in-home visits */}
           {!isCpr && !isTelemedicine(booking.visitType) && zoneProviders.length > 0 && (
             <div className="mb-5">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
-              <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
-                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
-                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Visit date</label>
+              {booking.date && !showDatePicker ? (
+                <div className="flex items-center justify-between px-3 py-2.5 border-2 border-[#7F77DD] rounded-xl bg-[#EEEDFE]">
+                  <span className="text-[14px] font-semibold text-[#3C3489]">
+                    {format(new Date(booking.date + 'T12:00:00'), 'EEE, MMM d')}
+                  </span>
+                  <button className="text-[12px] text-[#7F77DD] underline"
+                    onClick={() => { setBooking(b => ({ ...b, date: '', time: '', provider: '' })); setShowDatePicker(false) }}>
+                    Change
+                  </button>
+                </div>
+              ) : zoneLookaheadLoading ? (
+                <p className="text-[13px] text-[#999]">Checking availability…</p>
+              ) : zoneLookahead.length > 0 && !showDatePicker ? (
+                <div className="flex flex-col gap-2">
+                  {zoneLookahead.map(({ date: ld, firstSlot, providerCount }) => {
+                    const dt = new Date(ld + 'T12:00:00')
+                    const today2 = new Date(); today2.setHours(0, 0, 0, 0)
+                    const diffDays = Math.round((dt.getTime() - today2.getTime()) / 86400000)
+                    const label = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : format(dt, 'EEE, MMM d')
+                    return (
+                      <button key={ld}
+                        onClick={() => setBooking(b => ({ ...b, date: ld, time: '', provider: '' }))}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-[#E8E8E4] bg-white hover:border-[#7F77DD] hover:bg-[#EEEDFE] transition-all text-left">
+                        <div>
+                          <div className="text-[14px] font-semibold text-[#1A1A2E]">{label}</div>
+                          <div className="text-[12px] text-[#555]">{providerCount} provider{providerCount !== 1 ? 's' : ''} available</div>
+                        </div>
+                        <span className="text-[13px] font-medium text-[#7F77DD]">from {firstSlot}</span>
+                      </button>
+                    )
+                  })}
+                  <button className="text-[12px] text-[#999] underline text-center mt-1"
+                    onClick={() => setShowDatePicker(true)}>
+                    Need a different date?
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
+                    onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
+                    className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+                  {zoneLookahead.length === 0 && !zoneLookaheadLoading && (
+                    <p className="text-[12px] text-[#999] mt-1.5">No openings in the next 3 days — choose any date below.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
