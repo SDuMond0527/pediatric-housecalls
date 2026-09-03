@@ -3,7 +3,7 @@ import { MapPin, Clock, CheckCircle2, X, Plus, Phone, XCircle, Pencil } from 'lu
 import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
-  createAppointment, invokeNotifications, createWaitlistEntry,
+  createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -326,19 +326,25 @@ export function Waitlist() {
       }
     })
 
+    const finalVisitType = acceptVisitType || accepting.visit_type || 'In-home sick visit'
+    const DUAL_VISIT_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
+    const isDual = DUAL_VISIT_TYPES.includes(finalVisitType)
+
     try {
-      await createAppointment({
+      const apptResult = await createAppointment({
         provider_id: provider.id,
-        visit_type: acceptVisitType || accepting.visit_type || 'In-home sick visit',
+        visit_type: finalVisitType,
         zone: accepting.zip,
         scheduled_time: time24,
         scheduled_date: date,
         status: 'upcoming',
         notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
+        ...(isDual ? { state: accepting.state || null } : {}),
       })
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
+      // Always notify family that the visit is accepted
       invokeNotifications({
         type: 'waitlist_accepted',
         waitlistEntryId: accepting.id,
@@ -347,6 +353,46 @@ export function Waitlist() {
         date,
         time,
       }).catch(() => {})
+
+      // Dual visit type — check if partner was auto-paired or broadcast is needed
+      if (isDual && apptResult?.primary !== undefined) {
+        if (!apptResult.secondary) {
+          // No on-call partner found — fire a pairing broadcast to the other role
+          const noteMap = parseNotes(accepting.notes)
+          const patientFullName = noteMap['Patient'] || accepting.family_name || 'Patient'
+          const nameParts = patientFullName.trim().split(' ')
+          const patientFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : patientFullName
+          const patientLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+
+          const isInHome = provider.role === 'CMA' || provider.role === 'RN'
+          const pairingRoleNeeded = isInHome ? 'MD/NP' : 'CMA'
+
+          const bc = await createBroadcast({
+            patient_first_name: patientFirst,
+            patient_last_name: patientLast,
+            patient_address: noteMap['Address'] || null,
+            family_phone: accepting.family_phone || noteMap['Phone'] || null,
+            family_email: accepting.family_email || noteMap['Email'] || null,
+            state: accepting.state || null,
+            visit_type: finalVisitType,
+            request_type: pairingRoleNeeded === 'MD/NP' ? 'Telemedicine MD/NP needed' : 'In-home CMA needed',
+            complaint: accepting.complaint || noteMap['Complaint'] || null,
+            is_urgent: false,
+            created_by: provider.id,
+            created_by_name: provider.name,
+            related_appointment_id: apptResult.primary.id,
+            pairing_initiator_id: provider.id,
+            pairing_initiator_name: provider.name,
+            pairing_role_needed: pairingRoleNeeded,
+            scheduled_date: date,
+            scheduled_time: time24,
+          }).catch(() => null)
+
+          if (bc?.id) {
+            invokeNotifications({ type: 'broadcast', broadcastId: bc.id }).catch(() => {})
+          }
+        }
+      }
 
       setAccepting(null)
       setDate('')

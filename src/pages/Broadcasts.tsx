@@ -54,6 +54,53 @@ export function Broadcasts() {
     setLoading(false)
   }
 
+  function fmtTime24(t: string | null): string {
+    if (!t) return ''
+    const [h, m] = t.split(':').map(Number)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
+  }
+
+  async function claimPairing(bc: Broadcast) {
+    if (!provider) return
+    setActing(bc.id)
+    try {
+      const isInHomeNeeded = bc.pairing_role_needed === 'CMA'
+      const partnerLabel = isInHomeNeeded
+        ? `${bc.pairing_initiator_name} (MD/NP — telemedicine)`
+        : `${bc.pairing_initiator_name} (CMA — in-home)`
+      const noteParts = [
+        `Paired from broadcast`,
+        bc.complaint ? `CC:${bc.complaint}` : '',
+        `PARTNER:${partnerLabel}`,
+      ].filter(Boolean)
+
+      await createAppointment({
+        provider_id: provider.id,
+        visit_type: bc.visit_type || 'CMA + telemedicine',
+        zone: bc.patient_address || bc.zone || 'Broadcast',
+        scheduled_time: bc.scheduled_time || '09:00',
+        scheduled_date: bc.scheduled_date || format(new Date(), 'yyyy-MM-dd'),
+        status: 'upcoming',
+        notes: noteParts.join('|'),
+      })
+
+      await updateBroadcast(bc.id, { is_open: false })
+
+      invokeNotifications({
+        type: 'pairing_claimed',
+        broadcastId: bc.id,
+        claimedByName: provider.name,
+        claimedById: provider.id,
+      }).catch(() => {})
+
+      setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
+    } finally {
+      setActing(null)
+    }
+  }
+
   useEffect(() => { fetchBroadcasts() }, [])
 
   async function submitBroadcast() {
@@ -166,7 +213,56 @@ export function Broadcasts() {
           </div>
         ) : (
           <div className="space-y-3">
-            {broadcasts.map(bc => (
+            {/* Pairing requests — shown above general broadcasts */}
+            {broadcasts.filter(bc => bc.pairing_role_needed).map(bc => {
+              const myRole = provider?.role
+              const isMdNp = myRole === 'MD' || myRole === 'NP'
+              const isCma = myRole === 'CMA' || myRole === 'RN'
+              const canClaim =
+                (bc.pairing_role_needed === 'MD/NP' && isMdNp) ||
+                (bc.pairing_role_needed === 'CMA' && isCma)
+              const claimLabel = bc.pairing_role_needed === 'MD/NP'
+                ? 'Claim telemedicine half'
+                : 'Claim in-home half'
+              const dateStr = bc.scheduled_date
+                ? format(new Date(bc.scheduled_date + 'T12:00:00'), 'EEE, MMM d')
+                : null
+              return (
+                <div key={bc.id} className="border-2 border-[#AFA9EC] bg-[#F5F4FE] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <Badge variant="purple">{bc.pairing_role_needed} pairing needed</Badge>
+                    <span className="text-[12px] text-[#7F77DD]">via {bc.pairing_initiator_name}</span>
+                  </div>
+                  <div className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">
+                    {bc.patient_first_name} {bc.patient_last_name}
+                  </div>
+                  <div className="space-y-0.5 text-[13px] text-[#555] mb-3">
+                    {dateStr && bc.scheduled_time && (
+                      <p className="flex items-center gap-1 text-[#3C3489] font-medium">
+                        <Clock size={11} /> {dateStr} at {fmtTime24(bc.scheduled_time)}
+                      </p>
+                    )}
+                    {bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Complaint </span>{bc.complaint}</p>}
+                    {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#999]" />{bc.patient_address}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    {canClaim ? (
+                      <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => claimPairing(bc)}>
+                        {claimLabel}
+                      </Button>
+                    ) : (
+                      <span className="text-[12px] text-[#999] self-center italic">Needs {bc.pairing_role_needed}</span>
+                    )}
+                    <Button variant="secondary" size="sm" disabled={acting === bc.id} onClick={() => pass(bc.id)}>
+                      Pass
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* General broadcasts */}
+            {broadcasts.filter(bc => !bc.pairing_role_needed).map(bc => (
               <div key={bc.id}
                 className={`border rounded-xl p-4 ${bc.is_urgent ? 'border-[#FAC775] bg-[#FAEEDA]' : 'border-[#E8E8E4] bg-white'}`}>
                 <div className="mb-3">

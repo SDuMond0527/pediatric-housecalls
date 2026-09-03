@@ -68,6 +68,8 @@ export interface Broadcast {
   patient_last_name: string
   patient_dob: string | null
   patient_address: string | null
+  family_phone: string | null
+  family_email: string | null
   zone: string | null
   state: string | null
   visit_type: string | null
@@ -78,4 +80,10 @@ export interface Broadcast {
   created_by: string | null
   created_by_name: string | null
   created_at: string
+  related_appointment_id: string | null
+  pairing_initiator_id: string | null
+  pairing_initiator_name: string | null
+  pairing_role_needed: string | null
+  scheduled_date: string | null
+  scheduled_time: string | null
 }

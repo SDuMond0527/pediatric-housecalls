@@ -1351,6 +1351,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
+    // ── Pairing broadcast claimed — notify initiator + family ─────────────────
+    if (body.type === 'pairing_claimed') {
+      const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid`
+      if (!bc) return res.json({ ok: true })
+
+      const claimedByName: string = body.claimedByName || 'A provider'
+      const patientName = `${bc.patient_first_name} ${bc.patient_last_name}`.trim()
+      const dateFormatted = bc.scheduled_date
+        ? new Date(bc.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+        : 'your upcoming appointment'
+      const timeFormatted = bc.scheduled_time
+        ? (() => { const [hh, mm] = bc.scheduled_time.split(':').map(Number); const ap = hh >= 12 ? 'PM' : 'AM'; return `${hh % 12 || 12}:${mm.toString().padStart(2, '0')} ${ap}` })()
+        : ''
+
+      const isInHomeNeeded = bc.pairing_role_needed === 'CMA'
+      const claimedRole = isInHomeNeeded ? 'in-home' : 'telemedicine'
+      const initiatorRole = isInHomeNeeded ? 'telemedicine' : 'in-home'
+
+      // Notify the initiating provider
+      if (bc.pairing_initiator_id) {
+        const [initiator] = await sql`SELECT email, phone, name FROM providers WHERE id = ${bc.pairing_initiator_id}::uuid LIMIT 1`
+        if (initiator) {
+          const sms = `${PRACTICE_NAME}: ${claimedByName} has claimed the ${claimedRole} half for ${patientName} on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}. You're all set!`
+          if (initiator.phone) await sendSMS(initiator.phone, sms).catch(() => {})
+          if (initiator.email) await sendEmail(
+            initiator.email,
+            `${claimedByName} has joined your ${patientName} visit`,
+            `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
+              <p>Hi ${(initiator.name as string).split(' ')[0]},</p>
+              <p><strong>${claimedByName}</strong> has claimed the <strong>${claimedRole}</strong> portion of your CMA + telemedicine visit with <strong>${patientName}</strong> on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.</p>
+              <p>You're handling the ${initiatorRole} half. You're all set!</p>
+            </div>`
+          ).catch(() => {})
+        }
+      }
+
+      // Notify the family that both providers are now confirmed
+      const familyPhone: string | null = bc.family_phone ?? null
+      const familyEmail: string | null = bc.family_email ?? null
+      const initiatorName: string = bc.pairing_initiator_name || 'your provider'
+      const inHomeName = isInHomeNeeded ? claimedByName : initiatorName
+      const teleName = isInHomeNeeded ? initiatorName : claimedByName
+
+      const familySms = `${PRACTICE_NAME}: Your CMA + telemedicine visit is fully confirmed. ${inHomeName} will be there in person and ${teleName} will join by video on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.`
+      if (familyPhone) await sendSMS(familyPhone, familySms).catch(() => {})
+      if (familyEmail) await sendEmail(
+        familyEmail,
+        `Your visit is fully confirmed — ${dateFormatted}`,
+        `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
+          <p>Great news! Your CMA + telemedicine visit is now fully confirmed.</p>
+          <ul>
+            <li><strong>${inHomeName}</strong> will come to your home for the in-person portion</li>
+            <li><strong>${teleName}</strong> will join by video for the telemedicine consultation</li>
+          </ul>
+          <p>${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}</p>
+        </div>`
+      ).catch(() => {})
+
+      return res.json({ ok: true })
+    }
+
     // ── Post-visit thank-you + Google review email ────────────────────────────
     if (body.type === 'post_visit_email') {
       const { appointmentId } = body

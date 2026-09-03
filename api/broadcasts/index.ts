@@ -44,8 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const b = req.body
     const [row] = await sql`
-      INSERT INTO broadcasts (practice_id, patient_first_name, patient_last_name, patient_dob, patient_address, family_phone, family_email, zone, state, visit_type, request_type, complaint, is_urgent, is_open, created_by, created_by_name)
-      VALUES (${practiceId}::uuid, ${b.patient_first_name ?? null}, ${b.patient_last_name ?? null}, ${b.patient_dob ?? null}, ${b.patient_address ?? null}, ${b.family_phone ?? null}, ${b.family_email ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.visit_type ?? null}, ${b.request_type ?? 'standard'}, ${b.complaint ?? null}, ${b.is_urgent ?? false}, true, ${b.created_by}::uuid, ${b.created_by_name})
+      INSERT INTO broadcasts (practice_id, patient_first_name, patient_last_name, patient_dob, patient_address, family_phone, family_email, zone, state, visit_type, request_type, complaint, is_urgent, is_open, created_by, created_by_name, related_appointment_id, pairing_initiator_id, pairing_initiator_name, pairing_role_needed, scheduled_date, scheduled_time)
+      VALUES (${practiceId}::uuid, ${b.patient_first_name ?? null}, ${b.patient_last_name ?? null}, ${b.patient_dob ?? null}, ${b.patient_address ?? null}, ${b.family_phone ?? null}, ${b.family_email ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.visit_type ?? null}, ${b.request_type ?? 'standard'}, ${b.complaint ?? null}, ${b.is_urgent ?? false}, true, ${b.created_by}::uuid, ${b.created_by_name}, ${b.related_appointment_id ?? null}, ${b.pairing_initiator_id ?? null}, ${b.pairing_initiator_name ?? null}, ${b.pairing_role_needed ?? null}, ${b.scheduled_date ?? null}, ${b.scheduled_time ?? null})
       RETURNING *`
     return res.json(row)
   }
