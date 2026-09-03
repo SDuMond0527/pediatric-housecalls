@@ -596,6 +596,55 @@ function waitlistProviderEmail(data: {
 </body></html>`
 }
 
+// ── Shared booking notification rule ─────────────────────────────────────────
+// All booking types (family self-book, admin book, provider waitlist accept)
+// call this one function. Change the rule here and it applies everywhere.
+
+async function notifyBookingParties(
+  sql: any,
+  {
+    familyEmail, familyPhone,
+    provider,
+    practiceId,
+    familySubject, familyHtml, familySms,
+    providerSubject, providerHtml, providerSms,
+    adminSms,
+    excludeAdminIds = [],
+  }: {
+    familyEmail?: string | null
+    familyPhone?: string | null
+    provider?: { id?: string; email?: string | null; phone?: string | null } | null
+    practiceId?: string
+    familySubject?: string; familyHtml?: string; familySms?: string
+    providerSubject?: string; providerHtml?: string; providerSms?: string
+    adminSms: string
+    excludeAdminIds?: string[]
+  }
+) {
+  // 1. Family confirmation
+  if (familyEmail && familySubject && familyHtml)
+    await sendEmail(familyEmail, familySubject, familyHtml).catch(e => console.error('Booking family email failed:', e))
+  if (familyPhone && familySms)
+    await sendSMS(familyPhone, familySms).catch(e => console.error('Booking family SMS failed:', e))
+
+  // 2. Assigned provider (omitted when provider initiated the booking, e.g. waitlist acceptance)
+  if (provider?.email && providerSubject && providerHtml)
+    await sendEmail(provider.email, providerSubject, providerHtml).catch(e => console.error('Booking provider email failed:', e))
+  if (provider?.phone && providerSms)
+    await sendSMS(provider.phone, providerSms).catch(e => console.error('Booking provider SMS failed:', e))
+
+  // 3. All admins — deduped against assigned provider and any additionally excluded IDs
+  const skipIds = new Set([...(provider?.id ? [provider.id] : []), ...excludeAdminIds])
+  const admins = practiceId
+    ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
+    : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
+  for (const admin of admins) {
+    if (skipIds.has(admin.id)) continue
+    if (admin.email) await sendEmail(admin.email, `[${PRACTICE_NAME} Admin] ${adminSms}`, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${adminSms}</p>`).catch(e => console.error('Booking admin email failed:', e))
+    if (admin.phone) await sendSMS(admin.phone, adminSms).catch(e => console.error('Booking admin SMS failed:', e))
+  }
+}
+
 // ── Admin helpers ─────────────────────────────────────────────────────────────
 
 async function notifyAdmins(sql: any, smsBody: string, practiceId?: string) {
@@ -742,15 +791,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-      if (family?.email) {
-        await sendEmail(family.email, `Your appointment is confirmed — ${dateFormatted} at ${body.time}`, html).catch(e => console.error('Waitlist accepted family email failed:', e))
-      }
-      if (family?.phone) {
-        await sendSMS(family.phone, `${PRACTICE_NAME}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Waitlist accepted family SMS failed:', e))
-      }
-
       const waitlistPracticeId: string | undefined = entry.practice_id ?? undefined
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`, waitlistPracticeId)
+      // Provider is null here — they initiated the acceptance themselves, no need to notify them
+      await notifyBookingParties(sql, {
+        familyEmail: family?.email,
+        familyPhone: family?.phone,
+        provider: null,
+        practiceId: waitlistPracticeId,
+        familySubject: `Your appointment is confirmed — ${dateFormatted} at ${body.time}`,
+        familyHtml: html,
+        familySms: `${PRACTICE_NAME}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`,
+        adminSms: `${PRACTICE_NAME}: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`,
+      })
 
       const pickupDesc = `a waitlist patient (zip ${entry.zip}${entry.state ? `, ${entry.state}` : ''})`
       const pickupSms = `${PRACTICE_NAME}: A waitlist patient has been picked up. View: ${PORTAL_URL}/broadcasts`
@@ -1059,16 +1111,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-      if (family?.email) await sendEmail(family.email, `Appointment confirmed — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml).catch(e => console.error('Family email failed:', e))
-      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Appointment confirmed for ${childName} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}. Log in for details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Family SMS failed:', e))
-
-      if (provider?.email) {
-        const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName })
-        await sendEmail(provider.email, `New appointment: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml).catch(e => console.error('Provider email failed:', e))
-      }
-      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: New appointment — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Provider SMS failed:', e))
-
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment booked from patient chart for ${childName}. View: ${PORTAL_URL}/admin/schedule`, undefined)
+      await notifyBookingParties(sql, {
+        familyEmail: family?.email,
+        familyPhone: family?.phone,
+        provider: provider ? { id: appt.provider_id, email: provider.email, phone: provider.phone } : null,
+        familySubject: `Appointment confirmed — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`,
+        familyHtml,
+        familySms: `${PRACTICE_NAME}: Appointment confirmed for ${childName} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}. Log in for details: ${PORTAL_URL}/family/dashboard`,
+        providerSubject: `New appointment: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`,
+        providerHtml: providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName }),
+        providerSms: `${PRACTICE_NAME}: New appointment — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`,
+        adminSms: `${PRACTICE_NAME}: Appointment booked from patient chart for ${childName}. View: ${PORTAL_URL}/admin/schedule`,
+      })
       return res.json({ ok: true })
     }
 
@@ -1626,30 +1680,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ hasResend: !!RESEND_API_KEY, hasTwilioSid: !!TWILIO_SID, hasTwilioKey: !!TWILIO_API_KEY, hasTwilioSecret: !!TWILIO_API_SECRET, hasFrom: !!TWILIO_FROM, familyEmail: family?.email || null, providerEmail: provider?.email || null })
     }
 
-    const providerEmail = provider?.email || ''
     const dateFormatted = formatDate(booking.preferred_date)
-
-    if (family?.email) {
-      await sendEmail(
-        family.email,
-        `Confirmed: ${booking.visit_type} on ${dateFormatted}`,
-        parentConfirmationEmail({
-          visitType: booking.visit_type,
-          date: dateFormatted,
-          time: booking.preferred_time,
-          provider: provider?.name || 'Your provider',
-          zone: booking.zone || '',
-          ref: booking.reference_code,
-          displayName: family.display_name,
-        })
-      ).catch(e => console.error('Family confirmation email failed:', e))
-      if (booking.visit_type === 'In-home IV fluids') {
-        await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids email failed:', e))
-      }
-    }
-    if (family?.phone) {
-      await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment is confirmed — ${booking.visit_type} on ${formatDate(booking.preferred_date)} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Family confirmation SMS failed:', e))
-    }
+    const practiceId = provider?.practice_id as string | undefined
 
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`
     const notifHtml = providerNotificationEmail({
@@ -1660,15 +1692,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ref: booking.reference_code,
       providerName: provider?.name || 'Provider',
     })
-    const smsBody = `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/today`
+    const notifSms = `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/today`
 
-    // Assigned provider (CMA/RN)
-    if (providerEmail) await sendEmail(providerEmail, notifSubject, notifHtml).catch(e => console.error('Provider email failed:', e))
-    if (provider?.phone) await sendSMS(provider.phone, smsBody).catch(e => console.error('Provider SMS failed:', e))
-
-    // For CMA+telemedicine or In-home IV fluids: notify the on-call MD/NP
+    // For CMA+telemedicine or In-home IV fluids: also notify the on-call MD/NP
     let onCallProviderId: string | null = null
-    const practiceId = provider?.practice_id as string | undefined
     if (
       (booking.visit_type === 'CMA + telemedicine' || booking.visit_type === 'In-home IV fluids') &&
       booking.state && booking.preferred_date && booking.preferred_time && practiceId
@@ -1687,20 +1714,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         onCallProviderId = onCall.id as string
         if (onCall.id !== provider?.id) {
           if (onCall.email) await sendEmail(onCall.email as string, notifSubject, notifHtml).catch(e => console.error('On-call email failed:', e))
-          if (onCall.phone) await sendSMS(onCall.phone as string, smsBody).catch(e => console.error('On-call SMS failed:', e))
+          if (onCall.phone) await sendSMS(onCall.phone as string, notifSms).catch(e => console.error('On-call SMS failed:', e))
         }
       }
     }
 
-    // All admins — every booking (is_admin covers both dedicated admins and admin MDs like Sara/Pam)
-    const admins = practiceId
-      ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
-      : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
-    for (const admin of admins) {
-      if (admin.id === provider?.id) continue       // don't double-notify assigned provider
-      if (admin.id === onCallProviderId) continue   // don't double-notify on-call MD/NP
-      if (admin.email) await sendEmail(admin.email, notifSubject, notifHtml).catch(e => console.error('Admin email failed:', e))
-      if (admin.phone) await sendSMS(admin.phone, smsBody).catch(e => console.error('Admin SMS failed:', e))
+    // Unified booking notification rule: family + assigned provider + all admins (deduped)
+    await notifyBookingParties(sql, {
+      familyEmail: family?.email,
+      familyPhone: family?.phone,
+      provider: provider ? { id: provider.id, email: provider.email, phone: provider.phone } : null,
+      practiceId,
+      familySubject: `Confirmed: ${booking.visit_type} on ${dateFormatted}`,
+      familyHtml: parentConfirmationEmail({
+        visitType: booking.visit_type,
+        date: dateFormatted,
+        time: booking.preferred_time,
+        provider: provider?.name || 'Your provider',
+        zone: booking.zone || '',
+        ref: booking.reference_code,
+        displayName: family?.display_name,
+      }),
+      familySms: `${PRACTICE_NAME}: Your appointment is confirmed — ${booking.visit_type} on ${dateFormatted} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`,
+      providerSubject: notifSubject,
+      providerHtml: notifHtml,
+      providerSms: notifSms,
+      adminSms: `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/admin/schedule`,
+      excludeAdminIds: onCallProviderId ? [onCallProviderId] : [],
+    })
+
+    // IV fluids gets an extra family email with preparation instructions
+    if (booking.visit_type === 'In-home IV fluids' && family?.email) {
+      await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids email failed:', e))
     }
 
     return res.json({ ok: true })
