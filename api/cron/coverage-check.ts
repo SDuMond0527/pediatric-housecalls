@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       FROM providers p
       WHERE p.practice_id = ${practice_id}::uuid
         AND p.is_active = true
-        AND p.role != 'admin'
+        AND p.role IN ('MD', 'PNP')
         AND ${zone_name} = ANY(p.zones)
         AND (
           EXISTS (
