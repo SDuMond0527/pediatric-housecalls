@@ -738,19 +738,15 @@ export function Waitlist() {
                 <div>
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time</label>
                   <div className="grid grid-cols-4 gap-1.5">
-                    {TIME_SLOTS.map(slot => {
-                      const isBooked = bookedSlots.has(slot)
-                      return (
-                        <button key={slot} disabled={isBooked} onClick={() => setTime(slot)}
-                          className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
-                            time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
-                            : isBooked ? 'border-[#E8E8E4] bg-[#F5F5F3] text-[#C8C8C4] cursor-not-allowed line-through'
-                            : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
-                          }`}>
-                          {slot}
-                        </button>
-                      )
-                    })}
+                    {TIME_SLOTS.map(slot => (
+                      <button key={slot} onClick={() => setTime(slot)}
+                        className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
+                          time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                          : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
+                        }`}>
+                        {slot}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
