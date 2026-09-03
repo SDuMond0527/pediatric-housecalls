@@ -1152,6 +1152,9 @@ export function BookVisit() {
           preferred_pharmacy: intake.preferredPharmacy || null,
           pcp: intake.pcp || null,
           pcp_id: intake.pcp_id || null,
+          allergies: intake.allergies || null,
+          current_medications: intake.currentMedications || null,
+          medical_history: intake.medicalHistory || null,
         }
         if (!intake.hasProfile) {
           Object.assign(update, {
@@ -1160,9 +1163,6 @@ export function BookVisit() {
             last_name: intake.lastName || null,
             date_of_birth: intake.dateOfBirth || null,
             gender: intake.gender || null,
-            allergies: intake.allergies || null,
-            current_medications: intake.currentMedications || null,
-            medical_history: intake.medicalHistory || null,
           })
         }
         return updateChild(childId, update)
