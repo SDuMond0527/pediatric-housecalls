@@ -4,7 +4,7 @@ import { getAnalytics } from '../../lib/api'
 
 interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null; zone: string | null }
 interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string; family_id: string }
-interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null }
+interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null; removal_reason: string | null }
 interface ProviderRow { id: string; name: string; role: string }
 interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
 interface OnCallRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
@@ -165,6 +165,14 @@ export function AdminAnalytics() {
     if (w.status === 'waiting')   wByState[s].waiting++
     if (w.status === 'converted') wByState[s].converted++
   })
+
+  // Waitlist losses (admin-removed with a reason)
+  const lostEntries = waitlist.filter(w => w.status === 'removed' && w.removal_reason)
+  const lossByReason: Record<string, number> = {}
+  lostEntries.forEach(w => { lossByReason[w.removal_reason!] = (lossByReason[w.removal_reason!] ?? 0) + 1 })
+  const lossByState: Record<string, number> = {}
+  lostEntries.forEach(w => { const s = w.state ?? 'Other'; lossByState[s] = (lossByState[s] ?? 0) + 1 })
+  const maxLossByState = Math.max(...Object.values(lossByState), 1)
 
   // Weekly bookings trend (last 8 weeks)
   const weeks = Array.from({ length: 8 }, (_, i) => {
@@ -424,6 +432,52 @@ export function AdminAnalytics() {
                       </div>
                     </div>
                   ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Waitlist losses */}
+        <div className="grid lg:grid-cols-2 gap-5">
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
+            <p className="text-[12px] text-[#999] mb-4">Patients removed by admin without a provider pickup</p>
+            {lostEntries.length === 0 ? (
+              <p className="text-[13px] text-[#999]">No waitlist losses recorded yet.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg">
+                  <div className="font-display text-3xl font-semibold text-[#C0392B] mb-0.5">{lostEntries.length}</div>
+                  <div className="text-[11px] text-[#999]">Total losses</div>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(lossByReason).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                    <div key={reason}>
+                      <div className="flex items-center justify-between text-[13px] mb-1">
+                        <span className="text-[#555] leading-tight">{reason}</span>
+                        <span className="font-semibold text-[#C0392B] tabular-nums ml-3 flex-shrink-0">{count}</span>
+                      </div>
+                      <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-[#C0392B] transition-all duration-500"
+                          style={{ width: `${(count / lostEntries.length) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Losses by state</h3>
+            <p className="text-[12px] text-[#999] mb-4">Where are we losing waitlisted patients?</p>
+            {lostEntries.length === 0 ? (
+              <p className="text-[13px] text-[#999]">No waitlist losses recorded yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {Object.entries(lossByState).sort((a, b) => b[1] - a[1]).map(([state, count]) => (
+                  <HBar key={state} label={STATE_LABEL[state] ?? state} count={count} max={maxLossByState} color="#C0392B" />
+                ))}
               </div>
             )}
           </div>

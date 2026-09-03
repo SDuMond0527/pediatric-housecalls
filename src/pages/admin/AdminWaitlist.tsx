@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clock, CheckCircle2, Phone, XCircle, Plus, X, Pencil } from 'lucide-react'
+import { Clock, Phone, XCircle, Plus, X, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { getWaitlistEntries, updateWaitlistEntry, getFamiliesByIds, getChildrenByFamilyIds, invokeNotifications, createWaitlistEntry, apiFetch } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
@@ -75,6 +75,21 @@ export function AdminWaitlist() {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Loss reason modal
+  const [lossEntryId, setLossEntryId] = useState<string | null>(null)
+  const [lossReason, setLossReason] = useState('')
+  const [lossSubmitting, setLossSubmitting] = useState(false)
+
+  async function markAsLost() {
+    if (!lossEntryId || !lossReason) return
+    setLossSubmitting(true)
+    await updateWaitlistEntry(lossEntryId, { status: 'removed', removal_reason: lossReason }).catch(() => {})
+    setLossEntryId(null)
+    setLossReason('')
+    setLossSubmitting(false)
+    fetchEntries()
+  }
 
   // Edit contact modal
   const [editEntry, setEditEntry] = useState<WaitlistEntry | null>(null)
@@ -353,11 +368,9 @@ export function AdminWaitlist() {
                   <Button variant="ghost" size="xs" onClick={() => openEdit(e)}>
                     <Pencil size={11} /> Edit contact
                   </Button>
-                  {e.status !== 'converted' && (
-                    <Button variant="teal" size="xs" onClick={() => updateStatus(e.id, 'converted')}>
-                      <CheckCircle2 size={11} /> Converted
-                    </Button>
-                  )}
+                  <Button variant="amber" size="xs" onClick={() => { setLossEntryId(e.id); setLossReason('') }}>
+                    <XCircle size={11} /> Lost patient
+                  </Button>
                   <Button variant="danger" size="xs" onClick={() => updateStatus(e.id, 'removed')}>
                     <XCircle size={11} /> Remove
                   </Button>
@@ -367,6 +380,42 @@ export function AdminWaitlist() {
           </div>
         ))}
       </div>
+
+      {/* Lost patient reason modal */}
+      {lossEntryId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setLossEntryId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Why is this patient leaving?</h2>
+              <button onClick={() => setLossEntryId(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <p className="text-[12px] text-[#999] mb-4">Select a reason. The entry will be silently removed — no notifications sent.</p>
+            <div className="space-y-2">
+              {[
+                'Parents took patient to PCP / urgent care',
+                'No provider pickup — outside window of care',
+              ].map(reason => (
+                <button key={reason} type="button"
+                  onClick={() => setLossReason(reason)}
+                  className={`w-full text-left px-4 py-3 rounded-xl border text-[14px] transition-colors ${
+                    lossReason === reason
+                      ? 'border-[#7F77DD] bg-[#EEEDFE] text-[#1A1A2E] font-medium'
+                      : 'border-[#E8E8E4] bg-white text-[#555] hover:border-[#7F77DD]'
+                  }`}>
+                  {reason}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={() => setLossEntryId(null)}>Cancel</Button>
+              <Button variant="danger" className="flex-1" disabled={!lossReason} loading={lossSubmitting} onClick={markAsLost}>
+                Remove from waitlist
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit contact modal */}
       {editEntry && (

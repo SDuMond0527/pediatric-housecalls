@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { id } = req.query as { id: string }
-  const { status, converted_provider_id, notes } = req.body
+  const { status, converted_provider_id, notes, removal_reason } = req.body
 
   let row: unknown
 
@@ -53,6 +53,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Notes-only update (editing contact info)
     ;[row] = await sql`
       UPDATE waitlist_entries SET notes=${notes}
+      WHERE id=${id}::uuid AND (practice_id=${practiceId}::uuid OR practice_id IS NULL)
+      RETURNING *`
+  } else if (removal_reason) {
+    ;[row] = await sql`
+      UPDATE waitlist_entries SET status=${status}, removal_reason=${removal_reason}
       WHERE id=${id}::uuid AND (practice_id=${practiceId}::uuid OR practice_id IS NULL)
       RETURNING *`
   } else if (converted_provider_id) {
