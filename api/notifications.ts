@@ -600,11 +600,11 @@ function waitlistProviderEmail(data: {
 
 async function notifyAdmins(sql: any, smsBody: string, practiceId?: string) {
   const admins = practiceId
-    ? await sql`SELECT id, phone, email FROM providers WHERE role = 'admin' AND practice_id = ${practiceId}::uuid`
-    : await sql`SELECT id, phone, email FROM providers WHERE role = 'admin'`
+    ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
+    : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
   for (const admin of admins) {
-    if (admin.email) await sendEmail(admin.email, `[${PRACTICE_NAME} Admin] ` + smsBody, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${smsBody}</p>`)
-    if (admin.phone) await sendSMS(admin.phone, smsBody)
+    if (admin.email) await sendEmail(admin.email, `[${PRACTICE_NAME} Admin] ` + smsBody, `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;">${smsBody}</p>`).catch(e => console.error('Admin email failed:', e))
+    if (admin.phone) await sendSMS(admin.phone, smsBody).catch(e => console.error('Admin SMS failed:', e))
   }
 }
 
@@ -1059,14 +1059,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-      if (family?.email) await sendEmail(family.email, `Appointment confirmed — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml)
-      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Appointment confirmed for ${childName} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}. Log in for details: ${PORTAL_URL}/family/dashboard`)
+      if (family?.email) await sendEmail(family.email, `Appointment confirmed — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml).catch(e => console.error('Family email failed:', e))
+      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Appointment confirmed for ${childName} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}. Log in for details: ${PORTAL_URL}/family/dashboard`).catch(e => console.error('Family SMS failed:', e))
 
       if (provider?.email) {
         const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName })
-        await sendEmail(provider.email, `New appointment: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml)
+        await sendEmail(provider.email, `New appointment: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml).catch(e => console.error('Provider email failed:', e))
       }
-      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: New appointment — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`)
+      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: New appointment — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Provider SMS failed:', e))
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment booked from patient chart for ${childName}. View: ${PORTAL_URL}/admin/schedule`, undefined)
       return res.json({ ok: true })
