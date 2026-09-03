@@ -12,9 +12,10 @@ import { format } from 'date-fns'
 import type { Broadcast } from '../types'
 
 const REQUEST_TYPES = [
-  'In-person house call',
-  'Virtual visit — IV fluids screening',
-  'Virtual visit — CMA visit',
+  'MD/NP needed — virtual visit to go with CMA visit',
+  'MD/NP needed — virtual visit screening for IV fluids',
+  'CMA needed — in-home visit',
+  'RN needed — IV fluids in-home (telemedicine screening included)',
 ]
 
 function defaultAcceptTime() {
@@ -39,6 +40,7 @@ export function Broadcasts() {
     family_phone: '',
     family_email: '',
     request_type: '',
+    cma_specific: '',
     complaint: '',
     is_urgent: false,
   })
@@ -104,8 +106,14 @@ export function Broadcasts() {
   useEffect(() => { fetchBroadcasts() }, [])
 
   async function submitBroadcast() {
-    if (!provider || !form.patient_first_name || !form.patient_last_name || !form.request_type || !form.complaint) return
+    const isCmaRequest = form.request_type === 'CMA needed — in-home visit'
+    if (!provider || !form.patient_first_name || !form.patient_last_name || !form.request_type) return
+    if (isCmaRequest && !form.cma_specific) return
     setSubmitting(true)
+
+    const combinedComplaint = isCmaRequest
+      ? `Specific need: ${form.cma_specific}${form.complaint ? '\nNotes: ' + form.complaint : ''}`
+      : form.complaint || null
 
     const bc = await createBroadcast({
       patient_first_name: form.patient_first_name,
@@ -116,11 +124,11 @@ export function Broadcasts() {
       family_email: form.family_email || null,
       state: provider.states?.[0] || null,
       request_type: form.request_type,
-      complaint: form.complaint,
+      complaint: combinedComplaint,
       is_urgent: form.is_urgent,
       is_open: true,
       created_by: provider.id,
-      created_by_name: provider.name,
+      created_by_name: `${provider.role} ${provider.name}`,
     })
 
     if (bc) {
@@ -129,7 +137,7 @@ export function Broadcasts() {
 
     setSubmitting(false)
     setCreating(false)
-    setForm({ patient_first_name: '', patient_last_name: '', patient_dob: '', patient_address: '', family_phone: '', family_email: '', request_type: '', complaint: '', is_urgent: false })
+    setForm({ patient_first_name: '', patient_last_name: '', patient_dob: '', patient_address: '', family_phone: '', family_email: '', request_type: '', cma_specific: '', complaint: '', is_urgent: false })
     fetchBroadcasts()
   }
 
@@ -183,7 +191,8 @@ export function Broadcasts() {
     setActing(null)
   }
 
-  const formValid = form.patient_first_name && form.patient_last_name && form.request_type && form.complaint
+  const isCmaRequest = form.request_type === 'CMA needed — in-home visit'
+  const formValid = form.patient_first_name && form.patient_last_name && form.request_type && (!isCmaRequest || form.cma_specific)
 
   return (
     <div>
@@ -244,7 +253,7 @@ export function Broadcasts() {
                         <Clock size={11} /> {dateStr} at {fmtTime24(bc.scheduled_time)}
                       </p>
                     )}
-                    {bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Complaint </span>{bc.complaint}</p>}
+                    {bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>}
                     {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#999]" />{bc.patient_address}</p>}
                   </div>
                   <div className="flex gap-2">
@@ -286,7 +295,7 @@ export function Broadcasts() {
                       </p>
                     )}
                     {bc.complaint && (
-                      <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Complaint </span>{bc.complaint}</p>
+                      <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
                     )}
                     {bc.created_by_name && (
                       <p className="flex items-center gap-1 text-[12px] text-[#999] mt-2">
@@ -382,12 +391,23 @@ export function Broadcasts() {
                   {REQUEST_TYPES.map(rt => <option key={rt} value={rt}>{rt}</option>)}
                 </select>
               </div>
+              {isCmaRequest && (
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Specific need <span className="text-[#ff3b30]">*</span>
+                  </label>
+                  <textarea value={form.cma_specific} onChange={e => setForm(f => ({ ...f, cma_specific: e.target.value }))}
+                    placeholder="What do you need the CMA to do? (e.g. wound check, medication admin, vitals...)"
+                    rows={2}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
+                </div>
+              )}
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                  Chief complaint <span className="text-[#ff3b30]">*</span>
+                  Notes
                 </label>
                 <textarea value={form.complaint} onChange={e => setForm(f => ({ ...f, complaint: e.target.value }))}
-                  placeholder="Describe the patient's symptoms..."
+                  placeholder="Any additional details..."
                   rows={3}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
               </div>
