@@ -368,9 +368,11 @@ export function AdminWaitlist() {
                   <Button variant="ghost" size="xs" onClick={() => openEdit(e)}>
                     <Pencil size={11} /> Edit contact
                   </Button>
-                  <Button variant="amber" size="xs" onClick={() => { setLossEntryId(e.id); setLossReason('') }}>
+                  <button
+                    onClick={() => { setLossEntryId(e.id); setLossReason('') }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-lg bg-[#FEF3C7] text-[#92400E] hover:bg-[#FDE68A] border border-[#FCD34D] transition-colors">
                     <XCircle size={11} /> Lost patient
-                  </Button>
+                  </button>
                   <Button variant="danger" size="xs" onClick={() => updateStatus(e.id, 'removed')}>
                     <XCircle size={11} /> Remove
                   </Button>
