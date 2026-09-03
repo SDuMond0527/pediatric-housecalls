@@ -216,7 +216,7 @@ export function Broadcasts() {
             {/* Pairing requests — shown above general broadcasts */}
             {broadcasts.filter(bc => bc.pairing_role_needed).map(bc => {
               const myRole = provider?.role
-              const isMdNp = myRole === 'MD' || myRole === 'NP'
+              const isMdNp = myRole === 'MD' || myRole === 'PNP'
               const isCma = myRole === 'CMA' || myRole === 'RN'
               const canClaim =
                 (bc.pairing_role_needed === 'MD/NP' && isMdNp) ||
