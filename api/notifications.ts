@@ -1119,13 +1119,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 </table></td></tr></table></body></html>`
 
-      if (family?.email) await sendEmail(family.email, `Appointment rescheduled — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml)
-      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment for ${childName} has been rescheduled to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}.`)
+      if (family?.email) await sendEmail(family.email, `Appointment rescheduled — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} · ${PRACTICE_NAME}`, familyHtml).catch(e => console.error('Reschedule family email failed:', e))
+      if (family?.phone) await sendSMS(family.phone, `${PRACTICE_NAME}: Your appointment for ${childName} has been rescheduled to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} with ${providerName}.`).catch(e => console.error('Reschedule family SMS failed:', e))
       if (provider?.email) {
         const provHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName })
-        await sendEmail(provider.email, `Appointment rescheduled: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml)
+        await sendEmail(provider.email, `Appointment rescheduled: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, provHtml).catch(e => console.error('Reschedule provider email failed:', e))
       }
-      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: Appointment rescheduled — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`)
+      if (provider?.phone) await sendSMS(provider.phone, `${PRACTICE_NAME}: Appointment rescheduled — ${childName}, ${appt.visit_type}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`).catch(e => console.error('Reschedule provider SMS failed:', e))
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/admin/schedule`, undefined)
       return res.json({ ok: true })
     }
@@ -1148,16 +1148,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (assignedProvider?.email) {
         const html = providerNotificationEmail({ visitType, date: dateFormatted, time: timeStr, zone: body.zone ?? '', ref: '', providerName: assignedProvider.name })
-        await sendEmail(assignedProvider.email, `New appointment added — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, html)
+        await sendEmail(assignedProvider.email, `New appointment added — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, html).catch(e => console.error('Appt added provider email failed:', e))
       }
       if (assignedProvider?.phone) {
-        await sendSMS(assignedProvider.phone, `${PRACTICE_NAME}: New appointment added to your schedule — ${visitType}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`)
+        await sendSMS(assignedProvider.phone, `${PRACTICE_NAME}: New appointment added to your schedule — ${visitType}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Appt added provider SMS failed:', e))
       }
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, undefined)
 
       if (visitType === 'In-home IV fluids' && parentEmail) {
-        await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml())
+        await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids parent email failed:', e))
       }
 
       return res.json({ ok: true })
