@@ -235,13 +235,6 @@ export function Waitlist() {
     }
   }
 
-  function slotToMinutes(slot: string): number {
-    const [t, ampm] = slot.split(' ')
-    let [h, m] = t.split(':').map(Number)
-    if (ampm === 'PM' && h !== 12) h += 12
-    if (ampm === 'AM' && h === 12) h = 0
-    return h * 60 + m
-  }
 
 
   async function fetchEntries() {
