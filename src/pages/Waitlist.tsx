@@ -4,6 +4,7 @@ import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
   createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
+  getChildrenByFamilyIds, updateChild,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -281,7 +282,7 @@ export function Waitlist() {
       Patient: 'PATIENT', DOB: 'DOB', Email: 'PARENTEMAIL', Phone: 'PARENTPHONE',
       Allergies: 'ALLERGY', Medications: 'MEDS', PMH: 'PMH',
       PCP: 'PCP', Pharmacy: 'PHARMACY', Insurance: 'INSURANCE',
-      'Member ID': 'MEMBERID', 'Group #': 'GROUPNUM',
+      'Member ID': 'MID', 'Group #': 'GRP',
     }
     const apptNoteParts: string[] = []
     if (accepting.zip) apptNoteParts.push(`ZIP:${accepting.zip}`)
@@ -318,6 +319,39 @@ export function Waitlist() {
       })
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
+
+      // Save patient data from waitlist notes into the child's permanent profile
+      if (accepting.family_id) {
+        const noteMap = parseNotes(accepting.notes)
+        const patientName = noteMap['Patient'] || ''
+        const [patientFirst, ...rest] = patientName.trim().split(' ')
+        const patientLast = rest.join(' ')
+        try {
+          const familyChildren = await getChildrenByFamilyIds([accepting.family_id])
+          const match = (familyChildren ?? []).find((c: any) => {
+            const fn = (c.first_name || '').toLowerCase()
+            const ln = (c.last_name || '').toLowerCase()
+            return patientFirst && fn === patientFirst.toLowerCase() && (!patientLast || ln === patientLast.toLowerCase())
+          })
+          if (match) {
+            const insRaw = noteMap['Insurance'] || ''
+            await updateChild(match.id, {
+              allergies:                   noteMap['Allergies']   || null,
+              current_medications:         noteMap['Medications'] || null,
+              medical_history:             noteMap['PMH']         || null,
+              preferred_pharmacy:          noteMap['Pharmacy']    || null,
+              pcp:                         noteMap['PCP']         || null,
+              insurance_provider:          insRaw.split(' | ')[0] || null,
+              insurance_member_id:         noteMap['Member ID']   || null,
+              insurance_group_number:      noteMap['Group #']     || null,
+              parent_phone:                noteMap['Phone']       || accepting.family_phone || null,
+              parent_email:                noteMap['Email']       || accepting.family_email || null,
+              parent_address:              noteMap['Address']     || null,
+              parent_zip:                  accepting.zip          || null,
+            })
+          }
+        } catch { /* non-blocking */ }
+      }
 
       const partnerAutoFound = isDual && apptResult?.primary !== undefined && !!apptResult.secondary
       const needsBroadcast = isDual && apptResult?.primary !== undefined && !apptResult.secondary
