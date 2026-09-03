@@ -85,7 +85,6 @@ export function Waitlist() {
   const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
-  const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ADD)
   const [addSubmitting, setAddSubmitting] = useState(false)
@@ -244,23 +243,6 @@ export function Waitlist() {
     return h * 60 + m
   }
 
-  useEffect(() => {
-    if (!date || !provider || !accepting) { setBookedSlots(new Set()); return }
-    apiFetch<any[]>(`/api/appointments?provider_id=${provider.id}&date=${date}`).then(appts => {
-      const booked = new Set<string>()
-      for (const appt of appts) {
-        const [h, m] = (appt.scheduled_time as string).split(':').map(Number)
-        const startMin = h * 60 + m
-        const endMin = startMin + (appt.duration_minutes ?? 60)
-        for (const slot of TIME_SLOTS) {
-          const slotMin = slotToMinutes(slot)
-          if (slotMin >= startMin && slotMin < endMin) booked.add(slot)
-        }
-      }
-      setBookedSlots(booked)
-      setTime(t => booked.has(t) ? '' : t)
-    }).catch(() => {})
-  }, [date, provider?.id, accepting?.id])
 
   async function fetchEntries() {
     if (!provider) return
