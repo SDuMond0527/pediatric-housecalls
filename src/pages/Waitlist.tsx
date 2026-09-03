@@ -344,20 +344,23 @@ export function Waitlist() {
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
-      // Always notify family that the visit is accepted
-      invokeNotifications({
-        type: 'waitlist_accepted',
-        waitlistEntryId: accepting.id,
-        providerName: provider.name,
-        providerId: provider.id,
-        date,
-        time,
-      }).catch(() => {})
+      const partnerAutoFound = isDual && apptResult?.primary !== undefined && !!apptResult.secondary
+      const needsBroadcast = isDual && apptResult?.primary !== undefined && !apptResult.secondary
 
-      // Dual visit type — check if partner was auto-paired or broadcast is needed
-      if (isDual && apptResult?.primary !== undefined) {
-        if (!apptResult.secondary) {
-          // No on-call partner found — fire a pairing broadcast to the other role
+      // Only notify family when both providers are confirmed — either non-dual or auto-paired
+      if (!isDual || partnerAutoFound) {
+        invokeNotifications({
+          type: 'waitlist_accepted',
+          waitlistEntryId: accepting.id,
+          providerName: provider.name,
+          providerId: provider.id,
+          date,
+          time,
+        }).catch(() => {})
+      }
+
+      // Dual visit type — no partner found, fire pairing broadcast; family notified when claimed
+      if (needsBroadcast) {
           const noteMap = parseNotes(accepting.notes)
           const patientFullName = noteMap['Patient'] || accepting.family_name || 'Patient'
           const nameParts = patientFullName.trim().split(' ')
@@ -365,7 +368,13 @@ export function Waitlist() {
           const patientLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
           const isInHome = provider.role === 'CMA' || provider.role === 'RN'
-          const pairingRoleNeeded = isInHome ? 'MD/NP' : 'CMA'
+          const isIvFluids = finalVisitType === 'In-home IV fluids'
+          const pairingRoleNeeded = isInHome ? 'MD/NP' : (isIvFluids ? 'RN' : 'CMA')
+          const requestType = pairingRoleNeeded === 'MD/NP'
+            ? 'Telemedicine MD/NP needed'
+            : pairingRoleNeeded === 'RN'
+              ? 'In-home RN needed'
+              : 'In-home CMA needed'
 
           const bc = await createBroadcast({
             patient_first_name: patientFirst,
@@ -375,7 +384,7 @@ export function Waitlist() {
             family_email: accepting.family_email || noteMap['Email'] || null,
             state: accepting.state || null,
             visit_type: finalVisitType,
-            request_type: pairingRoleNeeded === 'MD/NP' ? 'Telemedicine MD/NP needed' : 'In-home CMA needed',
+            request_type: requestType,
             complaint: accepting.complaint || noteMap['Complaint'] || null,
             is_urgent: false,
             created_by: provider.id,
@@ -391,7 +400,6 @@ export function Waitlist() {
           if (bc?.id) {
             invokeNotifications({ type: 'broadcast', broadcastId: bc.id }).catch(() => {})
           }
-        }
       }
 
       setAccepting(null)

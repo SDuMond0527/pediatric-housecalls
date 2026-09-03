@@ -1365,9 +1365,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? (() => { const [hh, mm] = bc.scheduled_time.split(':').map(Number); const ap = hh >= 12 ? 'PM' : 'AM'; return `${hh % 12 || 12}:${mm.toString().padStart(2, '0')} ${ap}` })()
         : ''
 
-      const isInHomeNeeded = bc.pairing_role_needed === 'CMA'
+      const isInHomeNeeded = bc.pairing_role_needed === 'CMA' || bc.pairing_role_needed === 'RN'
       const claimedRole = isInHomeNeeded ? 'in-home' : 'telemedicine'
       const initiatorRole = isInHomeNeeded ? 'telemedicine' : 'in-home'
+      const visitLabel: string = bc.visit_type || 'dual-provider visit'
 
       // Notify the initiating provider
       if (bc.pairing_initiator_id) {
@@ -1380,7 +1381,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `${claimedByName} has joined your ${patientName} visit`,
             `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
               <p>Hi ${(initiator.name as string).split(' ')[0]},</p>
-              <p><strong>${claimedByName}</strong> has claimed the <strong>${claimedRole}</strong> portion of your CMA + telemedicine visit with <strong>${patientName}</strong> on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.</p>
+              <p><strong>${claimedByName}</strong> has claimed the <strong>${claimedRole}</strong> portion of your ${visitLabel} with <strong>${patientName}</strong> on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.</p>
               <p>You're handling the ${initiatorRole} half. You're all set!</p>
             </div>`
           ).catch(() => {})
@@ -1394,13 +1395,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const inHomeName = isInHomeNeeded ? claimedByName : initiatorName
       const teleName = isInHomeNeeded ? initiatorName : claimedByName
 
-      const familySms = `${PRACTICE_NAME}: Your CMA + telemedicine visit is fully confirmed. ${inHomeName} will be there in person and ${teleName} will join by video on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.`
+      const familySms = `${PRACTICE_NAME}: Your ${visitLabel} is fully confirmed. ${inHomeName} will be there in person and ${teleName} will join by video on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.`
       if (familyPhone) await sendSMS(familyPhone, familySms).catch(() => {})
       if (familyEmail) await sendEmail(
         familyEmail,
         `Your visit is fully confirmed — ${dateFormatted}`,
         `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
-          <p>Great news! Your CMA + telemedicine visit is now fully confirmed.</p>
+          <p>Great news! Your ${visitLabel} is now fully confirmed.</p>
           <ul>
             <li><strong>${inHomeName}</strong> will come to your home for the in-person portion</li>
             <li><strong>${teleName}</strong> will join by video for the telemedicine consultation</li>
