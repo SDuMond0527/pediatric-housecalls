@@ -563,6 +563,7 @@ export function BookVisit() {
     setBookedSlots(bookedSlotsList)
 
     const leadTimeSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, date)
+    const visitDur = byType[booking.visitType]?.duration_minutes ?? 60
     const freeSlots = leadTimeSlots.filter(slot => {
       const [t, ampm] = slot.split(' ')
       let [h, m] = t.split(':').map(Number)
@@ -571,7 +572,7 @@ export function BookVisit() {
       const slotMin = h * 60 + m
       const [wsh, wsm] = window.start.split(':').map(Number)
       const [weh, wem] = window.end.split(':').map(Number)
-      if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
+      if (slotMin < wsh * 60 + wsm || slotMin + visitDur > weh * 60 + wem) return false
       return !bookedSlotsList.some(({ time: bt, duration }) => {
         const bookedMin = timeStrToMinutes(bt)
         return slotMin >= bookedMin && slotMin < bookedMin + duration
@@ -611,6 +612,7 @@ export function BookVisit() {
           const window = intersectWindows(dayWindow, vtaWindow)
           if (!window) return null
           const bookedSlotsList = sched?.bookedSlots ?? []
+          const fwdVisitDur = byType[visitType]?.duration_minutes ?? 60
           const freeSlots = TIME_SLOTS.filter(slot => {
             const [t, ampm] = slot.split(' ')
             let [h, m] = t.split(':').map(Number)
@@ -619,7 +621,7 @@ export function BookVisit() {
             const slotMin = h * 60 + m
             const [wsh, wsm] = window.start.split(':').map(Number)
             const [weh, wem] = window.end.split(':').map(Number)
-            if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
+            if (slotMin < wsh * 60 + wsm || slotMin + fwdVisitDur > weh * 60 + wem) return false
             return !bookedSlotsList.some(({ time: bt, duration }) => {
               const bookedMin = timeStrToMinutes(bt)
               return slotMin >= bookedMin && slotMin < bookedMin + duration
@@ -693,11 +695,12 @@ export function BookVisit() {
       const window = intersectWindows(dayWindow, vtaWindow2)
       if (!window) return null
       const bookedList = sched?.bookedSlots ?? []
+      const faVisitDur = byType[booking.visitType]?.duration_minutes ?? 60
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
         const [weh, wem] = window.end.split(':').map(Number)
-        if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
+        if (sm < wsh * 60 + wsm || sm + faVisitDur > weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
           const bm2 = timeStrToMinutes(bt)
           return sm >= bm2 && sm < bm2 + duration
@@ -763,11 +766,12 @@ export function BookVisit() {
       const window = intersectWindows(dayWindow, vtaWindow3)
       if (!window) return null
       const bookedList = sched?.bookedSlots ?? []
+      const cmaVisitDur = byType['CMA + telemedicine']?.duration_minutes ?? 60
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
         const [weh, wem] = window.end.split(':').map(Number)
-        if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
+        if (sm < wsh * 60 + wsm || sm + cmaVisitDur > weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
           const bm2 = timeStrToMinutes(bt)
           return sm >= bm2 && sm < bm2 + duration
@@ -816,11 +820,12 @@ export function BookVisit() {
           const win = intersectWindows(dayWindow, vtaWin)
           if (!win) return null
           const booked = sched?.bookedSlots ?? []
+          const laVisitDur = byType[visitType]?.duration_minutes ?? 60
           const free = leadSlots.filter(slot => {
             const sm = slotMin(slot)
             const [wsh, wsm] = win.start.split(':').map(Number)
             const [weh, wem] = win.end.split(':').map(Number)
-            if (sm < wsh * 60 + wsm || sm >= weh * 60 + wem) return false
+            if (sm < wsh * 60 + wsm || sm + laVisitDur > weh * 60 + wem) return false
             return !booked.some(({ time: bt, duration }) => {
               const bm = timeStrToMinutes(bt)
               return sm >= bm && sm < bm + duration
@@ -1911,7 +1916,8 @@ export function BookVisit() {
               if (visitTypeWindow) {
                 const [wsh, wsm] = visitTypeWindow.start.split(':').map(Number)
                 const [weh, wem] = visitTypeWindow.end.split(':').map(Number)
-                if (slotMin < wsh * 60 + wsm || slotMin >= weh * 60 + wem) return false
+                const renderVisitDur = byType[booking.visitType]?.duration_minutes ?? 60
+                if (slotMin < wsh * 60 + wsm || slotMin + renderVisitDur > weh * 60 + wem) return false
               }
               return !bookedSlots.some(({ time: bt, duration }) => {
                 const bookedMin = timeStrToMinutes(bt)
