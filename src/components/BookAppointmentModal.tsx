@@ -89,10 +89,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
       })
       // Notify primary provider
       const primaryId = appt.primary?.id ?? appt.id
-      await invokeNotifications({ type: 'admin_booked', appointmentId: primaryId })
+      await invokeNotifications({ type: 'chart_booked', appointmentId: primaryId })
       // Notify secondary provider if dual booking
       if (appt.secondary?.id) {
-        await invokeNotifications({ type: 'admin_booked', appointmentId: appt.secondary.id })
+        await invokeNotifications({ type: 'chart_booked', appointmentId: appt.secondary.id })
       }
       onBooked()
     } catch (e: any) {

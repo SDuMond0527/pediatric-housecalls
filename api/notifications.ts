@@ -1061,7 +1061,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Admin booked appointment from patient chart ───────────────────────────
-    if (body.type === 'admin_booked') {
+    if (body.type === 'admin_booked' || body.type === 'chart_booked') {
       const [appt] = await sql`SELECT * FROM appointments WHERE id = ${body.appointmentId}::uuid LIMIT 1`
       if (!appt) return res.json({ ok: false, error: 'Appointment not found' })
 
