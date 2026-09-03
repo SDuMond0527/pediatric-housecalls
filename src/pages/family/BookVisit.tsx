@@ -1019,7 +1019,8 @@ export function BookVisit() {
       const noteParts = [`Ref: ${ref}`]
       if (booking.visitAddress) noteParts.push(`ADDR:${booking.visitAddress}${booking.city ? `, ${booking.city}` : ''}${booking.state ? `, ${booking.state}` : ''}${booking.zip ? ` ${booking.zip}` : ''}`)
       noteParts.push(`PARENTEMAIL:${family!.email}`)
-      if ((family as any)?.phone) noteParts.push(`PARENTPHONE:${(family as any).phone}`)
+      const effectivePhone = booking.phone || (family as any)?.phone || ''
+      if (effectivePhone) noteParts.push(`PARENTPHONE:${effectivePhone}`)
 
       // Store clinical intake data for all selected children
       const childCount = booking.selectedChildIds.length
@@ -2051,8 +2052,8 @@ export function BookVisit() {
             onBack={() => setStep(isCpr ? STEP_INTAKE : isIvFluids ? STEP_IV : STEP_INTAKE)}
             nextDisabled={
               isCpr
-                ? (!booking.date || !booking.time)
-                : (!booking.date || !booking.time || !booking.zone ||
+                ? (!booking.date || !booking.time || !booking.phone)
+                : (!booking.date || !booking.time || !booking.phone || !booking.zone ||
                    waitlistZones.includes(booking.zone) ||
                    zoneProviders.length === 0 ||
                    (!booking.provider && zoneProviders.length > 0) ||
