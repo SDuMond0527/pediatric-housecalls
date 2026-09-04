@@ -16,7 +16,7 @@ function toMin(t: string): number {
 
 /**
  * Validates that a requested time slot falls within a provider's configured
- * availability window (day-of-week schedule + visit-type restriction + overrides).
+ * availability window (date-specific override + visit-type restriction).
  * Returns null if valid, or an error string to send back to the client.
  */
 export async function validateProviderSlot(
@@ -26,13 +26,7 @@ export async function validateProviderSlot(
   date: string,       // "YYYY-MM-DD"
   time: string,       // "HH:MM" or "H:MM AM/PM"
 ): Promise<string | null> {
-  const dayOfWeek = new Date(date + 'T12:00:00').getDay()
-
-  const [availRows, overrideRows, vtRows] = await Promise.all([
-    sql`SELECT is_active, start_time, end_time
-        FROM availability
-        WHERE provider_id = ${providerId}::uuid AND day_of_week = ${dayOfWeek}
-        LIMIT 1`,
+  const [overrideRows, vtRows] = await Promise.all([
     sql`SELECT is_available, start_time, end_time
         FROM availability_overrides
         WHERE provider_id = ${providerId}::uuid AND date = ${date}::date
@@ -43,7 +37,6 @@ export async function validateProviderSlot(
         LIMIT 1`,
   ])
 
-  const avail    = availRows[0]    as any
   const override = overrideRows[0] as any
   const vtAvail  = vtRows[0]       as any
 
@@ -51,18 +44,11 @@ export async function validateProviderSlot(
   let winStart: number
   let winEnd: number
 
-  if (override) {
-    if (!override.is_available) return 'Provider is not available on this date'
-    winStart = toMin(override.start_time)
-    winEnd   = toMin(override.end_time)
-  } else if (avail) {
-    if (!avail.is_active) return 'Provider is not available on this day of the week'
-    winStart = toMin(avail.start_time)
-    winEnd   = toMin(avail.end_time)
-  } else {
-    // No availability record at all — provider is not configured for this day
-    return 'Provider has no availability configured for this date'
-  }
+  if (!override) return 'Provider has no availability configured for this date'
+  if (!override.is_available) return 'Provider is not available on this date'
+  if (!override.start_time || !override.end_time) return 'Provider has no hours set for this date'
+  winStart = toMin(override.start_time)
+  winEnd   = toMin(override.end_time)
 
   // Intersect with visit-type window when configured
   if (vtAvail?.is_active && vtAvail.start_time && vtAvail.end_time) {

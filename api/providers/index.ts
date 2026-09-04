@@ -70,10 +70,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rows = await sql`
       SELECT p.* FROM providers p
       WHERE p.is_active = true AND p.role != 'admin' AND ${zone} = ANY(p.zones) AND p.practice_id = ${practiceId}::uuid
-        AND (
-          NOT EXISTS (SELECT 1 FROM availability a WHERE a.provider_id = p.id)
-          OR EXISTS (SELECT 1 FROM availability a WHERE a.provider_id = p.id AND a.is_active = true)
-        )
       ORDER BY p.name`
     return res.json(rows)
   }

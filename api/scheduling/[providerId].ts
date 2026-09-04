@@ -14,10 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!providerRows.length) return res.status(404).json({ error: 'Provider not found' })
   const practiceId = providerRows[0].practice_id as string
 
-  const dayOfWeek = new Date(date + 'T12:00:00').getDay()
-
-  const [availRows, overrideRows, visitTypeRows, bookedRows] = await Promise.all([
-    sql`SELECT is_active, start_time, end_time FROM availability WHERE provider_id = ${providerId}::uuid AND day_of_week = ${dayOfWeek} LIMIT 1`,
+  const [overrideRows, visitTypeRows, bookedRows] = await Promise.all([
     sql`SELECT is_available, start_time, end_time FROM availability_overrides WHERE provider_id = ${providerId}::uuid AND date = ${date}::date LIMIT 1`,
     visit_type
       ? sql`SELECT is_active, start_time, end_time FROM visit_type_availability WHERE provider_id = ${providerId}::uuid AND visit_type = ${visit_type} LIMIT 1`
@@ -26,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ])
 
   res.json({
-    availability: availRows[0] ?? null,
+    availability: null,
     override: overrideRows[0] ?? null,
     visitTypeAvail: visitTypeRows[0] ?? null,
     bookedSlots: (bookedRows as Array<{ scheduled_time: string; duration_minutes: number }>).map(r => ({ time: r.scheduled_time, duration: r.duration_minutes })),

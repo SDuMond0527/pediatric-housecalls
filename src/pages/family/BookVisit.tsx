@@ -523,22 +523,9 @@ export function BookVisit() {
   async function getProviderDayWindow(providerId: string, date: string): Promise<{ start: string; end: string } | null> {
     const sched = await getSchedulingData(providerId, { date })
     const override = sched?.override
-    const avail = sched?.availability
-
-    // Date-specific override takes priority
-    if (override) {
-      if (!override.is_available) return null
-      // Use override times if both are present
-      if (override.start_time && override.end_time) {
-        return { start: override.start_time, end: override.end_time }
-      }
-      // Override marks day as available but has no specific times — fall through to weekly schedule
-    }
-
-    // Fall back to weekly day-of-week availability
-    if (!avail || !avail.is_active) return null
-    if (!avail.start_time || !avail.end_time) return null
-    return { start: avail.start_time, end: avail.end_time }
+    if (!override || !override.is_available) return null
+    if (!override.start_time || !override.end_time) return null
+    return { start: override.start_time, end: override.end_time }
   }
 
   async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
