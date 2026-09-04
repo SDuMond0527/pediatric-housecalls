@@ -379,6 +379,11 @@ export function BookVisit() {
   }, [zipToZone])
 
   useEffect(() => {
+    setAllSlotsBooked(false)
+    setSlotsChecking(false)
+    setForwardAvail([])
+    setBookedSlots([])
+    setVisitTypeWindow(null)
     if (booking.provider === '__first_available__') {
       if (booking.date) findFirstAvailable(booking.date)
     } else if (booking.provider && booking.date) {
