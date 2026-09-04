@@ -533,6 +533,7 @@ export function BookVisit() {
 
   async function loadBookedTimes(providerName: string, date: string, prevTime?: string) {
     if (!providerName || !date) { setBookedSlots([]); setAllSlotsBooked(false); setSlotsChecking(false); setVisitTypeWindow(null); setForwardAvail([]); return }
+    setAllSlotsBooked(false)
     setSlotsChecking(true)
     setForwardAvail([])
     try {
