@@ -1156,13 +1156,32 @@ export function BookVisit() {
       booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
     }
 
-    // Save ALL patient profile data immediately — before any step that could fail.
-    // This ensures name, DOB, insurance, etc. are on the record regardless of what happens next.
+    // Save identity fields (name, DOB, gender) first and separately for new patients —
+    // these must land on the record before anything else. Retried once on failure.
+    for (const childId of booking.selectedChildIds) {
+      const intake = booking.childIntakes[childId]
+      if (!intake || intake.hasProfile) continue
+      const identity = {
+        first_name: intake.firstName || null,
+        last_name: intake.lastName || null,
+        date_of_birth: intake.dateOfBirth || null,
+        gender: intake.gender || null,
+        phi_sharing_consent: intake.phiSharingConsent,
+      }
+      try {
+        await updateChild(childId, identity)
+      } catch {
+        // retry once
+        await updateChild(childId, identity).catch(() => {})
+      }
+    }
+
+    // Save ALL remaining patient profile data.
     await Promise.allSettled([
       ...booking.selectedChildIds.map(childId => {
         const intake = booking.childIntakes[childId]
         if (!intake) return Promise.resolve()
-        const update: Record<string, unknown> = {
+        return updateChild(childId, {
           insurance_provider: intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
           insurance_member_id: intake.selfPay ? null : (intake.insuranceMemberId || null),
           insurance_group_number: intake.insuranceGroupNumber || null,
@@ -1176,17 +1195,7 @@ export function BookVisit() {
           current_medications: intake.currentMedications || null,
           medical_history: intake.medicalHistory || null,
           vaccination_status: intake.vaccinationStatus || null,
-        }
-        if (!intake.hasProfile) {
-          Object.assign(update, {
-            phi_sharing_consent: intake.phiSharingConsent,
-            first_name: intake.firstName || null,
-            last_name: intake.lastName || null,
-            date_of_birth: intake.dateOfBirth || null,
-            gender: intake.gender || null,
-          })
-        }
-        return updateChild(childId, update)
+        })
       }),
       ...Object.entries(booking.childIntakes)
         .filter(([, intake]) => intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl)

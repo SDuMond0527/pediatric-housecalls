@@ -106,10 +106,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const dob = b.date_of_birth || null
+      const newFirst = b.first_name || null
+      const newLast  = b.last_name  || null
       const [row] = await sql`
         UPDATE children SET
-          first_name           = COALESCE(${b.first_name           || null}, first_name),
-          last_name            = COALESCE(${b.last_name            || null}, last_name),
+          first_name           = COALESCE(${newFirst}, first_name),
+          last_name            = COALESCE(${newLast},  last_name),
+          display_label        = CASE
+            WHEN ${newFirst}::text IS NOT NULL OR ${newLast}::text IS NOT NULL
+            THEN TRIM(COALESCE(${newFirst}::text, first_name) || ' ' || COALESCE(${newLast}::text, last_name))
+            ELSE display_label
+          END,
           date_of_birth        = COALESCE(${dob}::date,                      date_of_birth),
           insurance_provider   = COALESCE(${b.insurance_provider   || null}, insurance_provider),
           insurance_member_id  = COALESCE(${b.insurance_member_id  || null}, insurance_member_id),
