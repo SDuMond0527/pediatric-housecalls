@@ -262,47 +262,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PUT') {
-    const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
-    if (!existing) return res.status(404).json({ error: 'Note not found' })
+    try {
+      const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!existing) return res.status(404).json({ error: 'Note not found' })
 
-    const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration } = req.body
+      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration } = req.body
 
-    const unlocking = is_signed === false
-    if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
+      const unlocking = is_signed === false
+      if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
 
-    const signing = is_signed === true
+      const signing = is_signed === true
 
-    const [row] = await sql`
-      UPDATE encounter_notes SET
-        note_type       = COALESCE(${note_type ?? null}, note_type),
-        chief_complaint = COALESCE(${chief_complaint ?? null}, chief_complaint),
-        subjective      = COALESCE(${subjective ?? null}, subjective),
-        objective       = COALESCE(${objective ?? null}, objective),
-        assessment      = COALESCE(${assessment ?? null}, assessment),
-        plan            = COALESCE(${plan ?? null}, plan),
-        diagnoses       = COALESCE(${diagnoses != null ? JSON.stringify(diagnoses) : null}::jsonb, diagnoses),
-        cpt_codes       = COALESCE(${cpt_codes != null ? JSON.stringify(cpt_codes) : null}::jsonb, cpt_codes),
-        photos          = COALESCE(${photos != null ? JSON.stringify(photos) : null}::jsonb, photos),
-        vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
-        iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
-        child_id        = COALESCE(${child_id ?? null}::uuid, child_id),
-        is_signed       = ${signing},
-        signed_at       = CASE WHEN ${signing} THEN now() WHEN ${unlocking} THEN NULL ELSE signed_at END,
-        updated_at      = now()
-      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
-      RETURNING *`
-    if (child_id && row?.appointment_id) {
-      await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${row.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+      let row: any
+      try {
+        ;[row] = await sql`
+          UPDATE encounter_notes SET
+            note_type       = COALESCE(${note_type ?? null}, note_type),
+            chief_complaint = COALESCE(${chief_complaint ?? null}, chief_complaint),
+            subjective      = COALESCE(${subjective ?? null}, subjective),
+            objective       = COALESCE(${objective ?? null}, objective),
+            assessment      = COALESCE(${assessment ?? null}, assessment),
+            plan            = COALESCE(${plan ?? null}, plan),
+            diagnoses       = COALESCE(${diagnoses != null ? JSON.stringify(diagnoses) : null}::jsonb, diagnoses),
+            cpt_codes       = COALESCE(${cpt_codes != null ? JSON.stringify(cpt_codes) : null}::jsonb, cpt_codes),
+            photos          = COALESCE(${photos != null ? JSON.stringify(photos) : null}::jsonb, photos),
+            vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
+            iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
+            child_id        = COALESCE(${child_id ?? null}::uuid, child_id),
+            is_signed       = ${signing},
+            signed_at       = CASE WHEN ${signing} THEN now() WHEN ${unlocking} THEN NULL ELSE signed_at END,
+            updated_at      = now()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+      } catch (err: any) {
+        console.error('[note-put] UPDATE failed:', err?.message)
+        return res.status(500).json({ error: 'Note update failed: ' + (err?.message ?? String(err)) })
+      }
+
+      if (child_id && row?.appointment_id) {
+        try {
+          await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${row.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+        } catch (err: any) {
+          console.error('[note-put] appointment child_id update failed:', err?.message)
+        }
+      }
+      if (signing && row?.child_id) {
+        try { await faxNoteToPcp(row, practiceId, sql) }
+        catch (err: any) { console.error('[fax] PCP fax failed:', err?.message) }
+      }
+      if (signing && row?.id) {
+        try { await generateClaimForNote(sql, row.id, practiceId) }
+        catch (err: any) { console.error('[claim] Auto-generation failed:', err?.message) }
+      }
+      return res.json(row)
+    } catch (err: any) {
+      console.error('[note-put] Unhandled error:', err?.message)
+      return res.status(500).json({ error: 'Internal error: ' + (err?.message ?? String(err)) })
     }
-    if (signing && row?.child_id) {
-      try { await faxNoteToPcp(row, practiceId, sql) }
-      catch (err: any) { console.error('[fax] PCP fax failed:', err?.message) }
-    }
-    if (signing && row?.id) {
-      try { await generateClaimForNote(sql, row.id, practiceId) }
-      catch (err: any) { console.error('[claim] Auto-generation failed:', err?.message) }
-    }
-    return res.json(row)
   }
 
   res.status(405).json({ error: 'Method not allowed' })
