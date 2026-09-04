@@ -133,7 +133,6 @@ export function Availability() {
   }>({ label: '', blockType: 'recurring', days: 'Mon–Fri', time_range: '3:30–4:00 PM', date: '', start: '8:00 AM', end: '5:00 PM' })
   const [newOverride, setNewOverride] = useState({
     date: '',
-    is_available: true,
     start: '8:00 AM',
     end: '5:00 PM',
     note: '',
@@ -295,9 +294,9 @@ export function Availability() {
     try {
       const payload = {
         date: savedDate,
-        is_available: newOverride.is_available,
-        start_time: newOverride.is_available ? fmt12to24(newOverride.start) : null,
-        end_time: newOverride.is_available ? fmt12to24(newOverride.end) : null,
+        is_available: true,
+        start_time: fmt12to24(newOverride.start),
+        end_time: fmt12to24(newOverride.end),
         note: newOverride.note || null,
       }
       await upsertAvailabilityOverride(viewingProviderId, payload)
@@ -310,7 +309,7 @@ export function Availability() {
       setCalMonth(new Date(savedDate + 'T12:00:00'))
       setOverrideDateView('calendar')
       setOverrideModal(false)
-      setNewOverride({ date: '', is_available: true, start: '8:00 AM', end: '5:00 PM', note: '' })
+      setNewOverride({ date: '', start: '8:00 AM', end: '5:00 PM', note: '' })
     } catch (e) {
       alert('Failed to save: ' + (e instanceof Error ? e.message : 'Unknown error'))
     } finally {
@@ -332,13 +331,12 @@ export function Availability() {
     if (existing) {
       setNewOverride({
         date: existing.date,
-        is_available: existing.is_available,
         start: existing.start_time ? fmt24to12(existing.start_time) : '8:00 AM',
         end: existing.end_time ? fmt24to12(existing.end_time) : '5:00 PM',
         note: existing.note ?? '',
       })
     } else {
-      setNewOverride({ date: dateStr, is_available: true, start: '8:00 AM', end: '5:00 PM', note: '' })
+      setNewOverride({ date: dateStr, start: '8:00 AM', end: '5:00 PM', note: '' })
     }
     setOverrideModal(true)
   }
@@ -528,7 +526,7 @@ export function Availability() {
                 </button>
               </div>
               <Button variant="primary" size="sm" onClick={() => {
-                setNewOverride({ date: '', is_available: true, start: '8:00 AM', end: '5:00 PM', note: '' })
+                setNewOverride({ date: '', start: '8:00 AM', end: '5:00 PM', note: '' })
                 setOverrideModal(true)
               }}>
                 <Plus size={13} /> Add date
@@ -879,38 +877,22 @@ export function Availability() {
               className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" />
           </div>
 
-          <div>
-            <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Status</label>
-            <div className="flex gap-2">
-              <button onClick={() => setNewOverride(p => ({ ...p, is_available: true }))}
-                className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${newOverride.is_available ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#085041]' : 'border-[#E8E8E4] text-[#555]'}`}>
-                Working
-              </button>
-              <button onClick={() => setNewOverride(p => ({ ...p, is_available: false }))}
-                className={`flex-1 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${!newOverride.is_available ? 'border-[#F09595] bg-[#FCEBEB] text-[#791F1F]' : 'border-[#E8E8E4] text-[#555]'}`}>
-                Off
-              </button>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">From</label>
+              <select value={newOverride.start} onChange={e => setNewOverride(p => ({ ...p, start: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">To</label>
+              <select value={newOverride.end} onChange={e => setNewOverride(p => ({ ...p, end: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
+                {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
+              </select>
             </div>
           </div>
-
-          {newOverride.is_available && (
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">From</label>
-                <select value={newOverride.start} onChange={e => setNewOverride(p => ({ ...p, start: e.target.value }))}
-                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
-                  {TIME_OPTIONS_START.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">To</label>
-                <select value={newOverride.end} onChange={e => setNewOverride(p => ({ ...p, end: e.target.value }))}
-                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans">
-                  {TIME_OPTIONS_END.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
 
           <div>
             <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Note (optional)</label>
