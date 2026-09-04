@@ -228,6 +228,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!childRow) return res.status(404).json({ error: 'Patient not found' })
 
     const child  = childRow as Record<string, any>
+
+    // DoseSpot requires first name, last name, and date of birth — fail early with a clear message
+    const missing = [
+      !child.first_name && 'first name',
+      !child.last_name  && 'last name',
+      !child.date_of_birth && 'date of birth',
+    ].filter(Boolean)
+    if (missing.length) {
+      return res.status(422).json({
+        error: `Cannot open DoseSpot: patient record is missing ${missing.join(', ')}. Please update the patient chart before prescribing.`,
+      })
+    }
     // Use family profile fields, falling back to child's own parent fields
     const family = {
       phone:        child.family_phone   || child.parent_phone,
