@@ -93,8 +93,13 @@ function intersectWindows(
   return { start: fromMin(start), end: fromMin(end) }
 }
 
+function localDateStr(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
 function getAvailableSlots(leadMin: number, date: string): string[] {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDateStr()
   if (date !== today) return TIME_SLOTS
 
   const cutoff = new Date(Date.now() + leadMin * 60_000)
@@ -805,7 +810,7 @@ export function BookVisit() {
       if (ampm === 'AM' && h === 12) h = 0
       return h * 60 + m
     }
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateStr()
     const dates = [0, 1, 2].map(d => {
       const dt = new Date(today + 'T12:00:00')
       dt.setDate(dt.getDate() + d)
@@ -1860,7 +1865,7 @@ export function BookVisit() {
                 </div>
               ) : (
                 <div>
-                  <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
+                  <input type="date" value={booking.date} min={localDateStr()}
                     onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
                     className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
                   {zoneLookahead.length === 0 && !zoneLookaheadLoading && (
@@ -1942,7 +1947,7 @@ export function BookVisit() {
           {(isCpr || isTelemedicine(booking.visitType)) && booking.provider && (
             <div className="mb-5">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
-              <input type="date" value={booking.date} min={new Date().toISOString().split('T')[0]}
+              <input type="date" value={booking.date} min={localDateStr()}
                 onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
                 className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
             </div>
