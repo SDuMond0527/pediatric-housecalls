@@ -43,6 +43,7 @@ interface ChildIntake {
   // Profile fields (first booking only — saved to Charm)
   firstName: string
   lastName: string
+  nickname: string
   dateOfBirth: string
   gender: string
   insuranceProvider: string
@@ -51,6 +52,7 @@ interface ChildIntake {
   insuranceSubscriberName: string
   insuranceSubscriberDob: string
   insuranceSubscriberGender: string
+  insuranceSubscriberRelationship: string
   insuranceCardFrontUrl: string
   insuranceCardBackUrl: string
   selfPay: boolean
@@ -199,11 +201,11 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
   return {
     childId, displayLabel, hasProfile,
     cardOnFile: !!(child?.insurance_card_front_url && child?.insurance_card_back_url),
-    firstName: child?.first_name || '', lastName: child?.last_name || '', dateOfBirth: child?.date_of_birth || '', gender: '',
+    firstName: child?.first_name || '', lastName: child?.last_name || '', nickname: child?.nickname || '', dateOfBirth: child?.date_of_birth || '', gender: child?.gender || '',
     insuranceProvider: child?.insurance_provider || '',
     insuranceMemberId: child?.insurance_member_id || '',
     insuranceGroupNumber: child?.insurance_group_number || '',
-    insuranceSubscriberName: '', insuranceSubscriberDob: '', insuranceSubscriberGender: '',
+    insuranceSubscriberName: child?.insurance_subscriber_name || '', insuranceSubscriberDob: child?.insurance_subscriber_dob || '', insuranceSubscriberGender: child?.insurance_subscriber_gender || '', insuranceSubscriberRelationship: child?.insurance_subscriber_relationship || '',
     insuranceCardFrontUrl: child?.insurance_card_front_url || '',
     insuranceCardBackUrl: child?.insurance_card_back_url || '',
     selfPay: false,
@@ -968,7 +970,7 @@ export function BookVisit() {
       if (!intake.selfPay && !intake.hasProfile && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
       if (!intake.hasProfile) {
         if (!intake.firstName || !intake.lastName || !intake.dateOfBirth || !intake.gender) return false
-        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender)) return false
+        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender || !intake.insuranceSubscriberRelationship)) return false
         if (!intake.allergies || !intake.currentMedications || !intake.medicalHistory || !intake.preferredPharmacy) return false
         if (!intake.pcp_id && !intake.pcpNoPcp) return false
         if (!intake.vaccinationStatus) return false
@@ -1081,6 +1083,7 @@ export function BookVisit() {
           firstIntake.insuranceSubscriberName ? `SUB:${firstIntake.insuranceSubscriberName}` : '',
           firstIntake.insuranceSubscriberDob ? `SUBDOB:${firstIntake.insuranceSubscriberDob}` : '',
           firstIntake.insuranceSubscriberGender ? `SUBGENDER:${firstIntake.insuranceSubscriberGender}` : '',
+          firstIntake.insuranceSubscriberRelationship ? `SUBREL:${firstIntake.insuranceSubscriberRelationship}` : '',
         ].filter(Boolean).join(' | ')
         noteParts.push(`INSURANCE:${ins}`)
       }
@@ -1164,6 +1167,7 @@ export function BookVisit() {
       const identity = {
         first_name: intake.firstName || null,
         last_name: intake.lastName || null,
+        nickname: intake.nickname || null,
         date_of_birth: intake.dateOfBirth || null,
         gender: intake.gender || null,
         phi_sharing_consent: intake.phiSharingConsent,
@@ -1188,6 +1192,7 @@ export function BookVisit() {
           insurance_subscriber_name: intake.insuranceSubscriberName || null,
           insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
           insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
+          insurance_subscriber_relationship: intake.insuranceSubscriberRelationship || null,
           preferred_pharmacy: intake.preferredPharmacy || null,
           pcp: intake.pcp || null,
           pcp_id: intake.pcp_id || null,
@@ -1386,7 +1391,7 @@ export function BookVisit() {
             )}
             {children.map(c => {
               const selected = booking.selectedChildIds.includes(c.id)
-              const hasProfile = !!(c.charm_patient_id || c.first_name)
+              const hasProfile = !!(c.charm_patient_id || (c.first_name && c.date_of_birth && (c.insurance_provider || c.insurance_card_front_url)))
               return (
                 <button key={c.id} onClick={() => toggleChild(c.id, c.display_label, hasProfile)}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${selected ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
@@ -2617,8 +2622,11 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
           {/* Name + DOB */}
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <Input label="Legal first name" placeholder="Emma" required value={intake.firstName} onChange={e => onChange('firstName', e.target.value)} />
-            <Input label="Legal last name" placeholder="Smith" required value={intake.lastName} onChange={e => onChange('lastName', e.target.value)} />
+            <Input label="Given first name" placeholder="Emma" required value={intake.firstName} onChange={e => onChange('firstName', e.target.value)} />
+            <Input label="Last name" placeholder="Smith" required value={intake.lastName} onChange={e => onChange('lastName', e.target.value)} />
+          </div>
+          <div className="mb-3">
+            <Input label="Nickname (optional)" placeholder="What they go by" value={intake.nickname || ''} onChange={e => onChange('nickname', e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <Input label="Date of birth" type="date" required value={intake.dateOfBirth} onChange={e => onChange('dateOfBirth', e.target.value)} />
@@ -2669,6 +2677,17 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                     <option value="">Select</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber relationship to patient <span className="text-[#ff3b30]">*</span></label>
+                  <select value={intake.insuranceSubscriberRelationship || ''} onChange={e => onChange('insuranceSubscriberRelationship', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none">
+                    <option value="">Select</option>
+                    <option value="Self">Self</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
