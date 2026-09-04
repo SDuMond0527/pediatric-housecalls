@@ -1134,6 +1134,28 @@ export function BookVisit() {
       appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : isIvFluids ? apptRecord?.rn?.id : apptRecord?.id) || null
     }
 
+    // Save contact info immediately after appointment is created — before anything else
+    // that might fail. This ensures phone/address land on the record even if later steps error.
+    const contactUpdate: Record<string, unknown> = {}
+    if (booking.visitAddress) contactUpdate.address_line1 = booking.visitAddress
+    if (booking.city)         contactUpdate.city          = booking.city
+    if (booking.state)        contactUpdate.state         = booking.state
+    if (booking.zip)          contactUpdate.zip           = booking.zip
+    if (booking.phone)        contactUpdate.phone         = booking.phone
+    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(() => {})
+
+    const parentContactPatch: Record<string, unknown> = {}
+    if (family?.display_name)             parentContactPatch.parent_name    = family.display_name
+    if (user?.email || family?.email)     parentContactPatch.parent_email   = user?.email || family?.email
+    if (booking.phone || (family as any)?.phone) parentContactPatch.parent_phone = booking.phone || (family as any)?.phone
+    if (booking.visitAddress)             parentContactPatch.parent_address = booking.visitAddress
+    if (booking.city)                     parentContactPatch.parent_city    = booking.city
+    if (booking.state)                    parentContactPatch.parent_state   = booking.state
+    if (booking.zip)                      parentContactPatch.parent_zip     = booking.zip
+    if (Object.keys(parentContactPatch).length) {
+      booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
+    }
+
     // Once the appointment row exists in the DB, the visit IS booked.
     // Any failure below must go straight to confirmation — never reset the
     // guard, which would let the parent resubmit and create a duplicate.
@@ -1210,28 +1232,6 @@ export function BookVisit() {
         })),
     ])
     await refreshFamily()
-
-    // Save contact info to family profile so providers can see it in the patient chart
-    const contactUpdate: Record<string, unknown> = {}
-    if (booking.visitAddress) contactUpdate.address_line1 = booking.visitAddress
-    if (booking.city)         contactUpdate.city          = booking.city
-    if (booking.state)        contactUpdate.state         = booking.state
-    if (booking.zip)          contactUpdate.zip           = booking.zip
-    if (booking.phone)        contactUpdate.phone         = booking.phone
-    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(() => {})
-
-    // Mirror parent contact onto each child's patient record
-    const parentContactPatch: Record<string, unknown> = {}
-    if (family?.display_name)      parentContactPatch.parent_name    = family.display_name
-    if (user?.email || family?.email) parentContactPatch.parent_email = user?.email || family?.email
-    if (booking.phone || (family as any)?.phone) parentContactPatch.parent_phone = booking.phone || (family as any)?.phone
-    if (booking.visitAddress)      parentContactPatch.parent_address = booking.visitAddress
-    if (booking.city)              parentContactPatch.parent_city    = booking.city
-    if (booking.state)             parentContactPatch.parent_state   = booking.state
-    if (booking.zip)               parentContactPatch.parent_zip     = booking.zip
-    if (Object.keys(parentContactPatch).length) {
-      booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
-    }
 
     if (referralSource.trim() && !(family as any)?.referral_source) {
       updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
