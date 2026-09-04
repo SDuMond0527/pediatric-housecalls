@@ -23,10 +23,16 @@ export interface Child {
   charm_patient_id: string | null
   first_name: string | null
   last_name: string | null
+  nickname: string | null
   date_of_birth: string | null
+  gender: string | null
   insurance_provider: string | null
   insurance_member_id: string | null
   insurance_group_number: string | null
+  insurance_subscriber_name: string | null
+  insurance_subscriber_dob: string | null
+  insurance_subscriber_gender: string | null
+  insurance_subscriber_relationship: string | null
   insurance_card_front_url: string | null
   insurance_card_back_url: string | null
   allergies: string | null
