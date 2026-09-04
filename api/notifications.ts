@@ -633,8 +633,11 @@ async function notifyBookingParties(
   if (provider?.phone && providerSms)
     await sendSMS(provider.phone, providerSms).catch(e => console.error('Booking provider SMS failed:', e))
 
-  // 3. All admins — deduped against assigned provider and any additionally excluded IDs
-  const skipIds = new Set([...(provider?.id ? [provider.id] : []), ...excludeAdminIds])
+  // 3. All admins — always notified. Previously deduped against the assigned
+  // provider, but that hid missed notifications when the provider-path email/SMS
+  // silently failed. Admin+provider users now get two messages on their own
+  // bookings (one as provider, one as admin) — a small annoyance vs. missing a visit.
+  const skipIds = new Set(excludeAdminIds)
   const admins = practiceId
     ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
     : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`

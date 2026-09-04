@@ -1229,13 +1229,26 @@ export function BookVisit() {
         reference_code: ref,
         ...(convFee ? { convenience_fee: convFee.fee } : {}),
       })
-    } catch {
-      setSubmitting(false)
-      setConfirmed(ref)
-      return
+    } catch (e) {
+      console.error('familyCreateBookingRequest failed — falling back to appointment_added notification:', e)
     }
 
+    // Fire appointment_added as a fallback whenever the booking_request path didn't
+    // produce an id — otherwise the provider never learns about the appointment.
+    // The appointment row itself already exists at this point.
     if (!newBooking?.id) {
+      if (providerUid) {
+        familyInvokeNotifications({
+          type: 'appointment_added',
+          providerId: providerUid,
+          providerName: effectiveProvider || '',
+          visitType: booking.visitType,
+          date: booking.date,
+          time: to24hr(booking.time),
+          zone: booking.zone || '',
+          parentEmail: family?.email || '',
+        }).catch(e => console.error('Fallback appointment_added notification failed:', e))
+      }
       setSubmitting(false)
       setConfirmed(ref)
       return
