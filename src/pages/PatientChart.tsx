@@ -152,7 +152,7 @@ export function PatientChart() {
   const [editSaving, setEditSaving] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', date_of_birth: '', gender: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
+  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', nickname: '', date_of_birth: '', gender: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [pcpList, setPcpList] = useState<any[]>([])
   const [pcpSearch, setPcpSearch] = useState('')
@@ -362,6 +362,7 @@ export function PatientChart() {
       setContactEdit({
         first_name: child?.first_name || '',
         last_name: child?.last_name || '',
+        nickname: child?.nickname || '',
         date_of_birth: child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : '',
         gender: child?.gender || '',
         parent_name: child?.parent_name || '',
@@ -516,6 +517,7 @@ export function PatientChart() {
           <div className="flex-1 min-w-0">
             <div className="font-display text-[18px] font-medium text-[#1A1A2E] flex items-center gap-2">
               {name}
+              {child?.nickname && <span className="text-[13px] font-normal text-[#999]">"{child.nickname}"</span>}
               {child?.is_archived && (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#999]">Archived</span>
               )}
@@ -594,17 +596,23 @@ export function PatientChart() {
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Patient first name</label>
+                          <label className="text-[11px] text-[#999] block mb-1">Given first name</label>
                           <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.first_name} onChange={e => setContactEdit(p => ({ ...p, first_name: e.target.value }))}
-                            placeholder="First" />
+                            placeholder="Legal first name" />
                         </div>
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Patient last name</label>
+                          <label className="text-[11px] text-[#999] block mb-1">Last name</label>
                           <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.last_name} onChange={e => setContactEdit(p => ({ ...p, last_name: e.target.value }))}
                             placeholder="Last" />
                         </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Nickname (optional)</label>
+                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={contactEdit.nickname} onChange={e => setContactEdit(p => ({ ...p, nickname: e.target.value }))}
+                          placeholder="What they go by" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
