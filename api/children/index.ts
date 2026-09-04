@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (auth.isFamily) {
     const rows = await sql`SELECT id, practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
     if (!rows.length) return res.status(403).json({ error: 'Family not found' })
-    practiceId = rows[0].practice_id as string
+    practiceId = (rows[0].practice_id || process.env.VITE_PRACTICE_ID) as string
 
     if (req.method === 'GET') {
       const { family_ids, ids, lookup_first, lookup_last, lookup_dob } = req.query as Record<string, string>
