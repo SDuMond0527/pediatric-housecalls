@@ -280,7 +280,7 @@ export function AdminSchedule() {
     const params: Record<string, string> = { scheduled_date: filterDate }
     if (filterProvider) params.provider_id = filterProvider
     const data = await getAppointments(params).catch(() => [])
-    setAppointments((data ?? []) as Appointment[])
+    setAppointments(((data ?? []) as Appointment[]).filter((a: Appointment) => a.status !== 'cancelled'))
     setLoading(false)
   }
 
@@ -383,7 +383,7 @@ export function AdminSchedule() {
     if (!cancelApptTarget) return
     setCancelApptBusy(true)
     await updateAppointment(cancelApptTarget.id, { status: 'cancelled' })
-    setAppointments(prev => prev.map(a => a.id === cancelApptTarget!.id ? { ...a, status: 'cancelled' } : a))
+    setAppointments(prev => prev.filter(a => a.id !== cancelApptTarget!.id))
     invokeNotifications({ type: 'appointment_cancelled', appointmentId: cancelApptTarget.id }).catch(() => {})
     if (cancelApptTarget.zone) {
       invokeNotifications({
@@ -454,7 +454,7 @@ export function AdminSchedule() {
         notes: noteParts.join(' | ') || null,
       })
       await updateAppointment(waitlistTarget.id, { status: 'cancelled' })
-      setAppointments(prev => prev.map(a => a.id === waitlistTarget!.id ? { ...a, status: 'cancelled' } : a))
+      setAppointments(prev => prev.filter(a => a.id !== waitlistTarget!.id))
       setWaitlistTarget(null)
     } catch (e: any) {
       setWaitlistError(e?.message ?? 'Failed to move to waitlist')

@@ -238,6 +238,7 @@ export function BookVisit() {
   const STEP_LOCATION = isIvFluids ? 3 : 2
   const STEP_CONFIRM  = isIvFluids ? 4 : 3
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [referralSource, setReferralSource] = useState('')
@@ -982,7 +983,8 @@ export function BookVisit() {
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
   async function submit() {
-    if (submitting) return
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     const ref = 'PUC-' + Math.floor(10000 + Math.random() * 90000)
 
@@ -1038,6 +1040,7 @@ export function BookVisit() {
         updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
       }
 
+      submittingRef.current = false
       setSubmitting(false)
       setConfirmed(ref)
       return
@@ -1125,6 +1128,7 @@ export function BookVisit() {
         })
       } catch (e: any) {
         setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
+        submittingRef.current = false
         setSubmitting(false)
         return
       }
@@ -1150,12 +1154,14 @@ export function BookVisit() {
       })
     } catch (e: any) {
       setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
+      submittingRef.current = false
       setSubmitting(false)
       return
     }
 
     if (!newBooking?.id) {
       setSubmitError('Something went wrong submitting your booking. Please try again or call us directly.')
+      submittingRef.current = false
       setSubmitting(false)
       return
     }
