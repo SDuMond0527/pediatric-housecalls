@@ -75,7 +75,7 @@ export const VISIT_TYPE_INFO = {
   'CMA + telemedicine': {
     color: '#378ADD', bg: '#E6F1FB', icon: '🩺',
     duration: '~35 min',
-    note: 'Step 1: Your CMA will arrive for diagnostics (~20 min). Step 2: A provider video call follows.',
+    note: 'Certified medical assistant will come to your home to obtain vital signs, digital ear exam, and any testing needed (rapid strep, etc). The provider (MD or NP) will log in virtually.',
   },
   'Text visit': {
     color: '#D4537E', bg: '#FBEAF0', icon: '💬',

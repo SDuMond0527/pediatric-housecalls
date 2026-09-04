@@ -106,6 +106,7 @@ function parentConfirmationEmail(data: {
   const isVirtual = ['Video telemedicine', 'Text visit'].includes(data.visitType)
   const isVideoVisit = data.visitType === 'Video telemedicine'
   const isIVFluids = data.visitType.toLowerCase().includes('iv') || data.visitType.toLowerCase().includes('fluid')
+  const isCmaTele = data.visitType === 'CMA + telemedicine'
 
   return `<!DOCTYPE html>
 <html>
@@ -147,6 +148,9 @@ function parentConfirmationEmail(data: {
     </div>` : isIVFluids ? `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
       <strong>IV fluids request received:</strong> One of our physicians or nurse practitioners will be reaching out to you shortly to arrange for a brief video telemedicine screening to determine that IV fluids are medically safe for your child in this scenario, and to determine the kind and volume of fluids that the nurse will administer. Once that video consult is completed, your nurse will reach back out to you to confirm her arrival time at your home.
+    </div>` : isCmaTele ? `
+    <div style="background:#E6F1FB;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#0C447C;">
+      <strong>CMA + telemedicine visit:</strong> Your CMA will arrive within 15 minutes of your scheduled time with diagnostic equipment (ear exam, strep, urine, flu/COVID testing). Once diagnostics are complete, a provider will join by video to review results and make treatment decisions.
     </div>` : `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
       <strong>In-home visit:</strong> Your provider will arrive within 15 minutes of your scheduled time. Please be available at your address.

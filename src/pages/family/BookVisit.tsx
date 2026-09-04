@@ -1355,11 +1355,12 @@ export function BookVisit() {
           {/* Visit type */}
           <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Visit type</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            {Object.entries(VISIT_TYPE_INFO).filter(([type]) => type !== 'CMA + telemedicine').map(([type, info]) => {
+            {Object.entries(VISIT_TYPE_INFO).map(([type, info]) => {
               const infoAny = info as any
               const displayName: string = infoAny.shortName ?? type
               const details: string[] | undefined = infoAny.details
               const isExpanded = expandedCprType === type
+              const showNote = type === 'CMA + telemedicine' && !!infoAny.note
               return (
                 <button key={type} onClick={() => setBooking(b => ({ ...b, visitType: type }))}
                   className={`text-left p-4 rounded-xl border-2 transition-all ${booking.visitType === type ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
@@ -1368,6 +1369,9 @@ export function BookVisit() {
                     <div className="flex-1 min-w-0">
                       <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{displayName}</div>
                       <div className="text-[11px] text-[#555] mt-0.5">{info.duration}</div>
+                      {showNote && (
+                        <div className="text-[11px] text-[#555] mt-1.5 leading-snug">{infoAny.note}</div>
+                      )}
                       {details && (
                         <span
                           onClick={e => { e.stopPropagation(); setExpandedCprType(isExpanded ? null : type) }}
