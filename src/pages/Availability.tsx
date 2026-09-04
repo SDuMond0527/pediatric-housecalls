@@ -872,7 +872,6 @@ export function Availability() {
           <div>
             <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
             <input type="date" value={newOverride.date}
-              min={new Date().toISOString().split('T')[0]}
               onChange={e => setNewOverride(p => ({ ...p, date: e.target.value }))}
               className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-sm font-sans" />
           </div>
@@ -903,6 +902,19 @@ export function Availability() {
 
           <div className="flex gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => setOverrideModal(false)}>Cancel</Button>
+            {newOverride.date && overrideByDate[newOverride.date] && (
+              <Button variant="secondary" size="sm" className="text-[#791F1F] border-[#F09595] hover:bg-[#FCEBEB]"
+                onClick={async () => {
+                  const existing = overrideByDate[newOverride.date]
+                  if (existing) {
+                    await removeOverride(existing.id)
+                    setOverrideModal(false)
+                    setNewOverride({ date: '', start: '8:00 AM', end: '5:00 PM', note: '' })
+                  }
+                }}>
+                <X size={13} /> Remove date
+              </Button>
+            )}
             <Button variant="primary" size="sm" disabled={!newOverride.date} loading={savingOverride} onClick={addOverride}>
               <CheckCircle2 size={13} /> Save date
             </Button>
