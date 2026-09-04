@@ -161,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state } = req.body
+    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = req.body
     const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
 
     // Server-side availability guard for family-originated bookings.
@@ -173,98 +173,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (slotError) return res.status(409).json({ error: slotError })
     }
 
-    // CMA + telemedicine family bookings: create CMA appointment + auto-assign on-call MD/NP
-    if (visit_type === 'CMA + telemedicine' && auth.type === 'family') {
-      const [cmaProvider] = await sql`SELECT name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
-      const cmaName = (cmaProvider?.name ?? '') as string
-
-      const [cmaRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-        RETURNING *`
-      await sql`
-        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (cmaRow as any).id})`
-        .catch(() => {})
-
-      let mdRow: unknown = null
-      if (state) {
-        const onCallRows = await sql`
-          SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
-          JOIN providers p ON p.id = oc.provider_id
-          WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
-            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
-            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
-          LIMIT 1`
-        if (!onCallRows.length) {
-          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
-        } else {
-          const mdProviderId = onCallRows[0].provider_id as string
-          const mdName = (onCallRows[0].provider_name ?? '') as string
-          const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${cmaName} (CMA)` : '')
-          const cmaNotes = ((cmaRow as any).notes ?? '') + (cmaName ? `|PARTNER:${mdName} (MD/NP — telemedicine)` : '')
-          ;[mdRow] = await sql`
-            INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${mdNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-            RETURNING *`
-          await sql`UPDATE appointments SET notes = ${cmaNotes} WHERE id = ${(cmaRow as any).id}::uuid`
-          await sql`
-            INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
-            .catch(() => {})
-        }
+    // CMA + telemedicine / IV fluids: always create the paired MD/NP appointment,
+    // regardless of caller (family self-book, admin patient-chart add, provider
+    // waitlist pickup, etc.). If the caller supplied second_provider_id, respect
+    // it; otherwise look up the on-call MD/NP for the appointment's state.
+    const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
+    if (DUAL_TYPES.includes(visit_type)) {
+      // Derive state from zone if the caller didn't send one (some UIs don't).
+      let state = bodyState
+      if (!state && zone) {
+        const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${practiceId}::uuid LIMIT 1`
+        state = zoneRow?.state ?? null
       }
-      return res.json({ cma: cmaRow, md: mdRow })
-    }
 
-    // In-home IV fluids family bookings: create RN appointment + auto-assign on-call MD/NP
-    if (visit_type === 'In-home IV fluids' && auth.type === 'family') {
-      const [rnProvider] = await sql`SELECT name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
-      const rnName = (rnProvider?.name ?? '') as string
+      const [primaryProvRow] = await sql`SELECT role, name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
+      const primaryRole = (primaryProvRow?.role ?? '') as string
+      const primaryName = (primaryProvRow?.name ?? '') as string
+      const primaryIsInHome = primaryRole === 'CMA' || primaryRole === 'RN'
 
-      const [rnRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-        RETURNING *`
-      await sql`
-        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (rnRow as any).id})`
-        .catch(() => {})
-
-      let mdRow: unknown = null
-      if (state) {
-        const onCallRows = await sql`
-          SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
-          JOIN providers p ON p.id = oc.provider_id
-          WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
-            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
-            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
-          LIMIT 1`
-        if (!onCallRows.length) {
-          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
-        } else {
-          const mdProviderId = onCallRows[0].provider_id as string
-          const mdName = (onCallRows[0].provider_name ?? '') as string
-          const mdNotes = (notes ?? '') + (mdName ? `|PARTNER:${rnName} (RN — in-home)` : '')
-          const rnNotes = ((rnRow as any).notes ?? '') + (rnName ? `|PARTNER:${mdName} (MD/NP — telemedicine screening)` : '')
-          ;[mdRow] = await sql`
-            INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${mdNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-            RETURNING *`
-          await sql`UPDATE appointments SET notes = ${rnNotes} WHERE id = ${(rnRow as any).id}::uuid`
-          await sql`
-            INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-            VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (mdRow as any).id})`
-            .catch(() => {})
-        }
-      }
-      return res.json({ rn: rnRow, md: mdRow })
-    }
-
-    // Provider dual-type booking from waitlist — no second_provider_id supplied
-    // Checks on-call MD/NP; returns { primary, secondary } so frontend knows if broadcast is needed
-    const PROVIDER_DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
-    if (PROVIDER_DUAL_TYPES.includes(visit_type) && auth.type === 'provider' && !req.body.second_provider_id) {
       const [primaryRow] = await sql`
         INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
         VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
@@ -275,10 +201,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .catch(() => {})
 
       let secondaryRow: unknown = null
-      if (state) {
-        const [provRow] = await sql`SELECT role, name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
-        const isInHome = provRow?.role === 'CMA' || provRow?.role === 'RN'
-        if (isInHome) {
+
+      // Determine the secondary provider — only when the primary is an in-home role.
+      // If the primary is already an MD/NP, we assume the caller intended a solo booking.
+      let mdProviderId: string | null = null
+      let mdName = ''
+
+      if (primaryIsInHome) {
+        if (second_provider_id) {
+          const [md] = await sql`SELECT id, name FROM providers WHERE id = ${second_provider_id}::uuid LIMIT 1`
+          if (md) {
+            mdProviderId = (md as any).id as string
+            mdName = ((md as any).name ?? '') as string
+          }
+        } else if (state) {
           const onCallRows = await sql`
             SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
             JOIN providers p ON p.id = oc.provider_id
@@ -287,24 +223,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
             LIMIT 1`
           if (onCallRows.length) {
-            const mdProviderId = onCallRows[0].provider_id as string
-            const mdName = (onCallRows[0].provider_name ?? '') as string
-            const primaryName = (provRow?.name ?? '') as string
-            const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${provRow.role})`
-            const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (MD/NP — telemedicine)`
-            ;[secondaryRow] = await sql`
-              INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-              VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-              RETURNING *`
-            await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
-            await sql`
-              INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-              VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`
-              .catch(() => {})
+            mdProviderId = onCallRows[0].provider_id as string
+            mdName = ((onCallRows[0] as any).provider_name ?? '') as string
           }
         }
+
+        if (!mdProviderId && state) {
+          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
+        }
       }
-      return res.json({ primary: primaryRow, secondary: secondaryRow })
+
+      if (mdProviderId) {
+        const partnerRoleLabel = visit_type === 'CMA + telemedicine'
+          ? 'MD/NP — telemedicine'
+          : 'MD/NP — telemedicine screening'
+        const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`
+        const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
+        ;[secondaryRow] = await sql`
+          INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
+          VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+          RETURNING *`
+        await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
+        await sql`
+          INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+          VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`
+          .catch(() => {})
+      }
+
+      // Return every legacy shape at once so no existing caller breaks:
+      //  - family CMA+tele expects { cma, md }
+      //  - family IV fluids expects { rn, md }
+      //  - provider waitlist expects { primary, secondary }
+      //  - BookAppointmentModal (patient chart) reads .primary?.id ?? .id and .secondary?.id
+      const primaryKey = visit_type === 'CMA + telemedicine' ? 'cma' : 'rn'
+      return res.json({
+        primary: primaryRow,
+        secondary: secondaryRow,
+        [primaryKey]: primaryRow,
+        md: secondaryRow,
+      })
     }
 
     const [row] = await sql`
