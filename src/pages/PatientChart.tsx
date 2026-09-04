@@ -152,7 +152,7 @@ export function PatientChart() {
   const [editSaving, setEditSaving] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [contactEdit, setContactEdit] = useState({ parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
+  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [pcpList, setPcpList] = useState<any[]>([])
   const [pcpSearch, setPcpSearch] = useState('')
@@ -360,6 +360,8 @@ export function PatientChart() {
     setEditSaved(false)
     if (section === 'contact') {
       setContactEdit({
+        first_name: child?.first_name || '',
+        last_name: child?.last_name || '',
         parent_name: child?.parent_name || '',
         parent_phone: child?.parent_phone || '',
         parent_email: child?.parent_email || '',
@@ -587,6 +589,20 @@ export function PatientChart() {
                   </div>
                   {editingSection === 'contact' ? (
                     <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Patient first name</label>
+                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.first_name} onChange={e => setContactEdit(p => ({ ...p, first_name: e.target.value }))}
+                            placeholder="First" />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Patient last name</label>
+                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.last_name} onChange={e => setContactEdit(p => ({ ...p, last_name: e.target.value }))}
+                            placeholder="Last" />
+                        </div>
+                      </div>
                       <div>
                         <label className="text-[11px] text-[#999] block mb-1">Parent / guardian name</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
