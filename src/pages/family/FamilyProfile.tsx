@@ -522,7 +522,7 @@ export function FamilyProfile() {
             <div className="grid grid-cols-2 gap-3 mb-2">
               <Input label="First name *" placeholder="Emma"
                 value={newFirst} onChange={e => setNewFirst(e.target.value)} />
-              <Input label="Last name *" placeholder="Smith"
+              <Input label="Last name" placeholder="Smith"
                 value={newLast} onChange={e => setNewLast(e.target.value)} />
             </div>
             <div className="mb-3">
@@ -532,7 +532,7 @@ export function FamilyProfile() {
             {addChildError && <div className="mb-3 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addChildError}</div>}
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" disabled={addingChildSaving} onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob(''); setAddChildError('') }}>Cancel</Button>
-              <Button size="sm" loading={addingChildSaving} disabled={!newFirst.trim() || !newLast.trim()} onClick={addChild}>Add</Button>
+              <Button size="sm" loading={addingChildSaving} disabled={!newFirst.trim()} onClick={addChild}>Add</Button>
             </div>
           </div>
         )}
