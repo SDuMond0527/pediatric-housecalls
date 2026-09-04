@@ -832,8 +832,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // If caller didn't supply matchingZips, look them up from the zone name
       let zipsToMatch: string[] = matchingZips ?? []
       if (!zipsToMatch.length && zone && slotPracticeId) {
-        const [zoneRow] = await sql`SELECT zip_codes FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${slotPracticeId}::uuid LIMIT 1`
-        zipsToMatch = zoneRow?.zip_codes ?? []
+        const [zoneRow] = await sql`SELECT zips FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${slotPracticeId}::uuid LIMIT 1`
+        zipsToMatch = zoneRow?.zips ?? []
       }
 
       if (!zipsToMatch.length) {
