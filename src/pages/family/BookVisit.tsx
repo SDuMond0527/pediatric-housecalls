@@ -1156,44 +1156,8 @@ export function BookVisit() {
       booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
     }
 
-    // Once the appointment row exists in the DB, the visit IS booked.
-    // Any failure below must go straight to confirmation — never reset the
-    // guard, which would let the parent resubmit and create a duplicate.
-    let newBooking: any = null
-    try {
-      newBooking = await familyCreateBookingRequest({
-        family_id: family!.id,
-        child_ids: booking.selectedChildIds,
-        visit_type: booking.visitType,
-        preferred_provider: effectiveProvider || null,
-        zone: booking.zone || null,
-        state: booking.state || null,
-        preferred_date: booking.date,
-        preferred_time: booking.time,
-        status: 'confirmed',
-        confirmed_provider_id: providerUid,
-        reference_code: ref,
-        ...(convFee ? { convenience_fee: convFee.fee } : {}),
-      })
-    } catch {
-      setSubmitting(false)
-      setConfirmed(ref)
-      return
-    }
-
-    if (!newBooking?.id) {
-      setSubmitting(false)
-      setConfirmed(ref)
-      return
-    }
-
-    // Sync to Charm Health (non-blocking)
-    invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
-
-    // Send confirmation email to parent + notification to provider (non-blocking)
-    familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
-
-    // Save profile data so it's pre-filled on future bookings
+    // Save ALL patient profile data immediately — before any step that could fail.
+    // This ensures name, DOB, insurance, etc. are on the record regardless of what happens next.
     await Promise.allSettled([
       ...booking.selectedChildIds.map(childId => {
         const intake = booking.childIntakes[childId]
@@ -1231,6 +1195,44 @@ export function BookVisit() {
           insurance_card_back_url: intake.insuranceCardBackUrl,
         })),
     ])
+
+    // Once the appointment row exists in the DB, the visit IS booked.
+    // Any failure below must go straight to confirmation — never reset the
+    // guard, which would let the parent resubmit and create a duplicate.
+    let newBooking: any = null
+    try {
+      newBooking = await familyCreateBookingRequest({
+        family_id: family!.id,
+        child_ids: booking.selectedChildIds,
+        visit_type: booking.visitType,
+        preferred_provider: effectiveProvider || null,
+        zone: booking.zone || null,
+        state: booking.state || null,
+        preferred_date: booking.date,
+        preferred_time: booking.time,
+        status: 'confirmed',
+        confirmed_provider_id: providerUid,
+        reference_code: ref,
+        ...(convFee ? { convenience_fee: convFee.fee } : {}),
+      })
+    } catch {
+      setSubmitting(false)
+      setConfirmed(ref)
+      return
+    }
+
+    if (!newBooking?.id) {
+      setSubmitting(false)
+      setConfirmed(ref)
+      return
+    }
+
+    // Sync to Charm Health (non-blocking)
+    invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
+
+    // Send confirmation email to parent + notification to provider (non-blocking)
+    familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
+
     await refreshFamily()
 
     if (referralSource.trim() && !(family as any)?.referral_source) {
