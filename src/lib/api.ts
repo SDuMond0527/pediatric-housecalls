@@ -151,6 +151,11 @@ export const getFamiliesByIds = (ids: string[]) =>
   apiFetch<any[]>(`/api/families?ids=${ids.join(',')}`)
 
 // ── Children ──────────────────────────────────────────────────
+export const lookupChild = (first: string, last: string, dob: string) =>
+  familyApiFetch<{ id: string; first_name: string; last_name: string; date_of_birth: string; parent_phone: string | null; parent_email: string | null; parent_address: string | null } | null>(
+    `/api/children?lookup_first=${encodeURIComponent(first)}&lookup_last=${encodeURIComponent(last)}&lookup_dob=${encodeURIComponent(dob)}`
+  )
+
 export const createChild = (body: Record<string, unknown>) =>
   familyApiFetch<any>('/api/children', { method: 'POST', body: JSON.stringify(body) })
 

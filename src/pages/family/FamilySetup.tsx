@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
-import { updateMyFamily, createChild } from '../../lib/api'
+import { Plus, Trash2, CheckCircle2 } from 'lucide-react'
+import { updateMyFamily, createChild, lookupChild } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { PracticeLogo } from '../../lib/practice'
+import { format, parseISO } from 'date-fns'
 
 const US_STATES: [string, string][] = [
   ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],
@@ -20,6 +21,19 @@ const US_STATES: [string, string][] = [
   ['VA','Virginia'],['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming'],
 ]
 
+type ChildEntry = {
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  match: { id: string; first_name: string; last_name: string; date_of_birth: string; parent_phone: string | null; parent_email: string | null; parent_address: string | null } | null
+  matchDismissed: boolean
+  matchConfirmed: boolean
+}
+
+function emptyChild(): ChildEntry {
+  return { first_name: '', last_name: '', date_of_birth: '', match: null, matchDismissed: false, matchConfirmed: false }
+}
+
 export function FamilySetup() {
   const { user, loading, refreshFamily } = useFamilyAuth()
   const navigate = useNavigate()
@@ -27,21 +41,44 @@ export function FamilySetup() {
   useEffect(() => {
     if (!loading && !user) navigate('/family/login')
   }, [user, loading])
+
   const [displayName, setDisplayName] = useState('')
   const [state, setState] = useState('')
   const [zip, setZip] = useState('')
-  const [labels, setLabels] = useState([''])
+  const [children, setChildren] = useState<ChildEntry[]>([emptyChild()])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  function setLabel(i: number, v: string) {
-    setLabels(prev => prev.map((l, idx) => idx === i ? v : l))
+  const lookupTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+
+  function updateChild(i: number, field: keyof ChildEntry, value: string) {
+    setChildren(prev => prev.map((c, idx) => idx !== i ? c : { ...c, [field]: value, match: null, matchDismissed: false, matchConfirmed: false }))
+
+    // Trigger lookup when all three fields are filled
+    const updated = { ...children[i], [field]: value }
+    if (updated.first_name.trim() && updated.last_name.trim() && updated.date_of_birth) {
+      clearTimeout(lookupTimers.current[i])
+      lookupTimers.current[i] = setTimeout(async () => {
+        try {
+          const match = await lookupChild(updated.first_name.trim(), updated.last_name.trim(), updated.date_of_birth)
+          setChildren(prev => prev.map((c, idx) => idx !== i ? c : { ...c, match: match ?? null }))
+        } catch { /* lookup failure is non-fatal */ }
+      }, 600)
+    }
+  }
+
+  function confirmMatch(i: number) {
+    setChildren(prev => prev.map((c, idx) => idx !== i ? c : { ...c, matchConfirmed: true, matchDismissed: false }))
+  }
+
+  function dismissMatch(i: number) {
+    setChildren(prev => prev.map((c, idx) => idx !== i ? c : { ...c, matchDismissed: true, matchConfirmed: false }))
   }
 
   async function save() {
     if (!state || !zip) { setError('Please select your state and enter your zip code.'); return }
-    const validLabels = labels.filter(l => l.trim())
-    if (!validLabels.length) { setError('Please add at least one child.'); return }
+    const valid = children.filter(c => c.first_name.trim())
+    if (!valid.length) { setError('Please add at least one child.'); return }
     setSaving(true)
     setError('')
 
@@ -60,8 +97,13 @@ export function FamilySetup() {
     }
 
     try {
-      for (const label of validLabels) {
-        await createChild({ display_label: label.trim() })
+      for (const child of valid) {
+        await createChild({
+          first_name:    child.first_name.trim() || null,
+          last_name:     child.last_name.trim()  || null,
+          date_of_birth: child.date_of_birth     || null,
+          display_label: [child.first_name.trim(), child.last_name.trim()].filter(Boolean).join(' ') || null,
+        })
       }
     } catch (e: any) {
       setError('Child save failed: ' + (e?.message || String(e)))
@@ -112,29 +154,69 @@ export function FamilySetup() {
           </div>
 
           <div className="border-t border-[#E8E8E4] pt-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-1">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Children</h2>
-              <button onClick={() => setLabels(prev => [...prev, ''])}
+              <button onClick={() => setChildren(prev => [...prev, emptyChild()])}
                 className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium hover:underline">
                 <Plus size={13} /> Add another
               </button>
             </div>
-            <p className="text-[12px] text-[#999] mb-3">Add a name or label for each child so you can identify them when booking.</p>
-            <div className="space-y-2">
-              {labels.map((label, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <Input placeholder={`e.g. Emma, my son, Child ${i + 1}`}
-                      value={label} onChange={e => setLabel(i, e.target.value)} />
+            <p className="text-[12px] text-[#999] mb-4">Enter your child's legal name and date of birth.</p>
+
+            <div className="space-y-4">
+              {children.map((child, i) => {
+                const showMatch = child.match && !child.matchDismissed
+                return (
+                  <div key={i} className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input label="First name *" placeholder="Emma"
+                        value={child.first_name} onChange={e => updateChild(i, 'first_name', e.target.value)} />
+                      <Input label="Last name" placeholder="Smith"
+                        value={child.last_name} onChange={e => updateChild(i, 'last_name', e.target.value)} />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Input label="Date of birth" type="date"
+                          value={child.date_of_birth} onChange={e => updateChild(i, 'date_of_birth', e.target.value)} />
+                      </div>
+                      {children.length > 1 && (
+                        <button onClick={() => setChildren(prev => prev.filter((_, idx) => idx !== i))}
+                          className="p-2 mb-0.5 text-[#999] hover:text-[#791F1F]">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Existing profile match */}
+                    {showMatch && !child.matchConfirmed && (
+                      <div className="rounded-xl border border-[#7F77DD] bg-[#EEEDFE] p-4 space-y-3">
+                        <p className="text-[13px] font-semibold text-[#3C3489]">We found an existing patient profile — is this your child?</p>
+                        <div className="space-y-1 text-[13px] text-[#1A1A2E]">
+                          <div><span className="text-[#555]">Name: </span><strong>{child.match!.first_name} {child.match!.last_name}</strong></div>
+                          <div><span className="text-[#555]">Date of birth: </span><strong>{format(parseISO(String(child.match!.date_of_birth).split('T')[0]), 'MMMM d, yyyy')}</strong></div>
+                          {child.match!.parent_phone && <div><span className="text-[#555]">Phone: </span><strong>{child.match!.parent_phone}</strong></div>}
+                          {child.match!.parent_email && <div><span className="text-[#555]">Email: </span><strong>{child.match!.parent_email}</strong></div>}
+                          {child.match!.parent_address && <div><span className="text-[#555]">Address: </span><strong>{child.match!.parent_address}</strong></div>}
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button variant="primary" size="sm" onClick={() => confirmMatch(i)}>
+                            <CheckCircle2 size={13} /> Yes, that's my child
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => dismissMatch(i)}>
+                            No, create new profile
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {child.matchConfirmed && (
+                      <div className="rounded-lg bg-[#E1F5EE] border border-[#5DCAA5] px-3 py-2 flex items-center gap-2 text-[13px] text-[#085041]">
+                        <CheckCircle2 size={14} /> Existing profile will be linked to your account.
+                      </div>
+                    )}
                   </div>
-                  {labels.length > 1 && (
-                    <button onClick={() => setLabels(prev => prev.filter((_, idx) => idx !== i))}
-                      className="p-2 text-[#999] hover:text-[#791F1F] flex-shrink-0">
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

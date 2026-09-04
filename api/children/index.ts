@@ -38,7 +38,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     practiceId = rows[0].practice_id as string
 
     if (req.method === 'GET') {
-      const { family_ids, ids } = req.query as Record<string, string>
+      const { family_ids, ids, lookup_first, lookup_last, lookup_dob } = req.query as Record<string, string>
+
+      // Lookup: check for an existing provider-created record matching name + DOB
+      if (lookup_first && lookup_last && lookup_dob) {
+        const [match] = await sql`
+          SELECT id, first_name, last_name, date_of_birth, parent_phone, parent_email, parent_address
+          FROM children
+          WHERE practice_id = ${practiceId}::uuid
+            AND family_id IS NULL
+            AND first_name ILIKE ${lookup_first.trim()}
+            AND last_name  ILIKE ${lookup_last.trim()}
+            AND date_of_birth = ${lookup_dob}::date
+          LIMIT 1`
+        return res.json(match ?? null)
+      }
+
       if (ids) {
         const idList = ids.split(',').filter(Boolean)
         if (!idList.length) return res.json([])
