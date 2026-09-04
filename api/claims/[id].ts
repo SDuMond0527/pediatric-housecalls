@@ -41,7 +41,11 @@ function buildStediPayload(claim: any, testMode = false): object {
       return /^[A-Z0-9]{5}$/i.test(code) && !/^CV/i.test(code)
     })
     .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
-  const billableTotal = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
+  const billableTotal = cptCodes.reduce((s: number, c: any) => {
+    const charge = parseFloat(c.charge_amount) || 0
+    const units = parseInt(c.units, 10) || 1
+    return s + charge * units
+  }, 0)
 
   const fmtDate8 = (d: any) => {
     if (!d) return ''
@@ -101,15 +105,18 @@ function buildStediPayload(claim: any, testMode = false): object {
 
   const diagnosisPointers = diagnoses.map((_: any, i: number) => String(i + 1))
 
-  const serviceLines = cptCodes.map((c: any) => ({
+  const serviceLines = cptCodes.map((c: any) => {
+    const units = parseInt(c.units, 10) || 1
+    const lineCharge = (parseFloat(c.charge_amount ?? 0) * units).toFixed(2)
+    return {
     serviceDate: fmtDate8(claim.service_date),
     professionalService: {
       procedureIdentifier: 'HC',
       procedureCode: c.code,
       ...(isTelehealth ? { procedureModifiers: ['95'] } : {}),
-      lineItemChargeAmount: parseFloat(c.charge_amount ?? 0).toFixed(2),
+      lineItemChargeAmount: lineCharge,
       measurementUnit: 'UN',
-      serviceUnitCount: '1',
+      serviceUnitCount: String(units),
       compositeDiagnosisCodePointers: {
         diagnosisCodePointers: diagnosisPointers,
       },
@@ -121,7 +128,8 @@ function buildStediPayload(claim: any, testMode = false): object {
       lastName: provLast,
       ...(claim.rendering_provider_taxonomy ? { taxonomyCode: claim.rendering_provider_taxonomy } : {}),
     },
-  }))
+    }
+  })
 
   const { first: subFirstName, last: subLastName } = parseSubName(claim.subscriber_name ?? '')
 
@@ -275,7 +283,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Strip convenience / non-covered codes from the claim now that it's submitted to insurance
       const insuranceCodes = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
         .filter((c: any) => c.category !== 'Non-Covered Services')
-      const insuranceTotal = insuranceCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
+      const insuranceTotal = insuranceCodes.reduce((s: number, c: any) => {
+        const charge = parseFloat(c.charge_amount) || 0
+        const units = parseInt(c.units, 10) || 1
+        return s + charge * units
+      }, 0)
 
       const [updated] = await sql`
         UPDATE claims SET
@@ -310,7 +322,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Recalculate total_charge when cpt_codes are updated
     const newTotal = updates.cpt_codes != null
-      ? (updates.cpt_codes as any[]).reduce((s: number, c: any) => s + parseFloat(c.charge_amount ?? 0), 0)
+      ? (updates.cpt_codes as any[]).reduce((s: number, c: any) => {
+          const charge = parseFloat(c.charge_amount ?? 0) || 0
+          const units = parseInt(c.units, 10) || 1
+          return s + charge * units
+        }, 0)
       : null
 
     const [updated] = await sql`

@@ -1067,7 +1067,35 @@ export function AdminSchedule() {
                                                   className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]"
                                                 />
                                               </div>
-                                              <span className="text-[#1A1A2E] font-medium">${parseFloat(c.charge_amount ?? 0).toFixed(2)}</span>
+                                              {c.code === 'J7613' && (
+                                                <div className="flex items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={c.units ?? 1}
+                                                    onChange={e => {
+                                                      const n = Math.max(1, parseInt(e.target.value, 10) || 1)
+                                                      setNotes(prev => ({
+                                                        ...prev,
+                                                        [appt.id]: {
+                                                          ...prev[appt.id],
+                                                          cpt_codes: prev[appt.id].cpt_codes.map((x: any, j: number) => j === i ? { ...x, units: n } : x)
+                                                        }
+                                                      }))
+                                                    }}
+                                                    onBlur={async () => {
+                                                      const currentNote = notes[appt.id]
+                                                      if (!currentNote?.id) return
+                                                      try {
+                                                        await patchEncounterNote(currentNote.id, { cpt_codes: currentNote.cpt_codes })
+                                                      } catch { /* silent */ }
+                                                    }}
+                                                    className="w-14 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] outline-none focus:border-[#7F77DD]"
+                                                  />
+                                                  <label className="text-[10px] text-[#999] whitespace-nowrap">units</label>
+                                                </div>
+                                              )}
+                                              <span className="text-[#1A1A2E] font-medium">${(parseFloat(c.charge_amount ?? 0) * (parseInt(c.units, 10) || 1)).toFixed(2)}</span>
                                             </div>
                                           </div>
                                         ))}

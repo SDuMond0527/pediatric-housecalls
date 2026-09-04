@@ -95,8 +95,11 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   }, [claim.id])
 
   function cptTotal(cptCodes: any[]): number {
-    return (cptCodes ?? []).reduce((sum: number, c: any) =>
-      sum + (c.charge_amount != null ? parseFloat(String(c.charge_amount)) : 0), 0)
+    return (cptCodes ?? []).reduce((sum: number, c: any) => {
+      const charge = c.charge_amount != null ? parseFloat(String(c.charge_amount)) : 0
+      const units = c.units != null ? parseInt(String(c.units), 10) || 1 : 1
+      return sum + charge * units
+    }, 0)
   }
 
   function populateFromStatement(stmt: any) {

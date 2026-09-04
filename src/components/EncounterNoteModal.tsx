@@ -385,6 +385,7 @@ interface CptCode {
   category: string
   charge_amount: number
   modifier?: string
+  units?: number
 }
 
 const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
@@ -1957,7 +1958,25 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                         ) : c.modifier ? (
                           <span className="text-[11px] text-[#F5943A] font-medium">mod {c.modifier}</span>
                         ) : null}
-                        <span className="text-[13px] font-medium text-[#1A1A2E]">${c.charge_amount.toFixed(2)}</span>
+                        {c.code === 'J7613' && !readOnly && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={1}
+                              value={c.units ?? 1}
+                              onChange={e => {
+                                const n = Math.max(1, parseInt(e.target.value, 10) || 1)
+                                setCptCodes(prev => prev.map(x => x.code === c.code ? { ...x, units: n } : x))
+                              }}
+                              className="w-14 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] outline-none focus:border-[#7F77DD]"
+                            />
+                            <label className="text-[10px] text-[#999] whitespace-nowrap">units</label>
+                          </div>
+                        )}
+                        {c.code === 'J7613' && readOnly && (c.units ?? 1) > 1 && (
+                          <span className="text-[11px] text-[#555]">× {c.units} units</span>
+                        )}
+                        <span className="text-[13px] font-medium text-[#1A1A2E]">${(c.charge_amount * (c.units ?? 1)).toFixed(2)}</span>
                         {!readOnly && (
                           <button onClick={() => setCptCodes(prev => prev.filter(x => x.code !== c.code))}
                             className="text-[#999] hover:text-[#791F1F] transition-colors">
@@ -1970,7 +1989,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   {/* Total */}
                   <div className="flex justify-end px-3 pt-1">
                     <span className="text-[12px] font-semibold text-[#1A1A2E]">
-                      Total: ${cptCodes.reduce((sum, c) => sum + c.charge_amount, 0).toFixed(2)}
+                      Total: ${cptCodes.reduce((sum, c) => sum + c.charge_amount * (c.units ?? 1), 0).toFixed(2)}
                     </span>
                   </div>
                 </div>

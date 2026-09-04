@@ -55,7 +55,11 @@ export async function generateClaimForNote(
       return c.category !== 'Non-Covered Services' && /^[A-Z0-9]{5}$/i.test(code) && !/^CV/i.test(code)
     })
     .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
-  const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
+  const total = cptCodes.reduce((s: number, c: any) => {
+    const charge = parseFloat(c.charge_amount) || 0
+    const units = parseInt(c.units, 10) || 1
+    return s + charge * units
+  }, 0)
   const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = child?.insurance_provider ?? null
   const payerId = resolvePayer(payerName)

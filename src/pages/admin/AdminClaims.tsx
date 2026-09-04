@@ -733,16 +733,21 @@ export function AdminClaims() {
                               </div>
                             ) : (
                               <div className="space-y-1">
-                                {(c.cpt_codes ?? []).map((cp: any) => (
+                                {(c.cpt_codes ?? []).map((cp: any) => {
+                                  const units = parseInt(cp.units, 10) || 1
+                                  const lineTotal = (parseFloat(cp.charge_amount ?? 0) || 0) * units
+                                  return (
                                   <div key={cp.code} className="flex justify-between text-[12px]">
                                     <span className="text-[#1A1A2E]">
                                       <span className="font-semibold text-[#555]">{cp.code}</span>
                                       {cp.modifier && <span className="ml-1 text-[10px] font-semibold text-[#F5943A]">-{cp.modifier}</span>}
                                       {' '}{cp.description}
+                                      {units > 1 && <span className="ml-1 text-[10px] text-[#555]">× {units} units</span>}
                                     </span>
-                                    <span className="text-[#1A1A2E] font-medium ml-2 flex-shrink-0">{fmtMoney(cp.charge_amount)}</span>
+                                    <span className="text-[#1A1A2E] font-medium ml-2 flex-shrink-0">{fmtMoney(lineTotal)}</span>
                                   </div>
-                                ))}
+                                  )
+                                })}
                                 <div className="text-[12px] font-semibold text-[#1A1A2E] pt-1 border-t border-[#F1EFE8]">
                                   Total: {fmtMoney(c.total_charge)}
                                 </div>
