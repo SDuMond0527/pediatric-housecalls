@@ -152,7 +152,7 @@ export function PatientChart() {
   const [editSaving, setEditSaving] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
+  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', date_of_birth: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [pcpList, setPcpList] = useState<any[]>([])
   const [pcpSearch, setPcpSearch] = useState('')
@@ -362,6 +362,7 @@ export function PatientChart() {
       setContactEdit({
         first_name: child?.first_name || '',
         last_name: child?.last_name || '',
+        date_of_birth: child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : '',
         parent_name: child?.parent_name || '',
         parent_phone: child?.parent_phone || '',
         parent_email: child?.parent_email || '',
@@ -602,6 +603,11 @@ export function PatientChart() {
                             value={contactEdit.last_name} onChange={e => setContactEdit(p => ({ ...p, last_name: e.target.value }))}
                             placeholder="Last" />
                         </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-[#999] block mb-1">Date of birth</label>
+                        <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                          value={contactEdit.date_of_birth} onChange={e => setContactEdit(p => ({ ...p, date_of_birth: e.target.value }))} />
                       </div>
                       <div>
                         <label className="text-[11px] text-[#999] block mb-1">Parent / guardian name</label>
