@@ -1145,7 +1145,7 @@ export function BookVisit() {
     if (booking.state)        contactUpdate.state         = booking.state
     if (booking.zip)          contactUpdate.zip           = booking.zip
     if (booking.phone)        contactUpdate.phone         = booking.phone
-    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(() => {})
+    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(e => console.error('updateMyFamily failed:', e))
 
     const parentContactPatch: Record<string, unknown> = {}
     if (family?.display_name)             parentContactPatch.parent_name    = family.display_name
@@ -1245,7 +1245,7 @@ export function BookVisit() {
     invokeCharmAppointment({ bookingRequestId: newBooking.id, childIntakes: booking.childIntakes, appointmentDbId }).catch(() => {})
 
     // Send confirmation email to parent + notification to provider (non-blocking)
-    familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(() => {})
+    familyInvokeNotifications({ bookingRequestId: newBooking.id }).catch(e => console.error('Notification failed:', e))
 
     await refreshFamily()
 
