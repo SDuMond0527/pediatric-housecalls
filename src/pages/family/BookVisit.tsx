@@ -1893,8 +1893,18 @@ export function BookVisit() {
             </div>
           )}
 
-          {/* 3b. Provider list — shown after date is chosen */}
-          {zoneProviders.length > 0 && (isCpr || isTelemedicine(booking.visitType) || booking.date) && (
+          {/* 3a-alt. Date picker for CPR and telemedicine — shown before the provider list */}
+          {(isCpr || isTelemedicine(booking.visitType)) && zoneProviders.length > 0 && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
+              <input type="date" value={booking.date} min={localDateStr()}
+                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '', provider: '' })); }}
+                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+            </div>
+          )}
+
+          {/* 3b. Provider list — shown after date is chosen (all visit types) */}
+          {zoneProviders.length > 0 && booking.date && (
             <div className="mb-5">
               <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Provider</p>
               <div className="space-y-2 mb-4">
@@ -1959,16 +1969,6 @@ export function BookVisit() {
             </div>
           )}
           </>}
-
-          {/* 4. Date picker — CPR and telemedicine only (in-home visits use picker above) */}
-          {(isCpr || isTelemedicine(booking.visitType)) && booking.provider && (
-            <div className="mb-5">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
-              <input type="date" value={booking.date} min={localDateStr()}
-                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
-                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
-            </div>
-          )}
 
           {/* 5. Time slots — shown after provider + date are both set */}
           {booking.date && (isCpr || isTelemedicine(booking.visitType) || booking.provider) && (() => {
