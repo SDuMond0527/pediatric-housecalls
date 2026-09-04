@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { validateProviderSlot } from '../_lib/validateProviderSlot'
 
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -47,15 +46,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const b = req.body
       const childIds = b.child_ids ?? []
-
-      // Server-side availability guard: reject if the requested time is outside
-      // the confirmed provider's configured availability window.
-      if (b.confirmed_provider_id && b.preferred_time && b.preferred_date) {
-        const slotError = await validateProviderSlot(
-          sql, b.confirmed_provider_id, b.visit_type, b.preferred_date, b.preferred_time
-        )
-        if (slotError) return res.status(409).json({ error: slotError })
-      }
 
       const [row] = await sql`
         INSERT INTO booking_requests (practice_id, family_id, child_ids, visit_type, preferred_provider, zone, state, preferred_date, preferred_time, status, confirmed_provider_id, reference_code, convenience_fee, notes)
