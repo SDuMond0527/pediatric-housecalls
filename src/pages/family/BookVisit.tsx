@@ -1147,6 +1147,9 @@ export function BookVisit() {
       appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : isIvFluids ? apptRecord?.rn?.id : apptRecord?.id) || null
     }
 
+    // Once the appointment row exists in the DB, the visit IS booked.
+    // Any failure below must go straight to confirmation — never reset the
+    // guard, which would let the parent resubmit and create a duplicate.
     let newBooking: any = null
     try {
       newBooking = await familyCreateBookingRequest({
@@ -1163,17 +1166,15 @@ export function BookVisit() {
         reference_code: ref,
         ...(convFee ? { convenience_fee: convFee.fee } : {}),
       })
-    } catch (e: any) {
-      setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
-      submittingRef.current = false
+    } catch {
       setSubmitting(false)
+      setConfirmed(ref)
       return
     }
 
     if (!newBooking?.id) {
-      setSubmitError('Something went wrong submitting your booking. Please try again or call us directly.')
-      submittingRef.current = false
       setSubmitting(false)
+      setConfirmed(ref)
       return
     }
 
