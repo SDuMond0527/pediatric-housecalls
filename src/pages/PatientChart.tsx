@@ -152,7 +152,7 @@ export function PatientChart() {
   const [editSaving, setEditSaving] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', date_of_birth: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
+  const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', date_of_birth: '', gender: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
   const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
   const [pcpList, setPcpList] = useState<any[]>([])
   const [pcpSearch, setPcpSearch] = useState('')
@@ -161,7 +161,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '' })
+  const [insEdit, setInsEdit] = useState({ insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -363,6 +363,7 @@ export function PatientChart() {
         first_name: child?.first_name || '',
         last_name: child?.last_name || '',
         date_of_birth: child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : '',
+        gender: child?.gender || '',
         parent_name: child?.parent_name || '',
         parent_phone: child?.parent_phone || '',
         parent_email: child?.parent_email || '',
@@ -392,6 +393,7 @@ export function PatientChart() {
         insurance_subscriber_name: child?.insurance_subscriber_name || '',
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
+        insurance_subscriber_relationship: child?.insurance_subscriber_relationship || '',
       })
     }
     setEditingSection(section)
@@ -604,10 +606,21 @@ export function PatientChart() {
                             placeholder="Last" />
                         </div>
                       </div>
-                      <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Date of birth</label>
-                        <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          value={contactEdit.date_of_birth} onChange={e => setContactEdit(p => ({ ...p, date_of_birth: e.target.value }))} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Date of birth</label>
+                          <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.date_of_birth} onChange={e => setContactEdit(p => ({ ...p, date_of_birth: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Patient sex</label>
+                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                            value={contactEdit.gender} onChange={e => setContactEdit(p => ({ ...p, gender: e.target.value }))}>
+                            <option value="">—</option>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                          </select>
+                        </div>
                       </div>
                       <div>
                         <label className="text-[11px] text-[#999] block mb-1">Parent / guardian name</label>
@@ -934,7 +947,7 @@ export function PatientChart() {
                           value={insEdit.insurance_subscriber_name} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_name: e.target.value }))}
                           placeholder="e.g. John Smith" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="text-[11px] text-[#999] block mb-1">Subscriber DOB</label>
                           <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
@@ -947,6 +960,17 @@ export function PatientChart() {
                             <option value="">—</option>
                             <option value="M">Male</option>
                             <option value="F">Female</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#999] block mb-1">Relationship to patient</label>
+                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                            value={insEdit.insurance_subscriber_relationship} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_relationship: e.target.value }))}>
+                            <option value="">—</option>
+                            <option value="Self">Self</option>
+                            <option value="Spouse">Spouse</option>
+                            <option value="Child">Child</option>
+                            <option value="Other">Other</option>
                           </select>
                         </div>
                       </div>
