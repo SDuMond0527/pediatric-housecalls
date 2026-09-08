@@ -2092,27 +2092,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     const notifSms = `${PRACTICE_NAME}: New appointment booked. View: ${PORTAL_URL}/today`
 
-    // For CMA+telemedicine or In-home IV fluids: also notify the on-call MD/NP
+    // For CMA+telemedicine or In-home IV fluids: notify the paired MD/NP. Find
+    // them via reference code in appointments.notes rather than re-running an
+    // on_call_schedule lookup — mirrors the actual DB state (whoever was
+    // captured at booking time, even if the on-call schedule changes later),
+    // works regardless of whether booking.state was saved, and inherits the
+    // retry + fallback + admin-escalation behavior via notifyOrEscalate.
     let onCallProviderId: string | null = null
     if (
       (booking.visit_type === 'CMA + telemedicine' || booking.visit_type === 'In-home IV fluids') &&
-      booking.state && booking.preferred_date && booking.preferred_time && practiceId
+      booking.reference_code && practiceId
     ) {
-      const onCallRows = await sql`
-        SELECT p.id, p.name, p.email, p.phone FROM on_call_schedule oc
-        JOIN providers p ON p.id = oc.provider_id
-        WHERE oc.practice_id = ${practiceId}::uuid
-          AND oc.date = ${booking.preferred_date}::date
-          AND oc.state = ${booking.state}
-          AND (oc.start_time IS NULL OR oc.start_time <= ${booking.preferred_time}::time)
-          AND (oc.end_time IS NULL OR oc.end_time > ${booking.preferred_time}::time)
+      const twinRows = await sql`
+        SELECT a.provider_id, p.name, p.email, p.phone
+        FROM appointments a
+        JOIN providers p ON p.id = a.provider_id
+        WHERE a.practice_id = ${practiceId}::uuid
+          AND a.notes LIKE ${'%Ref: ' + booking.reference_code + '%'}
+          AND a.provider_id != ${provider?.id ?? null}::uuid
+          AND a.status != 'cancelled'
         LIMIT 1`
-      if (onCallRows.length) {
-        const onCall = onCallRows[0]
-        onCallProviderId = onCall.id as string
-        if (onCall.id !== provider?.id) {
-          if (onCall.email) await sendEmail(onCall.email as string, notifSubject, notifHtml).catch(e => console.error('On-call email failed:', e))
-          if (onCall.phone) await sendSMS(onCall.phone as string, notifSms).catch(e => console.error('On-call SMS failed:', e))
+      const twin = twinRows[0] as any
+      if (twin) {
+        onCallProviderId = twin.provider_id as string
+        if (twin.email || twin.phone) {
+          const twinName = (twin.name ?? 'Provider') as string
+          await notifyOrEscalate(sql, practiceId, {
+            name: twinName, email: twin.email, phone: twin.phone, role: 'paired provider',
+          }, {
+            subject: notifSubject,
+            html: notifHtml,
+            sms: notifSms,
+            context: 'new paired appointment on your schedule',
+          })
         }
       }
     }
