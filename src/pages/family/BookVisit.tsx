@@ -576,7 +576,7 @@ export function BookVisit() {
       if (slotMin < wsh * 60 + wsm || slotMin + visitDur > weh * 60 + wem) return false
       return !bookedSlotsList.some(({ time: bt, duration }) => {
         const bookedMin = timeStrToMinutes(bt)
-        return slotMin >= bookedMin && slotMin < bookedMin + duration
+        return slotMin < bookedMin + duration && slotMin + visitDur > bookedMin
       })
     })
     setAllSlotsBooked(freeSlots.length === 0)
@@ -625,7 +625,7 @@ export function BookVisit() {
             if (slotMin < wsh * 60 + wsm || slotMin + fwdVisitDur > weh * 60 + wem) return false
             return !bookedSlotsList.some(({ time: bt, duration }) => {
               const bookedMin = timeStrToMinutes(bt)
-              return slotMin >= bookedMin && slotMin < bookedMin + duration
+              return slotMin < bookedMin + duration && slotMin + fwdVisitDur > bookedMin
             })
           })
           return freeSlots.length > 0 ? { date: dateStr, firstSlot: freeSlots[0] } : null
@@ -704,7 +704,7 @@ export function BookVisit() {
         if (sm < wsh * 60 + wsm || sm + faVisitDur > weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
           const bm2 = timeStrToMinutes(bt)
-          return sm >= bm2 && sm < bm2 + duration
+          return sm < bm2 + duration && sm + faVisitDur > bm2
         })
       })
       return free.length > 0 ? { name: p.name, firstSlot: free[0] } : null
@@ -775,7 +775,7 @@ export function BookVisit() {
         if (sm < wsh * 60 + wsm || sm + cmaVisitDur > weh * 60 + wem) return false
         return !bookedList.some(({ time: bt, duration }) => {
           const bm2 = timeStrToMinutes(bt)
-          return sm >= bm2 && sm < bm2 + duration
+          return sm < bm2 + duration && sm + cmaVisitDur > bm2
         })
       })
       return free.length > 0 ? { name, firstSlot: free[0] } : null
@@ -1988,9 +1988,10 @@ export function BookVisit() {
                 const renderVisitDur = byType[booking.visitType]?.duration_minutes ?? 60
                 if (slotMin < wsh * 60 + wsm || slotMin + renderVisitDur > weh * 60 + wem) return false
               }
+              const renderVisitDur2 = byType[booking.visitType]?.duration_minutes ?? 60
               return !bookedSlots.some(({ time: bt, duration }) => {
                 const bookedMin = timeStrToMinutes(bt)
-                return slotMin >= bookedMin && slotMin < bookedMin + duration
+                return slotMin < bookedMin + duration && slotMin + renderVisitDur2 > bookedMin
               })
             })
             return (

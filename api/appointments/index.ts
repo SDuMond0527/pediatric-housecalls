@@ -173,6 +173,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (slotError) return res.status(409).json({ error: slotError })
     }
 
+    // Server-side overlap guard — every path (family, admin, provider). If the
+    // requested slot collides with any existing non-cancelled appointment for
+    // this provider on this date, reject with 409. Prevents client races,
+    // stale UIs, and admin-added double bookings.
+    if (provider_id && scheduled_time && scheduled_date) {
+      const [nh, nm] = String(scheduled_time).split(':').map(Number)
+      const newStart = nh * 60 + nm
+      const newDur = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
+      const newEnd = newStart + newDur
+      const existing = await sql`
+        SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
+        FROM appointments
+        WHERE provider_id = ${provider_id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND scheduled_date = ${scheduled_date}::date
+          AND status != 'cancelled'`
+      for (const row of existing as Array<{ scheduled_time: string; duration_minutes: number }>) {
+        const [eh, em] = String(row.scheduled_time).split(':').map(Number)
+        const exStart = eh * 60 + em
+        const exEnd = exStart + (row.duration_minutes ?? 60)
+        if (newStart < exEnd && newEnd > exStart) {
+          return res.status(409).json({ error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.' })
+        }
+      }
+    }
+
     // CMA + telemedicine / IV fluids: always create the paired MD/NP appointment,
     // regardless of caller (family self-book, admin patient-chart add, provider
     // waitlist pickup, etc.). If the caller supplied second_provider_id, respect
