@@ -305,8 +305,53 @@ export function Waitlist() {
     const finalVisitType = acceptVisitType || accepting.visit_type || 'In-home sick visit'
     const DUAL_VISIT_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
     const isDual = DUAL_VISIT_TYPES.includes(finalVisitType)
+    const acceptorIsInHome = provider.role === 'CMA' || provider.role === 'RN'
+    // When an MD/NP accepts a dual-type waitlist entry: don't book yet — send a
+    // pairing broadcast. Family and calendars only commit when a CMA/RN claims.
+    const mdSendsBroadcast = isDual && !acceptorIsInHome
 
     try {
+      if (mdSendsBroadcast) {
+        const isIvFluids = finalVisitType === 'In-home IV fluids'
+        const pairingRoleNeeded = isIvFluids ? 'RN' : 'CMA'
+        const requestType = isIvFluids ? 'In-home RN needed' : 'In-home CMA needed'
+        const patientFullName = accepting.family_name || 'Patient'
+        const nameParts = patientFullName.trim().split(' ')
+        const patientFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : patientFullName
+        const patientLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+        const noteMap = parseNotes(accepting.notes)
+        const bc = await createBroadcast({
+          patient_first_name: patientFirst,
+          patient_last_name: patientLast,
+          patient_address: noteMap['Address'] || null,
+          family_phone: accepting.family_phone || noteMap['Phone'] || null,
+          family_email: accepting.family_email || noteMap['Email'] || null,
+          state: accepting.state || null,
+          zone: accepting.zip || null,
+          visit_type: finalVisitType,
+          request_type: requestType,
+          complaint: accepting.complaint || noteMap['Complaint'] || null,
+          is_urgent: false,
+          created_by: provider.id,
+          created_by_name: `${provider.role} ${provider.name}`,
+          pairing_initiator_id: provider.id,
+          pairing_initiator_name: `${provider.role} ${provider.name}`,
+          pairing_role_needed: pairingRoleNeeded,
+          scheduled_date: date,
+          scheduled_time: time24,
+          waitlist_entry_id: accepting.id,
+        }).catch(() => null)
+        if (bc?.id) {
+          invokeNotifications({ type: 'broadcast', broadcastId: bc.id }).catch(() => {})
+        }
+        setAccepting(null)
+        setDate('')
+        setTime('')
+        setSubmitting(false)
+        fetchEntries()
+        return
+      }
+
       const apptResult = await createAppointment({
         provider_id: provider.id,
         visit_type: finalVisitType,
@@ -725,9 +770,20 @@ export function Waitlist() {
               )}
             </div>
 
-            <p className="text-[13px] text-[#555] mb-4">
-              Choose a visit type, date, and time. The family will be notified and the appointment will be added to your schedule.
-            </p>
+            {(() => {
+              const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
+              const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
+              const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
+              return modalMdSendsBroadcast ? (
+                <p className="text-[13px] text-[#555] mb-4">
+                  This visit needs a {acceptVisitType === 'In-home IV fluids' ? 'RN' : 'CMA'} to complete the pair. Confirming will send a broadcast to available {acceptVisitType === 'In-home IV fluids' ? 'RNs' : 'CMAs'} — the family will be notified once one claims. No appointment is added to your schedule until then.
+                </p>
+              ) : (
+                <p className="text-[13px] text-[#555] mb-4">
+                  Choose a visit type, date, and time. The family will be notified and the appointment will be added to your schedule.
+                </p>
+              )
+            })()}
 
             <div className="space-y-3 mb-5">
               <div>
@@ -767,9 +823,16 @@ export function Waitlist() {
             )}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
-              <Button variant="teal" className="flex-1" disabled={!acceptVisitType || !date || !time} loading={submitting} onClick={acceptEntry}>
-                <CheckCircle2 size={14} /> Confirm
-              </Button>
+              {(() => {
+                const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
+                const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
+                const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
+                return (
+                  <Button variant="teal" className="flex-1" disabled={!acceptVisitType || !date || !time} loading={submitting} onClick={acceptEntry}>
+                    <CheckCircle2 size={14} /> {modalMdSendsBroadcast ? 'Send broadcast' : 'Confirm'}
+                  </Button>
+                )
+              })()}
             </div>
           </div>
         </div>

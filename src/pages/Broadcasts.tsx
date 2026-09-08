@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { MapPin, Clock, AlertCircle, Plus, X, AlertTriangle } from 'lucide-react'
 import {
   getBroadcasts, createBroadcast, updateBroadcast,
-  createAppointment, invokeNotifications,
+  createAppointment, invokeNotifications, updateWaitlistEntry,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -68,27 +68,54 @@ export function Broadcasts() {
     if (!provider) return
     setActing(bc.id)
     try {
-      const isInHomeNeeded = bc.pairing_role_needed === 'CMA'
+      const isInHomeNeeded = bc.pairing_role_needed === 'CMA' || bc.pairing_role_needed === 'RN'
+      // Reference code shared across both twin appointments so cancel/reschedule
+      // cascades and paired-provider notification lookups can find the pair.
+      const pairRef = 'PUC-' + Math.floor(10000 + Math.random() * 90000)
       const partnerLabel = isInHomeNeeded
         ? `${bc.pairing_initiator_name} (MD/NP — telemedicine)`
         : `${bc.pairing_initiator_name} (CMA — in-home)`
       const noteParts = [
+        `Ref: ${pairRef}`,
         `Paired from broadcast`,
         bc.complaint ? `CC:${bc.complaint}` : '',
+        bc.patient_address ? `ADDR:${bc.patient_address}` : '',
+        bc.family_email ? `PARENTEMAIL:${bc.family_email}` : '',
+        bc.family_phone ? `PARENTPHONE:${bc.family_phone}` : '',
         `PARTNER:${partnerLabel}`,
       ].filter(Boolean)
 
-      await createAppointment({
+      // Pass state (fixes bug where on-call lookup silently failed because the
+      // zone was a street address) and second_provider_id so createAppointmentCore
+      // uses the pairing initiator as the paired provider instead of the on-call
+      // schedule. The initiator committed to being the MD/NP for this specific
+      // pair via the broadcast — respect that.
+      const apptResult = await createAppointment({
         provider_id: provider.id,
         visit_type: bc.visit_type || 'CMA + telemedicine',
-        zone: bc.patient_address || bc.zone || 'Broadcast',
+        zone: (bc as any).zone || bc.patient_address || 'Broadcast',
         scheduled_time: bc.scheduled_time || '09:00',
         scheduled_date: bc.scheduled_date || format(new Date(), 'yyyy-MM-dd'),
         status: 'upcoming',
         notes: noteParts.join('|'),
+        state: (bc as any).state || null,
+        ...(isInHomeNeeded && bc.pairing_initiator_id ? { second_provider_id: bc.pairing_initiator_id } : {}),
       })
 
+      if ((apptResult as any)?.error) {
+        // Overlap on primary or secondary — surface it and leave broadcast open.
+        alert((apptResult as any).error)
+        setActing(null)
+        return
+      }
+
       await updateBroadcast(bc.id, { is_open: false })
+
+      // If the broadcast was spawned by a waitlist entry, mark it converted now
+      // that the visit is actually booked.
+      if ((bc as any).waitlist_entry_id) {
+        await updateWaitlistEntry((bc as any).waitlist_entry_id, { status: 'converted', converted_provider_id: provider.id }).catch(() => {})
+      }
 
       invokeNotifications({
         type: 'pairing_claimed',

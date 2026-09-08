@@ -163,6 +163,33 @@ export async function createAppointmentCore(
     }
 
     if (mdProviderId) {
+      // Overlap guard for the paired provider — same as the primary. If the
+      // MD/NP is already booked at this time, roll back the primary insert and
+      // return an error so the caller (e.g. broadcast claim) can surface it.
+      const [nh2, nm2] = String(scheduled_time).split(':').map(Number)
+      const newStart2 = nh2 * 60 + nm2
+      const newDur2 = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
+      const newEnd2 = newStart2 + newDur2
+      const mdExisting = await sql`
+        SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
+        FROM appointments
+        WHERE provider_id = ${mdProviderId}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND scheduled_date = ${scheduled_date}::date
+          AND status != 'cancelled'
+          AND id != ${(primaryRow as any).id}::uuid`
+      for (const row of mdExisting as Array<{ scheduled_time: string; duration_minutes: number }>) {
+        const [eh, em] = String(row.scheduled_time).split(':').map(Number)
+        const exStart = eh * 60 + em
+        const exEnd = exStart + (row.duration_minutes ?? 60)
+        if (newStart2 < exEnd && newEnd2 > exStart) {
+          // Roll back — cancel the primary and delete its schedule block.
+          await sql`UPDATE appointments SET status = 'cancelled' WHERE id = ${(primaryRow as any).id}::uuid`
+          await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + (primaryRow as any).id} AND practice_id = ${practiceId}::uuid`.catch(() => {})
+          return { primary: null, secondary: null, error: `${mdName || 'The paired provider'} is no longer available at that time — please choose a different slot.` }
+        }
+      }
+
       const partnerRoleLabel = visit_type === 'CMA + telemedicine'
         ? 'MD/NP — telemedicine'
         : 'MD/NP — telemedicine screening'

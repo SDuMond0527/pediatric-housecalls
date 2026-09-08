@@ -1432,7 +1432,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const [initiator] = await sql`SELECT email, phone, name FROM providers WHERE id = ${bc.pairing_initiator_id}::uuid LIMIT 1`
         if (initiator) {
           const sms = `${PRACTICE_NAME}: ${claimedByName} has claimed the ${claimedRole} half for ${patientName} on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}. You're all set!`
-          if (initiator.phone) await sendSMS(initiator.phone, sms).catch(() => {})
+          if (initiator.phone) await sendSMS(initiator.phone, sms).catch(e => console.error('Pairing claimed initiator SMS failed:', e))
           if (initiator.email) await sendEmail(
             initiator.email,
             `${claimedByName} has joined your ${patientName} visit`,
@@ -1441,7 +1441,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               <p><strong>${claimedByName}</strong> has claimed the <strong>${claimedRole}</strong> portion of your ${visitLabel} with <strong>${patientName}</strong> on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.</p>
               <p>You're handling the ${initiatorRole} half. You're all set!</p>
             </div>`
-          ).catch(() => {})
+          ).catch(e => console.error('Pairing claimed initiator email failed:', e))
         }
       }
 
@@ -1453,7 +1453,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const teleName = isInHomeNeeded ? initiatorName : claimedByName
 
       const familySms = `${PRACTICE_NAME}: Your ${visitLabel} is fully confirmed. ${inHomeName} will be there in person and ${teleName} will join by video on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}.`
-      if (familyPhone) await sendSMS(familyPhone, familySms).catch(() => {})
+      if (familyPhone) await sendSMS(familyPhone, familySms).catch(e => console.error('Pairing claimed family SMS failed:', e))
       if (familyEmail) await sendEmail(
         familyEmail,
         `Your visit is fully confirmed — ${dateFormatted}`,
@@ -1465,7 +1465,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           </ul>
           <p>${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}</p>
         </div>`
-      ).catch(() => {})
+      ).catch(e => console.error('Pairing claimed family email failed:', e))
+
+      // Notify practice admins that a paired visit was fully booked.
+      const pairingPracticeId: string | undefined = bc.practice_id ?? undefined
+      await notifyAdmins(sql, `${PRACTICE_NAME}: ${claimedByName} claimed pairing — ${patientName} on ${dateFormatted}${timeFormatted ? ' at ' + timeFormatted : ''}. View: ${PORTAL_URL}/admin/schedule`, pairingPracticeId)
 
       return res.json({ ok: true })
     }
