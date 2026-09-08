@@ -1116,20 +1116,26 @@ export function AdminSchedule() {
                           />
                         </div>
 
-                        {appt.status !== 'done' && appt.status !== 'cancelled' && (
+                        {appt.status !== 'cancelled' && (
                           <div className="flex gap-2 mt-3 flex-wrap">
-                            <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
-                              <CheckCircle2 size={12} /> Mark complete
-                            </Button>
+                            {appt.status !== 'done' && (
+                              <Button variant="teal" size="xs" onClick={() => { setDoneTarget(appt); setDoneInstructions('') }}>
+                                <CheckCircle2 size={12} /> Mark complete
+                              </Button>
+                            )}
                             <Button variant="secondary" size="xs" onClick={() => { setRescheduleTarget(appt); setRescheduleDate(appt.scheduled_date); setRescheduleTime(appt.scheduled_time); setRescheduleVisitType(appt.visit_type); setRescheduleProviderId(appt.provider_id) }}>
                               Reschedule
                             </Button>
-                            <Button variant="secondary" size="xs" onClick={() => { setWaitlistTarget(appt); setWaitlistState('NC'); setWaitlistError(null) }}>
-                              Move to waitlist
-                            </Button>
-                            <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
-                              <XCircle size={12} /> Cancel visit
-                            </Button>
+                            {appt.status !== 'done' && (
+                              <Button variant="secondary" size="xs" onClick={() => { setWaitlistTarget(appt); setWaitlistState('NC'); setWaitlistError(null) }}>
+                                Move to waitlist
+                              </Button>
+                            )}
+                            {appt.status !== 'done' && (
+                              <Button variant="danger" size="xs" onClick={() => setCancelApptTarget(appt)}>
+                                <XCircle size={12} /> Cancel visit
+                              </Button>
+                            )}
                           </div>
                         )}
                         {appt.status === 'cancelled' && (

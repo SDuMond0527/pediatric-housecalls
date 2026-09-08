@@ -806,7 +806,7 @@ export function Today() {
                                 <Video size={13} /> Start video visit
                               </Button>
                             )}
-                            {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                            {appt.status !== 'cancelled' && (
                               <Button variant="secondary" size="sm" onClick={() => openEdit(appt)}>
                                 <Pencil size={13} /> Reschedule
                               </Button>
