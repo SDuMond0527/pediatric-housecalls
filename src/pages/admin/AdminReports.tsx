@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { format, startOfMonth, endOfMonth, parseISO, subDays } from 'date-fns'
+import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
+import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy } from 'lucide-react'
 import { getReports } from '../../lib/api'
 
@@ -73,8 +74,8 @@ export function AdminReports() {
   }, [startDate, endDate])
 
   const rangeLabel = startDate === endDate
-    ? format(parseISO(startDate), 'MMM d, yyyy')
-    : `${format(parseISO(startDate), 'MMM d')} – ${format(parseISO(endDate), 'MMM d, yyyy')}`
+    ? formatApiDate(startDate)
+    : `${formatApiDate(startDate, 'MMM d')} – ${formatApiDate(endDate)}`
 
   if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
 
@@ -348,7 +349,7 @@ export function AdminReports() {
                         {entries.map((e, i) => (
                           <tr key={i}>
                             <td className="py-2 pr-6 tabular-nums text-[#555] whitespace-nowrap">
-                              {format(parseISO(e.date), 'MMM d, yyyy')}
+                              {formatApiDate(e.date)}
                             </td>
                             <td className="py-2 pr-6">
                               <span className="font-mono text-[12px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{e.code}</span>
