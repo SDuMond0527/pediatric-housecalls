@@ -1,7 +1,140 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { createAppointmentCore } from '../_lib/createAppointmentCore'
+
+// Inlined from api/_lib/createAppointmentCore.ts. The _lib folder is treated
+// as private by Vercel and excluded from serverless function bundling, so any
+// import from it fails at runtime with a 500. Keeping this local to the file
+// avoids the outage.
+interface CreateAppointmentInput {
+  provider_id: string
+  visit_type: string
+  zone?: string | null
+  scheduled_time: string
+  scheduled_date: string
+  status?: string
+  notes?: string | null
+  duration_minutes?: number | null
+  child_id?: string | null
+  state?: string | null
+  second_provider_id?: string | null
+}
+interface CreateAppointmentResult {
+  primary: any
+  secondary: any
+  error?: string
+}
+async function createAppointmentCore(
+  sql: ReturnType<typeof neon>,
+  practiceId: string,
+  input: CreateAppointmentInput,
+): Promise<CreateAppointmentResult> {
+  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = input
+  const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
+  {
+    const [nh, nm] = String(scheduled_time).split(':').map(Number)
+    const newStart = nh * 60 + nm
+    const newDur = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
+    const newEnd = newStart + newDur
+    const existing = await sql`
+      SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
+      FROM appointments
+      WHERE provider_id = ${provider_id}::uuid AND practice_id = ${practiceId}::uuid
+        AND scheduled_date = ${scheduled_date}::date AND status != 'cancelled'`
+    for (const row of existing as Array<{ scheduled_time: string; duration_minutes: number }>) {
+      const [eh, em] = String(row.scheduled_time).split(':').map(Number)
+      const exStart = eh * 60 + em
+      const exEnd = exStart + (row.duration_minutes ?? 60)
+      if (newStart < exEnd && newEnd > exStart) {
+        return { primary: null, secondary: null, error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.' }
+      }
+    }
+  }
+  const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
+  if (DUAL_TYPES.includes(visit_type)) {
+    let state = bodyState
+    if (!state && zone) {
+      const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${practiceId}::uuid LIMIT 1`
+      state = (zoneRow as any)?.state ?? null
+    }
+    const [primaryProvRow] = await sql`SELECT role, name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
+    const primaryRole = ((primaryProvRow as any)?.role ?? '') as string
+    const primaryName = ((primaryProvRow as any)?.name ?? '') as string
+    const primaryIsInHome = primaryRole === 'CMA' || primaryRole === 'RN'
+    const [primaryRow] = await sql`
+      INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
+      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+      RETURNING *`
+    await sql`
+      INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (primaryRow as any).id})`.catch(() => {})
+    let secondaryRow: any = null
+    let mdProviderId: string | null = null
+    let mdName = ''
+    if (primaryIsInHome) {
+      if (second_provider_id) {
+        const [md] = await sql`SELECT id, name FROM providers WHERE id = ${second_provider_id}::uuid LIMIT 1`
+        if (md) { mdProviderId = (md as any).id as string; mdName = ((md as any).name ?? '') as string }
+      } else if (state) {
+        const onCallRows = await sql`
+          SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
+          JOIN providers p ON p.id = oc.provider_id
+          WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
+            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
+            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time) LIMIT 1`
+        if (onCallRows.length) {
+          mdProviderId = (onCallRows[0] as any).provider_id as string
+          mdName = ((onCallRows[0] as any).provider_name ?? '') as string
+        }
+      }
+      if (!mdProviderId && state) {
+        alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
+      }
+    }
+    if (mdProviderId) {
+      const [nh2, nm2] = String(scheduled_time).split(':').map(Number)
+      const newStart2 = nh2 * 60 + nm2
+      const newDur2 = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
+      const newEnd2 = newStart2 + newDur2
+      const mdExisting = await sql`
+        SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
+        FROM appointments
+        WHERE provider_id = ${mdProviderId}::uuid AND practice_id = ${practiceId}::uuid
+          AND scheduled_date = ${scheduled_date}::date AND status != 'cancelled'
+          AND id != ${(primaryRow as any).id}::uuid`
+      for (const row of mdExisting as Array<{ scheduled_time: string; duration_minutes: number }>) {
+        const [eh, em] = String(row.scheduled_time).split(':').map(Number)
+        const exStart = eh * 60 + em
+        const exEnd = exStart + (row.duration_minutes ?? 60)
+        if (newStart2 < exEnd && newEnd2 > exStart) {
+          await sql`UPDATE appointments SET status = 'cancelled' WHERE id = ${(primaryRow as any).id}::uuid`
+          await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + (primaryRow as any).id} AND practice_id = ${practiceId}::uuid`.catch(() => {})
+          return { primary: null, secondary: null, error: `${mdName || 'The paired provider'} is no longer available at that time — please choose a different slot.` }
+        }
+      }
+      const partnerRoleLabel = visit_type === 'CMA + telemedicine' ? 'MD/NP — telemedicine' : 'MD/NP — telemedicine screening'
+      const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`
+      const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
+      ;[secondaryRow] = await sql`
+        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
+        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+        RETURNING *`
+      await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
+      await sql`
+        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`.catch(() => {})
+    }
+    return { primary: primaryRow, secondary: secondaryRow }
+  }
+  const [row] = await sql`
+    INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
+    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+    RETURNING *`
+  await sql`
+    INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (row as any).id})`.catch(e => console.error('[appointments] schedule block error:', e))
+  return { primary: row, secondary: null }
+}
 
 function toMin(t: string): number {
   const s = t.trim()
