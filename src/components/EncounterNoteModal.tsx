@@ -427,6 +427,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [saving, setSaving] = useState(false)
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [dsLaunching, setDsLaunching] = useState(false)
 
@@ -879,6 +881,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   async function saveDraft() {
     setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(null)
     try {
       const [note] = await Promise.all([
         noteId
@@ -887,6 +891,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         saveVitals(buildVitalsBody()),
       ])
       if (!noteId) setNoteId(note.id)
+      setSaveSuccess('Draft saved')
+      setTimeout(() => setSaveSuccess(null), 3000)
+    } catch (e: any) {
+      console.error('[EncounterNoteModal] saveDraft failed:', e)
+      setSaveError(e?.message ?? 'Failed to save draft. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -2109,6 +2118,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-[#E8E8E4] bg-white flex-shrink-0">
             <div className="flex-1">
               {signError && <div className="text-[12px] text-[#DC2626]">{signError}</div>}
+              {saveError && <div className="text-[12px] text-[#DC2626]">{saveError}</div>}
+              {saveSuccess && <div className="text-[12px] text-[#1D9E75]">{saveSuccess}</div>}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={saveDraft} loading={saving} disabled={signing}>
