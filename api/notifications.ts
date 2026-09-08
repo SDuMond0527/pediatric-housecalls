@@ -1618,14 +1618,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (parentEmail) await sendEmail(parentEmail, `Your appointment has been cancelled — ${visitType} on ${dateFormatted}`, appointmentCancelledByProviderEmail({ displayName: familyName, visitType, date: dateFormatted, time, zone: zone || '' })).catch(e => console.error('Booking cancelled parent email failed:', e))
       if (parentPhone) await sendSMS(parentPhone, `${PRACTICE_NAME}: Your appointment has been cancelled. Please log in to rebook: ${PORTAL_URL}/family/login`).catch(e => console.error('Booking cancelled parent SMS failed:', e))
 
+      // Look up the primary provider (needed for practice_id and to notify them)
+      let cancelPracticeId: string | null = null
+      let primaryProviderName = 'Provider'
       if (providerId) {
-        const [prov] = await sql`SELECT name, phone, email FROM providers WHERE id = ${providerId}::uuid`
-        const providerName = prov?.name || 'Provider'
-        if (prov?.email) await sendEmail(prov.email, subject, cancellationNotificationEmail({ recipientName: providerName, visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled provider email failed:', e))
+        const [prov] = await sql`SELECT name, phone, email, practice_id FROM providers WHERE id = ${providerId}::uuid`
+        primaryProviderName = prov?.name || 'Provider'
+        cancelPracticeId = (prov?.practice_id ?? null) as string | null
+        if (prov?.email) await sendEmail(prov.email, subject, cancellationNotificationEmail({ recipientName: primaryProviderName, visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled provider email failed:', e))
         if (prov?.phone) await sendSMS(prov.phone, smsText).catch(e => console.error('Booking cancelled provider SMS failed:', e))
       }
 
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
+      // For CMA+telemedicine / IV fluids: also notify the paired on-call MD/NP whose
+      // appointment was cancelled by the cascade. Look them up the same way the
+      // pairing was originally established (state derived from zone, then on_call_schedule).
+      const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
+      let pairedMdId: string | null = null
+      if (pairedTypes.includes(visitType) && cancelPracticeId && zone && date && time) {
+        const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${cancelPracticeId}::uuid LIMIT 1`
+        const cancelState = zoneRow?.state ?? null
+        if (cancelState) {
+          const onCallRows = await sql`
+            SELECT oc.provider_id, p.name, p.email, p.phone FROM on_call_schedule oc
+            JOIN providers p ON p.id = oc.provider_id
+            WHERE oc.practice_id = ${cancelPracticeId}::uuid AND oc.date = ${date}::date AND oc.state = ${cancelState}
+              AND (oc.start_time IS NULL OR oc.start_time <= ${time}::time)
+              AND (oc.end_time IS NULL OR oc.end_time > ${time}::time)
+            LIMIT 1`
+          if (onCallRows.length) {
+            const md = onCallRows[0] as any
+            pairedMdId = (md.provider_id ?? null) as string | null
+            if (pairedMdId && pairedMdId !== providerId) {
+              const mdName = (md.name ?? 'Provider') as string
+              if (md.email) await sendEmail(md.email as string, subject, cancellationNotificationEmail({ recipientName: mdName, visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled paired MD email failed:', e))
+              if (md.phone) await sendSMS(md.phone as string, smsText).catch(e => console.error('Booking cancelled paired MD SMS failed:', e))
+            }
+          }
+        }
+      }
+
+      // Notify admins for this practice only (multi-tenant safety).
+      const admins = cancelPracticeId
+        ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${cancelPracticeId}::uuid`
+        : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] ${subject}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType, date: dateFormatted, time, zone: zone || '', familyName })).catch(e => console.error('Booking cancelled admin email failed:', e))
         if (admin.phone) await sendSMS(admin.phone, smsText).catch(e => console.error('Booking cancelled admin SMS failed:', e))
