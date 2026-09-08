@@ -45,9 +45,21 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     : [null]
 
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
-  const cptCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
-  const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
-  const pos = cptCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
+  // Include ALL codes on the stored claim (convenience fees visible for admin
+  // review). Non-Covered Services get stripped from the Stedi payload at
+  // submission time by api/claims/[id].ts. Matches api/claims/index.ts:63.
+  // Previously this stripped Non-Covered here too, so auto-generated claims
+  // (created when a provider signs a note) never had the convenience fee,
+  // even though manually-generated claims did — because the Sept 1 fix
+  // (88fe14d) was applied to only one of the two claim-generation paths.
+  const cptCodes = allCptCodes
+  const total = cptCodes.reduce((s: number, c: any) => {
+    const charge = parseFloat(c.charge_amount) || 0
+    const units = parseInt(c.units, 10) || 1
+    return s + charge * units
+  }, 0)
+  const insuranceCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
+  const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = child?.insurance_provider ?? null
   const payerId = resolvePayer(payerName)
 
