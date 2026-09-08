@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
@@ -137,6 +137,10 @@ export function PatientChart() {
   const { provider: currentProvider } = useAuth()
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines'>('overview')
   const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
+  const [dateEditNote, setDateEditNote] = useState<NoteWithVisit | null>(null)
+  const [newEncounterDate, setNewEncounterDate] = useState('')
+  const [dateSaving, setDateSaving] = useState(false)
+  const [dateError, setDateError] = useState<string | null>(null)
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -1443,6 +1447,17 @@ export function PatientChart() {
 
                               <div className="pt-2 border-t border-[#F1EFE8] flex justify-end gap-2">
                                 <button
+                                  onClick={() => {
+                                    setDateEditNote(note)
+                                    setNewEncounterDate(note.scheduled_date)
+                                    setDateError(null)
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                                >
+                                  <CalendarPlus size={12} />
+                                  Change date
+                                </button>
+                                <button
                                   onClick={() => setEditNote(note)}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
                                 >
@@ -1864,6 +1879,67 @@ export function PatientChart() {
             }).catch(() => {})
           }}
         />
+      )}
+
+      {/* Change encounter/appointment date modal */}
+      {dateEditNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !dateSaving && setDateEditNote(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Change appointment date</h2>
+              <button onClick={() => setDateEditNote(null)} disabled={dateSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <p className="text-[13px] text-[#555] mb-4">
+              The encounter note and its underlying appointment share the same date. Updating here updates both — the change will appear wherever the appointment is shown.
+            </p>
+            <div className="mb-4">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">Date</label>
+              <input
+                type="date"
+                value={newEncounterDate}
+                onChange={e => setNewEncounterDate(e.target.value)}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]"
+              />
+            </div>
+            {dateError && (
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{dateError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDateEditNote(null)}
+                disabled={dateSaving}
+                className="flex-1 py-2 px-3 border border-[#E8E8E4] rounded-lg text-[13px] font-medium text-[#555] hover:bg-[#FAFAF8] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!dateEditNote || !newEncounterDate) return
+                  setDateSaving(true)
+                  setDateError(null)
+                  try {
+                    await updateAppointment(dateEditNote.appointment_id, { scheduled_date: newEncounterDate })
+                    // Reload notes so the date update reflects in the UI
+                    if (childId) {
+                      const data = await getEncounterNotes({ child_id: childId })
+                      setNotes((data ?? []) as NoteWithVisit[])
+                    }
+                    setDateEditNote(null)
+                  } catch (e: any) {
+                    setDateError(e?.message ?? 'Failed to update date. Please try again.')
+                  } finally {
+                    setDateSaving(false)
+                  }
+                }}
+                disabled={dateSaving || !newEncounterDate || newEncounterDate === dateEditNote.scheduled_date}
+                className="flex-1 py-2 px-3 bg-[#7F77DD] text-white rounded-lg text-[13px] font-medium hover:bg-[#6C64C8] transition-colors disabled:opacity-50"
+              >
+                {dateSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Encounter note edit modal */}
