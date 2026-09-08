@@ -5,6 +5,8 @@ import { format, parseISO, differenceInYears } from 'date-fns'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
+import { EncounterNoteModal } from '../components/EncounterNoteModal'
+import { useAuth } from '../contexts/AuthContext'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
 
 interface VaccineEntry {
@@ -132,7 +134,9 @@ export function PatientChart() {
   const { childId } = useParams<{ childId: string }>()
   const navigate = useNavigate()
 
+  const { provider: currentProvider } = useAuth()
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines'>('overview')
+  const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -1437,7 +1441,14 @@ export function PatientChart() {
                                 </div>
                               )}
 
-                              <div className="pt-2 border-t border-[#F1EFE8] flex justify-end">
+                              <div className="pt-2 border-t border-[#F1EFE8] flex justify-end gap-2">
+                                <button
+                                  onClick={() => setEditNote(note)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                                >
+                                  <Pencil size={12} />
+                                  {note.is_signed ? 'Open note' : 'Edit note'}
+                                </button>
                                 <button
                                   onClick={() => { launchDoseSpot(); setActiveTab('prescribe') }}
                                   disabled={dsLoading}
@@ -1851,6 +1862,35 @@ export function PatientChart() {
               setBookingRequests(appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })))
               setActiveTab('appointments')
             }).catch(() => {})
+          }}
+        />
+      )}
+
+      {/* Encounter note edit modal */}
+      {editNote && currentProvider && (
+        <EncounterNoteModal
+          appointment={{
+            id: editNote.appointment_id,
+            provider_id: currentProvider.id,
+            visit_type: editNote.visit_type,
+            zone: editNote.zone,
+            scheduled_time: editNote.scheduled_time,
+            scheduled_date: editNote.scheduled_date,
+            status: 'done',
+            charm_appointment_id: null,
+            charm_patient_id: null,
+            notes: null,
+            after_visit_instructions: null,
+            duration_minutes: null,
+            child_id: editNote.child_id,
+            created_at: '',
+          }}
+          childId={editNote.child_id}
+          providerId={currentProvider.id}
+          onClose={() => {
+            setEditNote(null)
+            // Reload notes so any edits show up
+            if (childId) getEncounterNotes({ child_id: childId }).then(data => setNotes((data ?? []) as NoteWithVisit[])).catch(() => {})
           }}
         />
       )}
