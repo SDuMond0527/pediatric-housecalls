@@ -113,6 +113,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .catch(e => console.error('[appointments] twin block reschedule error:', e))
       }
     }
+
+    // Cascade date/time change to the matching booking_request row (linked via
+    // the same "Ref: PUC-XXXXX" in notes). Without this, the appointment updates
+    // but the booking_request keeps the old preferred_date/preferred_time and
+    // the patient chart still displays the stale date.
+    if (scheduled_date !== undefined || scheduled_time !== undefined) {
+      const apptRow = row as any
+      const refMatch = String(apptRow?.notes ?? '').match(/Ref: ([A-Z0-9-]+)/)
+      if (refMatch) {
+        await sql`
+          UPDATE booking_requests SET
+            preferred_date = COALESCE(${scheduled_date ?? null}::date, preferred_date),
+            preferred_time = COALESCE(${scheduled_time ?? null}, preferred_time)
+          WHERE reference_code = ${refMatch[1]} AND practice_id = ${practiceId}::uuid`
+      }
+    }
   } else if (status !== undefined && after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET status=${status}, after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
