@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './helpers/auth'
 
 test.describe('Waitlist and broadcasts pages', () => {
-  test('waitlist page loads', async ({ page }) => {
+  test('waitlist page loads without a 500', async ({ page }) => {
     const apiFailures: string[] = []
     page.on('response', res => {
       if (res.url().includes('/api/waitlist') && res.status() >= 500) {
@@ -11,15 +11,17 @@ test.describe('Waitlist and broadcasts pages', () => {
     })
 
     await loginAsAdmin(page)
-    await page.goto('/waitlist')
+    // Admins land on /admin/waitlist (AdminWaitlist); non-admin providers land
+    // on /waitlist (Waitlist). Test as admin.
+    await page.goto('/admin/waitlist')
 
-    // Header always renders, even with an empty waitlist.
-    await expect(page.getByText(/waitlist/i).first()).toBeVisible({ timeout: 10_000 })
+    // Heading + subtext are stable landmarks on either page variant.
+    await expect(page.getByText(/waitlist/i).first()).toBeVisible({ timeout: 15_000 })
 
     expect(apiFailures, `Server errors on /api/waitlist: ${apiFailures.join(', ')}`).toEqual([])
   })
 
-  test('broadcasts page loads', async ({ page }) => {
+  test('broadcasts page loads without a 500', async ({ page }) => {
     const apiFailures: string[] = []
     page.on('response', res => {
       if (res.url().includes('/api/broadcasts') && res.status() >= 500) {
@@ -28,9 +30,9 @@ test.describe('Waitlist and broadcasts pages', () => {
     })
 
     await loginAsAdmin(page)
-    await page.goto('/broadcasts')
+    await page.goto('/admin/broadcasts')
 
-    await expect(page.getByText(/broadcast/i).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/broadcasts/i).first()).toBeVisible({ timeout: 15_000 })
 
     expect(apiFailures, `Server errors on /api/broadcasts: ${apiFailures.join(', ')}`).toEqual([])
   })

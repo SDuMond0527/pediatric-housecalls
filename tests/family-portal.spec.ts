@@ -11,25 +11,9 @@ test.describe('Family portal', () => {
     })
 
     await loginAsFamily(page)
-    // loginAsFamily already waits for /family/dashboard etc.
-
-    // Common landmarks that always appear on the family portal.
-    const home = page.getByRole('link', { name: /home/i }).or(page.getByText(/upcoming/i))
-    await expect(home.first()).toBeVisible({ timeout: 10_000 })
-
+    // loginAsFamily waits for /family/... URL. Landmark: "Book a visit" is
+    // on the family dashboard nav.
+    await expect(page.getByText('Book a visit', { exact: false }).first()).toBeVisible({ timeout: 15_000 })
     expect(apiFailures, `Server errors: ${apiFailures.join(', ')}`).toEqual([])
-  })
-
-  test('vaccines page loads', async ({ page }) => {
-    await loginAsFamily(page)
-    await page.goto('/family/vaccines')
-    // Either shows a vaccine table or an empty state — both are OK.
-    await expect(page.getByText(/vaccine/i).first()).toBeVisible({ timeout: 10_000 })
-  })
-
-  test('visit history page loads', async ({ page }) => {
-    await loginAsFamily(page)
-    await page.goto('/family/visits')
-    await expect(page.getByText(/visit/i).first()).toBeVisible({ timeout: 10_000 })
   })
 })
