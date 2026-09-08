@@ -63,6 +63,21 @@ function formatDob(dob: string): string {
   }
 }
 
+// Timezone-safe date formatter for API-returned date fields. The API serializes
+// DATE columns as "YYYY-MM-DDT00:00:00.000Z" (midnight UTC), which parseISO
+// interprets as UTC then formats in local time — subtracting the TZ offset and
+// showing the previous day for any US timezone. Strip the time portion and
+// construct a local Date instead.
+function formatApiDate(dateStr: string, pattern: string = 'MMM d, yyyy'): string {
+  try {
+    const s = String(dateStr).split('T')[0]
+    const [y, m, day] = s.split('-').map(Number)
+    return format(new Date(y, m - 1, day), pattern)
+  } catch {
+    return dateStr
+  }
+}
+
 function vitalChips(v: any): string {
   const parts: string[] = []
   if (v?.temperature_f != null) parts.push(`${v.temperature_f}°F`)
@@ -1206,7 +1221,7 @@ export function PatientChart() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap mb-1.5">
                                 <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                                  {br.preferred_date ? format(parseISO(br.preferred_date), 'MMM d, yyyy') : 'Date TBD'}
+                                  {br.preferred_date ? formatApiDate(br.preferred_date) : 'Date TBD'}
                                 </span>
                                 {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
                               </div>
@@ -1229,8 +1244,8 @@ export function PatientChart() {
                               <button
                                 onClick={() => {
                                   setRescheduleTarget(br)
-                                  setRescheduleDate(br.preferred_date || br.scheduled_date || '')
-                                  setRescheduleTime(br.scheduled_time || '')
+                                  setRescheduleDate(String(br.preferred_date || br.scheduled_date || '').split('T')[0])
+                                  setRescheduleTime(String(br.scheduled_time || '').slice(0, 5))
                                   setRescheduleError(null)
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
@@ -1267,7 +1282,7 @@ export function PatientChart() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap mb-1.5">
                                 <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                                  {br.preferred_date ? format(parseISO(br.preferred_date), 'MMM d, yyyy') : 'Date TBD'}
+                                  {br.preferred_date ? formatApiDate(br.preferred_date) : 'Date TBD'}
                                 </span>
                                 {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
                               </div>
@@ -1290,8 +1305,8 @@ export function PatientChart() {
                               <button
                                 onClick={() => {
                                   setRescheduleTarget(br)
-                                  setRescheduleDate(br.preferred_date || br.scheduled_date || '')
-                                  setRescheduleTime(br.scheduled_time || '')
+                                  setRescheduleDate(String(br.preferred_date || br.scheduled_date || '').split('T')[0])
+                                  setRescheduleTime(String(br.scheduled_time || '').slice(0, 5))
                                   setRescheduleError(null)
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
@@ -1335,7 +1350,7 @@ export function PatientChart() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap mb-1">
                                 <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                                  {format(parseISO(note.scheduled_date), 'MMM d, yyyy')}
+                                  {formatApiDate(note.scheduled_date)}
                                 </span>
                                 <Badge variant="purple">{note.visit_type}</Badge>
                                 {note.is_signed && <Badge variant="teal">Signed</Badge>}
@@ -1822,7 +1837,7 @@ export function PatientChart() {
                     {vaccineNotes.map(note => (
                       <div key={note.id}>
                         <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">
-                          {format(parseISO(note.scheduled_date), 'MMMM d, yyyy')}
+                          {formatApiDate(note.scheduled_date, 'MMMM d, yyyy')}
                           {note.provider_name && <span className="ml-2 font-normal normal-case">· {note.provider_name}</span>}
                         </div>
                         <div className="border border-[#E8E8E4] rounded-xl overflow-hidden bg-white">
@@ -1926,7 +1941,7 @@ export function PatientChart() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
-              <div className="text-[#999]">Currently {rescheduleTarget.preferred_date || rescheduleTarget.scheduled_date} at {rescheduleTarget.scheduled_time || 'unknown'}</div>
+              <div className="text-[#999]">Currently {formatApiDate(rescheduleTarget.preferred_date || rescheduleTarget.scheduled_date)} at {rescheduleTarget.scheduled_time || 'unknown'}</div>
             </div>
             <div className="space-y-3 mb-4">
               <div>
@@ -2002,7 +2017,7 @@ export function PatientChart() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
-              <div className="text-[#999]">{cancelTarget.preferred_date || cancelTarget.scheduled_date} at {cancelTarget.scheduled_time || 'unknown'}</div>
+              <div className="text-[#999]">{formatApiDate(cancelTarget.preferred_date || cancelTarget.scheduled_date)} at {cancelTarget.scheduled_time || 'unknown'}</div>
             </div>
             <p className="text-[13px] text-[#555] mb-4">
               The parent and admins will be notified of the cancellation.
