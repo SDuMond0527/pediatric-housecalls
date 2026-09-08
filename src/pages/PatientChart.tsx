@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
@@ -137,6 +137,14 @@ export function PatientChart() {
   const { provider: currentProvider } = useAuth()
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines'>('overview')
   const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduleSaving, setRescheduleSaving] = useState(false)
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null)
+  const [cancelSaving, setCancelSaving] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   // DoseSpot e-prescribing
   const [dsLoading, setDsLoading] = useState(false)
@@ -1213,6 +1221,29 @@ export function PatientChart() {
                               {br.status ?? 'pending'}
                             </span>
                           </div>
+                          {br._source === 'appointment' && br.status !== 'cancelled' && (
+                            <div className="flex gap-2 mt-3 pt-3 border-t border-[#F1EFE8]">
+                              <button
+                                onClick={() => {
+                                  setRescheduleTarget(br)
+                                  setRescheduleDate(br.preferred_date || br.scheduled_date || '')
+                                  setRescheduleTime(br.scheduled_time || '')
+                                  setRescheduleError(null)
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                              >
+                                <Pencil size={12} /> Reschedule
+                              </button>
+                              {br.status !== 'done' && (
+                                <button
+                                  onClick={() => { setCancelTarget(br); setCancelError(null) }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FEE2E2] text-[#7F1D1D] text-[12px] font-medium rounded-lg hover:bg-[#FECACA] transition-colors"
+                                >
+                                  <X size={12} /> Cancel visit
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1251,6 +1282,21 @@ export function PatientChart() {
                               {br.status ?? 'unknown'}
                             </span>
                           </div>
+                          {br._source === 'appointment' && br.status !== 'cancelled' && (
+                            <div className="flex gap-2 mt-3 pt-3 border-t border-[#F1EFE8]">
+                              <button
+                                onClick={() => {
+                                  setRescheduleTarget(br)
+                                  setRescheduleDate(br.preferred_date || br.scheduled_date || '')
+                                  setRescheduleTime(br.scheduled_time || '')
+                                  setRescheduleError(null)
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                              >
+                                <Pencil size={12} /> Reschedule
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1864,6 +1910,139 @@ export function PatientChart() {
             }).catch(() => {})
           }}
         />
+      )}
+
+      {/* Reschedule appointment modal */}
+      {rescheduleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !rescheduleSaving && setRescheduleTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Reschedule appointment</h2>
+              <button onClick={() => setRescheduleTarget(null)} disabled={rescheduleSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
+              <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
+              <div className="text-[#999]">Currently {rescheduleTarget.preferred_date || rescheduleTarget.scheduled_date} at {rescheduleTarget.scheduled_time || 'unknown'}</div>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">New date</label>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  onChange={e => setRescheduleDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">New time (24-hour, e.g. 14:30)</label>
+                <input
+                  type="text"
+                  value={rescheduleTime}
+                  onChange={e => setRescheduleTime(e.target.value)}
+                  placeholder="e.g. 14:30"
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]"
+                />
+              </div>
+            </div>
+            {rescheduleError && (
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{rescheduleError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRescheduleTarget(null)}
+                disabled={rescheduleSaving}
+                className="flex-1 py-2 px-3 border border-[#E8E8E4] rounded-lg text-[13px] font-medium text-[#555] hover:bg-[#FAFAF8] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!rescheduleTarget || !rescheduleDate || !rescheduleTime) return
+                  setRescheduleSaving(true)
+                  setRescheduleError(null)
+                  try {
+                    await updateAppointment(rescheduleTarget.id, { scheduled_date: rescheduleDate, scheduled_time: rescheduleTime })
+                    invokeNotifications({ type: 'appointment_rescheduled', appointmentId: rescheduleTarget.id }).catch(() => {})
+                    // Reload appointments so change reflects
+                    if (childId) {
+                      const data = await getAppointments({ child_id: childId })
+                      const appts = data ?? []
+                      setBookingRequests(appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })))
+                    }
+                    setRescheduleTarget(null)
+                  } catch (e: any) {
+                    setRescheduleError(e?.message ?? 'Failed to reschedule. Please try again.')
+                  } finally {
+                    setRescheduleSaving(false)
+                  }
+                }}
+                disabled={rescheduleSaving || !rescheduleDate || !rescheduleTime}
+                className="flex-1 py-2 px-3 bg-[#7F77DD] text-white rounded-lg text-[13px] font-medium hover:bg-[#6C64C8] transition-colors disabled:opacity-50"
+              >
+                {rescheduleSaving ? 'Saving…' : 'Save new time'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel appointment modal */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !cancelSaving && setCancelTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Cancel this appointment?</h2>
+              <button onClick={() => setCancelTarget(null)} disabled={cancelSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+            </div>
+            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
+              <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
+              <div className="text-[#999]">{cancelTarget.preferred_date || cancelTarget.scheduled_date} at {cancelTarget.scheduled_time || 'unknown'}</div>
+            </div>
+            <p className="text-[13px] text-[#555] mb-4">
+              The parent and admins will be notified of the cancellation.
+            </p>
+            {cancelError && (
+              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{cancelError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelSaving}
+                className="flex-1 py-2 px-3 border border-[#E8E8E4] rounded-lg text-[13px] font-medium text-[#555] hover:bg-[#FAFAF8] transition-colors"
+              >
+                Keep
+              </button>
+              <button
+                onClick={async () => {
+                  if (!cancelTarget) return
+                  setCancelSaving(true)
+                  setCancelError(null)
+                  try {
+                    await updateAppointment(cancelTarget.id, { status: 'cancelled' })
+                    invokeNotifications({ type: 'appointment_cancelled', appointmentId: cancelTarget.id }).catch(() => {})
+                    if (childId) {
+                      const data = await getAppointments({ child_id: childId })
+                      const appts = data ?? []
+                      setBookingRequests(appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })))
+                    }
+                    setCancelTarget(null)
+                  } catch (e: any) {
+                    setCancelError(e?.message ?? 'Failed to cancel. Please try again.')
+                  } finally {
+                    setCancelSaving(false)
+                  }
+                }}
+                disabled={cancelSaving}
+                className="flex-1 py-2 px-3 bg-[#DC2626] text-white rounded-lg text-[13px] font-medium hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
+              >
+                {cancelSaving ? 'Cancelling…' : 'Cancel visit'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Encounter note edit modal */}
