@@ -33,6 +33,7 @@ interface NoteWithVisit {
   assessment: string | null
   plan: string | null
   diagnoses: { code: string; name: string }[]
+  cpt_codes?: { code: string; description: string; category?: string; charge_amount: number; modifier?: string; units?: number }[]
   is_signed: boolean
   signed_at: string | null
   pcp_faxed_at: string | null
@@ -1377,7 +1378,13 @@ export function PatientChart() {
                                   {note.vaccine_administrations!.map(v => v.vaccine_name).join(', ')}
                                 </div>
                               )}
-                              {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (note.vaccine_administrations?.length ?? 0) === 0 && (
+                              {(note.cpt_codes?.length ?? 0) > 0 && (
+                                <div className="text-[12px] text-[#555] mt-1.5">
+                                  <span className="text-[#999]">Codes: </span>
+                                  {note.cpt_codes!.map(c => c.code).join(', ')}
+                                </div>
+                              )}
+                              {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (note.vaccine_administrations?.length ?? 0) === 0 && (note.cpt_codes?.length ?? 0) === 0 && (
                                 <div className="text-[12px] text-[#bbb] italic mt-1">No encounter note content</div>
                               )}
                             </div>
@@ -1433,6 +1440,41 @@ export function PatientChart() {
                                         {dx.code} – {dx.name}
                                       </span>
                                     ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {(note.cpt_codes?.length ?? 0) > 0 && (
+                                <div>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Procedures &amp; Fees</div>
+                                  <div className="space-y-1.5">
+                                    {note.cpt_codes!.map(c => {
+                                      const units = parseInt(String(c.units), 10) || 1
+                                      const lineTotal = (parseFloat(String(c.charge_amount)) || 0) * units
+                                      return (
+                                        <div key={c.code} className="flex items-center justify-between px-3 py-2 bg-white border border-[#E8E8E4] rounded-lg gap-2">
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${c.category === 'Procedure' ? 'bg-[#EEEDFE] text-[#3C3489]' : 'bg-[#FEF3E8] text-[#633806]'}`}>
+                                              {c.code}
+                                            </span>
+                                            <span className="text-[12px] text-[#1A1A2E] truncate">{c.description}</span>
+                                            {units > 1 && <span className="text-[10px] text-[#555] whitespace-nowrap">× {units} units</span>}
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            {c.modifier && <span className="text-[10px] text-[#F5943A] font-medium">mod {c.modifier}</span>}
+                                            <span className="text-[12px] font-medium text-[#1A1A2E] tabular-nums">${lineTotal.toFixed(2)}</span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                    <div className="flex justify-end px-3 pt-1">
+                                      <span className="text-[12px] font-semibold text-[#1A1A2E] tabular-nums">
+                                        Total: ${note.cpt_codes!.reduce((sum, c) => {
+                                          const units = parseInt(String(c.units), 10) || 1
+                                          return sum + (parseFloat(String(c.charge_amount)) || 0) * units
+                                        }, 0).toFixed(2)}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               )}
