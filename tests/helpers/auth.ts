@@ -1,10 +1,13 @@
 import type { Page } from '@playwright/test'
 import * as fs from 'fs'
 import * as path from 'path'
+import { fileURLToPath } from 'url'
 
 // Load tests/.env manually — small enough not to need a dedicated dotenv package.
 // tests/.env is gitignored; real credentials live only on the local machine
 // (or in GitHub Actions secrets for CI).
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 const envPath = path.resolve(__dirname, '..', '.env')
 if (fs.existsSync(envPath)) {
   const lines = fs.readFileSync(envPath, 'utf8').split('\n')
@@ -38,8 +41,8 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   const password = requireEnv('TEST_ADMIN_PASSWORD')
 
   await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(password)
+  await page.locator('input[type="email"]').fill(email)
+  await page.locator('input[type="password"]').first().fill(password)
   await page.getByRole('button', { name: /sign in to provider portal/i }).click()
 
   // Wait for the landing page to appear — a provider always lands somewhere
@@ -55,8 +58,8 @@ export async function loginAsFamily(page: Page): Promise<void> {
   const password = requireEnv('TEST_FAMILY_PASSWORD')
 
   await page.goto('/family/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(password)
+  await page.locator('input[type="email"]').fill(email)
+  await page.locator('input[type="password"]').first().fill(password)
   await page.getByRole('button', { name: /sign in/i }).click()
 
   await page.waitForURL(/\/family\/(dashboard|book|home|profile)/, { timeout: 15_000 })

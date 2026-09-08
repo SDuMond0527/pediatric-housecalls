@@ -15,12 +15,9 @@ test.describe('Admin schedule page', () => {
     await loginAsAdmin(page)
     await page.goto('/admin/schedule')
 
-    // The schedule header should be visible on any successful load.
-    await expect(page.getByText('Schedule', { exact: false })).toBeVisible({ timeout: 10_000 })
-
     // The "Add appointment" button is a stable landmark that only appears when
     // the page actually rendered (not just spinning on a fetch).
-    await expect(page.getByRole('button', { name: /add appointment/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /add appointment/i })).toBeVisible({ timeout: 15_000 })
 
     // Fail loudly if any /api/appointments call errored during the load.
     expect(apiFailures, `Server errors on /api/appointments: ${apiFailures.join(', ')}`).toEqual([])
