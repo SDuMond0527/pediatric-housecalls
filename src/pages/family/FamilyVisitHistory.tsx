@@ -3,6 +3,7 @@ import { ChevronDown, Stethoscope } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { familyGetEncounterNotes } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
+import { formatApiDate } from '../../lib/dateUtils'
 
 interface EncounterNote {
   id: string
@@ -22,11 +23,7 @@ interface EncounterNote {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Date unknown'
-  try {
-    return format(parseISO(dateStr), 'MMMM d, yyyy')
-  } catch {
-    return dateStr
-  }
+  return formatApiDate(dateStr, 'MMMM d, yyyy') || dateStr
 }
 
 export function FamilyVisitHistory() {

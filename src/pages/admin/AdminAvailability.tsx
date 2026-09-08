@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format, parseISO } from 'date-fns'
+import { formatApiDate } from '../../lib/dateUtils'
 import { getProviders, getAvailability } from '../../lib/api'
 
 function fmt24to12(t: string) {
@@ -80,7 +81,7 @@ export function AdminAvailability() {
                   <div className="space-y-1.5">
                     {upcoming.map((o, i) => (
                       <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[12px] ${o.is_available ? 'bg-[#E1F5EE] text-[#085041]' : 'bg-[#FCEBEB] text-[#791F1F]'}`}>
-                        <span className="font-semibold whitespace-nowrap">{format(parseISO(o.date), 'EEE, MMM d')}</span>
+                        <span className="font-semibold whitespace-nowrap">{formatApiDate(o.date, 'EEE, MMM d')}</span>
                         <span>
                           {o.is_available
                             ? (o.start_time && o.end_time ? `${fmt24to12(o.start_time)} – ${fmt24to12(o.end_time)}` : 'Available')

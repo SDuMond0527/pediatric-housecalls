@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
 import type { Appointment } from '../types'
@@ -952,7 +953,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           <div>
             <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Encounter Note</div>
             <div className="text-[12px] text-[#999] mt-0.5">
-              {appointment.visit_type} · {format(parseISO(appointment.scheduled_date), 'MMM d, yyyy')}
+              {appointment.visit_type} · {formatApiDate(appointment.scheduled_date)}
             </div>
             {(linkedChildName || linkedChildDob) && (
               <div className="mt-1.5 flex items-center gap-2">
@@ -961,7 +962,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 )}
                 {linkedChildDob && (
                   <span className="text-[12px] text-[#666]">
-                    DOB {format(parseISO(linkedChildDob), 'MM/dd/yyyy')}
+                    DOB {formatApiDate(linkedChildDob, 'MM/dd/yyyy')}
                   </span>
                 )}
               </div>

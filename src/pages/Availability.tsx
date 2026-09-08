@@ -4,6 +4,7 @@ import {
   format, isPast, parseISO, startOfMonth, endOfMonth,
   eachDayOfInterval, getDay, addMonths, subMonths, isToday, isBefore, startOfDay,
 } from 'date-fns'
+import { formatApiDate, parseApiDate } from '../lib/dateUtils'
 import {
   getAvailability, upsertAvailabilityOverride, deleteAvailabilityOverride,
   createZoneRestriction, deleteZoneRestriction,
@@ -322,8 +323,8 @@ export function Availability() {
     setOverrides(prev => prev.filter(o => o.id !== id))
   }
 
-  const upcomingOverrides = overrides.filter(o => !isPast(parseISO(o.date)))
-  const pastOverrides = overrides.filter(o => isPast(parseISO(o.date)))
+  const upcomingOverrides = overrides.filter(o => { const d = parseApiDate(o.date); return d ? !isPast(d) : true })
+  const pastOverrides = overrides.filter(o => { const d = parseApiDate(o.date); return d ? isPast(d) : false })
   const overrideByDate = Object.fromEntries(overrides.map(o => [o.date, o]))
 
   function openOverrideForDate(dateStr: string) {
@@ -669,7 +670,7 @@ export function Availability() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[14px] font-medium text-[#1A1A2E]">
-                              {format(parseISO(o.date), 'EEEE, MMMM d, yyyy')}
+                              {formatApiDate(o.date, 'EEEE, MMMM d, yyyy')}
                             </span>
                             {o.is_available ? (
                               <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1D9E75] text-white font-medium">Working</span>
@@ -701,7 +702,7 @@ export function Availability() {
                     {pastOverrides.slice(-3).map(o => (
                       <div key={o.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-[#E8E8E4] bg-[#FAFAF8] opacity-60">
                         <div className="flex-1 text-[13px] text-[#555]">
-                          {format(parseISO(o.date), 'MMMM d, yyyy')} ·{' '}
+                          {formatApiDate(o.date, 'MMMM d, yyyy')} ·{' '}
                           {o.is_available && o.start_time && o.end_time
                             ? `${fmt24to12(o.start_time)} – ${fmt24to12(o.end_time)}`
                             : 'Off'}
