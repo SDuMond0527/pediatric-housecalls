@@ -178,7 +178,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">Date</label>
-              <input type="date" min={today} value={form.scheduled_date}
+              <input type="date" value={form.scheduled_date}
                 onChange={e => set('scheduled_date', e.target.value)} required
                 className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
             </div>
