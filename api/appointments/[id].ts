@@ -56,8 +56,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let row: unknown
 
+  // Look up the ref code from the CURRENT notes (before update). Used to find the
+  // paired twin appointment for CMA+telemedicine / IV fluids visits so cancel and
+  // reschedule stay in sync across both providers' schedules.
+  async function findTwinId(): Promise<string | null> {
+    const [existing] = await sql`SELECT visit_type, notes FROM appointments WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid LIMIT 1`
+    if (!existing) return null
+    const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
+    if (!pairedTypes.includes(existing.visit_type)) return null
+    const refMatch = String(existing.notes ?? '').match(/Ref: ([A-Z0-9-]+)/)
+    if (!refMatch) return null
+    const twins = await sql`
+      SELECT id FROM appointments
+      WHERE practice_id=${practiceId}::uuid
+        AND id != ${id}::uuid
+        AND notes LIKE ${'%Ref: ' + refMatch[1] + '%'}
+      LIMIT 1`
+    return (twins[0] as any)?.id ?? null
+  }
+
   // Full appointment edit (visit type, provider, date, time)
   if (visit_type !== undefined || provider_id !== undefined || scheduled_date !== undefined || scheduled_time !== undefined) {
+    const twinId = (scheduled_date !== undefined || scheduled_time !== undefined) ? await findTwinId() : null
+
     ;[row] = await sql`
       UPDATE appointments SET
         visit_type      = COALESCE(${visit_type ?? null}, visit_type),
@@ -73,12 +94,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
       VALUES (${practiceId}::uuid, ${appt.provider_id}::uuid, ${appt.scheduled_date}::date, ${appt.scheduled_date}::date, false, ${appt.scheduled_time}, ${endTime}, ${'appt:' + id})`
       .catch(e => console.error('[appointments] block reschedule error:', e))
+
+    // Cascade date/time change to the paired twin appointment (never change its
+    // provider or visit type — those are twin-specific).
+    if (twinId && (scheduled_date !== undefined || scheduled_time !== undefined)) {
+      await sql`
+        UPDATE appointments SET
+          scheduled_date = COALESCE(${scheduled_date ?? null}::date, scheduled_date),
+          scheduled_time = COALESCE(${scheduled_time ?? null}, scheduled_time)
+        WHERE id=${twinId}::uuid AND practice_id=${practiceId}::uuid`
+      const [twinAppt] = await sql`SELECT provider_id, scheduled_date, scheduled_time, visit_type FROM appointments WHERE id=${twinId}::uuid LIMIT 1`
+      if (twinAppt) {
+        const twinEnd = blockEndTime(twinAppt.scheduled_time as string, twinAppt.visit_type as string)
+        await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + twinId} AND practice_id = ${practiceId}::uuid`.catch(() => {})
+        await sql`
+          INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
+          VALUES (${practiceId}::uuid, ${twinAppt.provider_id}::uuid, ${twinAppt.scheduled_date}::date, ${twinAppt.scheduled_date}::date, false, ${twinAppt.scheduled_time}, ${twinEnd}, ${'appt:' + twinId})`
+          .catch(e => console.error('[appointments] twin block reschedule error:', e))
+      }
+    }
   } else if (status !== undefined && after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET status=${status}, after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
+    const twinId = status === 'cancelled' ? await findTwinId() : null
     ;[row] = await sql`UPDATE appointments SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
     if (status === 'cancelled') {
       await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + id} AND practice_id = ${practiceId}::uuid`.catch(() => {})
+      if (twinId) {
+        await sql`UPDATE appointments SET status='cancelled' WHERE id=${twinId}::uuid AND practice_id=${practiceId}::uuid AND status != 'cancelled'`
+        await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + twinId} AND practice_id = ${practiceId}::uuid`.catch(() => {})
+      }
     }
   } else if (after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`

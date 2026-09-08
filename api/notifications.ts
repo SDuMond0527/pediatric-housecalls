@@ -1218,11 +1218,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (oldProvider.phone) await sendSMS(oldProvider.phone, `${PRACTICE_NAME}: ${childName}'s ${appt.visit_type} on ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} has been moved to ${newProviderName}'s schedule.`).catch(e => console.error('Reschedule old provider SMS failed:', e))
       }
 
-      // 4. Admins
+      // 4. Paired provider (CMA+tele / IV fluids) — their twin was moved by the
+      // PATCH cascade; tell them the new time.
+      const reschedPairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
+      const reschedPracticeId = (appt.practice_id ?? null) as string | null
+      if (reschedPairedTypes.includes(appt.visit_type) && reschedPracticeId) {
+        const reschedRef = String(appt.notes ?? '').match(/Ref: ([A-Z0-9-]+)/)
+        if (reschedRef) {
+          const twinRows = await sql`
+            SELECT a.provider_id, p.name, p.email, p.phone
+            FROM appointments a
+            JOIN providers p ON p.id = a.provider_id
+            WHERE a.practice_id = ${reschedPracticeId}::uuid
+              AND a.id != ${appt.id}::uuid
+              AND a.notes LIKE ${'%Ref: ' + reschedRef[1] + '%'}
+              AND a.status != 'cancelled'
+            LIMIT 1`
+          const twin = twinRows[0] as any
+          if (twin && twin.provider_id !== appt.provider_id) {
+            const twinName = (twin.name ?? 'Provider') as string
+            const twinHtml = providerNotificationEmail({ visitType: appt.visit_type, date: dateFormatted, time: timeStr, zone: appt.zone ?? '', ref: appt.id, providerName: twinName })
+            if (twin.email) await sendEmail(twin.email as string, `Paired appointment rescheduled: ${childName} — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, twinHtml).catch(e => console.error('Reschedule paired provider email failed:', e))
+            if (twin.phone) await sendSMS(twin.phone as string, `${PRACTICE_NAME}: Your paired appointment for ${childName} has been rescheduled to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Reschedule paired provider SMS failed:', e))
+          }
+        }
+      }
+
+      // 5. Admins for this practice only
       const adminMsg = providerChanged
         ? `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''} — moved from ${oldProvider?.name ?? 'previous provider'} to ${newProviderName}. View: ${PORTAL_URL}/admin/schedule`
         : `${PRACTICE_NAME}: Appointment rescheduled for ${childName} to ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/admin/schedule`
-      await notifyAdmins(sql, adminMsg, undefined)
+      await notifyAdmins(sql, adminMsg, reschedPracticeId ?? undefined)
       return res.json({ ok: true })
     }
 
@@ -1589,9 +1615,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (parentEmail) await sendEmail(parentEmail, subject, appointmentCancelledByProviderEmail({ displayName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '' })).catch(e => console.error('Appt cancelled parent email failed:', e))
       if (parentPhone) await sendSMS(parentPhone, smsToParent).catch(e => console.error('Appt cancelled parent SMS failed:', e))
 
-      // Notify admins
+      const cancelPracticeId = (appt.practice_id ?? null) as string | null
+
+      // Notify admins for this practice only
       const adminSms = `${PRACTICE_NAME}: An appointment was cancelled. View: ${PORTAL_URL}/admin/schedule`
-      const admins = await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
+      const admins = cancelPracticeId
+        ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${cancelPracticeId}::uuid`
+        : await sql`SELECT id, phone, email FROM providers WHERE is_admin = true`
       const adminIds = admins.map((a: any) => a.id)
       for (const admin of admins) {
         if (admin.email) await sendEmail(admin.email, `[Admin] Provider cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: 'Admin', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' })).catch(e => console.error('Appt cancelled admin email failed:', e))
@@ -1602,6 +1632,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (appt.provider_id && !adminIds.includes(appt.provider_id)) {
         if (appt.provider_email) await sendEmail(appt.provider_email, `Appointment cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: appt.provider_name || 'Provider', visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' })).catch(e => console.error('Appt cancelled provider email failed:', e))
         if (appt.provider_phone) await sendSMS(appt.provider_phone, adminSms).catch(e => console.error('Appt cancelled provider SMS failed:', e))
+      }
+
+      // For CMA+telemedicine / IV fluids: notify the paired provider (the one whose
+      // twin appointment was cancelled by the PATCH cascade). Find them by matching
+      // the reference code across appointments — includes cancelled rows because the
+      // twin was just cancelled milliseconds ago.
+      const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
+      if (pairedTypes.includes(appt.visit_type) && refMatch) {
+        const twinRows = await sql`
+          SELECT a.provider_id, p.name, p.email, p.phone
+          FROM appointments a
+          JOIN providers p ON p.id = a.provider_id
+          WHERE a.practice_id = ${cancelPracticeId}::uuid
+            AND a.id != ${appointmentId}::uuid
+            AND a.notes LIKE ${'%Ref: ' + refMatch[1] + '%'}
+          LIMIT 1`
+        const twin = twinRows[0] as any
+        if (twin && twin.provider_id !== appt.provider_id && !adminIds.includes(twin.provider_id)) {
+          const twinName = (twin.name ?? 'Provider') as string
+          if (twin.email) await sendEmail(twin.email as string, `Appointment cancelled: ${appt.visit_type} — ${dateFormatted}`, cancellationNotificationEmail({ recipientName: twinName, visitType: appt.visit_type, date: dateFormatted, time: timeFormatted, zone: appt.zone || '', familyName: displayName || 'Family' })).catch(e => console.error('Appt cancelled paired provider email failed:', e))
+          if (twin.phone) await sendSMS(twin.phone as string, adminSms).catch(e => console.error('Appt cancelled paired provider SMS failed:', e))
+        }
       }
 
       return res.json({ ok: true })
