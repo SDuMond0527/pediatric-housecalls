@@ -55,7 +55,7 @@ export function AdminAnalytics() {
   const [onCallShifts, setOnCallShifts] = useState<OnCallRow[]>([])
   const [familyCount, setFamilyCount] = useState(0)
   const [loading, setLoading]       = useState(true)
-  const [showOnCallByDate, setShowOnCallByDate] = useState(false)
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -586,68 +586,70 @@ export function AdminAnalytics() {
             <p className="text-[13px] text-[#999]">No on-call shifts recorded yet.</p>
           ) : (
             <div className="space-y-2.5">
-              {onCallSorted.map(([name, count]) => (
-                <div key={name}>
-                  <div className="flex items-center justify-between text-[13px] mb-1">
-                    <span className="text-[#1A1A2E]">{name}</span>
-                    <span className="font-semibold text-[#1D9E75] tabular-nums">{count} hrs</span>
-                  </div>
-                  <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-[#1D9E75] transition-all duration-500"
-                      style={{ width: `${(count / maxOnCall) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+              {onCallSorted.map(([name, count]) => {
+                const isExpanded = expandedProvider === name
+                const providerShifts = onCallShifts
+                  .filter(s => (providers.find(p => p.id === s.provider_id)?.name ?? 'Unknown') === name)
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                return (
+                  <div key={name}>
+                    <button
+                      onClick={() => setExpandedProvider(isExpanded ? null : name)}
+                      className="w-full text-left group"
+                    >
+                      <div className="flex items-center justify-between text-[13px] mb-1">
+                        <span className={`transition-colors ${isExpanded ? 'text-[#1D9E75] font-medium' : 'text-[#1A1A2E] group-hover:text-[#1D9E75]'}`}>
+                          {isExpanded ? '▼' : '▶'} {name}
+                        </span>
+                        <span className="font-semibold text-[#1D9E75] tabular-nums">{count} hrs</span>
+                      </div>
+                      <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-[#1D9E75] transition-all duration-500"
+                          style={{ width: `${(count / maxOnCall) * 100}%` }} />
+                      </div>
+                    </button>
 
-          {onCallShifts.length > 0 && (
-            <div className="mt-5 pt-5 border-t border-[#F1EFE8]">
-              <button
-                onClick={() => setShowOnCallByDate(v => !v)}
-                className="text-[12px] font-medium text-[#7F77DD] hover:text-[#534AB7] transition-colors flex items-center gap-1"
-              >
-                {showOnCallByDate ? '▼' : '▶'} {showOnCallByDate ? 'Hide' : 'View'} shifts by date
-              </button>
-
-              {showOnCallByDate && (
-                <div className="mt-3 border border-[#E8E8E4] rounded-lg overflow-hidden">
-                  <table className="w-full text-[12px]">
-                    <thead>
-                      <tr className="bg-[#FAFAF8] border-b border-[#E8E8E4]">
-                        <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Date</th>
-                        <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Provider</th>
-                        <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">State</th>
-                        <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Hours</th>
-                        <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Window</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...onCallShifts]
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((s, i) => {
-                          const provider = providers.find(p => p.id === s.provider_id)
-                          const hrs = Math.round(shiftHours(s) * 10) / 10
-                          const windowLabel = s.start_time && s.end_time
-                            ? `${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}`
-                            : 'Full day'
-                          const displayDate = (() => {
-                            try { return format(new Date(s.date + 'T12:00:00'), 'EEE MMM d, yyyy') } catch { return s.date }
-                          })()
-                          return (
-                            <tr key={`${s.provider_id}-${s.date}-${i}`} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
-                              <td className="px-3 py-2 text-[#1A1A2E] font-medium">{displayDate}</td>
-                              <td className="px-3 py-2 text-[#555]">{provider?.name ?? 'Unknown'}</td>
-                              <td className="px-3 py-2 text-[#555]">{STATE_LABEL[s.state] ?? s.state ?? '—'}</td>
-                              <td className="px-3 py-2 text-[#1D9E75] font-semibold tabular-nums">{hrs}</td>
-                              <td className="px-3 py-2 text-[#555] tabular-nums">{windowLabel}</td>
+                    {isExpanded && (
+                      <div className="mt-2 mb-1 ml-3 border border-[#E8E8E4] rounded-lg overflow-hidden">
+                        <table className="w-full text-[12px]">
+                          <thead>
+                            <tr className="bg-[#FAFAF8] border-b border-[#E8E8E4]">
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Date</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">State</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Hours</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Window</th>
                             </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          </thead>
+                          <tbody>
+                            {providerShifts.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="px-3 py-3 text-center text-[#999] text-[12px]">No shifts recorded</td>
+                              </tr>
+                            )}
+                            {providerShifts.map((s, i) => {
+                              const hrs = Math.round(shiftHours(s) * 10) / 10
+                              const windowLabel = s.start_time && s.end_time
+                                ? `${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}`
+                                : 'Full day'
+                              const displayDate = (() => {
+                                try { return format(new Date(s.date + 'T12:00:00'), 'EEE MMM d, yyyy') } catch { return s.date }
+                              })()
+                              return (
+                                <tr key={`${s.provider_id}-${s.date}-${i}`} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
+                                  <td className="px-3 py-2 text-[#1A1A2E] font-medium">{displayDate}</td>
+                                  <td className="px-3 py-2 text-[#555]">{STATE_LABEL[s.state] ?? s.state ?? '—'}</td>
+                                  <td className="px-3 py-2 text-[#1D9E75] font-semibold tabular-nums">{hrs}</td>
+                                  <td className="px-3 py-2 text-[#555] tabular-nums">{windowLabel}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
