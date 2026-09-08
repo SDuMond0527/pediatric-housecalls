@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, X, Clock, Pencil } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
-import { formatApiDate } from '../lib/dateUtils'
 import { getOnCallSchedule, getCmaSchedule, claimShift, updateShiftTimes, invokeNotifications, upsertAvailabilityOverride } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -243,7 +242,7 @@ export function Shifts() {
               <div key={date} className="border border-[#E8E8E4] rounded-xl bg-white shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-[#F1EFE8] bg-[#FAFAF8]">
                   <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
-                    {formatApiDate(date, 'EEEE, MMMM d')}
+                    {format(parseISO(date), 'EEEE, MMMM d')}
                   </span>
                 </div>
 
@@ -380,7 +379,7 @@ export function Shifts() {
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">
-                {formatApiDate(claiming.date, 'EEEE, MMMM d')} · {STATE_LABELS[claiming.state] ?? claiming.state}
+                {format(parseISO(claiming.date), 'EEEE, MMMM d')} · {STATE_LABELS[claiming.state] ?? claiming.state}
               </div>
               <div className="text-[#999]">
                 Full coverage window: {fmt12(claiming.cmaStart)}–{fmt12(claiming.cmaEnd)}
@@ -465,7 +464,7 @@ export function Shifts() {
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">
-                {formatApiDate(editing.date, 'EEEE, MMMM d')} · {STATE_LABELS[editing.state] ?? editing.state}
+                {format(parseISO(editing.date), 'EEEE, MMMM d')} · {STATE_LABELS[editing.state] ?? editing.state}
               </div>
               <div className="text-[#999]">
                 Full coverage window: {fmt12(editing.cmaStart)}–{fmt12(editing.cmaEnd)}

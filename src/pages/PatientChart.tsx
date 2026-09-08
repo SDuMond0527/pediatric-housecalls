@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
@@ -64,6 +63,20 @@ function formatDob(dob: string): string {
   }
 }
 
+// Timezone-safe date formatter for API-returned date fields. The API serializes
+// DATE columns as "YYYY-MM-DDT00:00:00.000Z" (midnight UTC), which parseISO
+// interprets as UTC then formats in local time — subtracting the TZ offset and
+// showing the previous day for any US timezone. Strip the time portion and
+// construct a local Date instead.
+function formatApiDate(dateStr: string, pattern: string = 'MMM d, yyyy'): string {
+  try {
+    const s = String(dateStr).split('T')[0]
+    const [y, m, day] = s.split('-').map(Number)
+    return format(new Date(y, m - 1, day), pattern)
+  } catch {
+    return dateStr
+  }
+}
 
 function vitalChips(v: any): string {
   const parts: string[] = []
@@ -1888,7 +1901,7 @@ export function PatientChart() {
                         ageYears,
                         heightCm: v.height_in != null ? Math.round(v.height_in * 2.54 * 10) / 10 : undefined,
                         weightKg: v.weight_lbs != null ? Math.round(v.weight_lbs * 0.453592 * 10) / 10 : undefined,
-                        date: formatApiDate(visitDate),
+                        date: format(parseISO(visitDate), 'MMM d, yyyy'),
                       })
                     }
                     return points.sort((a, b) => a.ageYears - b.ageYears)

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Shield } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { formatApiDate } from '../../lib/dateUtils'
 import { familyGetEncounterNotes } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 
@@ -84,7 +83,7 @@ export function FamilyVaccines() {
                 {childNotes.map(note => (
                   <div key={note.id}>
                     <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">
-                      {note.scheduled_date ? formatApiDate(note.scheduled_date, 'MMMM d, yyyy') : 'Date unknown'}
+                      {note.scheduled_date ? format(parseISO(note.scheduled_date), 'MMMM d, yyyy') : 'Date unknown'}
                       {note.provider_name && (
                         <span className="ml-2 font-normal normal-case">· {note.provider_name}</span>
                       )}
