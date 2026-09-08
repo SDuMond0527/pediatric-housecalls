@@ -54,18 +54,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
     ;[row] = await sql`UPDATE booking_requests SET status=${status} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
-    // When a booking is cancelled, also cancel the matching appointment in the provider schedule
+    // When a booking is cancelled, also cancel the matching appointment(s) in the
+    // provider schedule. Match by reference code embedded in notes ("Ref: PUC-XXXXX")
+    // rather than provider+date+time, because preferred_time is stored as "3:00 PM"
+    // while appointments.scheduled_time is stored as "15:00" and they never match.
+    // Using the reference code also cascades to the paired MD/NP appointment for
+    // CMA+telemedicine visits, whose notes also carry the same reference code.
     if (status === 'cancelled') {
       const r = row as any
-      if (r?.confirmed_provider_id && r?.preferred_date && r?.preferred_time) {
-        await sql`
+      if (r?.reference_code) {
+        const cancelled = await sql`
           UPDATE appointments SET status = 'cancelled'
-          WHERE provider_id = ${r.confirmed_provider_id}::uuid
-            AND scheduled_date = ${r.preferred_date}::date
-            AND scheduled_time = ${r.preferred_time}
-            AND practice_id = ${practiceId}::uuid
+          WHERE practice_id = ${practiceId}::uuid
             AND status != 'cancelled'
-        `
+            AND notes LIKE ${'%Ref: ' + r.reference_code + '%'}
+          RETURNING id, provider_id`
+        if (!cancelled.length) {
+          console.error('[booking-requests cancel] no appointment matched reference_code', r.reference_code)
+        }
+      } else {
+        console.error('[booking-requests cancel] booking has no reference_code, cannot cascade cancel', r?.id)
       }
     }
   } else {
