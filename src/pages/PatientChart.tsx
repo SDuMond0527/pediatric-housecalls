@@ -1316,7 +1316,13 @@ export function PatientChart() {
                                   {note.plan.length > 120 ? note.plan.slice(0, 120) + '…' : note.plan}
                                 </div>
                               )}
-                              {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (
+                              {(note.vaccine_administrations?.length ?? 0) > 0 && (
+                                <div className="text-[12px] text-[#555] mt-1.5">
+                                  <span className="text-[#999]">Vaccines: </span>
+                                  {note.vaccine_administrations!.map(v => v.vaccine_name).join(', ')}
+                                </div>
+                              )}
+                              {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (note.vaccine_administrations?.length ?? 0) === 0 && (
                                 <div className="text-[12px] text-[#bbb] italic mt-1">No encounter note content</div>
                               )}
                             </div>
@@ -1372,6 +1378,43 @@ export function PatientChart() {
                                         {dx.code} – {dx.name}
                                       </span>
                                     ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {(note.vaccine_administrations?.length ?? 0) > 0 && (
+                                <div>
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Vaccines Administered</div>
+                                  <div className="border border-[#E8E8E4] rounded-lg overflow-hidden bg-white">
+                                    <table className="w-full text-[12px]">
+                                      <thead>
+                                        <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Vaccine</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Lot #</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Exp</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Dose</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Route</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Site</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Given by</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(note.vaccine_administrations ?? []).map((v, i) => (
+                                          <tr key={i} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
+                                            <td className="px-3 py-2 font-medium text-[#1A1A2E]">
+                                              {v.vaccine_name}
+                                              {v.manufacturer && <div className="text-[10px] text-[#999] font-normal">{v.manufacturer}</div>}
+                                            </td>
+                                            <td className="px-3 py-2 text-[#555]">{v.lot_number || '—'}</td>
+                                            <td className="px-3 py-2 text-[#555]">{v.expiration_date || '—'}</td>
+                                            <td className="px-3 py-2 text-[#555]">{v.dose || '—'}</td>
+                                            <td className="px-3 py-2 text-[#555]">{v.route || '—'}</td>
+                                            <td className="px-3 py-2 text-[#555]">{v.site || '—'}</td>
+                                            <td className="px-3 py-2 text-[#555]">{v.administered_by || '—'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
                                   </div>
                                 </div>
                               )}
