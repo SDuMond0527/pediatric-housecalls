@@ -289,13 +289,16 @@ export function PatientChart() {
       const byAppt: Record<string, any> = {}
       ;(vitalsRes ?? []).forEach((v: any) => { byAppt[v.appointment_id] = v })
       setVitalsByAppt(byAppt)
-      // Merge booking requests and direct appointments, deduplicate by appointment_id
+      // Display from appointments only. booking_requests was previously merged in
+      // as a second source of truth, which caused the patient chart to display
+      // stale dates whenever an appointment was rescheduled but its linked
+      // booking_request wasn't (or when the appointment was added manually and
+      // had no booking_request at all). Appointments are the authoritative record.
+      void bookingRes  // kept in destructure for backwards-compat; not displayed
       const appts = apptRes ?? []
-      const apptIds = new Set(appts.map((a: any) => a.id))
-      const mergedBookings = [
-        ...appts.map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' })),
-        ...(bookingRes ?? []).filter((br: any) => !apptIds.has(br.appointment_id)),
-      ].sort((a, b) => (b.preferred_date ?? b.scheduled_date ?? '').localeCompare(a.preferred_date ?? a.scheduled_date ?? ''))
+      const mergedBookings = appts
+        .map((a: any) => ({ ...a, preferred_date: a.scheduled_date, _source: 'appointment' }))
+        .sort((a: any, b: any) => (b.preferred_date ?? '').localeCompare(a.preferred_date ?? ''))
       setBookingRequests(mergedBookings)
       setLoading(false)
     }
