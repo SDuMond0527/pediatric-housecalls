@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { createAppointmentCore } from '../_lib/createAppointmentCore'
 
 function toMin(t: string): number {
   const s = t.trim()
@@ -162,7 +163,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = req.body
-    const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
 
     // Server-side availability guard for family-originated bookings.
     // Providers/admins may schedule outside normal hours intentionally.
@@ -173,133 +173,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (slotError) return res.status(409).json({ error: slotError })
     }
 
-    // Server-side overlap guard — every path (family, admin, provider). If the
-    // requested slot collides with any existing non-cancelled appointment for
-    // this provider on this date, reject with 409. Prevents client races,
-    // stale UIs, and admin-added double bookings.
-    if (provider_id && scheduled_time && scheduled_date) {
-      const [nh, nm] = String(scheduled_time).split(':').map(Number)
-      const newStart = nh * 60 + nm
-      const newDur = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
-      const newEnd = newStart + newDur
-      const existing = await sql`
-        SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
-        FROM appointments
-        WHERE provider_id = ${provider_id}::uuid
-          AND practice_id = ${practiceId}::uuid
-          AND scheduled_date = ${scheduled_date}::date
-          AND status != 'cancelled'`
-      for (const row of existing as Array<{ scheduled_time: string; duration_minutes: number }>) {
-        const [eh, em] = String(row.scheduled_time).split(':').map(Number)
-        const exStart = eh * 60 + em
-        const exEnd = exStart + (row.duration_minutes ?? 60)
-        if (newStart < exEnd && newEnd > exStart) {
-          return res.status(409).json({ error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.' })
-        }
-      }
-    }
+    const result = await createAppointmentCore(sql, practiceId, {
+      provider_id, visit_type, zone, scheduled_time, scheduled_date,
+      status, notes, duration_minutes, child_id,
+      state: bodyState, second_provider_id,
+    })
+    if (result.error) return res.status(409).json({ error: result.error })
 
-    // CMA + telemedicine / IV fluids: always create the paired MD/NP appointment,
-    // regardless of caller (family self-book, admin patient-chart add, provider
-    // waitlist pickup, etc.). If the caller supplied second_provider_id, respect
-    // it; otherwise look up the on-call MD/NP for the appointment's state.
     const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
     if (DUAL_TYPES.includes(visit_type)) {
-      // Derive state from zone if the caller didn't send one (some UIs don't).
-      let state = bodyState
-      if (!state && zone) {
-        const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${practiceId}::uuid LIMIT 1`
-        state = zoneRow?.state ?? null
-      }
-
-      const [primaryProvRow] = await sql`SELECT role, name FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
-      const primaryRole = (primaryProvRow?.role ?? '') as string
-      const primaryName = (primaryProvRow?.name ?? '') as string
-      const primaryIsInHome = primaryRole === 'CMA' || primaryRole === 'RN'
-
-      const [primaryRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-        RETURNING *`
-      await sql`
-        INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (primaryRow as any).id})`
-        .catch(() => {})
-
-      let secondaryRow: unknown = null
-
-      // Determine the secondary provider — only when the primary is an in-home role.
-      // If the primary is already an MD/NP, we assume the caller intended a solo booking.
-      let mdProviderId: string | null = null
-      let mdName = ''
-
-      if (primaryIsInHome) {
-        if (second_provider_id) {
-          const [md] = await sql`SELECT id, name FROM providers WHERE id = ${second_provider_id}::uuid LIMIT 1`
-          if (md) {
-            mdProviderId = (md as any).id as string
-            mdName = ((md as any).name ?? '') as string
-          }
-        } else if (state) {
-          const onCallRows = await sql`
-            SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
-            JOIN providers p ON p.id = oc.provider_id
-            WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
-              AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
-              AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time)
-            LIMIT 1`
-          if (onCallRows.length) {
-            mdProviderId = onCallRows[0].provider_id as string
-            mdName = ((onCallRows[0] as any).provider_name ?? '') as string
-          }
-        }
-
-        if (!mdProviderId && state) {
-          alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
-        }
-      }
-
-      if (mdProviderId) {
-        const partnerRoleLabel = visit_type === 'CMA + telemedicine'
-          ? 'MD/NP — telemedicine'
-          : 'MD/NP — telemedicine screening'
-        const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`
-        const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
-        ;[secondaryRow] = await sql`
-          INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-          VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-          RETURNING *`
-        await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
-        await sql`
-          INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-          VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`
-          .catch(() => {})
-      }
-
-      // Return every legacy shape at once so no existing caller breaks:
-      //  - family CMA+tele expects { cma, md }
-      //  - family IV fluids expects { rn, md }
-      //  - provider waitlist expects { primary, secondary }
-      //  - BookAppointmentModal (patient chart) reads .primary?.id ?? .id and .secondary?.id
+      // Legacy response shape — some callers read .cma / .rn / .md; some read .primary / .secondary.
       const primaryKey = visit_type === 'CMA + telemedicine' ? 'cma' : 'rn'
       return res.json({
-        primary: primaryRow,
-        secondary: secondaryRow,
-        [primaryKey]: primaryRow,
-        md: secondaryRow,
+        primary: result.primary,
+        secondary: result.secondary,
+        [primaryKey]: result.primary,
+        md: result.secondary,
       })
     }
-
-    const [row] = await sql`
-      INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
-      RETURNING *`
-    // Auto-block the provider's schedule for the duration of this appointment
-    await sql`
-      INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (row as any).id})`
-      .catch(e => console.error('[appointments] schedule block error:', e))
-    return res.json(row)
+    return res.json(result.primary)
   }
 
   res.status(405).json({ error: 'Method not allowed' })

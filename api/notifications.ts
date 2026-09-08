@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { createAppointmentCore } from './_lib/createAppointmentCore'
 
 const RESEND_API_KEY    = process.env.RESEND_API_KEY || ''
 const TWILIO_SID        = process.env.TWILIO_ACCOUNT_SID || ''
@@ -922,16 +923,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
       const offerPracticeId: string | null = offer.practice_id ?? null
+      const offerRef = `PUC-${offer.id.slice(0, 8).toUpperCase()}`
+      const offerVisitType = offer.visit_type || 'In-home sick visit'
+      const offerZone = offer.zone || ''
+      // Notes must start with "Ref: <code>" so cancel/reschedule cascades and
+      // notification lookups can find this appointment via the shared ref code.
+      const offerNotes = `Ref: ${offerRef}|From waitlist slot offer|Zip: ${entry?.zip || ''}`
+
       if (offerPracticeId) {
-        await sql`INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes)
-          VALUES (${offerPracticeId}::uuid, ${offer.provider_id}::uuid, ${offer.visit_type || 'In-home sick visit'}, ${offer.zone || ''}, ${time24}, ${offer.offered_date}, 'upcoming', ${`From waitlist slot offer · Zip: ${entry?.zip || ''}`})`
+        // Route through the shared appointment creator so this path picks up the
+        // overlap guard, CMA+tele/IV fluids on-call MD pairing, state-from-zone
+        // fallback, and schedule blocks. Previously a raw INSERT bypassed all of it.
+        const result = await createAppointmentCore(sql, offerPracticeId, {
+          provider_id: offer.provider_id,
+          visit_type: offerVisitType,
+          zone: offerZone,
+          scheduled_time: time24,
+          scheduled_date: offer.offered_date,
+          status: 'upcoming',
+          notes: offerNotes,
+          state: (offer as any).state ?? null,
+        })
+        if (result.error) {
+          return res.status(409).json({ ok: false, error: result.error })
+        }
         await sql`INSERT INTO booking_requests (practice_id, family_id, child_ids, visit_type, zone, preferred_date, preferred_time, status, confirmed_provider_id, reference_code)
-          VALUES (${offerPracticeId}::uuid, ${entry?.family_id}::uuid, '{}', ${offer.visit_type || 'In-home sick visit'}, ${offer.zone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offer.id.slice(0, 8).toUpperCase()})`
+          VALUES (${offerPracticeId}::uuid, ${entry?.family_id}::uuid, '{}', ${offerVisitType}, ${offerZone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offerRef})`
       } else {
+        // Legacy pre-multitenant fallback — no practice_id available. Very old
+        // offers only; kept for backwards compatibility.
         await sql`INSERT INTO appointments (provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes)
-          VALUES (${offer.provider_id}::uuid, ${offer.visit_type || 'In-home sick visit'}, ${offer.zone || ''}, ${time24}, ${offer.offered_date}, 'upcoming', ${`From waitlist slot offer · Zip: ${entry?.zip || ''}`})`
+          VALUES (${offer.provider_id}::uuid, ${offerVisitType}, ${offerZone}, ${time24}, ${offer.offered_date}, 'upcoming', ${offerNotes})`
         await sql`INSERT INTO booking_requests (family_id, child_ids, visit_type, zone, preferred_date, preferred_time, status, confirmed_provider_id, reference_code)
-          VALUES (${entry?.family_id}::uuid, '{}', ${offer.visit_type || 'In-home sick visit'}, ${offer.zone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offer.id.slice(0, 8).toUpperCase()})`
+          VALUES (${entry?.family_id}::uuid, '{}', ${offerVisitType}, ${offerZone}, ${offer.offered_date}, ${offer.offered_time}, 'confirmed', ${offer.provider_id}::uuid, ${offerRef})`
       }
 
       await sql`UPDATE slot_offers SET status = 'accepted' WHERE id = ${offer.id}::uuid`
