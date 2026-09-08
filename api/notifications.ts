@@ -25,16 +25,41 @@ function logo(accentColor: string): string {
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
 
+// Retry on transient failures (5xx, 429, network errors). Skip retry on 4xx
+// (permanent failures like bad email address or opted-out recipient — retrying
+// won't help). Keep total time under ~2 seconds so serverless timeouts hold.
+function isTransient(status: number): boolean {
+  return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500
+}
+async function sendWithRetry(label: string, fn: () => Promise<Response>): Promise<Response> {
+  const backoffMs = [0, 250, 750]
+  let lastRes: Response | null = null
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) await new Promise(r => setTimeout(r, backoffMs[attempt]))
+    try {
+      const res = await fn()
+      if (res.ok) return res
+      lastRes = res
+      if (!isTransient(res.status)) return res
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  if (lastRes) return lastRes
+  throw lastErr ?? new Error(`${label} failed`)
+}
+
 async function sendEmail(to: string, subject: string, html: string) {
   if (!RESEND_API_KEY || RESEND_API_KEY === 'PLACEHOLDER') {
     console.log(`[EMAIL SKIPPED — no key] To: ${to} | Subject: ${subject}`)
     return
   }
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await sendWithRetry('email', () => fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: `${PRACTICE_NAME} <${FROM_EMAIL}>`, to, subject, html }),
-  })
+  }))
   if (!res.ok) {
     const msg = await res.text()
     console.error('Email error:', msg)
@@ -57,18 +82,88 @@ async function sendSMS(to: string, body: string) {
     return
   }
   const formData = new URLSearchParams({ From: TWILIO_FROM, To: normalizePhone(to), Body: body })
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
+  const res = await sendWithRetry('sms', () => fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${Buffer.from(`${TWILIO_API_KEY}:${TWILIO_API_SECRET}`).toString('base64')}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: formData,
-  })
+  }))
   if (!res.ok) {
     const msg = await res.text()
     console.error('SMS error:', msg)
     throw new Error(`SMS failed: ${msg}`)
+  }
+}
+
+// Notify a recipient by email and/or SMS with automatic escalation to admins
+// when both channels hard-fail. Use this for critical patient-facing paths
+// (booking confirmations, cancellations, reschedules) where a missed
+// notification could mean a missed visit.
+export interface NotifyRecipient {
+  name?: string | null
+  email?: string | null
+  phone?: string | null
+  role?: string  // 'family', 'provider', 'admin' — used in escalation text
+}
+async function notifyOrEscalate(
+  sql: any,
+  practiceId: string | null | undefined,
+  recipient: NotifyRecipient,
+  content: { subject: string; html: string; sms: string; context: string },
+) {
+  const hasEmail = !!recipient.email
+  const hasPhone = !!recipient.phone
+  if (!hasEmail && !hasPhone) {
+    await escalateFailedNotification(sql, practiceId, recipient, content, 'no email or phone on file')
+    return
+  }
+  let emailOk = !hasEmail
+  let smsOk = !hasPhone
+  const results = await Promise.allSettled([
+    hasEmail ? sendEmail(recipient.email!, content.subject, content.html) : Promise.resolve(),
+    hasPhone ? sendSMS(recipient.phone!, content.sms) : Promise.resolve(),
+  ])
+  if (results[0].status === 'fulfilled') emailOk = true
+  if (results[1].status === 'fulfilled') smsOk = true
+
+  const anyDelivered = (hasEmail && emailOk) || (hasPhone && smsOk)
+  if (anyDelivered) return  // At least one channel got through — recipient is reached.
+
+  const reasons: string[] = []
+  if (results[0].status === 'rejected') reasons.push(`email: ${(results[0].reason as Error).message ?? results[0].reason}`)
+  if (results[1].status === 'rejected') reasons.push(`sms: ${(results[1].reason as Error).message ?? results[1].reason}`)
+  await escalateFailedNotification(sql, practiceId, recipient, content, reasons.join(' | ') || 'unknown')
+}
+
+async function escalateFailedNotification(
+  sql: any,
+  practiceId: string | null | undefined,
+  recipient: NotifyRecipient,
+  content: { subject: string; context: string },
+  reason: string,
+) {
+  const who = recipient.name || recipient.email || recipient.phone || 'unknown recipient'
+  const contact = [recipient.email, recipient.phone].filter(Boolean).join(' / ') || 'no contact info'
+  const subject = `⚠️ Notification delivery failed — please contact ${who} manually`
+  const body = `${PRACTICE_NAME}: Could NOT reach ${who} (${recipient.role || 'recipient'}) with: "${content.subject}". Context: ${content.context}. Reason: ${reason}. Please contact them at ${contact} directly.`
+  const html = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
+    <p><strong>Notification delivery failed — action needed.</strong></p>
+    <p><strong>Recipient:</strong> ${who} (${recipient.role || 'recipient'})</p>
+    <p><strong>Contact:</strong> ${contact}</p>
+    <p><strong>Missed message:</strong> ${content.subject}</p>
+    <p><strong>Context:</strong> ${content.context}</p>
+    <p><strong>Reason:</strong> ${reason}</p>
+    <p>Please reach out to them directly to make sure they get the information.</p>
+  </div>`
+  console.error('[escalation]', body)
+  const admins = practiceId
+    ? await sql`SELECT phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
+    : await sql`SELECT phone, email FROM providers WHERE is_admin = true`
+  for (const admin of admins as Array<{ phone?: string; email?: string }>) {
+    if (admin.email) await sendEmail(admin.email, subject, html).catch(e => console.error('[escalation] admin email failed:', e))
+    if (admin.phone) await sendSMS(admin.phone, body).catch(e => console.error('[escalation] admin SMS failed:', e))
   }
 }
 
@@ -626,17 +721,26 @@ async function notifyBookingParties(
     excludeAdminIds?: string[]
   }
 ) {
-  // 1. Family confirmation
-  if (familyEmail && familySubject && familyHtml)
-    await sendEmail(familyEmail, familySubject, familyHtml).catch(e => console.error('Booking family email failed:', e))
-  if (familyPhone && familySms)
-    await sendSMS(familyPhone, familySms).catch(e => console.error('Booking family SMS failed:', e))
+  // 1. Family confirmation — escalate to admins if we can't reach them.
+  if ((familyEmail || familyPhone) && familySubject && familyHtml && familySms) {
+    await notifyOrEscalate(sql, practiceId ?? null, {
+      email: familyEmail ?? null, phone: familyPhone ?? null, role: 'family',
+    }, {
+      subject: familySubject, html: familyHtml, sms: familySms,
+      context: 'booking confirmation',
+    })
+  }
 
-  // 2. Assigned provider (omitted when provider initiated the booking, e.g. waitlist acceptance)
-  if (provider?.email && providerSubject && providerHtml)
-    await sendEmail(provider.email, providerSubject, providerHtml).catch(e => console.error('Booking provider email failed:', e))
-  if (provider?.phone && providerSms)
-    await sendSMS(provider.phone, providerSms).catch(e => console.error('Booking provider SMS failed:', e))
+  // 2. Assigned provider — escalate to admins if we can't reach them (they need
+  // to know the appointment exists).
+  if (provider && (provider.email || provider.phone) && providerSubject && providerHtml && providerSms) {
+    await notifyOrEscalate(sql, practiceId ?? null, {
+      email: provider.email ?? null, phone: provider.phone ?? null, role: 'provider',
+    }, {
+      subject: providerSubject, html: providerHtml, sms: providerSms,
+      context: 'new appointment on your schedule',
+    })
+  }
 
   // 3. All admins — always notified. Previously deduped against the assigned
   // provider, but that hid missed notifications when the provider-path email/SMS
