@@ -44,6 +44,14 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     ? await sql`SELECT address_line1, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
 
+  // Vaccine encounters are always billed under Dr. Sara DuMond as the
+  // rendering provider (matches api/_lib/generateClaim.ts).
+  const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
+  const [supervisingMd] = isVaccineVisit
+    ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`
+    : [null]
+  const renderingProvider = supervisingMd ?? provider
+
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
   // Include ALL codes on the stored claim (convenience fees visible for admin
   // review). Non-Covered Services get stripped from the Stedi payload at
@@ -82,7 +90,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
       ${child?.insurance_group_number ?? null},
       ${appt?.scheduled_date ?? null}, ${pos},
       ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
-      ${provider?.name ?? null}, ${provider?.npi ?? null}, ${provider?.taxonomy_code ?? null},
+      ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
       ${child?.first_name ?? null}, ${child?.last_name ?? null},
       ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
       ${family?.address_line1 ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}
@@ -247,9 +255,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
-  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  const providerRows = await sql`SELECT practice_id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
+  const practiceId    = providerRows[0].practice_id as string
+  const currentProviderName = providerRows[0].name as string
 
   if (req.method === 'GET') {
     const rows = await sql`SELECT * FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
@@ -284,6 +293,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
 
       const signing = is_signed === true
+
+      // Vaccine encounters may only be signed by Dr. Sara DuMond. She is the
+      // supervising physician on all vaccine claims (the RN/CMA who runs the
+      // visit can draft the note but not sign it).
+      if (signing) {
+        const [ap] = await sql`
+          SELECT a.visit_type
+          FROM encounter_notes en
+          LEFT JOIN appointments a ON a.id = en.appointment_id
+          WHERE en.id = ${id}::uuid AND en.practice_id = ${practiceId}::uuid
+          LIMIT 1
+        `
+        if (ap?.visit_type === 'In-home vaccine administration' && currentProviderName !== 'Dr. Sara DuMond') {
+          return res.status(403).json({ error: 'Vaccine encounter notes can only be signed by Dr. Sara DuMond.' })
+        }
+      }
 
       let row: any
       try {

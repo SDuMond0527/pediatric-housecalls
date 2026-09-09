@@ -3,6 +3,7 @@ import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskC
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -453,6 +454,13 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [patientResults, setPatientResults] = useState<any[]>([])
   const [patientSearching, setPatientSearching] = useState(false)
   const patientTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Vaccine encounters can only be signed by Dr. Sara DuMond — she is the
+  // supervising physician on all vaccine claims. Other staff can draft the
+  // note, but the Sign button is disabled for them.
+  const { provider: currentProvider } = useAuth()
+  const isVaccineVisit = appointment.visit_type === 'In-home vaccine administration'
+  const canSignVaccineNote = !isVaccineVisit || currentProvider?.name === 'Dr. Sara DuMond'
 
   // Note type + template
   const [noteType, setNoteType] = useState<NoteType>(visitTypeToNoteType(appointment.visit_type))
@@ -2120,12 +2128,23 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               {signError && <div className="text-[12px] text-[#DC2626]">{signError}</div>}
               {saveError && <div className="text-[12px] text-[#DC2626]">{saveError}</div>}
               {saveSuccess && <div className="text-[12px] text-[#1D9E75]">{saveSuccess}</div>}
+              {!canSignVaccineNote && (
+                <div className="text-[12px] text-[#B45309]">
+                  Vaccine encounter notes can only be signed by Dr. Sara DuMond. Save as draft when finished.
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={saveDraft} loading={saving} disabled={signing}>
                 Save draft
               </Button>
-              <Button variant="teal" onClick={signNote} loading={signing} disabled={saving}>
+              <Button
+                variant="teal"
+                onClick={signNote}
+                loading={signing}
+                disabled={saving || !canSignVaccineNote}
+                title={!canSignVaccineNote ? 'Vaccine encounter notes can only be signed by Dr. Sara DuMond' : undefined}
+              >
                 Sign &amp; lock note
               </Button>
             </div>

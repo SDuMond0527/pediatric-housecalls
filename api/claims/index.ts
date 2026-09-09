@@ -57,6 +57,14 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
     ? await sql`SELECT address_line1, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
 
+  // Vaccine encounters are always billed under Dr. Sara DuMond as the
+  // rendering provider (see api/_lib/generateClaim.ts for the same rule).
+  const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
+  const [supervisingMd] = isVaccineVisit
+    ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`
+    : [null]
+  const renderingProvider = supervisingMd ?? provider
+
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
   // Include all codes on the claim (convenience fees show for admin review).
   // Non-Covered Services are stripped from the Stedi payload at submission time.
@@ -87,7 +95,7 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
       ${child?.insurance_group_number ?? null},
       ${appt?.scheduled_date ?? null}, ${pos},
       ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
-      ${provider?.name ?? null}, ${provider?.npi ?? null}, ${provider?.taxonomy_code ?? null},
+      ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
       ${child?.first_name ?? null}, ${child?.last_name ?? null},
       ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
       ${family?.address_line1 ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}

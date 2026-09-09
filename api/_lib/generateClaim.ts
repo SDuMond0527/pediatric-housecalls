@@ -43,6 +43,15 @@ export async function generateClaimForNote(
   const [provider] = note.provider_id
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE id = ${note.provider_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
+
+  // Vaccine encounters are always billed under Dr. Sara DuMond as the
+  // rendering provider (RN/CMA staff execute the visit, but the MD is the
+  // supervising/billing physician). Override rendering_* fields only.
+  const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
+  const [supervisingMd] = isVaccineVisit
+    ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`
+    : [null]
+  const renderingProvider = supervisingMd ?? provider
   const [family] = child?.family_id
     ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
@@ -83,7 +92,7 @@ export async function generateClaimForNote(
       ${child?.insurance_group_number ?? null},
       ${appt?.scheduled_date ?? null}, ${pos},
       ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
-      ${provider?.name ?? null}, ${provider?.npi ?? null}, ${provider?.taxonomy_code ?? null},
+      ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
       ${child?.first_name ?? null}, ${child?.last_name ?? null},
       ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
       ${family?.address ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}
