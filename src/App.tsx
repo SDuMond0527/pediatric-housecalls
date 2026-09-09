@@ -54,10 +54,28 @@ function RootRedirect() {
   return <Navigate to="/today" replace />
 }
 
+function SentryTestPage() {
+  return (
+    <div style={{ padding: 40, fontFamily: 'system-ui' }}>
+      <h1>Sentry Test</h1>
+      <p>Click the button below to throw an error. Sentry should capture it and email/notify you.</p>
+      <button
+        onClick={() => { throw new Error('Sentry test error — safe to ignore, this is intentional') }}
+        style={{ padding: '12px 20px', fontSize: 16, background: '#7F77DD', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+      >
+        Trigger test error
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* One-off route for verifying Sentry captures errors from prod. */}
+        <Route path="/sentry-test" element={<SentryTestPage />} />
+
         {/* Password reset pages — no auth context needed */}
         <Route path="/family/forgot-password" element={<FamilyForgotPassword />} />
         <Route path="/family/reset-password"  element={<FamilyResetPassword />} />
