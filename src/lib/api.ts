@@ -29,6 +29,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
   }
+  // 204 No Content responses have empty bodies — res.json() would throw
+  // SyntaxError. This bit every DELETE endpoint: the DB row was deleted
+  // successfully but the caller saw an exception and never updated the UI.
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -39,6 +43,7 @@ async function familyApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error ?? res.statusText)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
