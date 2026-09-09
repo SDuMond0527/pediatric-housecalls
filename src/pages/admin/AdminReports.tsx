@@ -524,8 +524,7 @@ export function AdminReports() {
                     `payroll-${selectedProvider.name.replace(/\s+/g, '_')}-${startDate}_to_${endDate}.csv`,
                     toCsv(filteredProviderRows),
                   )}
-                  disabled={filteredProviderRows.length === 0}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178862] disabled:bg-[#D8D5CE] disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178862]"
                 >
                   <Download size={13} /> Export as CSV
                 </button>
