@@ -171,8 +171,6 @@ export function AdminReports() {
   const [excludeCancelled, setExcludeCancelled] = useState(true)
   const [filterCategory, setFilterCategory] = useState<'all' | 'Procedure' | 'Non-Covered Services'>('all')
   const [filterVisitTypes, setFilterVisitTypes] = useState<string[]>([])
-  const [filterEncounterStart, setFilterEncounterStart] = useState('')
-  const [filterEncounterEnd, setFilterEncounterEnd] = useState('')
   const [excludedCodes, setExcludedCodes] = useState<string[]>([])
 
   useEffect(() => {
@@ -286,12 +284,10 @@ export function AdminReports() {
       if (filterCategory !== 'all' && r.category !== filterCategory) return false
       if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
       if (excludedCodes.includes(r.code)) return false
-      if (filterEncounterStart && (!r.encounterDate || r.encounterDate.slice(0, 10) < filterEncounterStart)) return false
-      if (filterEncounterEnd   && (!r.encounterDate || r.encounterDate.slice(0, 10) > filterEncounterEnd))   return false
       return true
     }).sort((a, b) => a.encounterDate.localeCompare(b.encounterDate) || a.code.localeCompare(b.code))
   }, [selectedProviderAllRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
-      excludedCodes, filterEncounterStart, filterEncounterEnd])
+      excludedCodes])
 
   const payrollProviderTotals = useMemo(() => {
     type Acc = { id: string; name: string; encounters: Set<string>; totalRvuCount: number; totalRvuPay: number; totalCvSplit: number }
@@ -365,8 +361,6 @@ export function AdminReports() {
     setExcludeCancelled(true)
     setFilterCategory('all')
     setFilterVisitTypes([])
-    setFilterEncounterStart('')
-    setFilterEncounterEnd('')
     setExcludedCodes([])
   }
 
@@ -575,11 +569,11 @@ export function AdminReports() {
                 <div className="grid grid-cols-2 gap-2 text-[12px]">
                   <div>
                     <div className="text-[#999] mb-0.5">Encounter date from</div>
-                    <input type="date" value={filterEncounterStart} onChange={e => setFilterEncounterStart(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                   <div>
                     <div className="text-[#999] mb-0.5">Encounter date to</div>
-                    <input type="date" value={filterEncounterEnd} onChange={e => setFilterEncounterEnd(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                 </div>
 
