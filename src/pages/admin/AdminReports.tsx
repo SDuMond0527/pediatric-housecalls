@@ -131,14 +131,9 @@ export function AdminReports() {
   const [excludeCancelled, setExcludeCancelled] = useState(true)
   const [filterCategory, setFilterCategory] = useState<'all' | 'Procedure' | 'Non-Covered Services'>('all')
   const [filterVisitTypes, setFilterVisitTypes] = useState<string[]>([])
-  const [filterInvoiceStart, setFilterInvoiceStart] = useState('')
-  const [filterInvoiceEnd, setFilterInvoiceEnd] = useState('')
-  const [filterChargeMin, setFilterChargeMin] = useState('')
-  const [filterChargeMax, setFilterChargeMax] = useState('')
-  const [filterDiscountMin, setFilterDiscountMin] = useState('')
-  const [filterDiscountMax, setFilterDiscountMax] = useState('')
-  const [filterTotalMin, setFilterTotalMin] = useState('')
-  const [filterTotalMax, setFilterTotalMax] = useState('')
+  const [filterEncounterStart, setFilterEncounterStart] = useState('')
+  const [filterEncounterEnd, setFilterEncounterEnd] = useState('')
+  const [excludedCodes, setExcludedCodes] = useState<string[]>([])
 
   useEffect(() => {
     async function load() {
@@ -199,25 +194,26 @@ export function AdminReports() {
     return Array.from(s).sort()
   }, [payrollRows])
 
+  // All unfiltered rows for the selected provider — used both by the filter chip
+  // options and to distinguish "no data" from "filters exclude everything".
+  const selectedProviderAllRows = useMemo(() => {
+    if (!selectedProviderId) return []
+    return payrollRows.filter(r => r.providerId === selectedProviderId)
+  }, [payrollRows, selectedProviderId])
+
   const filteredProviderRows = useMemo(() => {
     if (!selectedProviderId) return []
-    return payrollRows.filter(r => {
-      if (r.providerId !== selectedProviderId) return false
+    return selectedProviderAllRows.filter(r => {
       if (excludeCancelled && r.appointmentStatus === 'cancelled') return false
       if (filterCategory !== 'all' && r.category !== filterCategory) return false
       if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
-      if (filterInvoiceStart && (!r.encounterDate || r.encounterDate.slice(0, 10) < filterInvoiceStart)) return false
-      if (filterInvoiceEnd   && (!r.encounterDate || r.encounterDate.slice(0, 10) > filterInvoiceEnd))   return false
-      const numGte = (v: number, s: string) => !s || v >= Number(s)
-      const numLte = (v: number, s: string) => !s || v <= Number(s)
-      if (!numGte(r.charge, filterChargeMin) || !numLte(r.charge, filterChargeMax)) return false
-      if (!numGte(r.discountAmount, filterDiscountMin) || !numLte(r.discountAmount, filterDiscountMax)) return false
-      if (!numGte(r.totalAfterDiscount, filterTotalMin) || !numLte(r.totalAfterDiscount, filterTotalMax)) return false
+      if (excludedCodes.includes(r.code)) return false
+      if (filterEncounterStart && (!r.encounterDate || r.encounterDate.slice(0, 10) < filterEncounterStart)) return false
+      if (filterEncounterEnd   && (!r.encounterDate || r.encounterDate.slice(0, 10) > filterEncounterEnd))   return false
       return true
     }).sort((a, b) => a.encounterDate.localeCompare(b.encounterDate) || a.code.localeCompare(b.code))
-  }, [payrollRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
-      filterInvoiceStart, filterInvoiceEnd, filterChargeMin, filterChargeMax,
-      filterDiscountMin, filterDiscountMax, filterTotalMin, filterTotalMax])
+  }, [selectedProviderAllRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
+      excludedCodes, filterEncounterStart, filterEncounterEnd])
 
   const payrollProviderTotals = useMemo(() => {
     const byProvider = new Map<string, { id: string; name: string; totalCharge: number; totalAfterDiscount: number; rowCount: number }>()
@@ -284,14 +280,13 @@ export function AdminReports() {
     setExcludeCancelled(true)
     setFilterCategory('all')
     setFilterVisitTypes([])
-    setFilterInvoiceStart('')
-    setFilterInvoiceEnd('')
-    setFilterChargeMin('')
-    setFilterChargeMax('')
-    setFilterDiscountMin('')
-    setFilterDiscountMax('')
-    setFilterTotalMin('')
-    setFilterTotalMax('')
+    setFilterEncounterStart('')
+    setFilterEncounterEnd('')
+    setExcludedCodes([])
+  }
+
+  function toggleExcludedCode(code: string) {
+    setExcludedCodes(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code])
   }
 
   // Bonus leader
@@ -493,48 +488,65 @@ export function AdminReports() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px]">
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
                   <div>
                     <div className="text-[#999] mb-0.5">Encounter date from</div>
-                    <input type="date" value={filterInvoiceStart} onChange={e => setFilterInvoiceStart(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                    <input type="date" value={filterEncounterStart} onChange={e => setFilterEncounterStart(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                   <div>
                     <div className="text-[#999] mb-0.5">Encounter date to</div>
-                    <input type="date" value={filterInvoiceEnd} onChange={e => setFilterInvoiceEnd(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Charge min</div>
-                    <input type="number" step="0.01" value={filterChargeMin} onChange={e => setFilterChargeMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Charge max</div>
-                    <input type="number" step="0.01" value={filterChargeMax} onChange={e => setFilterChargeMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Discount min</div>
-                    <input type="number" step="0.01" value={filterDiscountMin} onChange={e => setFilterDiscountMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Discount max</div>
-                    <input type="number" step="0.01" value={filterDiscountMax} onChange={e => setFilterDiscountMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Total after discount min</div>
-                    <input type="number" step="0.01" value={filterTotalMin} onChange={e => setFilterTotalMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
-                  </div>
-                  <div>
-                    <div className="text-[#999] mb-0.5">Total after discount max</div>
-                    <input type="number" step="0.01" value={filterTotalMax} onChange={e => setFilterTotalMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                    <input type="date" value={filterEncounterEnd} onChange={e => setFilterEncounterEnd(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                 </div>
+
+                {/* Procedure code filter — one chip per unique code present in this
+                    provider's data. Click to exclude (e.g. codes without an RVU). */}
+                {(() => {
+                  const uniqueCodes = Array.from(new Set(selectedProviderAllRows.map(r => r.code))).sort()
+                  if (uniqueCodes.length === 0) return null
+                  return (
+                    <div className="text-[12px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[#555]">Procedure codes:</span>
+                        <span className="text-[11px] text-[#999]">click to exclude codes without an RVU</span>
+                        {excludedCodes.length > 0 && (
+                          <button onClick={() => setExcludedCodes([])} className="ml-auto text-[11px] text-[#999] hover:text-[#555] underline">include all</button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {uniqueCodes.map(code => {
+                          const excluded = excludedCodes.includes(code)
+                          return (
+                            <button
+                              key={code}
+                              onClick={() => toggleExcludedCode(code)}
+                              className={`font-mono px-2 py-0.5 rounded border transition-colors ${excluded ? 'border-[#E8E8E4] text-[#999] line-through bg-white' : 'bg-[#EEEDFE] border-[#EEEDFE] text-[#3C3489]'}`}
+                              title={excluded ? 'Excluded — click to include' : 'Included — click to exclude'}
+                            >
+                              {code}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="flex justify-end">
                   <button onClick={resetPayrollFilters} className="text-[11px] text-[#999] hover:text-[#555] underline">Reset filters</button>
                 </div>
               </div>
 
-              {filteredProviderRows.length === 0 ? (
-                <p className="text-[13px] text-[#999]">No procedure codes match the current filters.</p>
+              {selectedProviderAllRows.length === 0 ? (
+                <p className="text-[13px] text-[#999]">
+                  No signed encounter notes with procedure codes for {selectedProvider.name} in {rangeLabel}.
+                  {' '}Notes must be signed and have CPT codes attached to appear on payroll.
+                </p>
+              ) : filteredProviderRows.length === 0 ? (
+                <p className="text-[13px] text-[#999]">
+                  {selectedProviderAllRows.length} record{selectedProviderAllRows.length === 1 ? '' : 's'} exist for this provider,
+                  but the current filters exclude all of them. Try clicking <strong>Reset filters</strong> above.
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-[12px]">
