@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { start, end } = req.query as Record<string, string>
   const [appointments, providers, encounterNotes] = await Promise.all([
     sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
-    sql`SELECT id, name FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
+    sql`SELECT id, name, role FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
     sql`
       SELECT
         en.id                 AS encounter_note_id,
@@ -42,10 +42,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         a.visit_type,
         a.status              AS appointment_status,
         cl.id                 AS claim_id,
-        cl.created_at         AS claim_created_at
+        cl.claim_number       AS claim_number,
+        cl.created_at         AS claim_created_at,
+        cl.payer_name         AS payer_name,
+        cl.payer_id           AS payer_id,
+        ch.chart_number       AS chart_number,
+        ch.first_name         AS patient_first_name,
+        ch.last_name          AS patient_last_name
       FROM encounter_notes en
       JOIN appointments a       ON en.appointment_id = a.id
       LEFT JOIN claims cl       ON cl.encounter_note_id = en.id
+      LEFT JOIN children ch     ON ch.id = COALESCE(cl.child_id, a.child_id)
       WHERE a.scheduled_date >= ${start}::date
         AND a.scheduled_date <= ${end}::date
         AND en.practice_id = ${practiceId}::uuid

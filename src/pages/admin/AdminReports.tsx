@@ -3,6 +3,7 @@ import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports } from '../../lib/api'
+import { computeProviderPay } from '../../lib/payrollRules'
 
 interface ApptRow {
   id: string
@@ -12,7 +13,7 @@ interface ApptRow {
   status: string
   notes: string | null
 }
-interface ProviderRow { id: string; name: string }
+interface ProviderRow { id: string; name: string; role: string }
 interface EncounterCpt { code: string; description: string; category?: string; charge_amount: number; units?: number; modifier?: string }
 interface EncounterNoteRow {
   encounter_note_id: string
@@ -21,7 +22,13 @@ interface EncounterNoteRow {
   visit_type: string | null
   appointment_status: string | null
   claim_id: string | null
+  claim_number: string | null
   claim_created_at: string | null
+  payer_name: string | null
+  payer_id: string | null
+  chart_number: string | null
+  patient_first_name: string | null
+  patient_last_name: string | null
   cpt_codes: EncounterCpt[]
 }
 
@@ -30,47 +37,78 @@ interface PayrollRow {
   key: string
   providerId: string
   providerName: string
+  chartNumber: string
+  patientName: string
+  claimNumber: string
+  payer: string
   code: string
   description: string
   category: string
   encounterDate: string
   visitType: string
-  invoiceDate: string | null
-  invoiceNumber: string
+  claimDate: string | null
   charge: number
   quantity: number
-  totalCharge: number
-  discountAmount: number
-  totalAfterDiscount: number
+  rvu: number
+  rvuRate: number
+  rvuCount: number
+  providerPay: number
+  cvSplit: number
   appointmentStatus: string
 }
 
-function invoiceNumberFromClaimId(claimId: string | null): string {
-  if (!claimId) return '—'
-  // Show a short, stable-looking invoice # derived from the claim UUID.
-  const clean = claimId.replace(/-/g, '').toUpperCase()
-  return `INV-${clean.slice(0, 8)}`
+function fmtPayer(name: string | null, id: string | null): string {
+  if (!name && !id) return ''
+  if (name && id)   return `${name} [${id}]`
+  return name ?? id ?? ''
+}
+
+function fmtPatientName(first: string | null, last: string | null): string {
+  const l = (last ?? '').trim()
+  const f = (first ?? '').trim()
+  if (l && f) return `${l}, ${f}`
+  return l || f
 }
 
 function toCsv(rows: PayrollRow[]): string {
   const headers = [
-    'Procedure Code', 'Procedure Code Description', 'Category',
-    'Encounter Date', 'Visit Type', 'Invoice Date', 'Invoice #',
-    'Charge', 'Quantity', 'Total Charge', 'Discount Amount', 'Total Charge after Discount',
+    '#', 'Chart #', 'Patient Name', 'Claim #', 'Payer',
+    'Procedure Code', 'Description', 'Category',
+    'Encounter Date', 'Visit Type', 'Claim Date',
+    'Provider', 'Amount Billed',
+    'wRVU', '$/RVU', 'RVU Count', 'Provider $ Paid', 'CV Split',
   ]
   const esc = (v: any) => {
     const s = v == null ? '' : String(v)
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const body = rows.map(r => [
+  const body = rows.map((r, i) => [
+    i + 1, r.chartNumber, r.patientName, r.claimNumber, r.payer,
     r.code, r.description, r.category,
     formatApiDate(r.encounterDate), r.visitType,
-    r.invoiceDate ? formatApiDate(r.invoiceDate) : '',
-    r.invoiceNumber,
-    r.charge.toFixed(2), r.quantity, r.totalCharge.toFixed(2),
-    r.discountAmount.toFixed(2), r.totalAfterDiscount.toFixed(2),
+    r.claimDate ? formatApiDate(r.claimDate) : '',
+    r.providerName, r.charge.toFixed(2),
+    r.rvu.toFixed(2), r.rvuRate.toFixed(2), r.rvuCount.toFixed(2),
+    r.providerPay.toFixed(2), r.cvSplit.toFixed(2),
   ].map(esc).join(','))
-  return [headers.join(','), ...body].join('\n')
+
+  const totalEncounters = new Set(rows.map(r => r.claimNumber || r.encounterDate + '|' + r.patientName)).size
+  const totalRvuCount = rows.reduce((s, r) => s + r.rvuCount, 0)
+  const totalRvuPay   = rows.reduce((s, r) => s + r.providerPay, 0)
+  const totalCv       = rows.reduce((s, r) => s + r.cvSplit, 0)
+  const grandTotal    = totalRvuPay + totalCv
+  const totalsRow = [
+    '', '', '', '', '', '', '', 'REPORT TOTALS',
+    `Encounters: ${totalEncounters}`, '', '', '', '',
+    '', '', totalRvuCount.toFixed(2), totalRvuPay.toFixed(2), totalCv.toFixed(2),
+  ].map(esc).join(',')
+  const grandTotalRow = [
+    '', '', '', '', '', '', '', 'TOTAL PAY',
+    '', '', '', '', '',
+    '', '', '', grandTotal.toFixed(2), '',
+  ].map(esc).join(',')
+
+  return [headers.join(','), ...body, totalsRow, grandTotalRow].join('\n')
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -163,24 +201,34 @@ export function AdminReports() {
       en.cpt_codes.forEach((c, idx) => {
         const charge = Number(c.charge_amount) || 0
         const quantity = Number(c.units) || 1
-        const totalCharge = charge * quantity
-        const discountAmount = 0
+        const pay = computeProviderPay({
+          code: c.code,
+          quantity,
+          visitType: en.visit_type ?? '',
+          providerName: provider.name,
+          providerRole: provider.role ?? '',
+        })
         out.push({
           key: `${en.encounter_note_id}-${idx}`,
           providerId: provider.id,
           providerName: provider.name,
+          chartNumber: en.chart_number ?? '',
+          patientName: fmtPatientName(en.patient_first_name, en.patient_last_name),
+          claimNumber: en.claim_number ?? '',
+          payer: fmtPayer(en.payer_name, en.payer_id),
           code: c.code,
           description: c.description ?? '',
           category: c.category ?? 'Procedure',
           encounterDate: en.scheduled_date,
           visitType: en.visit_type ?? '',
-          invoiceDate: en.claim_created_at,
-          invoiceNumber: invoiceNumberFromClaimId(en.claim_id),
+          claimDate: en.claim_created_at,
           charge,
           quantity,
-          totalCharge,
-          discountAmount,
-          totalAfterDiscount: totalCharge - discountAmount,
+          rvu: pay.rvu,
+          rvuRate: pay.rvuRate,
+          rvuCount: pay.rvuCount,
+          providerPay: pay.pay,
+          cvSplit: pay.cvSplit,
           appointmentStatus: en.appointment_status ?? '',
         })
       })
@@ -216,16 +264,20 @@ export function AdminReports() {
       excludedCodes, filterEncounterStart, filterEncounterEnd])
 
   const payrollProviderTotals = useMemo(() => {
-    const byProvider = new Map<string, { id: string; name: string; totalCharge: number; totalAfterDiscount: number; rowCount: number }>()
+    type Acc = { id: string; name: string; encounters: Set<string>; totalRvuCount: number; totalRvuPay: number; totalCvSplit: number }
+    const byProvider = new Map<string, Acc>()
     payrollRows.forEach(r => {
       if (excludeCancelled && r.appointmentStatus === 'cancelled') return
-      const existing = byProvider.get(r.providerId) ?? { id: r.providerId, name: r.providerName, totalCharge: 0, totalAfterDiscount: 0, rowCount: 0 }
-      existing.totalCharge += r.totalCharge
-      existing.totalAfterDiscount += r.totalAfterDiscount
-      existing.rowCount += 1
+      const existing = byProvider.get(r.providerId) ?? { id: r.providerId, name: r.providerName, encounters: new Set<string>(), totalRvuCount: 0, totalRvuPay: 0, totalCvSplit: 0 }
+      existing.encounters.add(r.claimNumber || r.encounterDate + '|' + r.patientName)
+      existing.totalRvuCount += r.rvuCount
+      existing.totalRvuPay   += r.providerPay
+      existing.totalCvSplit  += r.cvSplit
       byProvider.set(r.providerId, existing)
     })
-    return Array.from(byProvider.values()).sort((a, b) => a.name.localeCompare(b.name))
+    return Array.from(byProvider.values())
+      .map(p => ({ id: p.id, name: p.name, encounters: p.encounters.size, totalRvuCount: p.totalRvuCount, totalRvuPay: p.totalRvuPay, totalCvSplit: p.totalCvSplit, totalPay: p.totalRvuPay + p.totalCvSplit }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [payrollRows, excludeCancelled])
 
   if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
@@ -268,8 +320,11 @@ export function AdminReports() {
   // payrollRows / filteredProviderRows / payrollProviderTotals / payrollVisitTypes
   // are memoized above the loading return so hook order stays stable.
 
-  const payrollGrandTotalCharge      = payrollProviderTotals.reduce((s, p) => s + p.totalCharge, 0)
-  const payrollGrandTotalAfterDisc   = payrollProviderTotals.reduce((s, p) => s + p.totalAfterDiscount, 0)
+  const payrollGrandTotalEncounters  = payrollProviderTotals.reduce((s, p) => s + p.encounters, 0)
+  const payrollGrandTotalRvuCount    = payrollProviderTotals.reduce((s, p) => s + p.totalRvuCount, 0)
+  const payrollGrandTotalRvuPay      = payrollProviderTotals.reduce((s, p) => s + p.totalRvuPay, 0)
+  const payrollGrandTotalCvSplit     = payrollProviderTotals.reduce((s, p) => s + p.totalCvSplit, 0)
+  const payrollGrandTotalPay         = payrollProviderTotals.reduce((s, p) => s + p.totalPay, 0)
   const selectedProvider = payrollProviderTotals.find(p => p.id === selectedProviderId)
 
   function toggleVisitTypeFilter(vt: string) {
@@ -552,39 +607,45 @@ export function AdminReports() {
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr className="border-b border-[#E8E8E4]">
-                        {['Procedure Code', 'Description', 'Category', 'Encounter Date', 'Visit Type', 'Invoice Date', 'Invoice #', 'Charge', 'Qty', 'Total Charge', 'Discount', 'Total after Disc.'].map(h => (
+                        {['#', 'Chart #', 'Patient', 'Claim #', 'Payer', 'Code', 'Description', 'Encounter', 'Visit Type', 'Claim Date', 'Billed', 'wRVU', '$/RVU', 'RVU Ct', 'Provider $', 'CV Split'].map(h => (
                           <th key={h} className="text-left text-[10px] font-medium text-[#999] uppercase tracking-wider pb-2 pr-3 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F1EFE8]">
-                      {filteredProviderRows.map(r => (
+                      {filteredProviderRows.map((r, i) => (
                         <tr key={r.key}>
+                          <td className="py-2 pr-3 text-[#999] tabular-nums">{i + 1}</td>
+                          <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.chartNumber || '—'}</td>
+                          <td className="py-2 pr-3 text-[#1A1A2E] whitespace-nowrap">{r.patientName || '—'}</td>
+                          <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.claimNumber || '—'}</td>
+                          <td className="py-2 pr-3 text-[#555] whitespace-nowrap max-w-[160px] truncate" title={r.payer}>{r.payer || '—'}</td>
                           <td className="py-2 pr-3">
                             <span className="font-mono text-[11px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{r.code}</span>
                           </td>
-                          <td className="py-2 pr-3 text-[#555] max-w-xs">{r.description}</td>
-                          <td className="py-2 pr-3">
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${r.category === 'Procedure' ? 'bg-[#EEEDFE] text-[#3C3489]' : 'bg-[#FEF3E8] text-[#633806]'}`}>
-                              {r.category}
-                            </span>
-                          </td>
+                          <td className="py-2 pr-3 text-[#555] max-w-[180px] truncate" title={r.description}>{r.description}</td>
                           <td className="py-2 pr-3 tabular-nums text-[#555] whitespace-nowrap">{formatApiDate(r.encounterDate)}</td>
                           <td className="py-2 pr-3 text-[#555] whitespace-nowrap">{r.visitType || '—'}</td>
-                          <td className="py-2 pr-3 tabular-nums text-[#555] whitespace-nowrap">{r.invoiceDate ? formatApiDate(r.invoiceDate) : '—'}</td>
-                          <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.invoiceNumber}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555] whitespace-nowrap">{r.claimDate ? formatApiDate(r.claimDate) : '—'}</td>
                           <td className="py-2 pr-3 tabular-nums text-[#1A1A2E]">${r.charge.toFixed(2)}</td>
-                          <td className="py-2 pr-3 tabular-nums text-[#555]">{r.quantity}</td>
-                          <td className="py-2 pr-3 tabular-nums font-medium text-[#1D9E75]">${r.totalCharge.toFixed(2)}</td>
-                          <td className="py-2 pr-3 tabular-nums text-[#555]">${r.discountAmount.toFixed(2)}</td>
-                          <td className="py-2 pr-3 tabular-nums font-semibold text-[#1D9E75]">${r.totalAfterDiscount.toFixed(2)}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555]">{r.rvu > 0 ? r.rvu.toFixed(2) : '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555]">{r.rvuRate > 0 ? `$${r.rvuRate}` : '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555]">{r.rvuCount > 0 ? r.rvuCount.toFixed(2) : '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums font-medium text-[#1D9E75]">{r.providerPay > 0 ? `$${r.providerPay.toFixed(2)}` : '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums font-medium text-[#EF9F27]">{r.cvSplit > 0 ? `$${r.cvSplit.toFixed(2)}` : '—'}</td>
                         </tr>
                       ))}
                       <tr className="bg-[#FAF9F4]">
-                        <td colSpan={9} className="py-2 pr-3 text-right text-[11px] font-medium text-[#555] uppercase tracking-wider">Report Total</td>
-                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1A1A2E]">${filteredProviderRows.reduce((s, r) => s + r.totalCharge, 0).toFixed(2)}</td>
-                        <td className="py-2 pr-3 tabular-nums text-[#555]">${filteredProviderRows.reduce((s, r) => s + r.discountAmount, 0).toFixed(2)}</td>
-                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1D9E75]">${filteredProviderRows.reduce((s, r) => s + r.totalAfterDiscount, 0).toFixed(2)}</td>
+                        <td colSpan={13} className="py-2 pr-3 text-right text-[11px] font-medium text-[#555] uppercase tracking-wider">Report Totals</td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1A1A2E]">{filteredProviderRows.reduce((s, r) => s + r.rvuCount, 0).toFixed(2)}</td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1D9E75]">${filteredProviderRows.reduce((s, r) => s + r.providerPay, 0).toFixed(2)}</td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#EF9F27]">${filteredProviderRows.reduce((s, r) => s + r.cvSplit, 0).toFixed(2)}</td>
+                      </tr>
+                      <tr className="bg-[#FAF9F4] border-t border-[#E8E8E4]">
+                        <td colSpan={14} className="py-2 pr-3 text-right text-[11px] font-medium text-[#555] uppercase tracking-wider">Total Pay for {selectedProvider.name}</td>
+                        <td colSpan={2} className="py-2 pr-3 tabular-nums font-semibold text-[15px] text-[#1D9E75]">
+                          ${filteredProviderRows.reduce((s, r) => s + r.providerPay + r.cvSplit, 0).toFixed(2)}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -610,7 +671,7 @@ export function AdminReports() {
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className="border-b border-[#E8E8E4]">
-                        {['Provider Name', 'Total Charge', 'Total Charge after Discount and Tax'].map(h => (
+                        {['Provider Name', 'Encounters', 'RVU Count', '$ RVU Pay', '$ CV Share', 'Total Pay'].map(h => (
                           <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -619,14 +680,20 @@ export function AdminReports() {
                       {payrollProviderTotals.map(p => (
                         <tr key={p.id} className="hover:bg-[#FAF9F4] cursor-pointer" onClick={() => setSelectedProviderId(p.id)}>
                           <td className="py-3 pr-6 font-medium text-[#7F77DD] underline whitespace-nowrap">{p.name}</td>
-                          <td className="py-3 pr-6 tabular-nums text-[#1A1A2E] text-right">${p.totalCharge.toFixed(2)}</td>
-                          <td className="py-3 pr-6 tabular-nums font-medium text-[#7F77DD] text-right">${p.totalAfterDiscount.toFixed(2)}</td>
+                          <td className="py-3 pr-6 tabular-nums text-[#1A1A2E] text-right">{p.encounters}</td>
+                          <td className="py-3 pr-6 tabular-nums text-[#1A1A2E] text-right">{p.totalRvuCount.toFixed(2)}</td>
+                          <td className="py-3 pr-6 tabular-nums text-[#1D9E75] text-right">${p.totalRvuPay.toFixed(2)}</td>
+                          <td className="py-3 pr-6 tabular-nums text-[#EF9F27] text-right">${p.totalCvSplit.toFixed(2)}</td>
+                          <td className="py-3 pr-6 tabular-nums font-semibold text-[#1D9E75] text-right">${p.totalPay.toFixed(2)}</td>
                         </tr>
                       ))}
                       <tr className="bg-[#FAF9F4]">
                         <td className="py-3 pr-6 font-semibold text-[#1A1A2E]">Report Total</td>
-                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">${payrollGrandTotalCharge.toFixed(2)}</td>
-                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">${payrollGrandTotalAfterDisc.toFixed(2)}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">{payrollGrandTotalEncounters}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">{payrollGrandTotalRvuCount.toFixed(2)}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1D9E75] text-right">${payrollGrandTotalRvuPay.toFixed(2)}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#EF9F27] text-right">${payrollGrandTotalCvSplit.toFixed(2)}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1D9E75] text-right">${payrollGrandTotalPay.toFixed(2)}</td>
                       </tr>
                     </tbody>
                   </table>
