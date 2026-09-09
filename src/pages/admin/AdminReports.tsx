@@ -33,8 +33,10 @@ interface EncounterNoteRow {
 }
 
 // One row per CPT line, per encounter note. Used by the Payroll report.
+// After grouping, CV/VACV codes are folded into the main visit code's row.
 interface PayrollRow {
   key: string
+  encounterNoteId: string
   providerId: string
   providerName: string
   chartNumber: string
@@ -193,7 +195,8 @@ export function AdminReports() {
   // Payroll rows must be a useMemo (not a bare computation) and must live above
   // the `if (loading)` early return so hook order stays stable across renders.
   const payrollRows: PayrollRow[] = useMemo(() => {
-    const out: PayrollRow[] = []
+    // Step 1: build a flat row per CPT line.
+    const raw: PayrollRow[] = []
     encounterNotes.forEach(en => {
       if (!Array.isArray(en.cpt_codes)) return
       const provider = providers.find(p => p.id === en.provider_id)
@@ -208,8 +211,9 @@ export function AdminReports() {
           providerName: provider.name,
           providerRole: provider.role ?? '',
         })
-        out.push({
+        raw.push({
           key: `${en.encounter_note_id}-${idx}`,
+          encounterNoteId: en.encounter_note_id,
           providerId: provider.id,
           providerName: provider.name,
           chartNumber: en.chart_number ?? '',
@@ -233,6 +237,32 @@ export function AdminReports() {
         })
       })
     })
+
+    // Step 2: collapse CV/VACV lines into the main visit row of each encounter.
+    // Rule: a CV/VACV row is one where cvSplit > 0. If an encounter has any
+    // non-CV rows, we drop the CV rows and sum their cvSplit onto the first
+    // non-CV row. If ALL rows for an encounter are CV rows, keep them as-is.
+    const byEncounter = new Map<string, PayrollRow[]>()
+    raw.forEach(r => {
+      const list = byEncounter.get(r.encounterNoteId) ?? []
+      list.push(r)
+      byEncounter.set(r.encounterNoteId, list)
+    })
+
+    const out: PayrollRow[] = []
+    byEncounter.forEach(rows => {
+      const cvRows    = rows.filter(r => r.cvSplit > 0)
+      const otherRows = rows.filter(r => r.cvSplit === 0)
+      if (otherRows.length === 0) {
+        out.push(...rows)
+        return
+      }
+      const cvTotal = cvRows.reduce((s, r) => s + r.cvSplit, 0)
+      otherRows.forEach((r, i) => {
+        out.push(i === 0 ? { ...r, cvSplit: cvTotal } : r)
+      })
+    })
+
     return out
   }, [encounterNotes, providers])
 
