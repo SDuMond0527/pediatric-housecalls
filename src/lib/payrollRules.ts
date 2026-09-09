@@ -42,6 +42,15 @@ export const FLAT_PAY_BY_CODE: Record<string, number> = {
   '98007':  31,
 }
 
+// Office E/M codes that are treated as virtual visits when modifier 95 is
+// present. Pays $31 flat regardless of provider (MD or NP).
+export const TELEHEALTH_MOD95_PAY: Record<string, number> = {
+  '99203': 31,
+  '99204': 31,
+  '99213': 31,
+  '99214': 31,
+}
+
 // CV split — provider's share per unit. Same for all providers.
 export const CV_SPLIT: Record<string, number> = {
   CV1:  15,
@@ -94,8 +103,9 @@ export function computeProviderPay(input: {
   visitType: string
   providerName: string
   providerRole: string
+  modifier?: string
 }): PayComputation {
-  const { code, quantity, visitType, providerName, providerRole } = input
+  const { code, quantity, visitType, providerName, providerRole, modifier } = input
   const units = quantity > 0 ? quantity : 1
 
   const rvu = RVU_CHART[code]
@@ -103,6 +113,12 @@ export function computeProviderPay(input: {
     const rvuRate  = providerRvuRate(providerName, providerRole)
     const rvuCount = rvu * units
     return { pay: rvuCount * rvuRate, rvu, rvuRate, rvuCount, cvSplit: 0 }
+  }
+
+  // Office E/M code billed as telehealth (modifier 95) — flat $31 to any provider.
+  const telehealthPay = TELEHEALTH_MOD95_PAY[code]
+  if (telehealthPay !== undefined && /(^|\W)95(\W|$)/.test(String(modifier ?? ''))) {
+    return { pay: telehealthPay * units, rvu: 0, rvuRate: 0, rvuCount: 0, cvSplit: 0 }
   }
 
   if (CV_SPLIT[code] !== undefined) {

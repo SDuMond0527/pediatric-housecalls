@@ -210,6 +210,7 @@ export function AdminReports() {
           visitType: en.visit_type ?? '',
           providerName: provider.name,
           providerRole: provider.role ?? '',
+          modifier: c.modifier,
         })
         raw.push({
           key: `${en.encounter_note_id}-${idx}`,
