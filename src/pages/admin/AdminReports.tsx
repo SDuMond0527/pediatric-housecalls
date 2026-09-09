@@ -508,7 +508,7 @@ export function AdminReports() {
                     <div className="text-[12px]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[#555]">Procedure codes:</span>
-                        <span className="text-[11px] text-[#999]">click to exclude codes without an RVU</span>
+                        <span className="text-[11px] text-[#999]">every code this provider used in the date range — click any to exclude from the report</span>
                         {excludedCodes.length > 0 && (
                           <button onClick={() => setExcludedCodes([])} className="ml-auto text-[11px] text-[#999] hover:text-[#555] underline">include all</button>
                         )}
@@ -520,7 +520,7 @@ export function AdminReports() {
                             <button
                               key={code}
                               onClick={() => toggleExcludedCode(code)}
-                              className={`font-mono px-2 py-0.5 rounded border transition-colors ${excluded ? 'border-[#E8E8E4] text-[#999] line-through bg-white' : 'bg-[#EEEDFE] border-[#EEEDFE] text-[#3C3489]'}`}
+                              className={`font-mono px-2 py-0.5 rounded border transition-colors ${excluded ? 'border-[#E8E8E4] text-[#B0AFA8] line-through bg-white' : 'border-[#E8E8E4] text-[#555] bg-white hover:bg-[#F1EFE8]'}`}
                               title={excluded ? 'Excluded — click to include' : 'Included — click to exclude'}
                             >
                               {code}
