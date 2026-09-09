@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, X, Clock, Pencil } from 'lucide-react'
 import { addDays } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getOnCallSchedule, getCmaSchedule, claimShift, updateShiftTimes, invokeNotifications, upsertAvailabilityOverride } from '../lib/api'
+import { getOnCallSchedule, getCmaSchedule, claimShift, updateShiftTimes, invokeNotifications } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -155,13 +155,16 @@ export function Shifts() {
     try {
       await claimShift(claiming.date, claiming.state, claiming.start, claiming.end)
 
-      upsertAvailabilityOverride(provider.id, {
-        date: claiming.date,
-        is_available: true,
-        start_time: claiming.start,
-        end_time: claiming.end,
-        note: 'Auto-set from on-call shift pickup',
-      }).catch(() => {})
+      // Deliberately no longer auto-creates an availability_overrides row.
+      // On-call and general availability are two separate concepts:
+      //   - On-call schedule drives CMA+tele auto-pairing (server-side lookup)
+      //   - Availability calendar drives what parents see when browsing slots
+      // Claiming on-call previously forced you to appear available for ALL
+      // visit types on that date, which is wrong — parents were seeing you
+      // as bookable for in-home visits even though you only signed up to be
+      // the telemedicine backup. Fix: don't touch the availability calendar.
+      // CMA+tele bookings still auto-pair you via on_call_schedule at
+      // booking time — no availability row needed.
 
       invokeNotifications({
         type: 'shift_claimed',
