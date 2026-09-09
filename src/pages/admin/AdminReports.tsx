@@ -206,8 +206,8 @@ export function AdminReports() {
       if (excludeCancelled && r.appointmentStatus === 'cancelled') return false
       if (filterCategory !== 'all' && r.category !== filterCategory) return false
       if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
-      if (filterInvoiceStart && (!r.invoiceDate || r.invoiceDate.slice(0, 10) < filterInvoiceStart)) return false
-      if (filterInvoiceEnd   && (!r.invoiceDate || r.invoiceDate.slice(0, 10) > filterInvoiceEnd))   return false
+      if (filterInvoiceStart && (!r.encounterDate || r.encounterDate.slice(0, 10) < filterInvoiceStart)) return false
+      if (filterInvoiceEnd   && (!r.encounterDate || r.encounterDate.slice(0, 10) > filterInvoiceEnd))   return false
       const numGte = (v: number, s: string) => !s || v >= Number(s)
       const numLte = (v: number, s: string) => !s || v <= Number(s)
       if (!numGte(r.charge, filterChargeMin) || !numLte(r.charge, filterChargeMax)) return false
@@ -495,11 +495,11 @@ export function AdminReports() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px]">
                   <div>
-                    <div className="text-[#999] mb-0.5">Invoice date from</div>
+                    <div className="text-[#999] mb-0.5">Encounter date from</div>
                     <input type="date" value={filterInvoiceStart} onChange={e => setFilterInvoiceStart(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                   <div>
-                    <div className="text-[#999] mb-0.5">Invoice date to</div>
+                    <div className="text-[#999] mb-0.5">Encounter date to</div>
                     <input type="date" value={filterInvoiceEnd} onChange={e => setFilterInvoiceEnd(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                   <div>
