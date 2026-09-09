@@ -274,7 +274,9 @@ export function Today() {
   async function fetchAppts() {
     if (!provider) return
     const data = await getAppointments({ provider_id: provider.id, scheduled_date: viewDate })
-    setAppts((data ?? []) as Appointment[])
+    // Hide cancelled appointments from the Today view so the schedule matches
+    // AdminSchedule's behavior — cancelled visits shouldn't clutter the day.
+    setAppts(((data ?? []) as Appointment[]).filter(a => a.status !== 'cancelled'))
     setLoading(false)
   }
 
@@ -481,7 +483,7 @@ export function Today() {
 
     await updateAppointment(cancelTarget.id, { status: 'cancelled' })
 
-    setAppts(prev => prev.map(a => a.id === cancelTarget.id ? { ...a, status: 'cancelled' } : a))
+    setAppts(prev => prev.filter(a => a.id !== cancelTarget.id))
 
     invokeNotifications({
       type: 'appointment_cancelled',
