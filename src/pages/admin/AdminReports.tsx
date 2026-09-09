@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
-import { Trophy } from 'lucide-react'
+import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports } from '../../lib/api'
 
 interface ApptRow {
@@ -13,10 +13,76 @@ interface ApptRow {
   notes: string | null
 }
 interface ProviderRow { id: string; name: string }
+interface EncounterCpt { code: string; description: string; category?: string; charge_amount: number; units?: number; modifier?: string }
 interface EncounterNoteRow {
+  encounter_note_id: string
   provider_id: string
   scheduled_date: string
-  cpt_codes: { code: string; description: string; charge_amount: number; modifier?: string }[]
+  visit_type: string | null
+  appointment_status: string | null
+  claim_id: string | null
+  claim_created_at: string | null
+  cpt_codes: EncounterCpt[]
+}
+
+// One row per CPT line, per encounter note. Used by the Payroll report.
+interface PayrollRow {
+  key: string
+  providerId: string
+  providerName: string
+  code: string
+  description: string
+  category: string
+  encounterDate: string
+  visitType: string
+  invoiceDate: string | null
+  invoiceNumber: string
+  charge: number
+  quantity: number
+  totalCharge: number
+  discountAmount: number
+  totalAfterDiscount: number
+  appointmentStatus: string
+}
+
+function invoiceNumberFromClaimId(claimId: string | null): string {
+  if (!claimId) return '—'
+  // Show a short, stable-looking invoice # derived from the claim UUID.
+  const clean = claimId.replace(/-/g, '').toUpperCase()
+  return `INV-${clean.slice(0, 8)}`
+}
+
+function toCsv(rows: PayrollRow[]): string {
+  const headers = [
+    'Procedure Code', 'Procedure Code Description', 'Category',
+    'Encounter Date', 'Visit Type', 'Invoice Date', 'Invoice #',
+    'Charge', 'Quantity', 'Total Charge', 'Discount Amount', 'Total Charge after Discount',
+  ]
+  const esc = (v: any) => {
+    const s = v == null ? '' : String(v)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const body = rows.map(r => [
+    r.code, r.description, r.category,
+    formatApiDate(r.encounterDate), r.visitType,
+    r.invoiceDate ? formatApiDate(r.invoiceDate) : '',
+    r.invoiceNumber,
+    r.charge.toFixed(2), r.quantity, r.totalCharge.toFixed(2),
+    r.discountAmount.toFixed(2), r.totalAfterDiscount.toFixed(2),
+  ].map(esc).join(','))
+  return [headers.join(','), ...body].join('\n')
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 const VT_COLOR: Record<string, string> = {
@@ -59,6 +125,20 @@ export function AdminReports() {
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Payroll report state
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
+  const [excludeCancelled, setExcludeCancelled] = useState(true)
+  const [filterCategory, setFilterCategory] = useState<'all' | 'Procedure' | 'Non-Covered Services'>('all')
+  const [filterVisitTypes, setFilterVisitTypes] = useState<string[]>([])
+  const [filterInvoiceStart, setFilterInvoiceStart] = useState('')
+  const [filterInvoiceEnd, setFilterInvoiceEnd] = useState('')
+  const [filterChargeMin, setFilterChargeMin] = useState('')
+  const [filterChargeMax, setFilterChargeMax] = useState('')
+  const [filterDiscountMin, setFilterDiscountMin] = useState('')
+  const [filterDiscountMax, setFilterDiscountMax] = useState('')
+  const [filterTotalMin, setFilterTotalMin] = useState('')
+  const [filterTotalMax, setFilterTotalMax] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -114,48 +194,101 @@ export function AdminReports() {
   const activeTypes = VISIT_TYPE_ORDER.filter(vt => appts.some(a => a.visit_type === vt))
   appts.forEach(a => { if (!activeTypes.includes(a.visit_type)) activeTypes.push(a.visit_type) })
 
-  // Procedure codes summary by provider (aggregated)
-  type CptSummary = { code: string; description: string; count: number; total: number }
-  const providerCptMap: Record<string, CptSummary[]> = {}
+  // Payroll report: one row per CPT line, flattened.
+  const payrollRows: PayrollRow[] = []
   encounterNotes.forEach(en => {
     if (!Array.isArray(en.cpt_codes)) return
     const provider = providers.find(p => p.id === en.provider_id)
     if (!provider) return
-    if (!providerCptMap[provider.name]) providerCptMap[provider.name] = []
-    en.cpt_codes.forEach(c => {
-      const existing = providerCptMap[provider.name].find(x => x.code === c.code)
-      if (existing) { existing.count++; existing.total += c.charge_amount ?? 0 }
-      else providerCptMap[provider.name].push({ code: c.code, description: c.description, count: 1, total: c.charge_amount ?? 0 })
-    })
-  })
-  const providerCptRows = Object.entries(providerCptMap)
-    .map(([name, codes]) => ({ name, codes: [...codes].sort((a, b) => b.count - a.count) }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  // Procedure codes detail by provider — one row per occurrence, sorted by date
-  type CptDetail = { date: string; code: string; description: string; charge: number }
-  const providerCptDetailMap: Record<string, CptDetail[]> = {}
-  encounterNotes.forEach(en => {
-    if (!Array.isArray(en.cpt_codes) || !en.scheduled_date) return
-    const provider = providers.find(p => p.id === en.provider_id)
-    if (!provider) return
-    if (!providerCptDetailMap[provider.name]) providerCptDetailMap[provider.name] = []
-    en.cpt_codes.forEach(c => {
-      providerCptDetailMap[provider.name].push({
-        date:        en.scheduled_date,
-        code:        c.code,
-        description: c.description,
-        charge:      c.charge_amount ?? 0,
+    en.cpt_codes.forEach((c, idx) => {
+      const charge = Number(c.charge_amount) || 0
+      const quantity = Number(c.units) || 1
+      const totalCharge = charge * quantity
+      const discountAmount = 0
+      payrollRows.push({
+        key: `${en.encounter_note_id}-${idx}`,
+        providerId: provider.id,
+        providerName: provider.name,
+        code: c.code,
+        description: c.description ?? '',
+        category: c.category ?? 'Procedure',
+        encounterDate: en.scheduled_date,
+        visitType: en.visit_type ?? '',
+        invoiceDate: en.claim_created_at,
+        invoiceNumber: invoiceNumberFromClaimId(en.claim_id),
+        charge,
+        quantity,
+        totalCharge,
+        discountAmount,
+        totalAfterDiscount: totalCharge - discountAmount,
+        appointmentStatus: en.appointment_status ?? '',
       })
     })
   })
-  const providerCptDetailRows = Object.entries(providerCptDetailMap)
-    .map(([name, entries]) => ({
-      name,
-      entries: [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.code.localeCompare(b.code)),
-      total: entries.reduce((sum, e) => sum + e.charge, 0),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Visit types actually present in the pulled data — for the multi-select filter.
+  const payrollVisitTypes = useMemo(() => {
+    const s = new Set<string>()
+    payrollRows.forEach(r => { if (r.visitType) s.add(r.visitType) })
+    return Array.from(s).sort()
+  }, [payrollRows])
+
+  // Rows for the selected provider, with filters applied.
+  const filteredProviderRows = useMemo(() => {
+    if (!selectedProviderId) return []
+    return payrollRows.filter(r => {
+      if (r.providerId !== selectedProviderId) return false
+      if (excludeCancelled && r.appointmentStatus === 'cancelled') return false
+      if (filterCategory !== 'all' && r.category !== filterCategory) return false
+      if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
+      if (filterInvoiceStart && (!r.invoiceDate || r.invoiceDate.slice(0, 10) < filterInvoiceStart)) return false
+      if (filterInvoiceEnd   && (!r.invoiceDate || r.invoiceDate.slice(0, 10) > filterInvoiceEnd))   return false
+      const numGte = (v: number, s: string) => !s || v >= Number(s)
+      const numLte = (v: number, s: string) => !s || v <= Number(s)
+      if (!numGte(r.charge, filterChargeMin) || !numLte(r.charge, filterChargeMax)) return false
+      if (!numGte(r.discountAmount, filterDiscountMin) || !numLte(r.discountAmount, filterDiscountMax)) return false
+      if (!numGte(r.totalAfterDiscount, filterTotalMin) || !numLte(r.totalAfterDiscount, filterTotalMax)) return false
+      return true
+    }).sort((a, b) => a.encounterDate.localeCompare(b.encounterDate) || a.code.localeCompare(b.code))
+  }, [payrollRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
+      filterInvoiceStart, filterInvoiceEnd, filterChargeMin, filterChargeMax,
+      filterDiscountMin, filterDiscountMax, filterTotalMin, filterTotalMax])
+
+  // Landing view: one row per provider with totals, respecting excludeCancelled.
+  const payrollProviderTotals = useMemo(() => {
+    const byProvider = new Map<string, { id: string; name: string; totalCharge: number; totalAfterDiscount: number; rowCount: number }>()
+    payrollRows.forEach(r => {
+      if (excludeCancelled && r.appointmentStatus === 'cancelled') return
+      const existing = byProvider.get(r.providerId) ?? { id: r.providerId, name: r.providerName, totalCharge: 0, totalAfterDiscount: 0, rowCount: 0 }
+      existing.totalCharge += r.totalCharge
+      existing.totalAfterDiscount += r.totalAfterDiscount
+      existing.rowCount += 1
+      byProvider.set(r.providerId, existing)
+    })
+    return Array.from(byProvider.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [payrollRows, excludeCancelled])
+
+  const payrollGrandTotalCharge      = payrollProviderTotals.reduce((s, p) => s + p.totalCharge, 0)
+  const payrollGrandTotalAfterDisc   = payrollProviderTotals.reduce((s, p) => s + p.totalAfterDiscount, 0)
+  const selectedProvider = payrollProviderTotals.find(p => p.id === selectedProviderId)
+
+  function toggleVisitTypeFilter(vt: string) {
+    setFilterVisitTypes(prev => prev.includes(vt) ? prev.filter(x => x !== vt) : [...prev, vt])
+  }
+
+  function resetPayrollFilters() {
+    setExcludeCancelled(true)
+    setFilterCategory('all')
+    setFilterVisitTypes([])
+    setFilterInvoiceStart('')
+    setFilterInvoiceEnd('')
+    setFilterChargeMin('')
+    setFilterChargeMax('')
+    setFilterDiscountMin('')
+    setFilterDiscountMax('')
+    setFilterTotalMin('')
+    setFilterTotalMax('')
+  }
 
   // Bonus leader
   const maxPickups = Math.max(...providerStats.map(p => p.pickups), 0)
@@ -284,86 +417,206 @@ export function AdminReports() {
           </div>
         )}
 
-        {/* Procedure codes summary by provider */}
+        {/* Payroll report */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Procedure codes by provider</h3>
-          <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — from completed encounter notes</p>
-          {providerCptRows.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-[#E8E8E4]">
-                    {['Provider', 'Code', 'Description', 'Count', 'Total Charges'].map(h => (
-                      <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1EFE8]">
-                  {providerCptRows.map(({ name, codes }) =>
-                    codes.map((c, i) => (
-                      <tr key={`${name}-${c.code}`}>
-                        <td className="py-2.5 pr-6 font-medium text-[#1A1A2E] whitespace-nowrap">
-                          {i === 0 ? name : ''}
-                        </td>
-                        <td className="py-2.5 pr-6">
-                          <span className="font-mono text-[12px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{c.code}</span>
-                        </td>
-                        <td className="py-2.5 pr-6 text-[#555] max-w-xs">{c.description}</td>
-                        <td className="py-2.5 pr-6 tabular-nums font-semibold text-[#1A1A2E]">{c.count}</td>
-                        <td className="py-2.5 tabular-nums text-[#1D9E75] font-medium">${c.total.toFixed(2)}</td>
-                      </tr>
-                    ))
+          {selectedProviderId && selectedProvider ? (
+            // ────────── Provider detail view ──────────
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => { setSelectedProviderId(null); resetPayrollFilters() }}
+                    className="p-1.5 rounded-md hover:bg-[#F1EFE8] text-[#555]"
+                    aria-label="Back to provider list"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">
+                    Payroll Report : {selectedProvider.name}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => downloadCsv(
+                    `payroll-${selectedProvider.name.replace(/\s+/g, '_')}-${startDate}_to_${endDate}.csv`,
+                    toCsv(filteredProviderRows),
                   )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  disabled={filteredProviderRows.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178862] disabled:bg-[#D8D5CE] disabled:cursor-not-allowed"
+                >
+                  <Download size={13} /> Export as CSV
+                </button>
+              </div>
+              <p className="text-[12px] text-[#999] mb-4">Encounter Date {rangeLabel}</p>
 
-        {/* Procedure codes detail by provider — one row per occurrence with date, for payroll */}
-        <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-          <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Procedure codes by provider — by date</h3>
-          <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — each code shown with its date of service</p>
-          {providerCptDetailRows.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
-          ) : (
-            <div className="space-y-6">
-              {providerCptDetailRows.map(({ name, entries, total: provTotal }) => (
-                <div key={name}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <div className="font-medium text-[14px] text-[#1A1A2E]">{name}</div>
-                    <div className="text-[12px] text-[#1D9E75] font-medium tabular-nums">${provTotal.toFixed(2)} total</div>
+              {/* Filters */}
+              <div className="bg-[#FAF9F4] border border-[#E8E8E4] rounded-lg p-3 mb-4 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                  <label className="inline-flex items-center gap-1.5 text-[#555]">
+                    <input type="checkbox" checked={excludeCancelled} onChange={e => setExcludeCancelled(e.target.checked)} />
+                    Exclude cancelled appointments
+                  </label>
+                  <span className="text-[#D8D5CE]">|</span>
+                  <label className="text-[#555]">Category:</label>
+                  <select
+                    value={filterCategory}
+                    onChange={e => setFilterCategory(e.target.value as any)}
+                    className="border border-[#E8E8E4] rounded px-2 py-1 text-[12px] bg-white"
+                  >
+                    <option value="all">All</option>
+                    <option value="Procedure">Procedure</option>
+                    <option value="Non-Covered Services">Non-Covered Services</option>
+                  </select>
+                </div>
+
+                {payrollVisitTypes.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                    <span className="text-[#555]">Visit type:</span>
+                    {payrollVisitTypes.map(vt => {
+                      const active = filterVisitTypes.includes(vt)
+                      return (
+                        <button
+                          key={vt}
+                          onClick={() => toggleVisitTypeFilter(vt)}
+                          className={`px-2 py-0.5 rounded-full border transition-colors ${active ? 'bg-[#7F77DD] border-[#7F77DD] text-white' : 'border-[#E8E8E4] text-[#555] hover:bg-white'}`}
+                        >
+                          {vt}
+                        </button>
+                      )
+                    })}
+                    {filterVisitTypes.length > 0 && (
+                      <button onClick={() => setFilterVisitTypes([])} className="text-[11px] text-[#999] hover:text-[#555] underline">clear</button>
+                    )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[13px]">
-                      <thead>
-                        <tr className="border-b border-[#E8E8E4]">
-                          {['Date', 'Code', 'Description', 'Charge'].map(h => (
-                            <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2 pr-6 whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#F1EFE8]">
-                        {entries.map((e, i) => (
-                          <tr key={i}>
-                            <td className="py-2 pr-6 tabular-nums text-[#555] whitespace-nowrap">
-                              {formatApiDate(e.date)}
-                            </td>
-                            <td className="py-2 pr-6">
-                              <span className="font-mono text-[12px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{e.code}</span>
-                            </td>
-                            <td className="py-2 pr-6 text-[#555] max-w-xs">{e.description}</td>
-                            <td className="py-2 tabular-nums text-[#1D9E75] font-medium">${e.charge.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                )}
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px]">
+                  <div>
+                    <div className="text-[#999] mb-0.5">Invoice date from</div>
+                    <input type="date" value={filterInvoiceStart} onChange={e => setFilterInvoiceStart(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Invoice date to</div>
+                    <input type="date" value={filterInvoiceEnd} onChange={e => setFilterInvoiceEnd(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Charge min</div>
+                    <input type="number" step="0.01" value={filterChargeMin} onChange={e => setFilterChargeMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Charge max</div>
+                    <input type="number" step="0.01" value={filterChargeMax} onChange={e => setFilterChargeMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Discount min</div>
+                    <input type="number" step="0.01" value={filterDiscountMin} onChange={e => setFilterDiscountMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Discount max</div>
+                    <input type="number" step="0.01" value={filterDiscountMax} onChange={e => setFilterDiscountMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Total after discount min</div>
+                    <input type="number" step="0.01" value={filterTotalMin} onChange={e => setFilterTotalMin(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
+                  </div>
+                  <div>
+                    <div className="text-[#999] mb-0.5">Total after discount max</div>
+                    <input type="number" step="0.01" value={filterTotalMax} onChange={e => setFilterTotalMax(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="flex justify-end">
+                  <button onClick={resetPayrollFilters} className="text-[11px] text-[#999] hover:text-[#555] underline">Reset filters</button>
+                </div>
+              </div>
+
+              {filteredProviderRows.length === 0 ? (
+                <p className="text-[13px] text-[#999]">No procedure codes match the current filters.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-[#E8E8E4]">
+                        {['Procedure Code', 'Description', 'Category', 'Encounter Date', 'Visit Type', 'Invoice Date', 'Invoice #', 'Charge', 'Qty', 'Total Charge', 'Discount', 'Total after Disc.'].map(h => (
+                          <th key={h} className="text-left text-[10px] font-medium text-[#999] uppercase tracking-wider pb-2 pr-3 whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F1EFE8]">
+                      {filteredProviderRows.map(r => (
+                        <tr key={r.key}>
+                          <td className="py-2 pr-3">
+                            <span className="font-mono text-[11px] font-semibold bg-[#EEEDFE] text-[#3C3489] px-1.5 py-0.5 rounded">{r.code}</span>
+                          </td>
+                          <td className="py-2 pr-3 text-[#555] max-w-xs">{r.description}</td>
+                          <td className="py-2 pr-3">
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${r.category === 'Procedure' ? 'bg-[#EEEDFE] text-[#3C3489]' : 'bg-[#FEF3E8] text-[#633806]'}`}>
+                              {r.category}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555] whitespace-nowrap">{formatApiDate(r.encounterDate)}</td>
+                          <td className="py-2 pr-3 text-[#555] whitespace-nowrap">{r.visitType || '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555] whitespace-nowrap">{r.invoiceDate ? formatApiDate(r.invoiceDate) : '—'}</td>
+                          <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.invoiceNumber}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#1A1A2E]">${r.charge.toFixed(2)}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555]">{r.quantity}</td>
+                          <td className="py-2 pr-3 tabular-nums font-medium text-[#1D9E75]">${r.totalCharge.toFixed(2)}</td>
+                          <td className="py-2 pr-3 tabular-nums text-[#555]">${r.discountAmount.toFixed(2)}</td>
+                          <td className="py-2 pr-3 tabular-nums font-semibold text-[#1D9E75]">${r.totalAfterDiscount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-[#FAF9F4]">
+                        <td colSpan={9} className="py-2 pr-3 text-right text-[11px] font-medium text-[#555] uppercase tracking-wider">Report Total</td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1A1A2E]">${filteredProviderRows.reduce((s, r) => s + r.totalCharge, 0).toFixed(2)}</td>
+                        <td className="py-2 pr-3 tabular-nums text-[#555]">${filteredProviderRows.reduce((s, r) => s + r.discountAmount, 0).toFixed(2)}</td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-[#1D9E75]">${filteredProviderRows.reduce((s, r) => s + r.totalAfterDiscount, 0).toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            // ────────── Landing view: provider totals ──────────
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+                <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">Payroll Report</h3>
+                <label className="inline-flex items-center gap-1.5 text-[12px] text-[#555]">
+                  <input type="checkbox" checked={excludeCancelled} onChange={e => setExcludeCancelled(e.target.checked)} />
+                  Exclude cancelled appointments
+                </label>
+              </div>
+              <p className="text-[12px] text-[#999] mb-4">Encounter Date {rangeLabel} — click a provider to see procedure detail and export CSV</p>
+
+              {payrollProviderTotals.length === 0 ? (
+                <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-[#E8E8E4]">
+                        {['Provider Name', 'Total Charge', 'Total Charge after Discount and Tax'].map(h => (
+                          <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F1EFE8]">
+                      {payrollProviderTotals.map(p => (
+                        <tr key={p.id} className="hover:bg-[#FAF9F4] cursor-pointer" onClick={() => setSelectedProviderId(p.id)}>
+                          <td className="py-3 pr-6 font-medium text-[#7F77DD] underline whitespace-nowrap">{p.name}</td>
+                          <td className="py-3 pr-6 tabular-nums text-[#1A1A2E] text-right">${p.totalCharge.toFixed(2)}</td>
+                          <td className="py-3 pr-6 tabular-nums font-medium text-[#7F77DD] text-right">${p.totalAfterDiscount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-[#FAF9F4]">
+                        <td className="py-3 pr-6 font-semibold text-[#1A1A2E]">Report Total</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">${payrollGrandTotalCharge.toFixed(2)}</td>
+                        <td className="py-3 pr-6 tabular-nums font-semibold text-[#1A1A2E] text-right">${payrollGrandTotalAfterDisc.toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
 

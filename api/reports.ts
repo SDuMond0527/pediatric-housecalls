@@ -33,7 +33,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const [appointments, providers, encounterNotes] = await Promise.all([
     sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
     sql`SELECT id, name FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
-    sql`SELECT en.provider_id, en.cpt_codes, a.scheduled_date FROM encounter_notes en JOIN appointments a ON en.appointment_id = a.id WHERE a.scheduled_date >= ${start}::date AND a.scheduled_date <= ${end}::date AND en.practice_id = ${practiceId}::uuid AND en.cpt_codes IS NOT NULL`,
+    sql`
+      SELECT
+        en.id                 AS encounter_note_id,
+        en.provider_id,
+        en.cpt_codes,
+        a.scheduled_date,
+        a.visit_type,
+        a.status              AS appointment_status,
+        cl.id                 AS claim_id,
+        cl.created_at         AS claim_created_at
+      FROM encounter_notes en
+      JOIN appointments a       ON en.appointment_id = a.id
+      LEFT JOIN claims cl       ON cl.encounter_note_id = en.id
+      WHERE a.scheduled_date >= ${start}::date
+        AND a.scheduled_date <= ${end}::date
+        AND en.practice_id = ${practiceId}::uuid
+        AND en.cpt_codes IS NOT NULL
+    `,
   ])
 
   res.json({ appointments, providers, encounterNotes })
