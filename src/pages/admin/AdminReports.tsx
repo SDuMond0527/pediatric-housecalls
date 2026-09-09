@@ -157,6 +157,81 @@ export function AdminReports() {
     ? formatApiDate(startDate)
     : `${formatApiDate(startDate, 'MMM d')} – ${formatApiDate(endDate)}`
 
+  // Payroll rows must be a useMemo (not a bare computation) and must live above
+  // the `if (loading)` early return so hook order stays stable across renders.
+  const payrollRows: PayrollRow[] = useMemo(() => {
+    const out: PayrollRow[] = []
+    encounterNotes.forEach(en => {
+      if (!Array.isArray(en.cpt_codes)) return
+      const provider = providers.find(p => p.id === en.provider_id)
+      if (!provider) return
+      en.cpt_codes.forEach((c, idx) => {
+        const charge = Number(c.charge_amount) || 0
+        const quantity = Number(c.units) || 1
+        const totalCharge = charge * quantity
+        const discountAmount = 0
+        out.push({
+          key: `${en.encounter_note_id}-${idx}`,
+          providerId: provider.id,
+          providerName: provider.name,
+          code: c.code,
+          description: c.description ?? '',
+          category: c.category ?? 'Procedure',
+          encounterDate: en.scheduled_date,
+          visitType: en.visit_type ?? '',
+          invoiceDate: en.claim_created_at,
+          invoiceNumber: invoiceNumberFromClaimId(en.claim_id),
+          charge,
+          quantity,
+          totalCharge,
+          discountAmount,
+          totalAfterDiscount: totalCharge - discountAmount,
+          appointmentStatus: en.appointment_status ?? '',
+        })
+      })
+    })
+    return out
+  }, [encounterNotes, providers])
+
+  const payrollVisitTypes = useMemo(() => {
+    const s = new Set<string>()
+    payrollRows.forEach(r => { if (r.visitType) s.add(r.visitType) })
+    return Array.from(s).sort()
+  }, [payrollRows])
+
+  const filteredProviderRows = useMemo(() => {
+    if (!selectedProviderId) return []
+    return payrollRows.filter(r => {
+      if (r.providerId !== selectedProviderId) return false
+      if (excludeCancelled && r.appointmentStatus === 'cancelled') return false
+      if (filterCategory !== 'all' && r.category !== filterCategory) return false
+      if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
+      if (filterInvoiceStart && (!r.invoiceDate || r.invoiceDate.slice(0, 10) < filterInvoiceStart)) return false
+      if (filterInvoiceEnd   && (!r.invoiceDate || r.invoiceDate.slice(0, 10) > filterInvoiceEnd))   return false
+      const numGte = (v: number, s: string) => !s || v >= Number(s)
+      const numLte = (v: number, s: string) => !s || v <= Number(s)
+      if (!numGte(r.charge, filterChargeMin) || !numLte(r.charge, filterChargeMax)) return false
+      if (!numGte(r.discountAmount, filterDiscountMin) || !numLte(r.discountAmount, filterDiscountMax)) return false
+      if (!numGte(r.totalAfterDiscount, filterTotalMin) || !numLte(r.totalAfterDiscount, filterTotalMax)) return false
+      return true
+    }).sort((a, b) => a.encounterDate.localeCompare(b.encounterDate) || a.code.localeCompare(b.code))
+  }, [payrollRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
+      filterInvoiceStart, filterInvoiceEnd, filterChargeMin, filterChargeMax,
+      filterDiscountMin, filterDiscountMax, filterTotalMin, filterTotalMax])
+
+  const payrollProviderTotals = useMemo(() => {
+    const byProvider = new Map<string, { id: string; name: string; totalCharge: number; totalAfterDiscount: number; rowCount: number }>()
+    payrollRows.forEach(r => {
+      if (excludeCancelled && r.appointmentStatus === 'cancelled') return
+      const existing = byProvider.get(r.providerId) ?? { id: r.providerId, name: r.providerName, totalCharge: 0, totalAfterDiscount: 0, rowCount: 0 }
+      existing.totalCharge += r.totalCharge
+      existing.totalAfterDiscount += r.totalAfterDiscount
+      existing.rowCount += 1
+      byProvider.set(r.providerId, existing)
+    })
+    return Array.from(byProvider.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [payrollRows, excludeCancelled])
+
   if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
 
   // Summary totals
@@ -194,79 +269,8 @@ export function AdminReports() {
   const activeTypes = VISIT_TYPE_ORDER.filter(vt => appts.some(a => a.visit_type === vt))
   appts.forEach(a => { if (!activeTypes.includes(a.visit_type)) activeTypes.push(a.visit_type) })
 
-  // Payroll report: one row per CPT line, flattened.
-  const payrollRows: PayrollRow[] = []
-  encounterNotes.forEach(en => {
-    if (!Array.isArray(en.cpt_codes)) return
-    const provider = providers.find(p => p.id === en.provider_id)
-    if (!provider) return
-    en.cpt_codes.forEach((c, idx) => {
-      const charge = Number(c.charge_amount) || 0
-      const quantity = Number(c.units) || 1
-      const totalCharge = charge * quantity
-      const discountAmount = 0
-      payrollRows.push({
-        key: `${en.encounter_note_id}-${idx}`,
-        providerId: provider.id,
-        providerName: provider.name,
-        code: c.code,
-        description: c.description ?? '',
-        category: c.category ?? 'Procedure',
-        encounterDate: en.scheduled_date,
-        visitType: en.visit_type ?? '',
-        invoiceDate: en.claim_created_at,
-        invoiceNumber: invoiceNumberFromClaimId(en.claim_id),
-        charge,
-        quantity,
-        totalCharge,
-        discountAmount,
-        totalAfterDiscount: totalCharge - discountAmount,
-        appointmentStatus: en.appointment_status ?? '',
-      })
-    })
-  })
-
-  // Visit types actually present in the pulled data — for the multi-select filter.
-  const payrollVisitTypes = useMemo(() => {
-    const s = new Set<string>()
-    payrollRows.forEach(r => { if (r.visitType) s.add(r.visitType) })
-    return Array.from(s).sort()
-  }, [payrollRows])
-
-  // Rows for the selected provider, with filters applied.
-  const filteredProviderRows = useMemo(() => {
-    if (!selectedProviderId) return []
-    return payrollRows.filter(r => {
-      if (r.providerId !== selectedProviderId) return false
-      if (excludeCancelled && r.appointmentStatus === 'cancelled') return false
-      if (filterCategory !== 'all' && r.category !== filterCategory) return false
-      if (filterVisitTypes.length > 0 && !filterVisitTypes.includes(r.visitType)) return false
-      if (filterInvoiceStart && (!r.invoiceDate || r.invoiceDate.slice(0, 10) < filterInvoiceStart)) return false
-      if (filterInvoiceEnd   && (!r.invoiceDate || r.invoiceDate.slice(0, 10) > filterInvoiceEnd))   return false
-      const numGte = (v: number, s: string) => !s || v >= Number(s)
-      const numLte = (v: number, s: string) => !s || v <= Number(s)
-      if (!numGte(r.charge, filterChargeMin) || !numLte(r.charge, filterChargeMax)) return false
-      if (!numGte(r.discountAmount, filterDiscountMin) || !numLte(r.discountAmount, filterDiscountMax)) return false
-      if (!numGte(r.totalAfterDiscount, filterTotalMin) || !numLte(r.totalAfterDiscount, filterTotalMax)) return false
-      return true
-    }).sort((a, b) => a.encounterDate.localeCompare(b.encounterDate) || a.code.localeCompare(b.code))
-  }, [payrollRows, selectedProviderId, excludeCancelled, filterCategory, filterVisitTypes,
-      filterInvoiceStart, filterInvoiceEnd, filterChargeMin, filterChargeMax,
-      filterDiscountMin, filterDiscountMax, filterTotalMin, filterTotalMax])
-
-  // Landing view: one row per provider with totals, respecting excludeCancelled.
-  const payrollProviderTotals = useMemo(() => {
-    const byProvider = new Map<string, { id: string; name: string; totalCharge: number; totalAfterDiscount: number; rowCount: number }>()
-    payrollRows.forEach(r => {
-      if (excludeCancelled && r.appointmentStatus === 'cancelled') return
-      const existing = byProvider.get(r.providerId) ?? { id: r.providerId, name: r.providerName, totalCharge: 0, totalAfterDiscount: 0, rowCount: 0 }
-      existing.totalCharge += r.totalCharge
-      existing.totalAfterDiscount += r.totalAfterDiscount
-      existing.rowCount += 1
-      byProvider.set(r.providerId, existing)
-    })
-    return Array.from(byProvider.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [payrollRows, excludeCancelled])
+  // payrollRows / filteredProviderRows / payrollProviderTotals / payrollVisitTypes
+  // are memoized above the loading return so hook order stays stable.
 
   const payrollGrandTotalCharge      = payrollProviderTotals.reduce((s, p) => s + p.totalCharge, 0)
   const payrollGrandTotalAfterDisc   = payrollProviderTotals.reduce((s, p) => s + p.totalAfterDiscount, 0)
