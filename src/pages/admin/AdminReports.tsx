@@ -165,6 +165,7 @@ export function AdminReports() {
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   // Payroll report state
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
@@ -182,6 +183,7 @@ export function AdminReports() {
       setProviders(result?.providers ?? [])
       setEncounterNotes(result?.encounterNotes ?? [])
       setLoading(false)
+      setHasLoadedOnce(true)
     }
     load()
   }, [startDate, endDate])
@@ -306,7 +308,10 @@ export function AdminReports() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [payrollRows, excludeCancelled])
 
-  if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
+  // Only replace the whole page on the FIRST load. On subsequent refetches
+  // (e.g., date-range change), keep the previously rendered content on screen
+  // so the scroll position doesn't jump back to the top.
+  if (loading && !hasLoadedOnce) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
 
   // Summary totals
   const total     = appts.length
@@ -380,7 +385,10 @@ export function AdminReports() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10 flex items-center justify-between flex-wrap gap-3">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Reports</div>
-          <div className="text-[12px] text-[#999] mt-0.5">Visit and provider activity</div>
+          <div className="text-[12px] text-[#999] mt-0.5">
+            Visit and provider activity
+            {loading && hasLoadedOnce && <span className="ml-2 text-[#7F77DD]">· refreshing…</span>}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input
