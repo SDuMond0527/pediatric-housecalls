@@ -105,6 +105,9 @@ const COMMON_TESTS = [
   { code: '005215', name: 'Erythrocyte Sedimentation Rate (ESR)' },
   { code: '001503', name: 'Prothrombin Time (PT/INR)' },
   { code: '002003', name: 'Urine Culture' },
+  { code: '164640', name: 'Tissue Transglutaminase (tTG)' },
+  { code: '001784', name: 'Immunoglobulin A, Quantitative' },
+  { code: '001321', name: 'Iron and Total Iron Binding Capacity (TIBC)' },
 ]
 
 function LabStatusBadge({ status }: { status: string }) {
