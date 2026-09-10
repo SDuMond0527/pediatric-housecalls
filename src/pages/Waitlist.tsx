@@ -425,39 +425,48 @@ export function Waitlist() {
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
-      // Save patient data from waitlist notes into the child's permanent profile
-      if (accepting.family_id) {
+      // Save patient data from the waitlist entry into the child's permanent
+      // profile. Prefer the explicit child_ids link that new entries carry
+      // (set by both admin submitAdd and family portal). Fall back to a
+      // name match against the family's children for legacy entries.
+      try {
         const noteMap = parseNotes(accepting.notes)
-        const patientName = noteMap['Patient'] || ''
-        const [patientFirst, ...rest] = patientName.trim().split(' ')
-        const patientLast = rest.join(' ')
-        try {
+        const insRaw = noteMap['Insurance'] || ''
+        const patientPatch = {
+          allergies:               noteMap['Allergies']         || null,
+          current_medications:     noteMap['Medications']       || null,
+          medical_history:         noteMap['PMH']               || null,
+          preferred_pharmacy:      noteMap['Pharmacy']          || null,
+          pcp:                     noteMap['PCP']               || null,
+          vaccination_status:      noteMap['Vaccination status'] || noteMap['Vaccination'] || null,
+          insurance_provider:      insRaw.split(' | ')[0]      || null,
+          insurance_member_id:     noteMap['Member ID']         || null,
+          insurance_group_number:  noteMap['Group #']           || null,
+          parent_phone:            noteMap['Phone']             || accepting.family_phone || null,
+          parent_email:            noteMap['Email']             || accepting.family_email || null,
+          parent_address:          noteMap['Address']           || null,
+          parent_zip:              accepting.zip                || null,
+        }
+
+        // Path 1 — explicit child_ids on the entry (preferred; set by new
+        // admin adds and family portal submits).
+        const explicitChildIds = Array.isArray((accepting as any).child_ids) ? (accepting as any).child_ids : []
+        if (explicitChildIds.length > 0) {
+          await Promise.all(explicitChildIds.map((cid: string) => updateChild(cid, patientPatch).catch(() => {})))
+        } else if (accepting.family_id) {
+          // Path 2 — legacy entries: look up family's children and match by name.
+          const patientName = noteMap['Patient'] || ''
+          const [patientFirst, ...rest] = patientName.trim().split(' ')
+          const patientLast = rest.join(' ')
           const familyChildren = await getChildrenByFamilyIds([accepting.family_id])
           const match = (familyChildren ?? []).find((c: any) => {
             const fn = (c.first_name || '').toLowerCase()
             const ln = (c.last_name || '').toLowerCase()
             return patientFirst && fn === patientFirst.toLowerCase() && (!patientLast || ln === patientLast.toLowerCase())
           })
-          if (match) {
-            const insRaw = noteMap['Insurance'] || ''
-            await updateChild(match.id, {
-              allergies:                   noteMap['Allergies']        || null,
-              current_medications:         noteMap['Medications']      || null,
-              medical_history:             noteMap['PMH']              || null,
-              preferred_pharmacy:          noteMap['Pharmacy']         || null,
-              pcp:                         noteMap['PCP']              || null,
-              vaccination_status:          noteMap['Vaccination']      || null,
-              insurance_provider:          insRaw.split(' | ')[0]     || null,
-              insurance_member_id:         noteMap['Member ID']        || null,
-              insurance_group_number:      noteMap['Group #']          || null,
-              parent_phone:                noteMap['Phone']            || accepting.family_phone || null,
-              parent_email:                noteMap['Email']            || accepting.family_email || null,
-              parent_address:              noteMap['Address']          || null,
-              parent_zip:                  accepting.zip               || null,
-            })
-          }
-        } catch { /* non-blocking */ }
-      }
+          if (match) await updateChild(match.id, patientPatch)
+        }
+      } catch { /* non-blocking */ }
 
       const partnerAutoFound = isDual && apptResult?.primary !== undefined && !!apptResult.secondary
       const needsBroadcast = isDual && apptResult?.primary !== undefined && !apptResult.secondary
