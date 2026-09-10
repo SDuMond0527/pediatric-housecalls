@@ -889,10 +889,8 @@ export function BookVisit() {
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
     if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
 
-    // Persist phone back to family profile so it's visible everywhere
-    if (waitlistPhone && !(family as any).phone) {
-      updateMyFamily({ phone: waitlistPhone }).catch(() => {})
-    }
+    // (Family profile is updated below along with child fields — no separate
+    // phone-only patch needed here.)
 
     const waitlistEntry = await familyCreateWaitlistEntry({
       family_id: family.id,
@@ -908,33 +906,54 @@ export function BookVisit() {
       familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: waitlistEntry.id }).catch(() => {})
     }
 
-    // Ensure child has a saved profile — create one for new patients, update existing
+    // Every field the parent typed on this waitlist form MUST be written to
+    // the permanent child + family records — not just stashed in the waitlist
+    // notes. Same fields for new AND existing patients — no branching. If it's
+    // an empty string, don't overwrite what's already there (COALESCE on the
+    // server side handles that).
+    // See memory: feedback_save_all_patient_data.md
+    const childFieldsFromWaitlist: Record<string, any> = {
+      family_id: family.id,
+      date_of_birth: waitlistDOB || null,
+      allergies: waitlistAllergies || null,
+      current_medications: waitlistMedications || null,
+      medical_history: waitlistPMH || null,
+      preferred_pharmacy: waitlistPharmacy || null,
+      pcp: waitlistPCP || null,
+      insurance_provider: waitlistInsurance || null,
+      insurance_member_id: waitlistInsuranceMemberId || null,
+      insurance_group_number: waitlistInsuranceGroupNum || null,
+      insurance_subscriber_name: waitlistInsuranceSubscriber || null,
+      parent_name: family.display_name || null,
+      parent_email: family.email || null,
+      parent_phone: effectivePhone || null,
+      parent_address: waitlistAddress || null,
+      parent_zip: booking.zip || null,
+      parent_state: booking.state || null,
+    }
+
     if (selectedChild) {
-      updateChild(selectedChild.id, { vaccination_status: (selectedChild as any).vaccination_status || null }).catch(() => {})
+      updateChild(selectedChild.id, childFieldsFromWaitlist).catch(() => {})
     } else if (waitlistPatient) {
       const [firstName, ...rest] = waitlistPatient.trim().split(' ')
       const lastName = rest.join(' ')
       createChild({
-        family_id: family.id,
+        ...childFieldsFromWaitlist,
         first_name: firstName || null,
         last_name: lastName || null,
-        date_of_birth: waitlistDOB || null,
-        allergies: waitlistAllergies || null,
-        current_medications: waitlistMedications || null,
-        medical_history: waitlistPMH || null,
-        preferred_pharmacy: waitlistPharmacy || null,
-        pcp: waitlistPCP || null,
-        insurance_provider: waitlistInsurance || null,
-        insurance_member_id: waitlistInsuranceMemberId || null,
-        insurance_group_number: waitlistInsuranceGroupNum || null,
-        insurance_subscriber_name: waitlistInsuranceSubscriber || null,
-        parent_name: family.display_name || null,
-        parent_email: family.email || null,
-        parent_phone: effectivePhone || null,
-        parent_address: waitlistAddress || null,
-        parent_zip: booking.zip || null,
-        parent_state: booking.state || null,
       }).catch(() => {})
+    }
+
+    // Save family-level fields (address, phone) back to the family profile
+    // regardless of which branch above ran — so they're available on every
+    // surface, not only trapped in this one child record.
+    const familyPatch: Record<string, any> = {}
+    if (effectivePhone) familyPatch.phone = effectivePhone
+    if (waitlistAddress) familyPatch.address_line1 = waitlistAddress
+    if (booking.zip) familyPatch.zip = booking.zip
+    if (booking.state) familyPatch.state = booking.state
+    if (Object.keys(familyPatch).length > 0) {
+      updateMyFamily(familyPatch).catch(() => {})
     }
 
     setWaitlistSubmitting(false)
