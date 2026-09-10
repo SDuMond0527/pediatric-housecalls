@@ -254,8 +254,16 @@ export function AdminClaims() {
     }
   }
 
-  const reviewClaims = claims.filter(c => c.status === 'pending_review' || c.status === 'error')
-  const submittedClaims = claims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
+  // Once the admin has sent the patient statement for a self-pay claim, hide
+  // the claim from the list — self-pay claims aren't submitted to insurance,
+  // so the statement being sent is their end state. `statement_status` and
+  // `statement_sent_at` come from the LEFT JOIN on patient_statements in
+  // api/claims/index.ts.
+  const isSelfPayWithSentStatement = (c: any) =>
+    c.payer_id === 'PP' && (c.statement_status === 'sent' || !!c.statement_sent_at)
+  const visibleClaims  = claims.filter(c => !isSelfPayWithSentStatement(c))
+  const reviewClaims   = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error')
+  const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`
