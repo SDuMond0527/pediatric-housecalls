@@ -150,7 +150,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           SELECT we.*,
             COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
             fp.email AS family_email,
-            COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
+            COALESCE(
+            fp.phone,
+            (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Phone:\s*([^|]+)')), '')
+          ) AS family_phone,
+          COALESCE(
+            fp.email,
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Email:\s*([^|]+)')), '')
+          ) AS family_email_resolved
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -162,7 +170,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           SELECT we.*,
             COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
             fp.email AS family_email,
-            COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
+            COALESCE(
+            fp.phone,
+            (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Phone:\s*([^|]+)')), '')
+          ) AS family_phone,
+          COALESCE(
+            fp.email,
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Email:\s*([^|]+)')), '')
+          ) AS family_email_resolved
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -173,8 +189,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       rows = await sql`
         SELECT we.*,
           COALESCE(fp.display_name, (SELECT last_name || ' Family' FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
-          fp.email AS family_email,
-          COALESCE(fp.phone, (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)) AS family_phone
+          COALESCE(
+            fp.email,
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Email:\s*([^|]+)')), '')
+          ) AS family_email,
+          COALESCE(
+            fp.phone,
+            (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Phone:\s*([^|]+)')), '')
+          ) AS family_phone
         FROM waitlist_entries we
         LEFT JOIN family_profiles fp ON fp.id = we.family_id
         WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)

@@ -500,7 +500,15 @@ export function Waitlist() {
           </div>
         )}
 
-        {entries.map(entry => (
+        {entries.map(entry => {
+          // Phone/email may live directly on the entry (from family portal) OR
+          // parsed out of the free-text notes field (from the admin add-form
+          // and legacy entries). Fall back to notes so the card always shows
+          // contact info when it exists somewhere.
+          const noteMap = parseNotes(entry.notes)
+          const displayPhone = entry.family_phone || noteMap['Phone'] || ''
+          const displayEmail = entry.family_email || noteMap['Email'] || ''
+          return (
           <div key={entry.id} className="border border-[#E8E8E4] rounded-xl p-5 bg-white shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -516,14 +524,14 @@ export function Waitlist() {
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#999] mb-2">
                   <span className="flex items-center gap-1"><MapPin size={11} /> Zip {entry.zip}{entry.state && ` · ${stateLabel(entry.state)}`}</span>
-                  {entry.family_phone && (
-                    <a href={`tel:${entry.family_phone}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
-                      <Phone size={11} /> {entry.family_phone}
+                  {displayPhone && (
+                    <a href={`tel:${displayPhone}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
+                      <Phone size={11} /> {displayPhone}
                     </a>
                   )}
-                  {entry.family_email && (
-                    <a href={`mailto:${entry.family_email}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
-                      {entry.family_email}
+                  {displayEmail && (
+                    <a href={`mailto:${displayEmail}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
+                      {displayEmail}
                     </a>
                   )}
                   {entry.preferred_time_window && <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window}</span>}
@@ -574,7 +582,8 @@ export function Waitlist() {
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Edit contact modal */}
