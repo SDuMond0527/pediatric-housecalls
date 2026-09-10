@@ -210,6 +210,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const b = req.body
     try {
+      // Phone is required. Reject any waitlist entry where the linked family
+      // has no phone AND no phone is present in the notes payload. See memory:
+      // feedback_phone_required_everywhere.md.
+      const notesPhoneDigits = String(b.notes ?? '').match(/Phone:\s*([^|]+)/)?.[1]?.replace(/\D/g, '') ?? ''
+      let familyPhoneDigits = ''
+      if (b.family_id) {
+        const [fp] = await sql`
+          SELECT COALESCE(
+            fp.phone,
+            (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)
+          ) AS phone
+          FROM family_profiles fp WHERE fp.id = ${b.family_id}::uuid
+        `
+        familyPhoneDigits = String(fp?.phone ?? '').replace(/\D/g, '')
+      }
+      const resolvedPhoneDigits = notesPhoneDigits.length === 10 ? notesPhoneDigits
+        : familyPhoneDigits.length === 10 ? familyPhoneDigits
+        : ''
+      if (resolvedPhoneDigits.length !== 10) {
+        return res.status(400).json({ error: 'A 10-digit phone number is required to add this family to the waitlist.' })
+      }
+
       const [row] = await sql`
         INSERT INTO waitlist_entries (practice_id, family_id, visit_type, zip, state, complaint, status, notes, preferred_time_window)
         VALUES (${practiceId}::uuid, ${b.family_id ?? null}, ${b.visit_type ?? null}, ${b.zip ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})

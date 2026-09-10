@@ -6,18 +6,30 @@ import { Input } from '../../components/ui/Input'
 
 export function FamilySignup() {
   const { signUp } = useFamilyAuth()
-  const [form, setForm] = useState({ email: '', password: '', confirm: '' })
+  const [form, setForm] = useState({ email: '', phone: '', password: '', confirm: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
+  // Phone is required. Providers cannot send e-prescriptions or reach the
+  // family without one. Enforced client-side here and server-side on
+  // /api/families/me and /api/waitlist-entries. See memory:
+  // feedback_phone_required_everywhere.md.
+  function normalizedPhone(raw: string): string {
+    return raw.replace(/\D/g, '')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    const digits = normalizedPhone(form.phone)
+    if (digits.length !== 10) { setError('Please enter a valid 10-digit phone number.'); return }
     if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (form.password !== form.confirm) { setError("Passwords don't match."); return }
     setLoading(true)
+    // Stash phone for FamilySetup to pick up and save with the family profile.
+    try { sessionStorage.setItem('phc_signup_phone', digits) } catch {}
     const { error } = await signUp(form.email, form.password)
     if (error) { setError(error.message); setLoading(false); return }
     window.location.href = '/family/setup'
@@ -39,6 +51,7 @@ export function FamilySignup() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} required />
+            <Input label="Mobile phone" type="tel" placeholder="(704) 555-0000" value={form.phone} onChange={e => set('phone', e.target.value)} required />
             <Input label="Password" type="password" placeholder="8+ characters" value={form.password} onChange={e => set('password', e.target.value)} required />
             <Input label="Confirm password" type="password" placeholder="••••••••" value={form.confirm} onChange={e => set('confirm', e.target.value)} required />
             {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}

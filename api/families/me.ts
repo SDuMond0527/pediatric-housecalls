@@ -39,6 +39,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PATCH') {
     try {
       const { email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at, practice_id } = req.body
+
+      // Phone is required for every family profile — providers cannot send
+      // e-prescriptions or reach the family without one. See memory:
+      // feedback_phone_required_everywhere.md. Reject the write unless the
+      // payload has a valid 10-digit phone OR the existing row already has one.
+      const digits = String(phone ?? '').replace(/\D/g, '')
+      if (digits.length !== 10) {
+        const [existing] = await sql`SELECT phone FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
+        const existingDigits = String(existing?.phone ?? '').replace(/\D/g, '')
+        if (existingDigits.length !== 10) {
+          return res.status(400).json({ error: 'A 10-digit phone number is required to save this profile.' })
+        }
+      }
+
       const [row] = await sql`
         INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at, practice_id)
         VALUES (

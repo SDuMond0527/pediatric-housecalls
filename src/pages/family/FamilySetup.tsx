@@ -82,14 +82,29 @@ export function FamilySetup() {
     setSaving(true)
     setError('')
 
+    // Phone is required. Collected at signup and stashed in sessionStorage;
+    // fall back to any parent_phone on a matched child. See memory:
+    // feedback_phone_required_everywhere.md.
+    let signupPhone = ''
+    try { signupPhone = sessionStorage.getItem('phc_signup_phone') || '' } catch {}
+    const matchedChildPhone = valid.map(c => c.match?.parent_phone).find(p => p && p.replace(/\D/g, '').length >= 10) || ''
+    const resolvedPhone = signupPhone || matchedChildPhone.replace(/\D/g, '')
+    if (!resolvedPhone || resolvedPhone.length < 10) {
+      setError('A 10-digit phone number is required. Please go back to sign up and provide one.')
+      setSaving(false)
+      return
+    }
+
     try {
       await updateMyFamily({
         email:        user!.email ?? null,
         display_name: displayName || null,
+        phone:        resolvedPhone,
         state:        state || null,
         zip:          zip || null,
         practice_id:  import.meta.env.VITE_PRACTICE_ID || null,
       })
+      try { sessionStorage.removeItem('phc_signup_phone') } catch {}
     } catch (e: any) {
       setError('Profile save failed: ' + (e?.message || String(e)))
       setSaving(false)
