@@ -51,35 +51,40 @@ export const TELEHEALTH_MOD95_PAY: Record<string, number> = {
   '99214': 31,
 }
 
-// CV split — provider's share per unit. Same for all providers.
+// CV split — provider's share per unit. Codes match the fee_schedule DB
+// exactly. Split rules come from Sara's authoritative CV structure document.
+// All providers get the same share (no per-provider differential).
 export const CV_SPLIT: Record<string, number> = {
-  CV1:  15,
-  CV2:  40,
-  CV3:  60,
-  CV4:  100,
-  CV5:  40,
-  CV6:  60,
-  CV7:  80,
-  CV8:  100,
-  CV9:  60,
-  CV10: 80,
-  CV11: 100,
-  CV12: 120,
-  CV13: 150,
+  CV1:     15,   // Weekday 8am-3pm, 0-5 mi     ($50)
+  CV2:     40,   // Weekday 8am-3pm, 5-15 mi    ($75)
+  CV3:     60,   // Weekday 8am-3pm, >15 mi     ($100)
+  CV4:     40,   // Weekday off-hours, 0-5 mi   ($75)
+  CV5:     60,   // Weekday off-hours, 5-15 mi  ($100)
+  CV6:     80,   // Weekday off-hours, >15 mi   ($125)
+  CV7:     60,   // Weekend, 0-5 mi             ($100)
+  CV8:     80,   // Weekend, 5-15 mi            ($125)
+  CV9:     100,  // Weekend, >15 mi             ($150)
+  CV10:    150,  // Major holiday               ($200)
+  CV11:    0,    // IV fluids convenience       ($150, no provider cut)
+  CVTech:  0,    // CMA visit convenience       ($50,  no provider cut)
 }
 
-// VACV split — Virginia convenience fees. Only Santos and Niu bill these.
-export const VACV_SPLIT: Record<string, { santos: number; niu: number }> = {
-  VACV1:  { santos: 50,  niu: 40 },
-  VACV2:  { santos: 65,  niu: 60 },
-  VACV3:  { santos: 115, niu: 100 },
-  VACV4:  { santos: 65,  niu: 60 },
-  VACV5:  { santos: 90,  niu: 80 },
-  VACV6:  { santos: 115, niu: 100 },
-  VACV7:  { santos: 90,  niu: 80 },
-  VACV8:  { santos: 115, niu: 100 },
-  VACV9:  { santos: 135, niu: 120 },
-  VACV10: { santos: 160, niu: 150 },
+// VACV split — Virginia convenience fees. Per new rules, no Santos/Niu
+// differential — all providers get the same share. VACV10 (major holiday)
+// and VACV11 ($50 <2 mi) exist in the DB but aren't listed in the new rule
+// document; provider share defaults to 0 until Sara specifies.
+export const VACV_SPLIT: Record<string, number> = {
+  VACV1:   40,   // Weekday 8am-3pm, 0-5 mi     ($75)
+  VACV2:   60,   // Weekday 8am-3pm, 5-15 mi    ($100)
+  VACV3:   100,  // Weekday 8am-3pm, >15 mi     ($150)
+  VACV4:   60,   // Weekday off-hours, 0-5 mi   ($100)
+  VACV5:   80,   // Weekday off-hours, 5-15 mi  ($125)
+  VACV6:   100,  // Weekday off-hours, >15 mi   ($150)
+  VACV7:   80,   // Weekend, 0-5 mi             ($125)
+  VACV8:   100,  // Weekend, 5-15 mi            ($150)
+  VACV9:   140,  // Weekend, >15 mi             ($175)
+  VACV10:  0,    // NOT in new rules — flag to Sara
+  VACV11:  0,    // NOT in new rules — flag to Sara
 }
 
 // Paired-visit fallback pay — when a row is on a paired appointment
@@ -125,12 +130,8 @@ export function computeProviderPay(input: {
     return { pay: 0, rvu: 0, rvuRate: 0, rvuCount: 0, cvSplit: CV_SPLIT[code] * units }
   }
 
-  const vacv = VACV_SPLIT[code]
-  if (vacv) {
-    const share = providerName === 'Dr. Rebecca Santos' ? vacv.santos
-      : providerName === 'Dr. Nina Niu' ? vacv.niu
-      : 0
-    return { pay: 0, rvu: 0, rvuRate: 0, rvuCount: 0, cvSplit: share * units }
+  if (VACV_SPLIT[code] !== undefined) {
+    return { pay: 0, rvu: 0, rvuRate: 0, rvuCount: 0, cvSplit: VACV_SPLIT[code] * units }
   }
 
   const flat = FLAT_PAY_BY_CODE[code]
