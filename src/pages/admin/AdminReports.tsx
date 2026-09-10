@@ -149,7 +149,7 @@ function toCsv(rows: PayrollRow[], onCallShiftsForProvider: OnCallShiftRow[]): s
     '', '', '', '', '', '', '', 'REPORT TOTALS',
     `Encounters: ${totalEncounters}`, '', '', '', '',
     '', '', totalRvuCount.toFixed(2), totalRvuPay.toFixed(2), totalCv.toFixed(2),
-    '', '',
+    totalOnCallHours.toFixed(2), totalOnCallPay.toFixed(2),
   ].map(esc).join(',')
   const grandTotalRow = [
     '', '', '', '', '', '', '', 'TOTAL PAY',
