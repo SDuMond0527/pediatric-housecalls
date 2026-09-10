@@ -4,7 +4,7 @@ import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
   createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
-  getChildrenByFamilyIds, updateChild,
+  getChildrenByFamilyIds, updateChild, createChild,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -192,6 +192,64 @@ export function Waitlist() {
   async function submitAdd() {
     if (!addForm.name || !addForm.phone || !addForm.zip || !addForm.state || !addForm.complaint) return
     setAddSubmitting(true)
+
+    // Save every field the admin typed into a PERMANENT child record — not just
+    // stashed in the waitlist entry's notes. This is the same rule the family
+    // portal now follows for both booking and waitlist submits. See memory:
+    // feedback_save_all_patient_data.md and feedback_no_branches_on_entry_origin.md.
+    const [firstName, ...restName] = (addForm.name || '').trim().split(/\s+/)
+    const lastName = restName.join(' ')
+
+    let childId: string | null = null
+    try {
+      if (selectedChild?.id) {
+        // Matched existing patient — update their profile with any new fields.
+        await updateChild(selectedChild.id, {
+          parent_phone:              addForm.phone || null,
+          parent_email:              addForm.email || null,
+          parent_address:            addForm.address || null,
+          parent_zip:                addForm.zip || null,
+          parent_state:              addForm.state || null,
+          date_of_birth:             addForm.dob || null,
+          allergies:                 addForm.allergies || null,
+          current_medications:       addForm.medications || null,
+          medical_history:           addForm.pmh || null,
+          pcp:                       addForm.pcp || null,
+          preferred_pharmacy:        addForm.pharmacy || null,
+          insurance_provider:        addForm.insurance || null,
+          insurance_member_id:       addForm.memberId || null,
+          insurance_group_number:    addForm.groupNum || null,
+        })
+        childId = selectedChild.id
+      } else {
+        // New patient — create with EVERY field. Same field set no matter which
+        // ingest path (admin add vs family portal) landed us here.
+        const created = await createChild({
+          first_name: firstName || null,
+          last_name:  lastName || null,
+          date_of_birth: addForm.dob || null,
+          parent_phone:  addForm.phone || null,
+          parent_email:  addForm.email || null,
+          parent_address: addForm.address || null,
+          parent_zip:    addForm.zip || null,
+          parent_state:  addForm.state || null,
+          pcp:           addForm.pcp || null,
+          preferred_pharmacy: addForm.pharmacy || null,
+          insurance_provider: addForm.insurance || null,
+          insurance_member_id: addForm.memberId || null,
+          insurance_group_number: addForm.groupNum || null,
+          allergies: addForm.allergies || null,
+          current_medications: addForm.medications || null,
+          medical_history: addForm.pmh || null,
+        })
+        childId = created?.id ?? null
+      }
+    } catch (err: any) {
+      console.error('[waitlist admin add] child save failed:', err)
+      // Don't block waitlist entry creation — better a note-only entry than losing the request
+    }
+
+    // Notes carry a human-readable dump of everything for legacy display.
     const noteParts: string[] = []
     noteParts.push(`Patient: ${addForm.name}`)
     if (addForm.dob) noteParts.push(`DOB: ${addForm.dob}`)
@@ -207,6 +265,7 @@ export function Waitlist() {
     if (addForm.memberId) noteParts.push(`Member ID: ${addForm.memberId}`)
     if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
     if (addForm.complaint) noteParts.push(`Complaint: ${addForm.complaint}`)
+
     try {
       const preferredWindow = [
         addForm.preferredDate ? new Date(addForm.preferredDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
@@ -220,6 +279,7 @@ export function Waitlist() {
         complaint: addForm.complaint,
         preferred_time_window: preferredWindow,
         notes: noteParts.join(' | '),
+        child_ids: childId ? [childId] : [],
       })
       if (newEntry?.id) {
         invokeNotifications({ type: 'waitlist', waitlistEntryId: newEntry.id }).catch(() => {})

@@ -222,6 +222,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       insurance_subscriber_relationship,
       insurance_card_front_url, insurance_card_back_url,
       nickname,
+      allergies, current_medications, medical_history, vaccination_status,
     } = req.body
     if (!first_name && !last_name) return res.status(400).json({ error: 'Name required' })
     const label = [first_name, last_name].filter(Boolean).join(' ')
@@ -236,7 +237,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
         insurance_subscriber_relationship,
         insurance_card_front_url, insurance_card_back_url,
-        nickname
+        nickname,
+        allergies, current_medications, medical_history, vaccination_status
       )
       VALUES (
         ${practiceId}::uuid,
@@ -264,7 +266,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${insurance_subscriber_relationship || null},
         ${insurance_card_front_url || null},
         ${insurance_card_back_url || null},
-        ${nickname || null}
+        ${nickname || null},
+        ${allergies || null},
+        ${current_medications || null},
+        ${medical_history || null},
+        ${vaccination_status || null}
       )
       RETURNING *`
     return res.json(row)
