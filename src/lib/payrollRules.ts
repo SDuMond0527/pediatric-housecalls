@@ -70,9 +70,7 @@ export const CV_SPLIT: Record<string, number> = {
 }
 
 // VACV split — Virginia convenience fees. Per new rules, no Santos/Niu
-// differential — all providers get the same share. VACV10 (major holiday)
-// and VACV11 ($50 <2 mi) exist in the DB but aren't listed in the new rule
-// document; provider share defaults to 0 until Sara specifies.
+// differential — all providers get the same share.
 export const VACV_SPLIT: Record<string, number> = {
   VACV1:   40,   // Weekday 8am-3pm, 0-5 mi     ($75)
   VACV2:   60,   // Weekday 8am-3pm, 5-15 mi    ($100)
@@ -83,8 +81,8 @@ export const VACV_SPLIT: Record<string, number> = {
   VACV7:   80,   // Weekend, 0-5 mi             ($125)
   VACV8:   100,  // Weekend, 5-15 mi            ($150)
   VACV9:   140,  // Weekend, >15 mi             ($175)
-  VACV10:  0,    // NOT in new rules — flag to Sara
-  VACV11:  0,    // NOT in new rules — flag to Sara
+  VACV10:  150,  // Major holiday               ($200)
+  VACV11:  15,   // Weekday <2 mi               ($50)
 }
 
 // Paired-visit fallback pay — when a row is on a paired appointment
