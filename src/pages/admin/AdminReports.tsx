@@ -14,6 +14,16 @@ interface ApptRow {
   notes: string | null
 }
 interface ProviderRow { id: string; name: string; role: string }
+interface OnCallShiftRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
+
+const ON_CALL_HOURLY_RATE = 6
+
+function onCallShiftHours(s: OnCallShiftRow): number {
+  if (!s.start_time || !s.end_time) return 0
+  const [sh, sm] = s.start_time.split(':').map(Number)
+  const [eh, em] = s.end_time.split(':').map(Number)
+  return Math.max(0, (eh + em / 60) - (sh + sm / 60))
+}
 interface EncounterCpt { code: string; description: string; category?: string; charge_amount: number; units?: number; modifier?: string }
 interface EncounterNoteRow {
   encounter_note_id: string
@@ -72,45 +82,118 @@ function fmtPatientName(first: string | null, last: string | null): string {
   return l || f
 }
 
-function toCsv(rows: PayrollRow[]): string {
+function toCsv(rows: PayrollRow[], onCallShiftsForProvider: OnCallShiftRow[]): string {
   const headers = [
     '#', 'Chart #', 'Patient Name', 'Claim #', 'Payer',
     'Procedure Code', 'Description', 'Category',
     'Encounter Date', 'Visit Type', 'Claim Date',
     'Provider', 'Amount Billed',
     'wRVU', '$/RVU', 'RVU Count', 'Provider $ Paid', 'CV Split',
+    'On-call hours', 'On-call pay',
   ]
   const esc = (v: any) => {
     const s = v == null ? '' : String(v)
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const body = rows.map((r, i) => [
-    i + 1, r.chartNumber, r.patientName, r.claimNumber, r.payer,
-    r.code, r.description, r.category,
-    formatApiDate(r.encounterDate), r.visitType,
-    r.claimDate ? formatApiDate(r.claimDate) : '',
-    r.providerName, r.charge.toFixed(2),
-    r.rvu.toFixed(2), r.rvuRate.toFixed(2), r.rvuCount.toFixed(2),
-    r.providerPay.toFixed(2), r.cvSplit.toFixed(2),
-  ].map(esc).join(','))
+
+  // Sum on-call hours per calendar date (multiple shifts/states can exist).
+  const hoursByDate = new Map<string, number>()
+  onCallShiftsForProvider.forEach(s => {
+    const d = s.date.slice(0, 10)
+    hoursByDate.set(d, (hoursByDate.get(d) ?? 0) + onCallShiftHours(s))
+  })
+
+  // Attribute a date's on-call hours to the FIRST row for that date; blank
+  // on subsequent rows so hours aren't double-counted visually.
+  const seenDates = new Set<string>()
+  const body = rows.map((r, i) => {
+    const dateKey = r.encounterDate ? r.encounterDate.slice(0, 10) : ''
+    const hrs = hoursByDate.get(dateKey) ?? 0
+    let onCallHrsCell = ''
+    let onCallPayCell = ''
+    if (hrs > 0 && !seenDates.has(dateKey)) {
+      onCallHrsCell = hrs.toFixed(2)
+      onCallPayCell = (hrs * ON_CALL_HOURLY_RATE).toFixed(2)
+      seenDates.add(dateKey)
+    }
+    return [
+      i + 1, r.chartNumber, r.patientName, r.claimNumber, r.payer,
+      r.code, r.description, r.category,
+      formatApiDate(r.encounterDate), r.visitType,
+      r.claimDate ? formatApiDate(r.claimDate) : '',
+      r.providerName, r.charge.toFixed(2),
+      r.rvu.toFixed(2), r.rvuRate.toFixed(2), r.rvuCount.toFixed(2),
+      r.providerPay.toFixed(2), r.cvSplit.toFixed(2),
+      onCallHrsCell, onCallPayCell,
+    ].map(esc).join(',')
+  })
 
   const totalEncounters = new Set(rows.map(r => r.claimNumber || r.encounterDate + '|' + r.patientName)).size
-  const totalRvuCount = rows.reduce((s, r) => s + r.rvuCount, 0)
-  const totalRvuPay   = rows.reduce((s, r) => s + r.providerPay, 0)
-  const totalCv       = rows.reduce((s, r) => s + r.cvSplit, 0)
-  const grandTotal    = totalRvuPay + totalCv
+  const totalRvuCount   = rows.reduce((s, r) => s + r.rvuCount, 0)
+  const totalRvuPay     = rows.reduce((s, r) => s + r.providerPay, 0)
+  const totalCv         = rows.reduce((s, r) => s + r.cvSplit, 0)
+  const grandTotal      = totalRvuPay + totalCv
+
+  // On-call dates the provider was on-call but had zero encounters — these
+  // need their own rows so the provider isn't underpaid.
+  const orphanDates = Array.from(hoursByDate.entries())
+    .filter(([d]) => !seenDates.has(d))
+    .sort((a, b) => a[0].localeCompare(b[0]))
+  const attributedHours = Array.from(seenDates).reduce((s, d) => s + (hoursByDate.get(d) ?? 0), 0)
+  const orphanHours     = orphanDates.reduce((s, [, h]) => s + h, 0)
+  const totalOnCallHours = attributedHours + orphanHours
+  const totalOnCallPay   = totalOnCallHours * ON_CALL_HOURLY_RATE
+  const grandTotalWithOnCall = grandTotal + totalOnCallPay
+
   const totalsRow = [
     '', '', '', '', '', '', '', 'REPORT TOTALS',
     `Encounters: ${totalEncounters}`, '', '', '', '',
     '', '', totalRvuCount.toFixed(2), totalRvuPay.toFixed(2), totalCv.toFixed(2),
+    '', '',
   ].map(esc).join(',')
   const grandTotalRow = [
     '', '', '', '', '', '', '', 'TOTAL PAY',
     '', '', '', '', '',
     '', '', '', grandTotal.toFixed(2), '',
+    '', '',
   ].map(esc).join(',')
 
-  return [headers.join(','), ...body, totalsRow, grandTotalRow].join('\n')
+  const csvLines = [headers.join(','), ...body, totalsRow, grandTotalRow]
+
+  if (totalOnCallHours > 0) {
+    csvLines.push('')
+    csvLines.push([
+      '', '', '', '', '', '', '', 'ON-CALL',
+      '', '', '', '', '',
+      '', '', '', '', '',
+      'Hours', 'Pay',
+    ].map(esc).join(','))
+
+    orphanDates.forEach(([date, hrs]) => {
+      csvLines.push([
+        '', '', '', '', '', '', '', 'On-call only',
+        formatApiDate(date), '', '', '', '',
+        '', '', '', '', '',
+        hrs.toFixed(2), (hrs * ON_CALL_HOURLY_RATE).toFixed(2),
+      ].map(esc).join(','))
+    })
+
+    csvLines.push([
+      '', '', '', '', '', '', '', 'ON-CALL TOTAL',
+      '', '', '', '', '',
+      '', '', '', '', '',
+      totalOnCallHours.toFixed(2), totalOnCallPay.toFixed(2),
+    ].map(esc).join(','))
+
+    csvLines.push([
+      '', '', '', '', '', '', '', 'GRAND TOTAL (WITH ON-CALL)',
+      '', '', '', '', '',
+      '', '', '', grandTotalWithOnCall.toFixed(2), '',
+      '', '',
+    ].map(esc).join(','))
+  }
+
+  return csvLines.join('\n')
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -164,6 +247,7 @@ export function AdminReports() {
   const [appts, setAppts] = useState<ApptRow[]>([])
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
+  const [onCallShifts, setOnCallShifts] = useState<OnCallShiftRow[]>([])
   const [loading, setLoading] = useState(true)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
@@ -182,6 +266,7 @@ export function AdminReports() {
       setAppts(result?.appointments ?? [])
       setProviders(result?.providers ?? [])
       setEncounterNotes(result?.encounterNotes ?? [])
+      setOnCallShifts(result?.onCallShifts ?? [])
       setLoading(false)
       setHasLoadedOnce(true)
     }
@@ -525,7 +610,10 @@ export function AdminReports() {
                 <button
                   onClick={() => downloadCsv(
                     `payroll-${selectedProvider.name.replace(/\s+/g, '_')}-${startDate}_to_${endDate}.csv`,
-                    toCsv(filteredProviderRows),
+                    toCsv(
+                      filteredProviderRows,
+                      onCallShifts.filter(s => s.provider_id === selectedProvider.id),
+                    ),
                   )}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178862]"
                 >

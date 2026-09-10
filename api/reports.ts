@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = providerRows[0].practice_id as string
 
   const { start, end } = req.query as Record<string, string>
-  const [appointments, providers, encounterNotes] = await Promise.all([
+  const [appointments, providers, encounterNotes, onCallShifts] = await Promise.all([
     sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
     sql`SELECT id, name, role FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
     sql`
@@ -58,7 +58,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         AND en.practice_id = ${practiceId}::uuid
         AND en.cpt_codes IS NOT NULL
     `,
+    sql`
+      SELECT provider_id, date::text AS date, state, start_time, end_time
+      FROM on_call_schedule
+      WHERE practice_id = ${practiceId}::uuid
+        AND date >= ${start}::date
+        AND date <= ${end}::date
+    `,
   ])
 
-  res.json({ appointments, providers, encounterNotes })
+  res.json({ appointments, providers, encounterNotes, onCallShifts })
 }
