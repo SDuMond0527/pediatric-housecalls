@@ -96,37 +96,26 @@ function toCsv(rows: PayrollRow[], onCallShiftsForProvider: OnCallShiftRow[]): s
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
 
-  // Sum on-call hours per calendar date (multiple shifts/states can exist).
+  // Sum on-call hours per calendar date (multiple shifts/states can exist
+  // for the same date). All on-call time — regardless of whether that date
+  // also had encounters — is listed in the ON-CALL section at the bottom.
+  // Encounter rows themselves never carry on-call hours (kept blank).
   const hoursByDate = new Map<string, number>()
   onCallShiftsForProvider.forEach(s => {
     const d = s.date.slice(0, 10)
     hoursByDate.set(d, (hoursByDate.get(d) ?? 0) + onCallShiftHours(s))
   })
 
-  // Attribute a date's on-call hours to the FIRST row for that date; blank
-  // on subsequent rows so hours aren't double-counted visually.
-  const seenDates = new Set<string>()
-  const body = rows.map((r, i) => {
-    const dateKey = r.encounterDate ? r.encounterDate.slice(0, 10) : ''
-    const hrs = hoursByDate.get(dateKey) ?? 0
-    let onCallHrsCell = ''
-    let onCallPayCell = ''
-    if (hrs > 0 && !seenDates.has(dateKey)) {
-      onCallHrsCell = hrs.toFixed(2)
-      onCallPayCell = (hrs * ON_CALL_HOURLY_RATE).toFixed(2)
-      seenDates.add(dateKey)
-    }
-    return [
-      i + 1, r.chartNumber, r.patientName, r.claimNumber, r.payer,
-      r.code, r.description, r.category,
-      formatApiDate(r.encounterDate), r.visitType,
-      r.claimDate ? formatApiDate(r.claimDate) : '',
-      r.providerName, r.charge.toFixed(2),
-      r.rvu.toFixed(2), r.rvuRate.toFixed(2), r.rvuCount.toFixed(2),
-      r.providerPay.toFixed(2), r.cvSplit.toFixed(2),
-      onCallHrsCell, onCallPayCell,
-    ].map(esc).join(',')
-  })
+  const body = rows.map((r, i) => [
+    i + 1, r.chartNumber, r.patientName, r.claimNumber, r.payer,
+    r.code, r.description, r.category,
+    formatApiDate(r.encounterDate), r.visitType,
+    r.claimDate ? formatApiDate(r.claimDate) : '',
+    r.providerName, r.charge.toFixed(2),
+    r.rvu.toFixed(2), r.rvuRate.toFixed(2), r.rvuCount.toFixed(2),
+    r.providerPay.toFixed(2), r.cvSplit.toFixed(2),
+    '', '',
+  ].map(esc).join(','))
 
   const totalEncounters = new Set(rows.map(r => r.claimNumber || r.encounterDate + '|' + r.patientName)).size
   const totalRvuCount   = rows.reduce((s, r) => s + r.rvuCount, 0)
@@ -134,14 +123,8 @@ function toCsv(rows: PayrollRow[], onCallShiftsForProvider: OnCallShiftRow[]): s
   const totalCv         = rows.reduce((s, r) => s + r.cvSplit, 0)
   const grandTotal      = totalRvuPay + totalCv
 
-  // On-call dates the provider was on-call but had zero encounters — these
-  // need their own rows so the provider isn't underpaid.
-  const orphanDates = Array.from(hoursByDate.entries())
-    .filter(([d]) => !seenDates.has(d))
-    .sort((a, b) => a[0].localeCompare(b[0]))
-  const attributedHours = Array.from(seenDates).reduce((s, d) => s + (hoursByDate.get(d) ?? 0), 0)
-  const orphanHours     = orphanDates.reduce((s, [, h]) => s + h, 0)
-  const totalOnCallHours = attributedHours + orphanHours
+  const sortedOnCallDates = Array.from(hoursByDate.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  const totalOnCallHours = sortedOnCallDates.reduce((s, [, h]) => s + h, 0)
   const totalOnCallPay   = totalOnCallHours * ON_CALL_HOURLY_RATE
   const grandTotalWithOnCall = grandTotal + totalOnCallPay
 
@@ -169,9 +152,9 @@ function toCsv(rows: PayrollRow[], onCallShiftsForProvider: OnCallShiftRow[]): s
       'Hours', 'Pay',
     ].map(esc).join(','))
 
-    orphanDates.forEach(([date, hrs]) => {
+    sortedOnCallDates.forEach(([date, hrs]) => {
       csvLines.push([
-        '', '', '', '', '', '', '', 'On-call only',
+        '', '', '', '', '', '', '', 'On-call',
         formatApiDate(date), '', '', '', '',
         '', '', '', '', '',
         hrs.toFixed(2), (hrs * ON_CALL_HOURLY_RATE).toFixed(2),
