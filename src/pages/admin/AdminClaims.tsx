@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -59,6 +59,8 @@ export function AdminClaims() {
   const [reopening, setReopening] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const [markingReady, setMarkingReady] = useState<string | null>(null)
+  const [readyOnly, setReadyOnly] = useState(false)
   const [statementClaim, setStatementClaim] = useState<any>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [feeSchedule, setFeeSchedule] = useState<any[]>([])
@@ -192,6 +194,22 @@ export function AdminClaims() {
     }
   }
 
+  async function handleToggleReady(claimId: string, currentlyReady: boolean) {
+    setMarkingReady(claimId)
+    try {
+      const updated = currentlyReady
+        ? await unmarkClaimReadyForBiller(claimId)
+        : await markClaimReadyForBiller(claimId)
+      setClaims(prev => prev.map(c => c.id === claimId
+        ? { ...c, ready_for_biller_at: updated.ready_for_biller_at, ready_for_biller_by: updated.ready_for_biller_by }
+        : c))
+    } catch (e: any) {
+      alert(e.message || 'Failed to update ready-for-biller status')
+    } finally {
+      setMarkingReady(null)
+    }
+  }
+
   async function handleReopen(claimId: string) {
     if (!confirm('Move this claim back to Pending Review? The claim has already been submitted to insurance — only do this if you need to correct an error and resubmit.')) return
     setReopening(claimId)
@@ -261,9 +279,12 @@ export function AdminClaims() {
   // api/claims/index.ts.
   const isSelfPayWithSentStatement = (c: any) =>
     c.payer_id === 'PP' && (c.statement_status === 'sent' || !!c.statement_sent_at)
-  const visibleClaims  = claims.filter(c => !isSelfPayWithSentStatement(c))
-  const reviewClaims   = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error')
+  const isReady = (c: any) => !!c.ready_for_biller_at
+  const baseVisibleClaims = claims.filter(c => !isSelfPayWithSentStatement(c))
+  const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
+  const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error')
   const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
+  const readyCount      = baseVisibleClaims.filter(isReady).length
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`
@@ -280,14 +301,21 @@ export function AdminClaims() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-[#E8E8E4] mb-6">
-        <button className={tabCls('review')} onClick={() => setTab('review')}>
-          Pending Review ({reviewClaims.length})
-        </button>
-        <button className={tabCls('submitted')} onClick={() => setTab('submitted')}>
-          Submitted ({submittedClaims.length})
-        </button>
+      {/* Tabs + Ready-for-biller filter */}
+      <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">
+        <div className="flex">
+          <button className={tabCls('review')} onClick={() => setTab('review')}>
+            Pending Review ({reviewClaims.length})
+          </button>
+          <button className={tabCls('submitted')} onClick={() => setTab('submitted')}>
+            Submitted ({submittedClaims.length})
+          </button>
+        </div>
+        <label className="flex items-center gap-1.5 text-[12px] text-[#555] pr-2 pb-2 cursor-pointer">
+          <input type="checkbox" checked={readyOnly} onChange={e => setReadyOnly(e.target.checked)} />
+          Ready for biller only
+          {readyCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[#E1F5EE] text-[#085041] text-[10px] font-semibold">{readyCount}</span>}
+        </label>
       </div>
 
       {loading ? (
@@ -306,6 +334,7 @@ export function AdminClaims() {
                 const isSelfPay = c.payer_id === 'PP'
                 const missingPayer = !c.payer_id && !isSelfPay
                 const isError = c.status === 'error'
+                const readyForBiller = !!c.ready_for_biller_at
                 const stediError = (() => {
                   if (!c.submission_error) return null
                   try {
@@ -344,7 +373,17 @@ export function AdminClaims() {
                           </div>
                         </div>
                       </div>
-                      {isOpen ? <ChevronUp size={15} className="text-[#999] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#999] flex-shrink-0" />}
+                      <div className="flex items-center gap-2">
+                        {readyForBiller && (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"
+                            title={`Marked by ${c.ready_for_biller_by ?? 'Unknown'} on ${fmtDate(c.ready_for_biller_at)}`}
+                          >
+                            Ready for biller
+                          </span>
+                        )}
+                        {isOpen ? <ChevronUp size={15} className="text-[#999] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#999] flex-shrink-0" />}
+                      </div>
                     </button>
 
                     {isOpen && (
@@ -820,6 +859,22 @@ export function AdminClaims() {
                               onClick={() => handleDelete(c.id)}>
                               <Trash2 size={12} className="mr-1.5 text-[#DC2626]" /> Delete
                             </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant={readyForBiller ? 'secondary' : 'teal'}
+                              size="sm"
+                              loading={markingReady === c.id}
+                              disabled={!!markingReady}
+                              onClick={() => handleToggleReady(c.id, readyForBiller)}
+                            >
+                              {readyForBiller ? 'Unmark ready for biller' : 'Mark ready for biller'}
+                            </Button>
+                            {readyForBiller && (
+                              <span className="text-[11px] text-[#666]">
+                                Marked by {c.ready_for_biller_by ?? 'Unknown'} · {fmtDate(c.ready_for_biller_at)}
+                              </span>
+                            )}
                           </div>
                           {isSelfPay ? (
                             <Button variant="teal" onClick={() => setStatementClaim(c)}>

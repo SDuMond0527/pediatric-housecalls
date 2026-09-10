@@ -225,6 +225,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PUT') {
     const { action, ...fields } = req.body ?? {}
 
+    // Toggle the "ready for biller" flag. Anyone can mark or unmark; the
+    // person who marks it is captured in ready_for_biller_by for the badge.
+    if (action === 'mark_ready' || action === 'unmark_ready') {
+      const [me] = await sql`SELECT name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const markerName = me?.name ?? 'Unknown'
+      if (action === 'mark_ready') {
+        const [updated] = await sql`
+          UPDATE claims SET
+            ready_for_biller_at = now(),
+            ready_for_biller_by = ${markerName},
+            updated_at          = now()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+        return res.json(updated)
+      } else {
+        const [updated] = await sql`
+          UPDATE claims SET
+            ready_for_biller_at = NULL,
+            ready_for_biller_by = NULL,
+            updated_at          = now()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+        return res.json(updated)
+      }
+    }
+
     // Submit to Stedi (live or test)
     if (action === 'submit' || action === 'test') {
       const testMode = action === 'test'

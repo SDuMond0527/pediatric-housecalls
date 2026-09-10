@@ -370,6 +370,12 @@ export const submitClaim = (id: string) =>
 export const testClaim = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'test' }) })
 
+export const markClaimReadyForBiller = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'mark_ready' }) })
+
+export const unmarkClaimReadyForBiller = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'unmark_ready' }) })
+
 export const deleteClaim = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'DELETE' })
 
