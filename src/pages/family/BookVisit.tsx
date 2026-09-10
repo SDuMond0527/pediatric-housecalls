@@ -848,112 +848,97 @@ export function BookVisit() {
     if (!family) return
     setWaitlistSubmitting(true)
 
-    const effectivePhone = waitlistPhone || (family as any).phone || ''
+    // Waitlist is offered AFTER the parent has already gone through step 1
+    // (visit type + kids), step 2 (full intake), and step 3 (chose date/
+    // provider). All the patient data is in booking.childIntakes. We use it
+    // to save the child + family profiles AND to build the waitlist entry.
+    // No separate re-entry from the parent — waitlist is just a button.
+    const selectedIds = booking.selectedChildIds
+    const primaryChildId = selectedIds[0]
+    const primaryIntake = primaryChildId ? booking.childIntakes[primaryChildId] : null
+    const patientNames = selectedIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean).join(', ')
+    const effectivePhone = booking.phone || (family as any).phone || ''
 
+    // Save the full intake to child + family profiles — same code the
+    // successful-book path runs so no matter which door the family goes
+    // through, the profile is populated. See memory:
+    // feedback_save_all_patient_data.md
+    const familyPatch: Record<string, any> = {}
+    if (effectivePhone)     familyPatch.phone         = effectivePhone
+    if (booking.visitAddress) familyPatch.address_line1 = booking.visitAddress
+    if (booking.city)       familyPatch.city          = booking.city
+    if (booking.state)      familyPatch.state         = booking.state
+    if (booking.zip)        familyPatch.zip           = booking.zip
+    if (Object.keys(familyPatch).length) updateMyFamily(familyPatch).catch(() => {})
+
+    for (const childId of selectedIds) {
+      const intake = booking.childIntakes[childId]
+      if (!intake) continue
+
+      // Identity fields — only need to write for new patients (returning ones
+      // already have these). Non-empty saves override safely.
+      if (!intake.hasProfile) {
+        await updateChild(childId, {
+          first_name:  intake.firstName || null,
+          last_name:   intake.lastName || null,
+          nickname:    intake.nickname || null,
+          date_of_birth: intake.dateOfBirth || null,
+          gender:      intake.gender || null,
+          phi_sharing_consent: intake.phiSharingConsent,
+        }).catch(() => {})
+      }
+
+      // Full profile save — runs for ALL children (new + returning) so any
+      // updates the parent made in intake persist.
+      await updateChild(childId, {
+        insurance_provider:                intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
+        insurance_member_id:               intake.selfPay ? null : (intake.insuranceMemberId || null),
+        insurance_group_number:            intake.insuranceGroupNumber || null,
+        insurance_subscriber_name:         intake.insuranceSubscriberName || null,
+        insurance_subscriber_dob:          intake.insuranceSubscriberDob || null,
+        insurance_subscriber_gender:       intake.insuranceSubscriberGender || null,
+        insurance_subscriber_relationship: intake.insuranceSubscriberRelationship || null,
+        preferred_pharmacy:                intake.preferredPharmacy || null,
+        pcp:                               intake.pcp || null,
+        pcp_id:                            intake.pcp_id || null,
+        allergies:                         intake.allergies || null,
+        current_medications:               intake.currentMedications || null,
+        medical_history:                   intake.medicalHistory || null,
+        vaccination_status:                intake.vaccinationStatus || null,
+        insurance_card_front_url:          intake.insuranceCardFrontUrl || null,
+        insurance_card_back_url:           intake.insuranceCardBackUrl || null,
+        parent_name:                       family.display_name || null,
+        parent_email:                      family.email || null,
+        parent_phone:                      effectivePhone || null,
+        parent_address:                    booking.visitAddress || null,
+        parent_zip:                        booking.zip || null,
+        parent_state:                      booking.state || null,
+      }).catch(() => {})
+    }
+
+    // Build waitlist notes from the ALREADY-COLLECTED intake data (not from a
+    // separate waitlist form).
     const noteParts: string[] = []
     noteParts.push(`Family: ${family.display_name || family.email}`)
     noteParts.push(`Email: ${family.email}`)
     if (effectivePhone) noteParts.push(`Phone: ${effectivePhone}`)
-
-    // If a known child was selected, pull their info from the profile
-    const selectedChild = waitlistChildId ? children.find(c => c.id === waitlistChildId) : null
-    if (selectedChild) {
-      const name = [selectedChild.first_name, selectedChild.last_name].filter(Boolean).join(' ') || selectedChild.display_label
-      noteParts.push(`Patient: ${name}`)
-      if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
-      if (selectedChild.date_of_birth) noteParts.push(`DOB: ${selectedChild.date_of_birth}`)
-      if (selectedChild.allergies) noteParts.push(`Allergies: ${selectedChild.allergies}`)
-      if (selectedChild.current_medications) noteParts.push(`Medications: ${selectedChild.current_medications}`)
-      if (selectedChild.medical_history) noteParts.push(`PMH: ${selectedChild.medical_history}`)
-      if (selectedChild.pcp) noteParts.push(`PCP: ${selectedChild.pcp}`)
-      if (selectedChild.preferred_pharmacy) noteParts.push(`Pharmacy: ${selectedChild.preferred_pharmacy}`)
-      if (selectedChild.insurance_provider) noteParts.push(`Insurance: ${selectedChild.insurance_provider}`)
-      if (selectedChild.insurance_member_id) noteParts.push(`Member ID: ${selectedChild.insurance_member_id}`)
-      if (selectedChild.insurance_group_number) noteParts.push(`Group #: ${selectedChild.insurance_group_number}`)
-    } else {
-      if (waitlistPatient) noteParts.push(`Patient: ${waitlistPatient}`)
-      if (waitlistDOB) noteParts.push(`DOB: ${waitlistDOB}`)
-      if (waitlistAddress) noteParts.push(`Address: ${waitlistAddress}`)
-      if (waitlistAllergies) noteParts.push(`Allergies: ${waitlistAllergies}`)
-      if (waitlistMedications) noteParts.push(`Medications: ${waitlistMedications}`)
-      if (waitlistPMH) noteParts.push(`PMH: ${waitlistPMH}`)
-      if (waitlistPCP) noteParts.push(`PCP: ${waitlistPCP}`)
-      if (waitlistPharmacy) noteParts.push(`Pharmacy: ${waitlistPharmacy}`)
-      if (waitlistInsurance) noteParts.push(`Insurance: ${waitlistInsurance}`)
-      if (waitlistInsuranceMemberId) noteParts.push(`Member ID: ${waitlistInsuranceMemberId}`)
-      if (waitlistInsuranceGroupNum) noteParts.push(`Group #: ${waitlistInsuranceGroupNum}`)
-      if (waitlistInsuranceSubscriber) noteParts.push(`Subscriber: ${waitlistInsuranceSubscriber}`)
-    }
-
-    if (waitlistComplaint) noteParts.push(`Complaint: ${waitlistComplaint}`)
+    if (patientNames)   noteParts.push(`Patient: ${patientNames}`)
+    if (booking.visitAddress) noteParts.push(`Address: ${booking.visitAddress}`)
+    if (primaryIntake?.chiefComplaint) noteParts.push(`Complaint: ${primaryIntake.chiefComplaint}`)
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
-    if (waitlistNotes) noteParts.push(`Parent notes: ${waitlistNotes}`)
-
-    // (Family profile is updated below along with child fields — no separate
-    // phone-only patch needed here.)
 
     const waitlistEntry = await familyCreateWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
       state: booking.state || null,
-      preferred_time_window: waitlistTime || null,
+      preferred_time_window: null,
       notes: noteParts.join(' | '),
       status: 'waiting',
     }).catch(() => null)
 
     if (waitlistEntry?.id) {
       familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: waitlistEntry.id }).catch(() => {})
-    }
-
-    // Every field the parent typed on this waitlist form MUST be written to
-    // the permanent child + family records — not just stashed in the waitlist
-    // notes. Same fields for new AND existing patients — no branching. If it's
-    // an empty string, don't overwrite what's already there (COALESCE on the
-    // server side handles that).
-    // See memory: feedback_save_all_patient_data.md
-    const childFieldsFromWaitlist: Record<string, any> = {
-      family_id: family.id,
-      date_of_birth: waitlistDOB || null,
-      allergies: waitlistAllergies || null,
-      current_medications: waitlistMedications || null,
-      medical_history: waitlistPMH || null,
-      preferred_pharmacy: waitlistPharmacy || null,
-      pcp: waitlistPCP || null,
-      insurance_provider: waitlistInsurance || null,
-      insurance_member_id: waitlistInsuranceMemberId || null,
-      insurance_group_number: waitlistInsuranceGroupNum || null,
-      insurance_subscriber_name: waitlistInsuranceSubscriber || null,
-      parent_name: family.display_name || null,
-      parent_email: family.email || null,
-      parent_phone: effectivePhone || null,
-      parent_address: waitlistAddress || null,
-      parent_zip: booking.zip || null,
-      parent_state: booking.state || null,
-    }
-
-    if (selectedChild) {
-      updateChild(selectedChild.id, childFieldsFromWaitlist).catch(() => {})
-    } else if (waitlistPatient) {
-      const [firstName, ...rest] = waitlistPatient.trim().split(' ')
-      const lastName = rest.join(' ')
-      createChild({
-        ...childFieldsFromWaitlist,
-        first_name: firstName || null,
-        last_name: lastName || null,
-      }).catch(() => {})
-    }
-
-    // Save family-level fields (address, phone) back to the family profile
-    // regardless of which branch above ran — so they're available on every
-    // surface, not only trapped in this one child record.
-    const familyPatch: Record<string, any> = {}
-    if (effectivePhone) familyPatch.phone = effectivePhone
-    if (waitlistAddress) familyPatch.address_line1 = waitlistAddress
-    if (booking.zip) familyPatch.zip = booking.zip
-    if (booking.state) familyPatch.state = booking.state
-    if (Object.keys(familyPatch).length > 0) {
-      updateMyFamily(familyPatch).catch(() => {})
     }
 
     setWaitlistSubmitting(false)
@@ -1833,17 +1818,9 @@ export function BookVisit() {
                   We're always expanding — join our waitlist and we'll contact you as soon as we have a provider in your area.
                 </p>
               </div>
-              <button onClick={() => {
-                const firstId = booking.selectedChildIds[0]
-                const intake = firstId ? booking.childIntakes[firstId] : null
-                const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
-                setWaitlistPatient(labels.join(', '))
-                setWaitlistComplaint(intake?.chiefComplaint || '')
-                setWaitlistAddress(booking.visitAddress || '')
-                setWaitlistOpen(true)
-              }}
-                className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
-                Join the waitlist
+              <button onClick={submitWaitlist} disabled={waitlistSubmitting}
+                className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
               </button>
             </div>
           )}
@@ -2088,17 +2065,9 @@ export function BookVisit() {
                         We'll reach out as soon as a spot opens up on your preferred date.
                       </p>
                     </div>
-                    <button onClick={() => {
-                      const firstId = booking.selectedChildIds[0]
-                      const intake = firstId ? booking.childIntakes[firstId] : null
-                      const labels = booking.selectedChildIds.map(id => booking.childIntakes[id]?.displayLabel).filter(Boolean)
-                      setWaitlistPatient(labels.join(', '))
-                      setWaitlistComplaint(intake?.chiefComplaint || '')
-                      setWaitlistAddress(booking.visitAddress || '')
-                      setWaitlistOpen(true)
-                    }}
-                      className="mt-auto w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors">
-                      Join the waitlist
+                    <button onClick={submitWaitlist} disabled={waitlistSubmitting}
+                      className="mt-auto w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
                     </button>
                   </div>
                 )}
