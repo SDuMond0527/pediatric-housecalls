@@ -725,16 +725,18 @@ export function PatientChart() {
                           <MapPin size={11} />
                           Address
                         </div>
-                        {(child?.family_address_line1 || child?.parent_address) ? (
-                          <div className="text-[13px] text-[#1A1A2E] mt-0.5">
-                            {child.family_address_line1 || child.parent_address}
-                            {((child.family_city || child.parent_city) || (child.family_state || child.parent_state) || (child.family_zip || child.parent_zip)) && (
-                              <>, {[child.family_city || child.parent_city, child.family_state || child.parent_state, child.family_zip || child.parent_zip].filter(Boolean).join(' ')}</>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
-                        )}
+                        {(() => {
+                          const line1 = child?.family_address_line1 || child?.parent_address
+                          const city  = child?.family_city  || child?.parent_city
+                          const state = child?.family_state || child?.parent_state
+                          const zip   = child?.family_zip   || child?.parent_zip
+                          if (!line1 && !city && !state && !zip) {
+                            return <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
+                          }
+                          const cityStateZip = [city, state, zip].filter(Boolean).join(' ')
+                          const full = [line1, cityStateZip].filter(Boolean).join(', ')
+                          return <div className="text-[13px] text-[#1A1A2E] mt-0.5">{full}</div>
+                        })()}
                       </div>
                     </div>
                   )}
