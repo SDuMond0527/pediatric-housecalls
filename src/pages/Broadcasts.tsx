@@ -3,6 +3,7 @@ import { MapPin, Clock, AlertCircle, Plus, X, AlertTriangle } from 'lucide-react
 import {
   getBroadcasts, createBroadcast, updateBroadcast,
   createAppointment, invokeNotifications, updateWaitlistEntry,
+  apiFetch,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -18,6 +19,92 @@ const REQUEST_TYPES = [
   'RN needed — IV fluids in-home (telemedicine screening included)',
 ]
 
+function BroadcastPatientDetails({ bc, child }: { bc: Broadcast; child: any }) {
+  const name = [child?.first_name, child?.last_name].filter(Boolean).join(' ') || `${bc.patient_first_name || ''} ${bc.patient_last_name || ''}`.trim()
+  const familyName = child?.family_display_name || ''
+  const dob = child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : (bc.patient_dob ? String(bc.patient_dob).split('T')[0] : '')
+  const sex = child?.gender || ''
+  const phone = child?.parent_phone || child?.family_phone || bc.family_phone || ''
+  const email = child?.parent_email || child?.family_email || bc.family_email || ''
+  const address = [child?.parent_address || child?.family_address_line1, child?.parent_city || child?.family_city].filter(Boolean).join(', ') || bc.patient_address || ''
+  const allergies = child?.allergies || ''
+  const meds = child?.current_medications || ''
+  const pmh = child?.medical_history || ''
+  const pcp = child?.pcp || ''
+  const pharmacy = child?.preferred_pharmacy || ''
+  const insurance = child?.insurance_provider || ''
+  const memberId = child?.insurance_member_id || ''
+  const groupNum = child?.insurance_group_number || ''
+  const subscriber = child?.insurance_subscriber_name || ''
+  const subscriberDob = child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : ''
+  const subscriberSex = child?.insurance_subscriber_gender || ''
+  const cardFront = child?.insurance_card_front_url || ''
+  const cardBack = child?.insurance_card_back_url || ''
+
+  const F = ({ label, value }: { label: string; value: string }) => value ? (
+    <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+  ) : null
+
+  const patientHas = name || familyName || dob || sex || phone || email || address
+  const clinicalHas = allergies || meds || pmh || pcp || pharmacy
+  const insuranceHas = insurance || memberId || groupNum || subscriber || subscriberDob || subscriberSex || cardFront || cardBack
+
+  if (!patientHas && !clinicalHas && !insuranceHas) return null
+
+  return (
+    <div className="mt-3 space-y-2">
+      {patientHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Patient</div>
+          {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+          <F label="Family" value={familyName} />
+          <F label="Date of birth" value={dob} />
+          <F label="Sex" value={sex} />
+          {phone && (
+            <div className="text-[13px]">
+              <span className="text-[#999] text-[11px] block">Phone</span>
+              <div className="flex items-center justify-between gap-2">
+                <span>{phone}</span>
+                <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
+                   className="px-2 py-0.5 rounded bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">Call</a>
+              </div>
+            </div>
+          )}
+          <F label="Email" value={email} />
+          <F label="Address" value={address} />
+        </div>
+      )}
+      {clinicalHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Clinical</div>
+          <F label="Allergies" value={allergies} />
+          <F label="Medications" value={meds} />
+          <F label="Medical history / PMH" value={pmh} />
+          <F label="PCP" value={pcp} />
+          <F label="Preferred pharmacy" value={pharmacy} />
+        </div>
+      )}
+      {insuranceHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Insurance</div>
+          <F label="Insurance" value={insurance} />
+          <F label="Member ID" value={memberId} />
+          <F label="Group #" value={groupNum} />
+          <F label="Subscriber name" value={subscriber} />
+          <F label="Subscriber DOB" value={subscriberDob} />
+          <F label="Subscriber sex" value={subscriberSex} />
+          {(cardFront || cardBack) && (
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {cardFront && <a href={cardFront} target="_blank" rel="noopener noreferrer"><img src={cardFront} alt="Insurance card front" className="max-h-24 rounded border border-[#E8E8E4] object-contain" /></a>}
+              {cardBack && <a href={cardBack} target="_blank" rel="noopener noreferrer"><img src={cardBack} alt="Insurance card back" className="max-h-24 rounded border border-[#E8E8E4] object-contain" /></a>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function defaultAcceptTime() {
   const now = new Date()
   const m = Math.ceil(now.getMinutes() / 15) * 15
@@ -31,6 +118,10 @@ export function Broadcasts() {
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  // Cached child record lookup for each broadcast so we can render the same
+  // full patient info block that waitlist / appointment cards show. Keyed by
+  // broadcast id. Resolved lazily via name-search + phone/DOB disambiguation.
+  const [broadcastChildren, setBroadcastChildren] = useState<Record<string, any>>({})
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({
     patient_first_name: '',
@@ -144,6 +235,35 @@ export function Broadcasts() {
   }
 
   useEffect(() => { fetchBroadcasts() }, [])
+
+  // Hydrate patient records for any newly-loaded broadcasts. Name search is
+  // practice-scoped server-side; we disambiguate multiple matches locally by
+  // family phone and DOB from the broadcast.
+  useEffect(() => {
+    broadcasts.forEach(async bc => {
+      if (bc.id in broadcastChildren) return
+      const name = `${bc.patient_first_name || ''} ${bc.patient_last_name || ''}`.trim()
+      if (!name) return
+      try {
+        const rows = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(name)}`)
+        if (!rows?.length) { setBroadcastChildren(prev => ({ ...prev, [bc.id]: null })); return }
+        const notePhoneDigits = String(bc.family_phone || '').replace(/\D/g, '')
+        const noteDob = bc.patient_dob ? String(bc.patient_dob).split('T')[0] : ''
+        const scored = rows.map((c: any) => {
+          const cPhone = String(c.parent_phone || c.family_phone || '').replace(/\D/g, '')
+          const cDob = c.date_of_birth ? String(c.date_of_birth).split('T')[0] : ''
+          let score = 0
+          if (notePhoneDigits && cPhone && notePhoneDigits === cPhone) score += 2
+          if (noteDob && cDob && noteDob === cDob) score += 1
+          return { c, score }
+        })
+        scored.sort((a, b) => b.score - a.score)
+        setBroadcastChildren(prev => ({ ...prev, [bc.id]: scored[0]?.c ?? null }))
+      } catch {
+        setBroadcastChildren(prev => ({ ...prev, [bc.id]: null }))
+      }
+    })
+  }, [broadcasts])
 
   async function submitBroadcast() {
     const isCmaRequest = form.request_type === 'CMA needed — in-home visit'
@@ -306,7 +426,8 @@ export function Broadcasts() {
                     )}
                     {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#999]" />{bc.patient_address}</p>}
                   </div>
-                  <div className="flex gap-2">
+                  <BroadcastPatientDetails bc={bc} child={broadcastChildren[bc.id] ?? null} />
+                  <div className="flex gap-2 mt-3">
                     {canClaim ? (
                       <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => claimPairing(bc)}>
                         {claimLabel}
@@ -355,7 +476,8 @@ export function Broadcasts() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <BroadcastPatientDetails bc={bc} child={broadcastChildren[bc.id] ?? null} />
+                <div className="flex gap-2 mt-3">
                   <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => openAcceptModal(bc)}>
                     Accept — add to my schedule
                   </Button>
