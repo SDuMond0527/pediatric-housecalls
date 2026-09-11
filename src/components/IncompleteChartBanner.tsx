@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Send, Pencil, X } from 'lucide-react'
-import { updateChild, apiFetch, uploadNotePhoto } from '../lib/api'
+import { providerUpdateChild, apiFetch, uploadNotePhoto } from '../lib/api'
 import { getMissingChildFields, type RequiredField } from '../lib/childCompleteness'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -131,7 +131,7 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
         setSubmitting(false)
         return
       }
-      const updated = await updateChild(child.id, patch)
+      const updated = await providerUpdateChild(child.id, patch)
       onSaved({ ...child, ...updated })
     } catch (e: any) {
       setError(e?.message || 'Save failed.')
