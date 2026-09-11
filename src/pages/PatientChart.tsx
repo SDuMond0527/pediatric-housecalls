@@ -9,6 +9,7 @@ import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
 import { GrowthChart, type GrowthVitalPoint } from '../components/GrowthChart'
+import { IncompleteChartBanner } from '../components/IncompleteChartBanner'
 
 interface VaccineEntry {
   vaccine_name: string
@@ -594,6 +595,7 @@ export function PatientChart() {
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
+        {!loading && child && <IncompleteChartBanner child={child} onUpdated={setChild} />}
         {loading ? (
           <div className="text-center py-16 text-[#999] text-[14px]">Loading chart…</div>
         ) : (
