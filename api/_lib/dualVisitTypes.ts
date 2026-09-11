@@ -11,6 +11,8 @@ export const IV_FLUIDS_ALIASES = [
   'In-home IV fluids',
   'RN IV fluids',
   'RN IV fluid visit — paired with MD/NP screening',
+  'RN in-home IV fluids administration',
+  'Video telemedicine screening for IV fluids',
 ] as const
 
 export const DUAL_VISIT_TYPES: readonly string[] = [

@@ -16,7 +16,7 @@ const VENMO_HANDLE      = process.env.VENMO_HANDLE || '@Pediatric-Housecalls'
 // Paired-visit aliases. Kept in sync with api/appointments/index.ts,
 // api/appointments/[id].ts, src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
-const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
 const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)

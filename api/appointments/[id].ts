@@ -16,7 +16,7 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 // Paired-visit aliases. Keep in sync with api/appointments/index.ts and
 // src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
-const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
 
 const VISIT_DURATIONS: Record<string, number> = {

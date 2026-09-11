@@ -61,7 +61,7 @@ async function getDrivingMiles(origin: string, destination: string): Promise<num
 
 // ── Paired-visit aliases (kept in sync with api/appointments/index.ts) ────────
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
-const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
 const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
 

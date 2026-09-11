@@ -13,9 +13,11 @@ export const CMA_TELE_ALIASES = [
 ] as const
 
 export const IV_FLUIDS_ALIASES = [
-  'In-home IV fluids',
-  'RN IV fluids',
+  'In-home IV fluids',                            // legacy short name (some practices)
+  'RN IV fluids',                                 // legacy short name (some practices)
   'RN IV fluid visit — paired with MD/NP screening',
+  'RN in-home IV fluids administration',          // PHC — RN side of the IV pair
+  'Video telemedicine screening for IV fluids',   // PHC — MD/NP screening side of the IV pair
 ] as const
 
 export const DUAL_VISIT_TYPES: readonly string[] = [
