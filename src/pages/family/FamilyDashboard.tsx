@@ -11,6 +11,8 @@ import type { BookingRequest, SlotOffer } from '../../types/family'
 import { PRACTICE_NAME } from '../../lib/practice'
 
 import { DUAL_VISIT_TYPES } from '../../lib/dualVisitTypes'
+import { CompleteChildProfileGate } from '../../components/CompleteChildProfileGate'
+import { isChildComplete } from '../../lib/childCompleteness'
 const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', ...DUAL_VISIT_TYPES]
 
 function safeFormat(value: string | null | undefined, fmt: string, suffix = ''): string {
@@ -32,7 +34,7 @@ function isWithin2Hours(booking: BookingRequest): boolean {
 }
 
 export function FamilyDashboard() {
-  const { family, children } = useFamilyAuth()
+  const { family, children, refreshFamily } = useFamilyAuth()
   const { zipToZone } = usePracticeZones()
   const navigate = useNavigate()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
@@ -158,6 +160,22 @@ export function FamilyDashboard() {
   const greeting = family.display_name
     ? `Welcome back, ${family.display_name.replace(/^The\s+/i, '')}!`
     : 'Welcome back!'
+
+  // Every child on this family must be complete. If any is missing a
+  // required field, block ALL navigation with the CompleteChildProfileGate
+  // — the parent cannot see the dashboard, book, or view offers until every
+  // field for every child is filled in. This is why we exit early below
+  // any time the gate should render.
+  const anyIncomplete = children.some(c => !isChildComplete(c, family))
+  if (anyIncomplete) {
+    return (
+      <CompleteChildProfileGate
+        children={children}
+        family={family}
+        onAllComplete={() => { refreshFamily().catch(() => {}) }}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">

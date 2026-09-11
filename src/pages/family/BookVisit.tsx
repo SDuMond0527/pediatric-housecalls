@@ -27,6 +27,8 @@ import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { getProvidersByZone, getProvidersByState } from '../../lib/api'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { isCmaTelePair, isIvFluidsPair, CMA_TELE_ALIASES } from '../../lib/dualVisitTypes'
+import { CompleteChildProfileGate } from '../../components/CompleteChildProfileGate'
+import { isChildComplete } from '../../lib/childCompleteness'
 import { format } from 'date-fns'
 import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
 
@@ -1365,6 +1367,20 @@ export function BookVisit() {
   // ─── Step renders ─────────────────────────────────────────────────────────────
 
   const selectedChildren = children.filter(c => booking.selectedChildIds.includes(c.id))
+
+  // Same completion gate as FamilyDashboard — parents cannot proceed to
+  // booking (or waitlist submit, since it lives in this same page) until
+  // every child on their account has every required field filled in.
+  const anyIncomplete = children.some(c => !isChildComplete(c, family))
+  if (anyIncomplete) {
+    return (
+      <CompleteChildProfileGate
+        children={children}
+        family={family}
+        onAllComplete={() => { refreshFamily().catch(() => {}) }}
+      />
+    )
+  }
 
   return (
     <div>
