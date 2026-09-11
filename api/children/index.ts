@@ -190,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             MAX(insurance_card_back_url)                          AS insurance_card_back_url,
             MAX(NULLIF(preferred_pharmacy,''))                    AS preferred_pharmacy,
             MAX(NULLIF(pcp,''))                                   AS pcp,
-            MAX(pcp_id)                                           AS pcp_id
+            (ARRAY_AGG(pcp_id) FILTER (WHERE pcp_id IS NOT NULL))[1] AS pcp_id
           FROM children
           WHERE family_id = ${familyId}::uuid
             AND practice_id = ${practiceId}::uuid
