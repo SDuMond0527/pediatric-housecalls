@@ -21,6 +21,7 @@ interface WaitlistEntry {
   family_email?: string
   family_name?: string
   family_phone?: string
+  patient_address?: string | null
   children?: string[]
 }
 
@@ -337,13 +338,20 @@ export function AdminWaitlist() {
                     }
                   })
                   const complaint = e.complaint || noteMap.Complaint || ''
-                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
+                  const address = e.patient_address || noteMap.Address || ''
+                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient' && k !== 'Address')
                   return (
                     <div className="mt-2 space-y-1">
                       {complaint && (
                         <div className="text-[12px]">
                           <span className="text-[#999]">Chief complaint: </span>
                           <span className="text-[#1A1A2E] font-medium">{complaint}</span>
+                        </div>
+                      )}
+                      {address && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Address: </span>
+                          <span className="text-[#1A1A2E] font-medium">{address}</span>
                         </div>
                       )}
                       {noteMap.Patient && (
