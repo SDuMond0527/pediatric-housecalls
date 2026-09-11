@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
   getAppointments, createAppointment, updateAppointment,
@@ -10,6 +10,7 @@ import {
 } from '../lib/api'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderModal'
+import { CmaOrderModal, type CmaOrderContext } from '../components/CmaOrderModal'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -139,37 +140,54 @@ export function Today() {
   const [rnIvOpen, setRnIvOpen] = useState(false)
   const [rnIvCtx, setRnIvCtx] = useState<RnIvOrderContext | null>(null)
   const [rnIvOpening, setRnIvOpening] = useState(false)
-  const [rnIvSentToast, setRnIvSentToast] = useState<string | null>(null)
+  const [cmaOpen, setCmaOpen] = useState(false)
+  const [cmaCtx, setCmaCtx] = useState<CmaOrderContext | null>(null)
+  const [cmaOpening, setCmaOpening] = useState(false)
+  const [orderToast, setOrderToast] = useState<string | null>(null)
+
+  async function buildAppointmentOrderCtx(appt: Appointment): Promise<RnIvOrderContext> {
+    let child: any = childRecords[appt.id]
+    if (!child && appt.child_id) {
+      const rows = await apiFetch<any[]>(`/api/children?ids=${appt.child_id}`).catch(() => [])
+      child = rows?.[0] ?? {}
+    }
+    child = child ?? {}
+    const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ') || null
+    const noteBits: Record<string, string> = {}
+    ;(appt.notes || '').split('|').forEach((p: string) => {
+      const c = p.indexOf(':')
+      if (c > 0) noteBits[p.slice(0, c).trim()] = p.slice(c + 1).trim()
+    })
+    return {
+      patientFirstName: child.first_name || (noteBits.PATIENT?.split(' ')[0]) || 'Patient',
+      patientLastName:  child.last_name  || (noteBits.PATIENT?.split(' ').slice(1).join(' ')) || '',
+      patientDob:       child.date_of_birth ? String(child.date_of_birth).split('T')[0] : (noteBits.DOB || null),
+      patientAddress:   address || noteBits.ADDR || null,
+      familyPhone:      child.parent_phone || child.family_phone || noteBits.PARENTPHONE || null,
+      familyEmail:      child.parent_email || child.family_email || noteBits.PARENTEMAIL || null,
+      state:            child.parent_state || child.family_state || null,
+      zone:             appt.zone || child.parent_zip || null,
+      relatedAppointmentId: appt.id,
+    }
+  }
 
   async function openRnIvOrder(appt: Appointment) {
     setRnIvOpening(true)
     try {
-      let child: any = childRecords[appt.id]
-      if (!child && appt.child_id) {
-        const rows = await apiFetch<any[]>(`/api/children?ids=${appt.child_id}`).catch(() => [])
-        child = rows?.[0] ?? {}
-      }
-      child = child ?? {}
-      const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ') || null
-      const noteBits: Record<string, string> = {}
-      ;(appt.notes || '').split('|').forEach((p: string) => {
-        const c = p.indexOf(':')
-        if (c > 0) noteBits[p.slice(0, c).trim()] = p.slice(c + 1).trim()
-      })
-      setRnIvCtx({
-        patientFirstName: child.first_name || (noteBits.PATIENT?.split(' ')[0]) || 'Patient',
-        patientLastName:  child.last_name  || (noteBits.PATIENT?.split(' ').slice(1).join(' ')) || '',
-        patientDob:       child.date_of_birth ? String(child.date_of_birth).split('T')[0] : (noteBits.DOB || null),
-        patientAddress:   address || noteBits.ADDR || null,
-        familyPhone:      child.parent_phone || child.family_phone || noteBits.PARENTPHONE || null,
-        familyEmail:      child.parent_email || child.family_email || noteBits.PARENTEMAIL || null,
-        state:            child.parent_state || child.family_state || null,
-        zone:             appt.zone || child.parent_zip || null,
-        relatedAppointmentId: appt.id,
-      })
+      setRnIvCtx(await buildAppointmentOrderCtx(appt))
       setRnIvOpen(true)
     } finally {
       setRnIvOpening(false)
+    }
+  }
+
+  async function openCmaOrder(appt: Appointment) {
+    setCmaOpening(true)
+    try {
+      setCmaCtx(await buildAppointmentOrderCtx(appt))
+      setCmaOpen(true)
+    } finally {
+      setCmaOpening(false)
     }
   }
 
@@ -885,6 +903,11 @@ export function Today() {
                               </Button>
                             )}
                             {appt.status !== 'cancelled' && (
+                              <Button variant="secondary" size="sm" onClick={() => openCmaOrder(appt)} disabled={cmaOpening}>
+                                <TestTube size={13} /> Order CMA visit
+                              </Button>
+                            )}
+                            {appt.status !== 'cancelled' && (
                               <Button variant="secondary" size="sm" onClick={() => openEdit(appt)}>
                                 <Pencil size={13} /> Reschedule
                               </Button>
@@ -921,6 +944,7 @@ export function Today() {
                         const address = [child?.parent_address || child?.family_address_line1, child?.parent_city || child?.family_city].filter(Boolean).join(', ')
                         const cc = noteMap.CC || ''
                         const rnOrder = noteMap.RNORDER || ''
+                        const cmaOrder = noteMap.CMAORDER || ''
                         const additionalNotes = noteMap.NOTES || ''
                         const allergies = child?.allergies || noteMap.ALLERGY || cd?.allergies || ''
                         const meds = child?.current_medications || noteMap.MEDS || ''
@@ -982,6 +1006,12 @@ export function Today() {
                               <div className="bg-[#F5F4FE] border border-[#AFA9EC] rounded-lg p-3">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">RN orders</div>
                                 <div className="text-[13px] text-[#1A1A2E] font-medium">{rnOrder}</div>
+                              </div>
+                            )}
+                            {cmaOrder && (
+                              <div className="bg-[#F5F4FE] border border-[#AFA9EC] rounded-lg p-3">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">CMA orders</div>
+                                <div className="text-[13px] text-[#1A1A2E] font-medium">{cmaOrder}</div>
                               </div>
                             )}
                             {(cc || additionalNotes || allergies || meds || pmh || vax || pcp || pharmacy) && (
@@ -1665,14 +1695,28 @@ export function Today() {
           onClose={() => setRnIvOpen(false)}
           onSent={() => {
             setRnIvOpen(false)
-            setRnIvSentToast('IV fluids broadcast sent to on-call RNs')
-            setTimeout(() => setRnIvSentToast(null), 4000)
+            setOrderToast('IV fluids broadcast sent to on-call RNs')
+            setTimeout(() => setOrderToast(null), 4000)
           }}
         />
       )}
-      {rnIvSentToast && (
+      {cmaOpen && cmaCtx && provider && (
+        <CmaOrderModal
+          ctx={cmaCtx}
+          providerId={provider.id}
+          providerRole={provider.role}
+          providerName={provider.name}
+          onClose={() => setCmaOpen(false)}
+          onSent={() => {
+            setCmaOpen(false)
+            setOrderToast('CMA visit broadcast sent to on-call CMAs')
+            setTimeout(() => setOrderToast(null), 4000)
+          }}
+        />
+      )}
+      {orderToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1D9E75] text-white text-[13px] font-medium px-4 py-2.5 rounded-lg shadow-lg">
-          {rnIvSentToast}
+          {orderToast}
         </div>
       )}
     </div>

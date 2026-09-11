@@ -326,11 +326,13 @@ export function Broadcasts() {
     setAcceptingBc(null)
 
     const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
+    const isCmaSolo  = bc.visit_type === 'In-home diagnostics – CMA only'
+    const isSolo = isRnIvSolo || isCmaSolo
 
     // Resolve the child_id the same way the display hydration already does,
-    // so the RN's Today card can pull the full child record (address,
-    // allergies, insurance, pharmacy, PCP, etc.) — otherwise it renders only
-    // the fields we can pack into notes.
+    // so the claiming provider's Today card can pull the full child record
+    // (address, allergies, insurance, pharmacy, PCP, etc.) — otherwise it
+    // renders only the fields we can pack into notes.
     const resolvedChild = broadcastChildren[bc.id] ?? null
     const resolvedChildId: string | null = resolvedChild?.id ?? null
 
@@ -342,12 +344,14 @@ export function Broadcasts() {
     if (bc.family_phone) noteParts.push(`PARENTPHONE:${bc.family_phone}`)
     if (bc.family_email) noteParts.push(`PARENTEMAIL:${bc.family_email}`)
     if (bc.complaint) {
-      // RN IV solo — complaint carries the RN orders (weight/volume/notes).
-      // Tag it distinctly so the RN's Today card renders the purple "RN orders"
-      // block instead of a generic chief complaint.
-      noteParts.push(isRnIvSolo ? `RNORDER:${bc.complaint}` : `CC:${bc.complaint}`)
+      // Solo visit types — complaint carries the ordering provider's orders
+      // (weight/volume/notes for RN IV, test list/notes for CMA diagnostics).
+      // Tag distinctly so the claimer's Today card renders the purple
+      // "RN orders" / "CMA orders" block instead of a generic chief complaint.
+      const tag = isRnIvSolo ? 'RNORDER' : isCmaSolo ? 'CMAORDER' : 'CC'
+      noteParts.push(`${tag}:${bc.complaint}`)
     }
-    if (!isRnIvSolo) noteParts.push(`Request: ${bc.request_type}`)
+    if (!isSolo) noteParts.push(`Request: ${bc.request_type}`)
 
     await createAppointment({
       provider_id: provider.id,
@@ -420,23 +424,27 @@ export function Broadcasts() {
               const isCma = myRole === 'CMA'
               const isRn = myRole === 'RN'
               const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
+              const isCmaSolo = bc.visit_type === 'In-home diagnostics – CMA only'
+              const isSolo = isRnIvSolo || isCmaSolo
               const canClaim =
                 (bc.pairing_role_needed === 'MD/NP' && isMdNp) ||
                 (bc.pairing_role_needed === 'CMA' && isCma) ||
                 (bc.pairing_role_needed === 'RN' && isRn)
               const claimLabel = isRnIvSolo
                 ? 'Accept IV fluids visit'
-                : bc.pairing_role_needed === 'MD/NP'
-                  ? 'Claim telemedicine half'
-                  : 'Claim in-home half'
+                : isCmaSolo
+                  ? 'Accept CMA visit'
+                  : bc.pairing_role_needed === 'MD/NP'
+                    ? 'Claim telemedicine half'
+                    : 'Claim in-home half'
               const dateStr = bc.scheduled_date
                 ? format(new Date(bc.scheduled_date + 'T12:00:00'), 'EEE, MMM d')
                 : null
               return (
                 <div key={bc.id} className="border-2 border-[#AFA9EC] bg-[#F5F4FE] rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Badge variant="purple">{isRnIvSolo ? 'RN — IV fluids' : `${bc.pairing_role_needed} pairing needed`}</Badge>
-                    <span className="text-[12px] text-[#7F77DD]">{isRnIvSolo ? `ordered by ${bc.created_by_name}` : `via ${bc.pairing_initiator_name}`}</span>
+                    <Badge variant="purple">{isRnIvSolo ? 'RN — IV fluids' : isCmaSolo ? 'CMA — in-home diagnostics' : `${bc.pairing_role_needed} pairing needed`}</Badge>
+                    <span className="text-[12px] text-[#7F77DD]">{isSolo ? `ordered by ${bc.created_by_name}` : `via ${bc.pairing_initiator_name}`}</span>
                   </div>
                   <div className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">
                     {bc.patient_first_name} {bc.patient_last_name}
@@ -447,9 +455,9 @@ export function Broadcasts() {
                         <Clock size={11} /> {dateStr} at {fmtTime24(bc.scheduled_time)}
                       </p>
                     )}
-                    {isRnIvSolo && bc.complaint ? (
+                    {isSolo && bc.complaint ? (
                       <div className="mt-2 mb-1 p-2.5 bg-white border border-[#AFA9EC] rounded-lg">
-                        <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">RN orders</div>
+                        <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">{isRnIvSolo ? 'RN orders' : 'CMA orders'}</div>
                         <div className="text-[13px] text-[#1A1A2E] font-medium">{bc.complaint}</div>
                       </div>
                     ) : (
@@ -460,7 +468,7 @@ export function Broadcasts() {
                   <BroadcastPatientDetails bc={bc} child={broadcastChildren[bc.id] ?? null} />
                   <div className="flex gap-2 mt-3">
                     {canClaim ? (
-                      <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => isRnIvSolo ? openAcceptModal(bc) : claimPairing(bc)}>
+                      <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => isSolo ? openAcceptModal(bc) : claimPairing(bc)}>
                         {claimLabel}
                       </Button>
                     ) : (

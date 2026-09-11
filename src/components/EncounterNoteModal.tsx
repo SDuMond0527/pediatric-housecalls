@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube } from 'lucide-react'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
+import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
@@ -454,28 +455,47 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [rnIvOpen, setRnIvOpen] = useState(false)
   const [rnIvCtx, setRnIvCtx] = useState<RnIvOrderContext | null>(null)
   const [rnIvOpening, setRnIvOpening] = useState(false)
+  const [cmaOpen, setCmaOpen] = useState(false)
+  const [cmaCtx, setCmaCtx] = useState<CmaOrderContext | null>(null)
+  const [cmaOpening, setCmaOpening] = useState(false)
+
+  async function buildOrderCtx(): Promise<RnIvOrderContext | null> {
+    if (!linkedChildId) return null
+    const rows = await getChildrenByIds([linkedChildId]).catch(() => [])
+    const child: any = rows?.[0] ?? {}
+    const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ') || null
+    return {
+      patientFirstName: child.first_name || (linkedChildName?.split(' ')[0] ?? 'Patient'),
+      patientLastName:  child.last_name  || (linkedChildName?.split(' ').slice(1).join(' ') ?? ''),
+      patientDob:       child.date_of_birth ? String(child.date_of_birth).split('T')[0] : (linkedChildDob ?? null),
+      patientAddress:   address,
+      familyPhone:      child.parent_phone || child.family_phone || null,
+      familyEmail:      child.parent_email || child.family_email || null,
+      state:            child.parent_state || child.family_state || null,
+      zone:             child.parent_zip   || child.family_zip   || null,
+      relatedAppointmentId: appointment.id,
+    }
+  }
 
   async function openRnIvOrder() {
     if (!linkedChildId) return
     setRnIvOpening(true)
     try {
-      const rows = await getChildrenByIds([linkedChildId]).catch(() => [])
-      const child: any = rows?.[0] ?? {}
-      const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ') || null
-      setRnIvCtx({
-        patientFirstName: child.first_name || (linkedChildName?.split(' ')[0] ?? 'Patient'),
-        patientLastName:  child.last_name  || (linkedChildName?.split(' ').slice(1).join(' ') ?? ''),
-        patientDob:       child.date_of_birth ? String(child.date_of_birth).split('T')[0] : (linkedChildDob ?? null),
-        patientAddress:   address,
-        familyPhone:      child.parent_phone || child.family_phone || null,
-        familyEmail:      child.parent_email || child.family_email || null,
-        state:            child.parent_state || child.family_state || null,
-        zone:             child.parent_zip   || child.family_zip   || null,
-        relatedAppointmentId: appointment.id,
-      })
-      setRnIvOpen(true)
+      const ctx = await buildOrderCtx()
+      if (ctx) { setRnIvCtx(ctx); setRnIvOpen(true) }
     } finally {
       setRnIvOpening(false)
+    }
+  }
+
+  async function openCmaOrder() {
+    if (!linkedChildId) return
+    setCmaOpening(true)
+    try {
+      const ctx = await buildOrderCtx()
+      if (ctx) { setCmaCtx(ctx); setCmaOpen(true) }
+    } finally {
+      setCmaOpening(false)
     }
   }
   const [patientQuery, setPatientQuery] = useState('')
@@ -1041,6 +1061,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             >
               <Droplet size={13} />
               {rnIvOpening ? 'Loading…' : 'Order IV fluids'}
+            </button>
+            <button
+              onClick={openCmaOrder}
+              disabled={cmaOpening || !linkedChildId}
+              title={!linkedChildId ? 'Link a patient to order an in-home CMA visit' : 'Send an in-home CMA to collect labs / do diagnostics'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <TestTube size={13} />
+              {cmaOpening ? 'Loading…' : 'Order CMA visit'}
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] ml-1">
               <X size={16} />
@@ -2198,6 +2227,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           onSent={() => {
             setRnIvOpen(false)
             setSaveSuccess('IV fluids broadcast sent to on-call RNs')
+            setTimeout(() => setSaveSuccess(null), 4000)
+          }}
+        />
+      )}
+      {cmaOpen && cmaCtx && currentProvider && (
+        <CmaOrderModal
+          ctx={cmaCtx}
+          providerId={currentProvider.id}
+          providerRole={currentProvider.role}
+          providerName={currentProvider.name}
+          onClose={() => setCmaOpen(false)}
+          onSent={() => {
+            setCmaOpen(false)
+            setSaveSuccess('CMA visit broadcast sent to on-call CMAs')
             setTimeout(() => setSaveSuccess(null), 4000)
           }}
         />
