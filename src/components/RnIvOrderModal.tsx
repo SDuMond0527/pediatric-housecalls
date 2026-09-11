@@ -3,7 +3,6 @@ import { X, Droplet, Send } from 'lucide-react'
 import { createBroadcast, invokeNotifications } from '../lib/api'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
-import { TIME_SLOTS } from '../lib/zipData'
 
 // Patient context — anything we already know from where the modal is opened.
 export interface RnIvOrderContext {
@@ -32,30 +31,27 @@ const VOLUMES = [500, 1000] as const
 export function RnIvOrderModal({ ctx, providerId, providerRole, providerName, onClose, onSent }: Props) {
   const [weightLbs, setWeightLbs] = useState('')
   const [volumeMl, setVolumeMl] = useState<number | null>(null)
+  const [notes, setNotes] = useState('')
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
-  const [time, setTime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const weightNum = parseFloat(weightLbs)
   const weightValid = !Number.isNaN(weightNum) && weightNum > 0
-  const canSend = weightValid && volumeMl !== null && !!date && !!time && !submitting
+  const canSend = weightValid && volumeMl !== null && !!date && !submitting
 
   async function send() {
     if (!canSend) return
     setError(null)
     setSubmitting(true)
     try {
-      const [t, ampm] = time.split(' ')
-      let [h, m] = t.split(':').map(Number)
-      if (ampm === 'PM' && h !== 12) h += 12
-      if (ampm === 'AM' && h === 12) h = 0
-      const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-
       // Structured, machine-parseable orders string. Rendered as a distinct
       // "RN orders" block on the broadcast card and the RN's appointment card.
-      const complaint = `IV: NS ${volumeMl} mL | wt ${weightNum} lbs`
+      const trimmedNotes = notes.trim()
+      const complaint = trimmedNotes
+        ? `IV: NS ${volumeMl} mL | wt ${weightNum} lbs | notes: ${trimmedNotes}`
+        : `IV: NS ${volumeMl} mL | wt ${weightNum} lbs`
 
       const bc = await createBroadcast({
         patient_first_name: ctx.patientFirstName,
@@ -77,8 +73,10 @@ export function RnIvOrderModal({ ctx, providerId, providerRole, providerName, on
         // filter), but leave pairing_initiator_id null so the claim path knows
         // this is a solo visit, not a pair.
         pairing_role_needed: 'RN',
+        // The claiming RN picks her own arrival time from the accept modal.
+        // The date the ordering provider chose here is a hint / target day.
         scheduled_date: date,
-        scheduled_time: time24,
+        scheduled_time: null,
       }).catch(() => null)
 
       if (!bc?.id) {
@@ -149,29 +147,27 @@ export function RnIvOrderModal({ ctx, providerId, providerRole, providerName, on
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date *</label>
-              <input type="date" value={date} min={today}
-                onChange={e => setDate(e.target.value)}
-                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Additional notes for the RN</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={3}
+                placeholder="e.g. Zofran 4 mg IV if nausea. Prior IV attempts failed at ED — consider foot vein."
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] resize-none"
+              />
+              <p className="text-[11px] text-[#999] mt-1">Optional — anything else the RN should know.</p>
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time *</label>
-              <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
-                {TIME_SLOTS.map(slot => (
-                  <button key={slot} type="button" onClick={() => setTime(slot)}
-                    className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
-                      time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
-                      : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
-                    }`}>
-                    {slot}
-                  </button>
-                ))}
-              </div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Target date *</label>
+              <input type="date" value={date} min={today}
+                onChange={e => setDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+              <p className="text-[11px] text-[#999] mt-1">The claiming RN picks the exact arrival time when she accepts.</p>
             </div>
 
             <div className="p-3 bg-[#FEF3E8] border border-[#F5943A]/30 rounded-lg text-[12px] text-[#633806]">
-              This will page every active RN in the state. First to claim adds it to their schedule. No paired telemedicine visit is created.
+              This will page every active RN in the state. The first RN to claim picks her arrival time and adds it to her schedule. No paired telemedicine visit is created.
             </div>
           </div>
         </div>

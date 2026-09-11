@@ -303,7 +303,9 @@ export function Broadcasts() {
 
   function openAcceptModal(bc: Broadcast) {
     setAcceptingBc(bc)
-    setAcceptDate(format(new Date(), 'yyyy-MM-dd'))
+    // Prefer the target date the ordering provider suggested (RN IV solo path)
+    // and let the RN change it if she needs to.
+    setAcceptDate(bc.scheduled_date || format(new Date(), 'yyyy-MM-dd'))
     setAcceptTime(defaultAcceptTime())
   }
 
@@ -313,15 +315,24 @@ export function Broadcasts() {
     setActing(bc.id)
     setAcceptingBc(null)
 
+    const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
+
     const noteParts = [`Broadcast: ${bc.patient_first_name} ${bc.patient_last_name}`]
     if (bc.patient_dob) noteParts.push(`DOB:${bc.patient_dob}`)
     if (bc.patient_address) noteParts.push(`ADDR:${bc.patient_address}`)
-    if (bc.complaint) noteParts.push(`CC:${bc.complaint}`)
-    noteParts.push(`Request: ${bc.request_type}`)
+    if (bc.family_phone) noteParts.push(`PARENTPHONE:${bc.family_phone}`)
+    if (bc.family_email) noteParts.push(`PARENTEMAIL:${bc.family_email}`)
+    if (bc.complaint) {
+      // RN IV solo — complaint carries the RN orders (weight/volume/notes).
+      // Tag it distinctly so the RN's Today card renders the purple "RN orders"
+      // block instead of a generic chief complaint.
+      noteParts.push(isRnIvSolo ? `RNORDER:${bc.complaint}` : `CC:${bc.complaint}`)
+    }
+    if (!isRnIvSolo) noteParts.push(`Request: ${bc.request_type}`)
 
     await createAppointment({
       provider_id: provider.id,
-      visit_type: bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine',
+      visit_type: bc.visit_type || (bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine'),
       zone: bc.patient_address || (bc as any).zone || 'Broadcast',
       scheduled_time: acceptTime,
       scheduled_date: acceptDate,
@@ -429,7 +440,7 @@ export function Broadcasts() {
                   <BroadcastPatientDetails bc={bc} child={broadcastChildren[bc.id] ?? null} />
                   <div className="flex gap-2 mt-3">
                     {canClaim ? (
-                      <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => claimPairing(bc)}>
+                      <Button variant="teal" size="sm" loading={acting === bc.id} onClick={() => isRnIvSolo ? openAcceptModal(bc) : claimPairing(bc)}>
                         {claimLabel}
                       </Button>
                     ) : (
