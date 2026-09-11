@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Send, Pencil, X } from 'lucide-react'
-import { updateChild, apiFetch } from '../lib/api'
+import { updateChild, apiFetch, uploadNotePhoto } from '../lib/api'
 import { getMissingChildFields, type RequiredField } from '../lib/childCompleteness'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -84,12 +84,26 @@ export function IncompleteChartBanner({ child, onUpdated }: Props) {
         </div>
       </div>
 
-      {fillOpen && <FillInModal child={child} missing={missing} onClose={() => setFillOpen(false)} onSaved={(patched) => { onUpdated(patched); setFillOpen(false) }} />}
+      {fillOpen && <FillInModal child={child} onClose={() => setFillOpen(false)} onSaved={(patched) => { onUpdated(patched); setFillOpen(false) }} />}
     </>
   )
 }
 
-function FillInModal({ child, missing, onClose, onSaved }: { child: any; missing: RequiredField[]; onClose: () => void; onSaved: (updated: any) => void }) {
+function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => void; onSaved: (updated: any) => void }) {
+  // Derive missing INSIDE the modal from the current child prop so we react
+  // to external edits (e.g., staff saving via the chart's own "Edit" buttons
+  // while the modal is open, or having saved values just before opening it).
+  // Any field that gets populated externally disappears from the modal.
+  const missing = getMissingChildFields(child, {
+    phone:         child?.family_phone,
+    email:         child?.family_email,
+    address_line1: child?.family_address_line1,
+  })
+  if (missing.length === 0) {
+    // Nothing left to fill in — close automatically.
+    onClose()
+    return null
+  }
   const [values, setValues] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -152,7 +166,7 @@ function FillInModal({ child, missing, onClose, onSaved }: { child: any; missing
 
 function FieldInput({ field, value, onChange }: { field: RequiredField; value: string; onChange: (v: string) => void }) {
   if (field.key === 'insurance_card_front_url' || field.key === 'insurance_card_back_url') {
-    return <Input label={`${field.label} (paste URL) *`} value={value} onChange={e => onChange(e.target.value)} placeholder="https://..." />
+    return <CardUploadInput field={field} value={value} onChange={onChange} />
   }
   if (field.key === 'date_of_birth' || field.key === 'insurance_subscriber_dob') {
     return (
@@ -199,4 +213,39 @@ function FieldInput({ field, value, onChange }: { field: RequiredField; value: s
   }
   const type = field.key === 'parent_phone' ? 'tel' : field.key === 'parent_email' ? 'email' : 'text'
   return <Input label={`${field.label} *`} type={type} value={value} onChange={e => onChange(e.target.value)} />
+}
+
+function CardUploadInput({ field, value, onChange }: { field: RequiredField; value: string; onChange: (v: string) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  async function pick(file: File) {
+    setErr(null)
+    setUploading(true)
+    try {
+      const url = await uploadNotePhoto(file)
+      onChange(url)
+    } catch (e: any) {
+      setErr(e?.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+  return (
+    <div>
+      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">{field.label} *</label>
+      {value ? (
+        <div className="flex items-center gap-2">
+          <img src={value} className="h-16 rounded border border-[#E8E8E4] object-contain" />
+          <button type="button" onClick={() => onChange('')} className="text-[11px] text-[#DC2626] underline">Remove</button>
+        </div>
+      ) : (
+        <div>
+          <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && pick(e.target.files[0])}
+                 className="block text-[12px] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#E8E8E4] file:bg-white file:text-[#1A1A2E] file:cursor-pointer" />
+          {uploading && <div className="text-[11px] text-[#999] mt-1">Uploading…</div>}
+          {err && <div className="text-[11px] text-[#DC2626] mt-1">{err}</div>}
+        </div>
+      )}
+    </div>
+  )
 }
