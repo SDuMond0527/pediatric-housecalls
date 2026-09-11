@@ -68,6 +68,11 @@ export function Broadcasts() {
     if (!provider) return
     setActing(bc.id)
     try {
+      // RN IV solo — the MD/NP already saw the patient in person and ordered
+      // fluids. No paired telemedicine visit is created; just add the RN's
+      // visit to their schedule.
+      const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
+
       const isInHomeNeeded = bc.pairing_role_needed === 'CMA' || bc.pairing_role_needed === 'RN'
       // Reference code shared across both twin appointments so cancel/reschedule
       // cascades and paired-provider notification lookups can find the pair.
@@ -75,7 +80,13 @@ export function Broadcasts() {
       const partnerLabel = isInHomeNeeded
         ? `${bc.pairing_initiator_name} (MD/NP — telemedicine)`
         : `${bc.pairing_initiator_name} (CMA — in-home)`
-      const noteParts = [
+      const noteParts = isRnIvSolo ? [
+        `From broadcast · ordered by ${bc.created_by_name}`,
+        bc.complaint ? `RNORDER:${bc.complaint}` : '',
+        bc.patient_address ? `ADDR:${bc.patient_address}` : '',
+        bc.family_email ? `PARENTEMAIL:${bc.family_email}` : '',
+        bc.family_phone ? `PARENTPHONE:${bc.family_phone}` : '',
+      ].filter(Boolean) : [
         `Ref: ${pairRef}`,
         `Paired from broadcast`,
         bc.complaint ? `CC:${bc.complaint}` : '',
@@ -99,7 +110,9 @@ export function Broadcasts() {
         status: 'upcoming',
         notes: noteParts.join('|'),
         state: (bc as any).state || null,
-        ...(isInHomeNeeded && bc.pairing_initiator_id ? { second_provider_id: bc.pairing_initiator_id } : {}),
+        // Solo RN IV: no second_provider_id — visit_type is not in DUAL_TYPES
+        // so the appointments API will create a single row and skip pairing.
+        ...(!isRnIvSolo && isInHomeNeeded && bc.pairing_initiator_id ? { second_provider_id: bc.pairing_initiator_id } : {}),
       })
 
       if ((apptResult as any)?.error) {
@@ -255,21 +268,24 @@ export function Broadcasts() {
               const isMdNp = myRole === 'MD' || myRole === 'PNP'
               const isCma = myRole === 'CMA'
               const isRn = myRole === 'RN'
+              const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
               const canClaim =
                 (bc.pairing_role_needed === 'MD/NP' && isMdNp) ||
                 (bc.pairing_role_needed === 'CMA' && isCma) ||
                 (bc.pairing_role_needed === 'RN' && isRn)
-              const claimLabel = bc.pairing_role_needed === 'MD/NP'
-                ? 'Claim telemedicine half'
-                : 'Claim in-home half'
+              const claimLabel = isRnIvSolo
+                ? 'Accept IV fluids visit'
+                : bc.pairing_role_needed === 'MD/NP'
+                  ? 'Claim telemedicine half'
+                  : 'Claim in-home half'
               const dateStr = bc.scheduled_date
                 ? format(new Date(bc.scheduled_date + 'T12:00:00'), 'EEE, MMM d')
                 : null
               return (
                 <div key={bc.id} className="border-2 border-[#AFA9EC] bg-[#F5F4FE] rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Badge variant="purple">{bc.pairing_role_needed} pairing needed</Badge>
-                    <span className="text-[12px] text-[#7F77DD]">via {bc.pairing_initiator_name}</span>
+                    <Badge variant="purple">{isRnIvSolo ? 'RN — IV fluids' : `${bc.pairing_role_needed} pairing needed`}</Badge>
+                    <span className="text-[12px] text-[#7F77DD]">{isRnIvSolo ? `ordered by ${bc.created_by_name}` : `via ${bc.pairing_initiator_name}`}</span>
                   </div>
                   <div className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">
                     {bc.patient_first_name} {bc.patient_last_name}
@@ -280,7 +296,14 @@ export function Broadcasts() {
                         <Clock size={11} /> {dateStr} at {fmtTime24(bc.scheduled_time)}
                       </p>
                     )}
-                    {bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>}
+                    {isRnIvSolo && bc.complaint ? (
+                      <div className="mt-2 mb-1 p-2.5 bg-white border border-[#AFA9EC] rounded-lg">
+                        <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">RN orders</div>
+                        <div className="text-[13px] text-[#1A1A2E] font-medium">{bc.complaint}</div>
+                      </div>
+                    ) : (
+                      bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
+                    )}
                     {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#999]" />{bc.patient_address}</p>}
                   </div>
                   <div className="flex gap-2">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet } from 'lucide-react'
+import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
@@ -450,6 +451,33 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [linkedChildId, setLinkedChildId] = useState<string | null>(childId)
   const [linkedChildName, setLinkedChildName] = useState<string | null>(null)
   const [linkedChildDob, setLinkedChildDob] = useState<string | null>(null)
+  const [rnIvOpen, setRnIvOpen] = useState(false)
+  const [rnIvCtx, setRnIvCtx] = useState<RnIvOrderContext | null>(null)
+  const [rnIvOpening, setRnIvOpening] = useState(false)
+
+  async function openRnIvOrder() {
+    if (!linkedChildId) return
+    setRnIvOpening(true)
+    try {
+      const rows = await getChildrenByIds([linkedChildId]).catch(() => [])
+      const child: any = rows?.[0] ?? {}
+      const address = [child.parent_address || child.family_address_line1, child.parent_city || child.family_city].filter(Boolean).join(', ') || null
+      setRnIvCtx({
+        patientFirstName: child.first_name || (linkedChildName?.split(' ')[0] ?? 'Patient'),
+        patientLastName:  child.last_name  || (linkedChildName?.split(' ').slice(1).join(' ') ?? ''),
+        patientDob:       child.date_of_birth ? String(child.date_of_birth).split('T')[0] : (linkedChildDob ?? null),
+        patientAddress:   address,
+        familyPhone:      child.parent_phone || child.family_phone || null,
+        familyEmail:      child.parent_email || child.family_email || null,
+        state:            child.parent_state || child.family_state || null,
+        zone:             child.parent_zip   || child.family_zip   || null,
+        relatedAppointmentId: appointment.id,
+      })
+      setRnIvOpen(true)
+    } finally {
+      setRnIvOpening(false)
+    }
+  }
   const [patientQuery, setPatientQuery] = useState('')
   const [patientResults, setPatientResults] = useState<any[]>([])
   const [patientSearching, setPatientSearching] = useState(false)
@@ -1004,6 +1032,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             >
               <FlaskConical size={13} />
               {dsLaunching ? 'Opening…' : 'Prescribe'}
+            </button>
+            <button
+              onClick={openRnIvOrder}
+              disabled={rnIvOpening || !linkedChildId}
+              title={!linkedChildId ? 'Link a patient to order IV fluids' : 'Send an in-home RN to run IV fluids'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Droplet size={13} />
+              {rnIvOpening ? 'Loading…' : 'Order IV fluids'}
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] ml-1">
               <X size={16} />
@@ -2151,6 +2188,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           </div>
         )}
       </div>
+      {rnIvOpen && rnIvCtx && currentProvider && (
+        <RnIvOrderModal
+          ctx={rnIvCtx}
+          providerId={currentProvider.id}
+          providerRole={currentProvider.role}
+          providerName={currentProvider.name}
+          onClose={() => setRnIvOpen(false)}
+          onSent={() => {
+            setRnIvOpen(false)
+            setSaveSuccess('IV fluids broadcast sent to on-call RNs')
+            setTimeout(() => setSaveSuccess(null), 4000)
+          }}
+        />
+      )}
     </div>
   )
 }
