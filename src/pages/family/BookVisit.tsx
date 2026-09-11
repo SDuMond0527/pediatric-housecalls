@@ -210,9 +210,13 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     insuranceCardFrontUrl: child?.insurance_card_front_url || '',
     insuranceCardBackUrl: child?.insurance_card_back_url || '',
     selfPay: false,
-    allergies: child?.allergies || 'NKDA', currentMedications: child?.current_medications || 'None',
+    // No auto-fill defaults. If the field is empty on the child record, the
+    // intake field is empty and the parent must fill it before submit. See
+    // memory: feedback_all_patient_info_required_and_displayed.md
+    allergies: child?.allergies || '', currentMedications: child?.current_medications || '',
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
-    pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false, vaccinationStatus: 'fully_vaccinated',
+    pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false,
+    vaccinationStatus: (child as any)?.vaccination_status || '',
     phiSharingConsent: false,
     chiefComplaint: '', additionalInfo: '', textVisitPhotos: [],
   }
@@ -976,16 +980,26 @@ export function BookVisit() {
     return booking.selectedChildIds.every(id => {
       const intake = booking.childIntakes[id]
       if (!intake) return false
+      // Every field is required to be non-empty on the intake object. The
+      // intake pre-fills from the child record on load — so anything that's
+      // already saved from a previous visit passes automatically. Only truly
+      // EMPTY fields (never filled before, or blanked out) block submit.
+      // See memory: feedback_all_patient_info_required_and_displayed.md
       if (!intake.chiefComplaint) return false
-      if (!intake.selfPay && !intake.hasProfile && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
-      if (!intake.hasProfile) {
-        if (!intake.firstName || !intake.lastName || !intake.dateOfBirth || !intake.gender) return false
-        if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender || !intake.insuranceSubscriberRelationship)) return false
-        if (!intake.allergies || !intake.currentMedications || !intake.medicalHistory || !intake.preferredPharmacy) return false
-        if (!intake.pcp_id && !intake.pcpNoPcp) return false
-        if (!intake.vaccinationStatus) return false
-        if (!intake.phiSharingConsent) return false
-      }
+      // Insurance cards — require upload unless self-pay OR already on file.
+      if (!intake.selfPay && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
+      // Identity
+      if (!intake.firstName || !intake.lastName || !intake.dateOfBirth || !intake.gender) return false
+      // Insurance details — required if not self-pay
+      if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender || !intake.insuranceSubscriberRelationship)) return false
+      // Clinical
+      if (!intake.allergies || !intake.currentMedications || !intake.medicalHistory || !intake.preferredPharmacy) return false
+      // PCP — either a specific PCP or an explicit "no PCP" flag
+      if (!intake.pcp_id && !intake.pcpNoPcp) return false
+      // Vaccination
+      if (!intake.vaccinationStatus) return false
+      // PHI consent
+      if (!intake.phiSharingConsent) return false
       return true
     })
   }
