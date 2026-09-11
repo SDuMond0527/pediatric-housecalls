@@ -264,8 +264,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nickname,
       allergies, current_medications, medical_history, vaccination_status,
     } = req.body
-    if (!first_name && !last_name) return res.status(400).json({ error: 'Name required' })
-    const label = [first_name, last_name].filter(Boolean).join(' ')
+    // Provider-path dedup — same three rules as the family-portal path:
+    //   (1) Reject if first_name is missing. No more empty rows.
+    //   (2) Race guard — if the same practice created ANY child row for
+    //       this family (or, when family_id isn't provided, matching
+    //       first_name in the practice) in the last 10 seconds, return
+    //       that row rather than inserting a duplicate.
+    //   (3) Same-family / same-name dedup — return the existing row
+    //       when a match already exists.
+    const fn = String(first_name ?? '').trim()
+    const ln = String(last_name ?? '').trim()
+    if (!fn) return res.status(400).json({ error: "Child's first name is required." })
+
+    if (family_id) {
+      const [recent] = await sql`
+        SELECT * FROM children
+        WHERE family_id = ${family_id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND created_at > NOW() - INTERVAL '10 seconds'
+        ORDER BY created_at DESC
+        LIMIT 1`
+      if (recent) return res.json(recent)
+    } else {
+      const [recent] = await sql`
+        SELECT * FROM children
+        WHERE practice_id = ${practiceId}::uuid
+          AND family_id IS NULL
+          AND first_name ILIKE ${fn}
+          AND created_at > NOW() - INTERVAL '10 seconds'
+        ORDER BY created_at DESC
+        LIMIT 1`
+      if (recent) return res.json(recent)
+    }
+
+    if (family_id) {
+      const [sameFamilyMatch] = await sql`
+        SELECT * FROM children
+        WHERE family_id = ${family_id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND first_name ILIKE ${fn}
+          AND (${ln} = '' OR last_name ILIKE ${ln})
+          AND (${date_of_birth ?? null}::date IS NULL OR date_of_birth = ${date_of_birth ?? null}::date)
+        ORDER BY created_at ASC
+        LIMIT 1`
+      if (sameFamilyMatch) return res.json(sameFamilyMatch)
+    } else if (ln && date_of_birth) {
+      const [prevMatch] = await sql`
+        SELECT * FROM children
+        WHERE practice_id = ${practiceId}::uuid
+          AND family_id IS NULL
+          AND first_name ILIKE ${fn}
+          AND last_name ILIKE ${ln}
+          AND date_of_birth = ${date_of_birth}::date
+        LIMIT 1`
+      if (prevMatch) return res.json(prevMatch)
+    }
+
+    const label = [fn, ln].filter(Boolean).join(' ')
     const [row] = await sql`
       INSERT INTO children (
         practice_id, display_label, first_name, last_name, date_of_birth, gender,
@@ -283,8 +338,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       VALUES (
         ${practiceId}::uuid,
         ${label},
-        ${first_name || null},
-        ${last_name || null},
+        ${fn},
+        ${ln || null},
         ${date_of_birth || null},
         ${gender || null},
         ${family_id || null},
