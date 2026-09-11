@@ -835,89 +835,93 @@ export function Waitlist() {
       {accepting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setAccepting(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Accept waitlist patient</h2>
               <button onClick={() => setAccepting(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
                 <X size={16} />
               </button>
             </div>
 
-            <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
-              <div className="font-medium text-[#1A1A2E]">{accepting.family_name}</div>
-              <div className="flex items-center gap-1 text-[#999]">
-                <MapPin size={11} /> Zip {accepting.zip} · {stateLabel(accepting.state)}
-              </div>
-              {accepting.preferred_time_window && (
+            <div className="px-6 flex-1 overflow-y-auto">
+              <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
+                <div className="font-medium text-[#1A1A2E]">{accepting.family_name}</div>
                 <div className="flex items-center gap-1 text-[#999]">
-                  <Clock size={11} /> Preferred: {accepting.preferred_time_window}
+                  <MapPin size={11} /> Zip {accepting.zip} · {stateLabel(accepting.state)}
                 </div>
-              )}
-            </div>
-
-            {(() => {
-              const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
-              const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
-              const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
-              return modalMdSendsBroadcast ? (
-                <p className="text-[13px] text-[#555] mb-4">
-                  This visit needs a {acceptVisitType === 'In-home IV fluids' ? 'RN' : 'CMA'} to complete the pair. Confirming will send a broadcast to available {acceptVisitType === 'In-home IV fluids' ? 'RNs' : 'CMAs'} — the family will be notified once one claims. No appointment is added to your schedule until then.
-                </p>
-              ) : (
-                <p className="text-[13px] text-[#555] mb-4">
-                  Choose a visit type, date, and time. The family will be notified and the appointment will be added to your schedule.
-                </p>
-              )
-            })()}
-
-            <div className="space-y-3 mb-5">
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
-                <select value={acceptVisitType} onChange={e => setAcceptVisitType(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
-                  <option value="">Select visit type…</option>
-                  {visitTypes.map(v => <option key={v.visit_type} value={v.visit_type}>{v.badge_label || v.visit_type}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
-                <input type="date" value={date} min={new Date().toISOString().split('T')[0]}
-                  onChange={e => setDate(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
-              </div>
-              {date && (
-                <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time</label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {TIME_SLOTS.map(slot => (
-                      <button key={slot} onClick={() => setTime(slot)}
-                        className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
-                          time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
-                          : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
-                        }`}>
-                        {slot}
-                      </button>
-                    ))}
+                {accepting.preferred_time_window && (
+                  <div className="flex items-center gap-1 text-[#999]">
+                    <Clock size={11} /> Preferred: {accepting.preferred_time_window}
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {acceptError && (
-              <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{acceptError}</div>
-            )}
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
               {(() => {
                 const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
                 const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
                 const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
-                return (
-                  <Button variant="teal" className="flex-1" disabled={!acceptVisitType || !date || !time} loading={submitting} onClick={acceptEntry}>
-                    <CheckCircle2 size={14} /> {modalMdSendsBroadcast ? 'Send broadcast' : 'Confirm'}
-                  </Button>
+                return modalMdSendsBroadcast ? (
+                  <p className="text-[13px] text-[#555] mb-4">
+                    This visit needs a {acceptVisitType === 'In-home IV fluids' ? 'RN' : 'CMA'} to complete the pair. Confirming will send a broadcast to available {acceptVisitType === 'In-home IV fluids' ? 'RNs' : 'CMAs'} — the family will be notified once one claims. No appointment is added to your schedule until then.
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-[#555] mb-4">
+                    Choose a visit type, date, and time. The family will be notified and the appointment will be added to your schedule.
+                  </p>
                 )
               })()}
+
+              <div className="space-y-3 mb-5">
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit type</label>
+                  <select value={acceptVisitType} onChange={e => setAcceptVisitType(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                    <option value="">Select visit type…</option>
+                    {visitTypes.map(v => <option key={v.visit_type} value={v.visit_type}>{v.badge_label || v.visit_type}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date</label>
+                  <input type="date" value={date} min={new Date().toISOString().split('T')[0]}
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                </div>
+                {date && (
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Time</label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {TIME_SLOTS.map(slot => (
+                        <button key={slot} onClick={() => setTime(slot)}
+                          className={`py-1.5 text-center text-[12px] rounded-lg border-2 transition-all font-sans ${
+                            time === slot ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                            : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC] text-[#1A1A2E]'
+                          }`}>
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#E8E8E4]">
+              {acceptError && (
+                <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{acceptError}</div>
+              )}
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
+                {(() => {
+                  const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
+                  const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
+                  const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
+                  return (
+                    <Button variant="teal" className="flex-1" disabled={!acceptVisitType || !date || !time} loading={submitting} onClick={acceptEntry}>
+                      <CheckCircle2 size={14} /> {modalMdSendsBroadcast ? 'Send broadcast' : 'Confirm'}
+                    </Button>
+                  )
+                })()}
+              </div>
             </div>
           </div>
         </div>
