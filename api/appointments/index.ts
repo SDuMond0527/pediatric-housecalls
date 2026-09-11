@@ -50,8 +50,7 @@ async function createAppointmentCore(
       }
     }
   }
-  const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
-  if (DUAL_TYPES.includes(visit_type)) {
+  if (DUAL_VISIT_TYPES.includes(visit_type)) {
     let state = bodyState
     if (!state && zone) {
       const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${practiceId}::uuid LIMIT 1`
@@ -112,7 +111,7 @@ async function createAppointmentCore(
           return { primary: null, secondary: null, error: `${mdName || 'The paired provider'} is no longer available at that time — please choose a different slot.` }
         }
       }
-      const partnerRoleLabel = visit_type === 'CMA + telemedicine' ? 'MD/NP — telemedicine' : 'MD/NP — telemedicine screening'
+      const partnerRoleLabel = isCmaTelePair(visit_type) ? 'MD/NP — telemedicine' : 'MD/NP — telemedicine screening'
       const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`
       const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
       ;[secondaryRow] = await sql`
@@ -231,13 +230,23 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   return { sub: payload.sub, type: 'provider' }
 }
 
+// Paired-visit aliases. All three names for each pair map to the same
+// duration so historical names, current DB names, and the explicit renamed
+// versions all resolve correctly. Keep in sync with api/_lib/dualVisitTypes.ts
+// and src/lib/dualVisitTypes.ts.
+const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
+const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
+const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
+
 const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60,
   'Sports physical': 60,
-  'CMA + telemedicine': 30,
+  ...Object.fromEntries(CMA_TELE_ALIASES.map(k => [k, 30])),
   'Video telemedicine': 30,
   'Text visit': 15,
-  'In-home IV fluids': 90,
+  ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, 90])),
   'In-home CPR class (Heartsaver)': 240,
   'In-home CPR class (BLS)': 240,
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 240,
@@ -313,10 +322,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     if (result.error) return res.status(409).json({ error: result.error })
 
-    const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
-    if (DUAL_TYPES.includes(visit_type)) {
+    if (DUAL_VISIT_TYPES.includes(visit_type)) {
       // Legacy response shape — some callers read .cma / .rn / .md; some read .primary / .secondary.
-      const primaryKey = visit_type === 'CMA + telemedicine' ? 'cma' : 'rn'
+      const primaryKey = isCmaTelePair(visit_type) ? 'cma' : 'rn'
       return res.json({
         primary: result.primary,
         secondary: result.secondary,

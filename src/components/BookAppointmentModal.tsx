@@ -4,8 +4,9 @@ import { Button } from './ui/Button'
 import { createAppointment, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
 import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { DUAL_VISIT_TYPES, isCmaTelePair } from '../lib/dualVisitTypes'
 
-const DUAL_PROVIDER_TYPES = ['CMA + telemedicine', 'In-home IV fluids'] as const
+const DUAL_PROVIDER_TYPES = DUAL_VISIT_TYPES
 
 interface Props {
   child: any
@@ -34,7 +35,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const isDual = DUAL_PROVIDER_TYPES.includes(form.visit_type as any)
-  const isCma = form.visit_type === 'CMA + telemedicine'
+  const isCma = isCmaTelePair(form.visit_type)
   const firstLabel  = isCma ? 'CMA (in-home)' : 'RN (in-home)'
   const secondLabel = 'MD / NP (telemedicine)'
 

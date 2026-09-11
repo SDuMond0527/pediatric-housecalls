@@ -87,9 +87,15 @@ export const VACV_SPLIT: Record<string, number> = {
 
 // Paired-visit fallback pay — when a row is on a paired appointment
 // (CMA+tele or IV fluids) and no specific-code rule matched, pay by role.
+// Every alias name for each pair maps to the same value.
+import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from './dualVisitTypes'
+
+const CMA_TELE_PAY = { md: 31, pnp: 31, cma: 35, rn: 0 }
+const IV_FLUIDS_PAY = { md: 31, pnp: 31, cma: 0, rn: 90 }
+
 export const PAIRED_ROLE_PAY: Record<string, { md: number; pnp: number; cma: number; rn: number }> = {
-  'CMA + telemedicine': { md: 31, pnp: 31, cma: 35, rn: 0 },
-  'In-home IV fluids':  { md: 31, pnp: 31, cma: 0,  rn: 90 },
+  ...Object.fromEntries(CMA_TELE_ALIASES.map(k => [k, CMA_TELE_PAY])),
+  ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, IV_FLUIDS_PAY])),
 }
 
 export interface PayComputation {

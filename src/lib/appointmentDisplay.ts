@@ -1,10 +1,12 @@
 // Display-only transforms for appointment visit types. Data model stays the
-// same — both twins of a paired dual visit are stored with the shared
-// dual visit_type ('CMA + telemedicine' or 'In-home IV fluids'). On the
-// MD/NP's side of the pair, we relabel to make it clear what that provider
-// is actually doing (video screening while a CMA/RN handles in-home work).
+// same — both twins of a paired dual visit are stored with the shared dual
+// visit_type. On the MD/NP's side of the pair, we relabel to make it clear
+// what that provider is actually doing (video screening while a CMA/RN
+// handles in-home work).
 
-const DUAL_VISIT_TYPES = new Set(['CMA + telemedicine', 'In-home IV fluids'])
+import { DUAL_VISIT_TYPES as DUAL_ALIASES } from './dualVisitTypes'
+
+const DUAL_VISIT_TYPES = new Set(DUAL_ALIASES)
 
 // The MD/NP's own row will have a PARTNER: tag pointing to the CMA/RN, e.g.
 //   "PARTNER: Jane Smith (CMA)"

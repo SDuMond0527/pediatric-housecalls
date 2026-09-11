@@ -59,11 +59,17 @@ async function getDrivingMiles(origin: string, destination: string): Promise<num
   return element.distance.value / 1609.344
 }
 
+// ── Paired-visit aliases (kept in sync with api/appointments/index.ts) ────────
+const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
+const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
+
 // ── Fee calculation ───────────────────────────────────────────────────────────
 
 function calculateFee(miles: number, dateStr: string, time24: string, visitType: string, state?: string): { fee: number; code: string } {
-  if (visitType === 'In-home IV fluids') return { fee: 150, code: 'IV-flat' }
-  if (visitType === 'CMA + telemedicine') return { fee: 50, code: 'CMA-flat' }
+  if (isIvFluidsPair(visitType)) return { fee: 150, code: 'IV-flat' }
+  if (isCmaTelePair(visitType)) return { fee: 50, code: 'CMA-flat' }
   if (isMajorHoliday(dateStr)) return state === 'VA' ? { fee: 200, code: 'VACV10' } : { fee: 200, code: 'CV13' }
 
   const date = new Date(dateStr + 'T12:00:00')
@@ -125,10 +131,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isVA = state === 'VA'
 
   // Flat fees — no distance needed
-  if (visitType === 'In-home IV fluids') {
+  if (isIvFluidsPair(visitType)) {
     return res.json({ ok: true, fee: 150, code: 'IV-flat', basis: 'Flat rate for IV fluids' })
   }
-  if (visitType === 'CMA + telemedicine') {
+  if (isCmaTelePair(visitType)) {
     return res.json({ ok: true, fee: 50, code: 'CMA-flat', basis: 'Flat rate for CMA visits' })
   }
   if (visitType.startsWith('In-home CPR class')) {

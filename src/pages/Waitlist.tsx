@@ -12,6 +12,7 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { DUAL_VISIT_TYPES, isIvFluidsPair } from '../lib/dualVisitTypes'
 
 interface WaitlistEntry {
   id: string
@@ -363,7 +364,6 @@ export function Waitlist() {
     })
 
     const finalVisitType = acceptVisitType || accepting.visit_type || 'In-home sick visit'
-    const DUAL_VISIT_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
     const isDual = DUAL_VISIT_TYPES.includes(finalVisitType)
     const acceptorIsInHome = provider.role === 'CMA' || provider.role === 'RN'
     // When an MD/NP accepts a dual-type waitlist entry: don't book yet — send a
@@ -372,7 +372,7 @@ export function Waitlist() {
 
     try {
       if (mdSendsBroadcast) {
-        const isIvFluids = finalVisitType === 'In-home IV fluids'
+        const isIvFluids = isIvFluidsPair(finalVisitType)
         const pairingRoleNeeded = isIvFluids ? 'RN' : 'CMA'
         const requestType = isIvFluids ? 'In-home RN needed' : 'In-home CMA needed'
         const patientFullName = accepting.family_name || 'Patient'
@@ -505,7 +505,7 @@ export function Waitlist() {
           const patientLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
           const isInHome = provider.role === 'CMA' || provider.role === 'RN'
-          const isIvFluids = finalVisitType === 'In-home IV fluids'
+          const isIvFluids = isIvFluidsPair(finalVisitType)
           const pairingRoleNeeded = isInHome ? 'MD/NP' : (isIvFluids ? 'RN' : 'CMA')
           const requestType = pairingRoleNeeded === 'MD/NP'
             ? 'Telemedicine MD/NP needed'
@@ -870,12 +870,12 @@ export function Waitlist() {
               </div>
 
               {(() => {
-                const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
+                const modalIsDual = DUAL_VISIT_TYPES.includes(acceptVisitType || accepting.visit_type || '')
                 const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
                 const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
                 return modalMdSendsBroadcast ? (
                   <p className="text-[13px] text-[#555] mb-4">
-                    This visit needs a {acceptVisitType === 'In-home IV fluids' ? 'RN' : 'CMA'} to complete the pair. Confirming will send a broadcast to available {acceptVisitType === 'In-home IV fluids' ? 'RNs' : 'CMAs'} — the family will be notified once one claims. No appointment is added to your schedule until then.
+                    This visit needs a {isIvFluidsPair(acceptVisitType) ? 'RN' : 'CMA'} to complete the pair. Confirming will send a broadcast to available {isIvFluidsPair(acceptVisitType) ? 'RNs' : 'CMAs'} — the family will be notified once one claims. No appointment is added to your schedule until then.
                   </p>
                 ) : (
                   <p className="text-[13px] text-[#555] mb-4">
@@ -925,7 +925,7 @@ export function Waitlist() {
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setAccepting(null)}>Cancel</Button>
                 {(() => {
-                  const modalIsDual = ['CMA + telemedicine', 'In-home IV fluids'].includes(acceptVisitType || accepting.visit_type || '')
+                  const modalIsDual = DUAL_VISIT_TYPES.includes(acceptVisitType || accepting.visit_type || '')
                   const modalAcceptorIsInHome = provider?.role === 'CMA' || provider?.role === 'RN'
                   const modalMdSendsBroadcast = modalIsDual && !modalAcceptorIsInHome
                   return (

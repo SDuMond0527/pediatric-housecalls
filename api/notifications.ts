@@ -13,6 +13,14 @@ const TELEMEDICINE_URL  = process.env.TELEMEDICINE_URL || 'https://doxy.me/v2/ch
 const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || 'https://g.page/r/CeBMcqioHWlQEBM/review'
 const VENMO_HANDLE      = process.env.VENMO_HANDLE || '@Pediatric-Housecalls'
 
+// Paired-visit aliases. Kept in sync with api/appointments/index.ts,
+// api/appointments/[id].ts, src/lib/dualVisitTypes.ts.
+const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
+const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
+const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
+
 // Splits practice name into "first words" (white) + "last word" (accent color)
 function logo(accentColor: string): string {
   const parts = PRACTICE_NAME.trim().split(/\s+/)
@@ -201,7 +209,7 @@ function parentConfirmationEmail(data: {
   const isVirtual = ['Video telemedicine', 'Text visit'].includes(data.visitType)
   const isVideoVisit = data.visitType === 'Video telemedicine'
   const isIVFluids = data.visitType.toLowerCase().includes('iv') || data.visitType.toLowerCase().includes('fluid')
-  const isCmaTele = data.visitType === 'CMA + telemedicine'
+  const isCmaTele = isCmaTelePair(data.visitType)
 
   return `<!DOCTYPE html>
 <html>
@@ -1360,8 +1368,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 4. Paired provider (CMA+tele / IV fluids) — their twin was moved by the
       // PATCH cascade; tell them the new time. Escalate on hard fail.
-      const reschedPairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
-      if (reschedPairedTypes.includes(appt.visit_type) && reschedPracticeId) {
+      if (DUAL_VISIT_TYPES.includes(appt.visit_type) && reschedPracticeId) {
         const reschedRef = String(appt.notes ?? '').match(/Ref: ([A-Z0-9-]+)/)
         if (reschedRef) {
           const twinRows = await sql`
@@ -1423,7 +1430,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, undefined)
 
-      if (visitType === 'In-home IV fluids' && parentEmail) {
+      if (isIvFluidsPair(visitType) && parentEmail) {
         await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids parent email failed:', e))
       }
 
@@ -1800,8 +1807,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // For CMA+telemedicine / IV fluids: notify the paired provider (twin was
       // cancelled by the PATCH cascade). Escalate on hard fail.
-      const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
-      if (pairedTypes.includes(appt.visit_type) && refMatch) {
+      if (DUAL_VISIT_TYPES.includes(appt.visit_type) && refMatch) {
         const twinRows = await sql`
           SELECT a.provider_id, p.name, p.email, p.phone
           FROM appointments a
@@ -1874,9 +1880,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // For CMA+telemedicine / IV fluids: also notify the paired on-call MD/NP whose
       // appointment was cancelled by the cascade. Escalate on hard fail.
-      const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
       let pairedMdId: string | null = null
-      if (pairedTypes.includes(visitType) && cancelPracticeId && zone && date && time) {
+      if (DUAL_VISIT_TYPES.includes(visitType) && cancelPracticeId && zone && date && time) {
         const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${cancelPracticeId}::uuid LIMIT 1`
         const cancelState = zoneRow?.state ?? null
         if (cancelState) {
@@ -2089,7 +2094,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // retry + fallback + admin-escalation behavior via notifyOrEscalate.
     let onCallProviderId: string | null = null
     if (
-      (booking.visit_type === 'CMA + telemedicine' || booking.visit_type === 'In-home IV fluids') &&
+      DUAL_VISIT_TYPES.includes(booking.visit_type) &&
       booking.reference_code && practiceId
     ) {
       const twinRows = await sql`
@@ -2143,7 +2148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     // IV fluids gets an extra family email with preparation instructions
-    if (booking.visit_type === 'In-home IV fluids' && family?.email) {
+    if (isIvFluidsPair(booking.visit_type) && family?.email) {
       await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids email failed:', e))
     }
 

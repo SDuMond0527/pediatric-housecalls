@@ -191,22 +191,24 @@ function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(url)
 }
 
+import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from '../../lib/dualVisitTypes'
+
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
   'Sports physical':     '#EF9F27',
-  'CMA + telemedicine':  '#378ADD',
+  ...Object.fromEntries(CMA_TELE_ALIASES.map(k => [k, '#378ADD'])),
   'Video telemedicine':  '#1D9E75',
   'Text visit':          '#D4537E',
-  'In-home IV fluids':   '#0F6E56',
+  ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, '#0F6E56'])),
 }
 
 const VISIT_TYPE_ORDER = [
   'In-home sick visit',
   'Video telemedicine',
-  'CMA + telemedicine',
+  ...CMA_TELE_ALIASES,
   'Sports physical',
   'Text visit',
-  'In-home IV fluids',
+  ...IV_FLUIDS_ALIASES,
 ]
 
 function SummaryCard({ label, value, color, bg, sub }: { label: string; value: number; color: string; bg: string; sub?: string }) {

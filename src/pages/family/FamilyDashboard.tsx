@@ -10,7 +10,8 @@ import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { BookingRequest, SlotOffer } from '../../types/family'
 import { PRACTICE_NAME } from '../../lib/practice'
 
-const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', 'CMA + telemedicine', 'In-home IV fluids']
+import { DUAL_VISIT_TYPES } from '../../lib/dualVisitTypes'
+const IN_PERSON_TYPES = ['In-home sick visit', 'Sports physical', ...DUAL_VISIT_TYPES]
 
 function safeFormat(value: string | null | undefined, fmt: string, suffix = ''): string {
   if (!value) return '—'

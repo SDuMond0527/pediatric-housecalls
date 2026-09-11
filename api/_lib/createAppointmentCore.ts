@@ -1,13 +1,13 @@
 import type { neon } from '@neondatabase/serverless'
+import { DUAL_VISIT_TYPES, isCmaTelePair, dualAliasMap } from './dualVisitTypes'
 
 // Duration table — must stay in sync with api/appointments/index.ts.
 const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60,
   'Sports physical': 60,
-  'CMA + telemedicine': 30,
+  ...dualAliasMap(30, 90),
   'Video telemedicine': 30,
   'Text visit': 15,
-  'In-home IV fluids': 90,
   'In-home CPR class (Heartsaver)': 240,
   'In-home CPR class (BLS)': 240,
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 240,
@@ -110,8 +110,7 @@ export async function createAppointmentCore(
     }
   }
 
-  const DUAL_TYPES = ['CMA + telemedicine', 'In-home IV fluids']
-  if (DUAL_TYPES.includes(visit_type)) {
+  if (DUAL_VISIT_TYPES.includes(visit_type)) {
     let state = bodyState
     if (!state && zone) {
       const [zoneRow] = await sql`SELECT state FROM practice_zones WHERE zone_name = ${zone} AND practice_id = ${practiceId}::uuid LIMIT 1`
@@ -190,7 +189,7 @@ export async function createAppointmentCore(
         }
       }
 
-      const partnerRoleLabel = visit_type === 'CMA + telemedicine'
+      const partnerRoleLabel = isCmaTelePair(visit_type)
         ? 'MD/NP — telemedicine'
         : 'MD/NP — telemedicine screening'
       const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`

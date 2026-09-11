@@ -26,6 +26,7 @@ import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { getProvidersByZone, getProvidersByState } from '../../lib/api'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
+import { isCmaTelePair, isIvFluidsPair, CMA_TELE_ALIASES } from '../../lib/dualVisitTypes'
 import { format } from 'date-fns'
 import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
 
@@ -223,6 +224,11 @@ export function BookVisit() {
   const { user, family, children, refreshFamily } = useFamilyAuth()
   const { zipToZone, zipToState, waitlistZones } = usePracticeZones()
   const { byType } = usePracticeVisitTypes()
+  // The practice may have named its paired visit types anything from the
+  // aliases (older `CMA + telemedicine`, current `CMA + tele`, or the new
+  // explicit rename). Pick whichever one actually exists in this practice's
+  // catalog so downstream API calls and duration/lead-time lookups hit.
+  const cmaVisitTypeKey = CMA_TELE_ALIASES.find(k => byType[k]) ?? CMA_TELE_ALIASES[0]
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [expandedCprType, setExpandedCprType] = useState<string | null>(null)
@@ -235,7 +241,7 @@ export function BookVisit() {
     participantCount: 1, participantNames: '',
   })
 
-  const isIvFluids = booking.visitType === 'In-home IV fluids'
+  const isIvFluids = isIvFluidsPair(booking.visitType)
   const isCpr = byType[booking.visitType]?.is_cpr ?? false
   const STEPS = isIvFluids ? STEPS_IV : isCpr ? STEPS_CPR : STEPS_DEFAULT
 
@@ -303,8 +309,8 @@ export function BookVisit() {
 
 
   useEffect(() => {
-    const isIv = booking.visitType === 'In-home IV fluids'
-    const isCma = booking.visitType === 'CMA + telemedicine'
+    const isIv = isIvFluidsPair(booking.visitType)
+    const isCma = isCmaTelePair(booking.visitType)
     const isTele = isTelemedicine(booking.visitType)
     if (isTele) {
       if (!booking.state) { setRegularZoneProviders([]); return }
@@ -401,19 +407,19 @@ export function BookVisit() {
   // Check CMA availability whenever no in-person slots exist on the selected date/zone
   useEffect(() => {
     setCmaAvailResult(null)
-    if (!booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
+    if (!booking.date || !booking.zone || isCmaTelePair(booking.visitType)) return
     const noLeadSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     if (noLeadSlots) findCmaAvailability(booking.date, booking.zone)
   }, [booking.date, booking.zone, booking.visitType])
 
   useEffect(() => {
-    if (!allSlotsBooked || !booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
+    if (!allSlotsBooked || !booking.date || !booking.zone || isCmaTelePair(booking.visitType)) return
     findCmaAvailability(booking.date, booking.zone)
   }, [allSlotsBooked])
 
   // For CMA-only zones (no regular providers), check CMA availability whenever date changes
   useEffect(() => {
-    if (!booking.date || !booking.zone || booking.visitType === 'CMA + telemedicine') return
+    if (!booking.date || !booking.zone || isCmaTelePair(booking.visitType)) return
     if (waitlistZones.includes(booking.zone)) return
     if (regularZoneProviders.length === 0) {
       setCmaAvailResult(null)
@@ -424,7 +430,7 @@ export function BookVisit() {
   // Proactive 3-day look-ahead: fires when zone providers load for in-home visit types
   useEffect(() => {
     const isInHome = !isCpr && !isTelemedicine(booking.visitType) &&
-      booking.visitType !== 'CMA + telemedicine' && booking.visitType !== 'In-home IV fluids'
+      !isCmaTelePair(booking.visitType) && !isIvFluidsPair(booking.visitType)
     if (!isInHome || regularZoneProviders.length === 0) {
       setZoneLookahead([])
       setZoneLookaheadLoading(false)
@@ -652,10 +658,10 @@ export function BookVisit() {
     if (zip.length === 5 && zone) {
       // Served zip — load secure text numbers for providers assigned to this zone
       // (IV fluids: show only the RNs who cover this specific zone)
-      const ivRows = booking.visitType === 'In-home IV fluids'
+      const ivRows = isIvFluidsPair(booking.visitType)
         ? await getProvidersByRole({ role: 'RN', is_active: 'true', zone }).catch(() => [] as any[])
         : []
-      const providerNames = booking.visitType === 'In-home IV fluids'
+      const providerNames = isIvFluidsPair(booking.visitType)
         ? (ivRows as any[]).map((p: any) => p.name)
         : regularZoneProviders.map(p => p.name)
       if (providerNames.length > 0) {
@@ -743,7 +749,7 @@ export function BookVisit() {
     )
     const cmaNames = (cmaRows ?? []).map((r: any) => r.name as string)
 
-    const leadTimeSlots = getAvailableSlots(byType['CMA + telemedicine']?.lead_minutes ?? 60, date)
+    const leadTimeSlots = getAvailableSlots(byType[cmaVisitTypeKey]?.lead_minutes ?? 60, date)
     if (leadTimeSlots.length === 0) return
 
     const slotMin = (slot: string) => {
@@ -759,7 +765,7 @@ export function BookVisit() {
       if (!provRow) return null
       const dayWindow = await getProviderDayWindow(provRow.id, date)
       if (!dayWindow) return null
-      const sched = await getSchedulingData(provRow.id, { date, visit_type: 'CMA + telemedicine' })
+      const sched = await getSchedulingData(provRow.id, { date, visit_type: cmaVisitTypeKey })
       const vtaRow = sched?.visitTypeAvail
       const vtaWindow3 = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
         ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
@@ -767,7 +773,7 @@ export function BookVisit() {
       const window = intersectWindows(dayWindow, vtaWindow3)
       if (!window) return null
       const bookedList = sched?.bookedSlots ?? []
-      const cmaVisitDur = byType['CMA + telemedicine']?.duration_minutes ?? 60
+      const cmaVisitDur = byType[cmaVisitTypeKey]?.duration_minutes ?? 60
       const free = leadTimeSlots.filter(slot => {
         const sm = slotMin(slot)
         const [wsh, wsm] = window.start.split(':').map(Number)
@@ -946,7 +952,7 @@ export function BookVisit() {
     setWaitlistDone(true)
   }
 
-  const isCmaVisit = booking.visitType === 'CMA + telemedicine'
+  const isCmaVisit = isCmaTelePair(booking.visitType)
   const isTele = isTelemedicine(booking.visitType)
   const cmaOnlyZone = !!booking.zone && !waitlistZones.includes(booking.zone) && regularZoneProviders.length === 0 && !isCmaVisit
   const zoneProviders = isIvFluids
@@ -1364,7 +1370,7 @@ export function BookVisit() {
               const displayName: string = infoAny.shortName ?? type
               const details: string[] | undefined = infoAny.details
               const isExpanded = expandedCprType === type
-              const showNote = type === 'CMA + telemedicine' && !!infoAny.note
+              const showNote = isCmaTelePair(type) && !!infoAny.note
               return (
                 <button key={type} onClick={() => setBooking(b => ({ ...b, visitType: type }))}
                   className={`text-left p-4 rounded-xl border-2 transition-all ${booking.visitType === type ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
@@ -2097,10 +2103,10 @@ export function BookVisit() {
                         const result = cmaAvailResult
                         setCmaAvailResult(null)
                         if (result) {
-                          setBooking(b => ({ ...b, visitType: 'CMA + telemedicine', provider: result.name, time: result.firstSlot }))
+                          setBooking(b => ({ ...b, visitType: cmaVisitTypeKey, provider: result.name, time: result.firstSlot }))
                           loadBookedTimes(result.name, booking.date)
                         } else {
-                          setBooking(b => ({ ...b, visitType: 'CMA + telemedicine', provider: '' }))
+                          setBooking(b => ({ ...b, visitType: cmaVisitTypeKey, provider: '' }))
                         }
                       }}
                       className="mt-auto w-full py-2.5 bg-[#0C447C] text-white rounded-xl text-[13px] font-semibold hover:bg-[#0a3666] transition-colors">

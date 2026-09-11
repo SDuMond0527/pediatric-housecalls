@@ -13,13 +13,19 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
+// Paired-visit aliases. Keep in sync with api/appointments/index.ts and
+// src/lib/dualVisitTypes.ts.
+const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening']
+const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
+
 const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60,
   'Sports physical': 60,
-  'CMA + telemedicine': 30,
+  ...Object.fromEntries(CMA_TELE_ALIASES.map(k => [k, 30])),
   'Video telemedicine': 30,
   'Text visit': 15,
-  'In-home IV fluids': 90,
+  ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, 90])),
   'In-home CPR class (Heartsaver)': 240,
   'In-home CPR class (BLS)': 240,
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 240,
@@ -62,8 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   async function findTwinId(): Promise<string | null> {
     const [existing] = await sql`SELECT visit_type, notes FROM appointments WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid LIMIT 1`
     if (!existing) return null
-    const pairedTypes = ['CMA + telemedicine', 'In-home IV fluids']
-    if (!pairedTypes.includes(existing.visit_type)) return null
+    if (!DUAL_VISIT_TYPES.includes(existing.visit_type)) return null
     const refMatch = String(existing.notes ?? '').match(/Ref: ([A-Z0-9-]+)/)
     if (!refMatch) return null
     const twins = await sql`

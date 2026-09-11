@@ -122,6 +122,14 @@ export const VISIT_TYPE_INFO = {
   },
 }
 
+// Register alias entries for the paired visit types so any historical /
+// current / renamed name resolves to the same display metadata.
+import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from './dualVisitTypes'
+const _cmaInfo = (VISIT_TYPE_INFO as any)['CMA + telemedicine']
+const _ivInfo  = (VISIT_TYPE_INFO as any)['In-home IV fluids']
+for (const k of CMA_TELE_ALIASES) if (_cmaInfo && !(VISIT_TYPE_INFO as any)[k]) (VISIT_TYPE_INFO as any)[k] = _cmaInfo
+for (const k of IV_FLUIDS_ALIASES) if (_ivInfo  && !(VISIT_TYPE_INFO as any)[k]) (VISIT_TYPE_INFO as any)[k] = _ivInfo
+
 export const COMPLAINT_OPTIONS = [
   'Fever','Ear pain','Sore throat','Rash / skin concern',
   'Vomiting / diarrhea','Cough / congestion','Eye discharge / pink eye',

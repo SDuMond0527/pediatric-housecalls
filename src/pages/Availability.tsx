@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { isCmaTelePair } from '../lib/dualVisitTypes'
 import type { ZoneRestriction, TimeBlock } from '../types'
 
 interface AvailabilityOverride {
@@ -174,7 +175,7 @@ export function Availability() {
       const config = byType[v.visit_type]
       // Hide on-call types from MD/PNP (handled by on-call schedule instead)
       const label = (config?.badge_label ?? v.visit_type).toLowerCase()
-      if (isMdOrPnp && (v.visit_type === 'CMA + telemedicine' || label.includes('screening'))) return false
+      if (isMdOrPnp && (isCmaTelePair(v.visit_type) || label.includes('screening'))) return false
       // Hide visit types whose allowed_roles doesn't include this provider's role
       if (config?.allowed_roles && viewingProviderRole && !config.allowed_roles.includes(viewingProviderRole)) return false
       return true

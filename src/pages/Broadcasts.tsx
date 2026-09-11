@@ -203,7 +203,7 @@ export function Broadcasts() {
       // pair via the broadcast — respect that.
       const apptResult = await createAppointment({
         provider_id: provider.id,
-        visit_type: bc.visit_type || 'CMA + telemedicine',
+        visit_type: bc.visit_type || 'CMA + tele',
         zone: (bc as any).zone || bc.patient_address || 'Broadcast',
         scheduled_time: bc.scheduled_time || '09:00',
         scheduled_date: bc.scheduled_date || format(new Date(), 'yyyy-MM-dd'),

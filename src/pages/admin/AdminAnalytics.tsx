@@ -9,13 +9,15 @@ interface ProviderRow { id: string; name: string; role: string }
 interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
 interface OnCallRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
 
+import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from '../../lib/dualVisitTypes'
+
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
   'Sports physical':     '#EF9F27',
-  'CMA + telemedicine':  '#378ADD',
+  ...Object.fromEntries(CMA_TELE_ALIASES.map(k => [k, '#378ADD'])),
   'Video telemedicine':  '#1D9E75',
   'Text visit':          '#D4537E',
-  'In-home IV fluids':   '#0F6E56',
+  ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, '#0F6E56'])),
 }
 
 const STATE_LABEL: Record<string, string> = { NC: 'North Carolina', SC: 'South Carolina', VA: 'Virginia' }
