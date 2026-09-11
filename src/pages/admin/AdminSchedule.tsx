@@ -8,6 +8,7 @@ import { Modal } from '../../components/ui/Modal'
 import { EncounterNoteModal } from '../../components/EncounterNoteModal'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
+import { displayVisitType } from '../../lib/appointmentDisplay'
 import type { Appointment, Provider } from '../../types'
 
 function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: any; error: string | null } | undefined; onCheck: () => void }) {
@@ -676,9 +677,9 @@ export function AdminSchedule() {
                     }}>
                     <div className="flex items-center gap-3 px-4 py-2.5">
                       <span className="text-[12px] text-[#555] w-14 flex-shrink-0">{to12h(appt.scheduled_time)}</span>
-                      <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{appt.visit_type}</span>
+                      <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{displayVisitType(appt)}</span>
                       <span className="text-[12px] text-[#555] hidden sm:block">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</span>
-                      <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{vt?.badge_label || appt.visit_type}</Badge>
+                      <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
                       <ChevronDown size={13} className={`text-[#999] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
@@ -786,7 +787,7 @@ export function AdminSchedule() {
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="bg-[#F6F5FF] rounded-lg p-2.5">
                                   <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Visit type</div>
-                                  <div className="text-[13px] text-[#1A1A2E]">{appt.visit_type}</div>
+                                  <div className="text-[13px] text-[#1A1A2E]">{displayVisitType(appt)}</div>
                                 </div>
                                 <div className="bg-[#F6F5FF] rounded-lg p-2.5">
                                   <div className="text-[10px] font-medium text-[#3C3489] uppercase tracking-wider mb-1">Zone</div>

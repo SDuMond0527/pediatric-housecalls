@@ -15,6 +15,7 @@ import { Button } from '../components/ui/Button'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeZones } from '../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { displayVisitType } from '../lib/appointmentDisplay'
 import type { Appointment } from '../types'
 
 function to12h(time24: string): string {
@@ -796,10 +797,10 @@ export function Today() {
                   <div className="flex items-center gap-3 px-4 py-3">
                     <div className="text-[13px] font-medium text-[#555] w-16 flex-shrink-0">{to12h(appt.scheduled_time)}</div>
                     <div className="flex-1 min-w-0">
-                      <div className={`font-display text-[15px] font-medium ${isExpanded ? 'text-[#3C3489]' : 'text-[#1A1A2E]'}`}>{appt.visit_type}</div>
+                      <div className={`font-display text-[15px] font-medium ${isExpanded ? 'text-[#3C3489]' : 'text-[#1A1A2E]'}`}>{displayVisitType(appt)}</div>
                       <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
                     </div>
-                    <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{vt?.badge_label || appt.visit_type}</Badge>
+                    <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
                     <ChevronDown size={14} className={`text-[#999] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -974,7 +975,7 @@ export function Today() {
                       })()}
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         {[
-                          { label: 'Visit type', value: appt.visit_type },
+                          { label: 'Visit type', value: displayVisitType(appt) },
                           { label: 'Zone',       value: appt.zone },
                           ...((() => { const z = (appt.notes || '').split('|').find(p => p.trim().startsWith('ZIP:'))?.replace(/^ZIP:/, '').trim(); return z ? [{ label: 'Zip', value: z }] : [] })()),
                         ].map(d => (
