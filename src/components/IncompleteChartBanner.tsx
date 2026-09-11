@@ -98,15 +98,24 @@ function FillInModal({ child, missing, onClose, onSaved }: { child: any; missing
     setError(null)
     setSubmitting(true)
     try {
+      // Staff-side fill-in supports partial saves. Only fields the user
+      // actually typed values into get written to the DB. Any field left
+      // empty stays empty — the banner will re-render on the next page load
+      // showing whatever is still missing. This is different from the
+      // parent-facing CompleteChildProfileGate, which does require every
+      // field in one shot (parents are filling their own child's profile,
+      // not chasing missing info piecemeal like staff).
       const patch: Record<string, any> = {}
       for (const f of missing) {
         const raw = values[f.key]
-        if (raw == null || String(raw).trim() === '') {
-          setError(`Please fill in "${f.label}" — every field is required.`)
-          setSubmitting(false)
-          return
+        if (raw != null && String(raw).trim() !== '') {
+          patch[f.key] = raw
         }
-        patch[f.key] = raw
+      }
+      if (Object.keys(patch).length === 0) {
+        setError('Nothing to save — fill in at least one field before saving.')
+        setSubmitting(false)
+        return
       }
       const updated = await updateChild(child.id, patch)
       onSaved({ ...child, ...updated })
