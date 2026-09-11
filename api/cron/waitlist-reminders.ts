@@ -17,6 +17,11 @@ const BIZ_END_HOUR   = 18
 const REMINDER_THRESHOLD_HOURS = 3
 const MAX_PER_RUN = 20
 
+// Only remind / auto-remove entries created after this timestamp. Anything
+// on the waitlist before this line went live keeps its old, pre-feature
+// behavior (no automated reminder, no automated EOD removal).
+const FEATURE_LAUNCH_AT = '2026-09-11T17:45:00Z'
+
 function easternHour(d: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }).formatToParts(d)
   const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10)
@@ -100,6 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     WHERE we.status = 'waiting'
       AND we.reminder_sent_at IS NULL
       AND we.created_at > NOW() - INTERVAL '48 hours'
+      AND we.created_at >= ${FEATURE_LAUNCH_AT}::timestamptz
     ORDER BY we.created_at ASC
   `
 
@@ -187,6 +193,7 @@ Remove us from the waitlist: ${removeUrl}`
         WHERE status = 'waiting'
           AND (created_at AT TIME ZONE 'America/New_York')::date = ${etTodayISO}::date
           AND EXTRACT(HOUR FROM (created_at AT TIME ZONE 'America/New_York')) < ${BIZ_END_HOUR}
+          AND created_at >= ${FEATURE_LAUNCH_AT}::timestamptz
         RETURNING id
       `
       autoRemoved = rows.length
