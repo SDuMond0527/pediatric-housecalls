@@ -476,19 +476,13 @@ export function AdminSchedule() {
     if (form.email) noteParts.push(`PARENTEMAIL:${form.email}`)
     if (form.phone) noteParts.push(`PARENTPHONE:${form.phone}`)
 
-    await createAppointment({
-      provider_id: form.provider_id,
-      visit_type: form.visit_type,
-      zone: form.zone || form.address || 'Unspecified',
-      scheduled_time: form.scheduled_time,
-      scheduled_date: form.scheduled_date,
-      status: 'upcoming',
-      notes: noteParts.length ? noteParts.join('|') : null,
-    })
-
-    // Persist contact info to children table for future autofill
+    // Resolve child_id BEFORE creating the appointment so the schedule card
+    // can pull the full Patient / Clinical / Insurance blocks from the child
+    // record — no more relying on a display-side name-search fallback that
+    // could pick the wrong kid if two share a first + last name.
+    let resolvedChildId: string | null = selectedPatient?.id ?? null
     if (selectedPatient?.id) {
-      apiFetch(`/api/children/${selectedPatient.id}`, {
+      await apiFetch(`/api/children/${selectedPatient.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           parent_phone:   form.phone   || null,
@@ -499,7 +493,7 @@ export function AdminSchedule() {
       }).catch(() => {})
     } else if (form.patientName) {
       const [firstName, ...rest] = form.patientName.trim().split(' ')
-      apiFetch('/api/children', {
+      const created = await apiFetch<any>('/api/children', {
         method: 'POST',
         body: JSON.stringify({
           first_name:     firstName      || null,
@@ -511,8 +505,20 @@ export function AdminSchedule() {
           parent_address: form.address   || null,
           parent_zip:     form.zip       || null,
         }),
-      }).catch(() => {})
+      }).catch(() => null)
+      if (created?.id) resolvedChildId = created.id
     }
+
+    await createAppointment({
+      provider_id: form.provider_id,
+      visit_type: form.visit_type,
+      zone: form.zone || form.address || 'Unspecified',
+      scheduled_time: form.scheduled_time,
+      scheduled_date: form.scheduled_date,
+      status: 'upcoming',
+      notes: noteParts.length ? noteParts.join('|') : null,
+      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+    })
 
     setModalOpen(false)
     fetchAppointments()

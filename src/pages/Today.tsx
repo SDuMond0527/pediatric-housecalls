@@ -472,19 +472,14 @@ export function Today() {
     const providerId = addForProviderId || provider.id
     const assignedProvider = allProviders.find(p => p.id === providerId)
 
-    await createAppointment({
-      provider_id: providerId,
-      visit_type: addForm.visitType,
-      zone: addForm.zone || addForm.address || 'Unspecified',
-      scheduled_time: time24,
-      scheduled_date: addForm.date,
-      status: 'upcoming',
-      notes: noteParts.join('|') || null,
-    })
-
-    // Save patient contact info to children table so it appears in future searches
+    // Resolve child_id BEFORE creating the appointment so Today.tsx / AdminSchedule
+    // can fetch the child record and display the full Patient / Clinical / Insurance
+    // blocks. If the provider linked an existing patient we use their id; otherwise
+    // we create the child row first (with full profile data) and use the returned id.
+    let resolvedChildId: string | null = selectedPatient?.id ?? null
     if (selectedPatient?.id) {
-      apiFetch(`/api/children/${selectedPatient.id}`, {
+      // Update the existing child with any new profile info the provider typed.
+      await apiFetch(`/api/children/${selectedPatient.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           parent_phone:   addForm.phone   || null,
@@ -496,7 +491,7 @@ export function Today() {
     } else if (addForm.patientName) {
       const [firstName, ...rest] = addForm.patientName.trim().split(' ')
       const lastName = rest.join(' ')
-      apiFetch('/api/children', {
+      const created = await apiFetch<any>('/api/children', {
         method: 'POST',
         body: JSON.stringify({
           first_name:    firstName || null,
@@ -514,8 +509,20 @@ export function Today() {
           insurance_subscriber_dob:   addForm.subscriberDob    || null,
           insurance_subscriber_gender: addForm.subscriberGender || null,
         }),
-      }).catch(() => {})
+      }).catch(() => null)
+      if (created?.id) resolvedChildId = created.id
     }
+
+    await createAppointment({
+      provider_id: providerId,
+      visit_type: addForm.visitType,
+      zone: addForm.zone || addForm.address || 'Unspecified',
+      scheduled_time: time24,
+      scheduled_date: addForm.date,
+      status: 'upcoming',
+      notes: noteParts.join('|') || null,
+      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+    })
 
     setAddSubmitting(false)
     setAdding(false)
