@@ -412,6 +412,32 @@ export function Waitlist() {
         return
       }
 
+      // Resolve child_id BEFORE creating the appointment so Today.tsx / the
+      // schedule can fetch the child record and surface every field the
+      // waitlist card showed (address, allergies, insurance, PCP, etc.).
+      // Same resolution rule the follow-up updateChild uses below: explicit
+      // child_ids first, then name-match against the family's children.
+      let resolvedChildId: string | null = null
+      let matchedChildForPatch: any = null
+      const noteMapForResolve = parseNotes(accepting.notes)
+      try {
+        const explicitChildIdsForResolve = Array.isArray((accepting as any).child_ids) ? (accepting as any).child_ids : []
+        if (explicitChildIdsForResolve.length > 0) {
+          resolvedChildId = explicitChildIdsForResolve[0]
+        } else if (accepting.family_id) {
+          const patientName = noteMapForResolve['Patient'] || ''
+          const [patientFirst, ...restName] = patientName.trim().split(' ')
+          const patientLast = restName.join(' ')
+          const familyChildren = await getChildrenByFamilyIds([accepting.family_id]).catch(() => [])
+          const match = (familyChildren ?? []).find((c: any) => {
+            const fn = (c.first_name || '').toLowerCase()
+            const ln = (c.last_name || '').toLowerCase()
+            return patientFirst && fn === patientFirst.toLowerCase() && (!patientLast || ln === patientLast.toLowerCase())
+          })
+          if (match) { resolvedChildId = match.id; matchedChildForPatch = match }
+        }
+      } catch { /* non-blocking */ }
+
       const apptResult = await createAppointment({
         provider_id: provider.id,
         visit_type: finalVisitType,
@@ -420,17 +446,16 @@ export function Waitlist() {
         scheduled_date: date,
         status: 'upcoming',
         notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
+        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
         ...(isDual ? { state: accepting.state || null } : {}),
       })
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
       // Save patient data from the waitlist entry into the child's permanent
-      // profile. Prefer the explicit child_ids link that new entries carry
-      // (set by both admin submitAdd and family portal). Fall back to a
-      // name match against the family's children for legacy entries.
+      // profile — same rule as above: explicit child_ids first, then name match.
       try {
-        const noteMap = parseNotes(accepting.notes)
+        const noteMap = noteMapForResolve
         const insRaw = noteMap['Insurance'] || ''
         const patientPatch = {
           allergies:               noteMap['Allergies']         || null,
@@ -448,23 +473,11 @@ export function Waitlist() {
           parent_zip:              accepting.zip                || null,
         }
 
-        // Path 1 — explicit child_ids on the entry (preferred; set by new
-        // admin adds and family portal submits).
         const explicitChildIds = Array.isArray((accepting as any).child_ids) ? (accepting as any).child_ids : []
         if (explicitChildIds.length > 0) {
           await Promise.all(explicitChildIds.map((cid: string) => updateChild(cid, patientPatch).catch(() => {})))
-        } else if (accepting.family_id) {
-          // Path 2 — legacy entries: look up family's children and match by name.
-          const patientName = noteMap['Patient'] || ''
-          const [patientFirst, ...rest] = patientName.trim().split(' ')
-          const patientLast = rest.join(' ')
-          const familyChildren = await getChildrenByFamilyIds([accepting.family_id])
-          const match = (familyChildren ?? []).find((c: any) => {
-            const fn = (c.first_name || '').toLowerCase()
-            const ln = (c.last_name || '').toLowerCase()
-            return patientFirst && fn === patientFirst.toLowerCase() && (!patientLast || ln === patientLast.toLowerCase())
-          })
-          if (match) await updateChild(match.id, patientPatch)
+        } else if (matchedChildForPatch) {
+          await updateChild(matchedChildForPatch.id, patientPatch)
         }
       } catch { /* non-blocking */ }
 
