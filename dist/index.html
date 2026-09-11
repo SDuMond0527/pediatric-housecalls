@@ -21,7 +21,33 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          // updateViaCache: 'none' — always network-check the sw.js on register,
+          // so a new deploy's SW is picked up immediately instead of waiting up
+          // to 24h for the browser's HTTP cache to expire.
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+            .then(reg => {
+              // Trigger an update check on every page load in this tab, so a
+              // long-lived tab notices a new deploy without needing a hard
+              // reload.
+              reg.update().catch(() => {})
+              // If a new worker is waiting (installed but not yet active),
+              // tell it to take over immediately.
+              if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+              reg.addEventListener('updatefound', () => {
+                const nw = reg.installing
+                if (!nw) return
+                nw.addEventListener('statechange', () => {
+                  if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                    // A new SW is installed and there's an existing controller,
+                    // meaning this page loaded on the old bundle. The new SW's
+                    // activate handler already navigates open clients, so we
+                    // just nudge the waiting one to activate now.
+                    nw.postMessage({ type: 'SKIP_WAITING' })
+                  }
+                })
+              })
+            })
+            .catch(() => {})
         })
       }
     </script>
