@@ -116,14 +116,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const b = req.body
+      // Phone is required at every ingest point — the display side always
+      // shows it, so it must be present. Reject the create if we can't
+      // resolve a 10-digit phone from either the family profile, any linked
+      // child's parent_phone, or a Phone: line in the notes payload.
+      // See memory: feedback_all_patient_info_required_and_displayed.md
+      const notesPhoneDigits = String(b.notes ?? '').match(/Phone:\s*([^|]+)/)?.[1]?.replace(/\D/g, '') ?? ''
+      const [famRow] = await sql`
+        SELECT COALESCE(
+          fp.phone,
+          (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1)
+        ) AS phone
+        FROM family_profiles fp WHERE fp.id = ${familyProfileId}::uuid
+      `
+      const familyPhoneDigits = String(famRow?.phone ?? '').replace(/\D/g, '')
+      const resolvedPhoneDigits =
+        notesPhoneDigits.length === 10 ? notesPhoneDigits
+        : familyPhoneDigits.length === 10 ? familyPhoneDigits
+        : ''
+      if (resolvedPhoneDigits.length !== 10) {
+        return res.status(400).json({ error: 'A 10-digit phone number is required to join the waitlist. Please add a phone number to your family profile.' })
+      }
+
       // Prevent duplicate active entries for the same family
       const existing = await sql`SELECT id FROM waitlist_entries WHERE family_id = ${familyProfileId}::uuid AND (practice_id = ${practiceId}::uuid OR practice_id IS NULL) AND status IN ('waiting', 'contacted') LIMIT 1`
       if (existing.length) return res.json(existing[0])
       const childIds: string[] = b.child_ids ?? []
       const childIdsPg = `{${childIds.join(',')}}`
+      // Ensure a Phone: line is baked into notes so the display fallback
+      // path (COALESCE in the GET query) always resolves it.
+      const notesWithPhone = String(b.notes ?? '').includes('Phone:')
+        ? b.notes
+        : ((b.notes ? b.notes + ' | ' : '') + `Phone: ${resolvedPhoneDigits}`)
       const [row] = await sql`
         INSERT INTO waitlist_entries (practice_id, family_id, child_ids, visit_type, zip, zone, state, complaint, status, notes, preferred_time_window)
-        VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${b.notes ?? null}, ${b.preferred_time_window ?? null})
+        VALUES (${practiceId}::uuid, ${familyProfileId}::uuid, ${childIdsPg}::uuid[], ${b.visit_type}, ${b.zip ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.complaint ?? null}, 'waiting', ${notesWithPhone ?? null}, ${b.preferred_time_window ?? null})
         RETURNING *`
       console.error('[waitlist] entry created:', row.id)
       return res.json(row)

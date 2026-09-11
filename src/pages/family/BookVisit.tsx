@@ -1824,7 +1824,8 @@ export function BookVisit() {
                   We're always expanding — join our waitlist and we'll contact you as soon as we have a provider in your area.
                 </p>
               </div>
-              <button onClick={submitWaitlist} disabled={waitlistSubmitting}
+              <button onClick={submitWaitlist} disabled={waitlistSubmitting || !(booking.phone || (family as any)?.phone)}
+                title={!(booking.phone || (family as any)?.phone) ? 'Add a phone number to your profile before joining the waitlist' : undefined}
                 className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
               </button>
@@ -2464,7 +2465,7 @@ export function BookVisit() {
 
                 <div className="flex gap-2 pt-1">
                   <Button variant="secondary" size="sm" className="flex-1" onClick={() => setWaitlistOpen(false)}>Cancel</Button>
-                  <Button size="sm" className="flex-1" loading={waitlistSubmitting} onClick={submitWaitlist}>
+                  <Button size="sm" className="flex-1" loading={waitlistSubmitting} disabled={!(booking.phone || (family as any)?.phone)} onClick={submitWaitlist}>
                     Join waitlist
                   </Button>
                 </div>
