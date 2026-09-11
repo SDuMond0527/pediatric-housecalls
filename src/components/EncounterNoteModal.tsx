@@ -389,7 +389,7 @@ interface CptCode {
   units?: number
 }
 
-const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
+const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
 const applyAutoModifier = (c: CptCode): CptCode =>
   AUTO_MODIFIERS[c.code] ? { ...c, modifier: AUTO_MODIFIERS[c.code] } : c
 

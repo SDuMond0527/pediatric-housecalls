@@ -157,7 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
             WHERE cl.practice_id = ${practiceId}::uuid
             ORDER BY cl.created_at DESC`
-      const CLIA_CPT_CODES = new Set(['87880', '87428', '81002', '82962'])
+      const CLIA_CPT_CODES = new Set(['87880', '87812', '81002', '82962'])
       const PRACTICE_CLIA = process.env.PRACTICE_CLIA_NUMBER || ''
       const annotated = rows.map((r: any) => {
         const needsClia = PRACTICE_CLIA && (r.cpt_codes ?? []).some((c: any) => CLIA_CPT_CODES.has(String(c.code)))

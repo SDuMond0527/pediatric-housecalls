@@ -31,6 +31,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = providerRows[0].practice_id as string
 
+  // One-time in-place code swap: rapid COVID/flu test moved from 87428 to
+  // 87812 (idempotent — no-op once done, no-op if 87812 already exists).
+  try {
+    await sql`
+      UPDATE fee_schedule
+      SET code = '87812'
+      WHERE code = '87428'
+        AND NOT EXISTS (SELECT 1 FROM fee_schedule fs2 WHERE fs2.code = '87812' AND fs2.practice_id = fee_schedule.practice_id)
+    `
+  } catch (e) {
+    console.error('[fee-schedule] cpt swap err:', e)
+  }
+
   const rows = await sql`
     SELECT code, description, category, charge_amount, place_of_service
     FROM fee_schedule

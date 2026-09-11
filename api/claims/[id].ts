@@ -33,7 +33,7 @@ function getFacilityAddress(renderingProviderName: string | null) {
 
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
-  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
+  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
   // Only include valid CPT codes (exactly 5 alphanumeric chars, not starting with CV) — strips all convenience fees and internal codes
   const cptCodes  = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
     .filter((c: any) => {
@@ -96,7 +96,7 @@ function buildStediPayload(claim: any, testMode = false): object {
   }))
 
   const isTelehealth = (claim.place_of_service ?? '12') === '10'
-  const CLIA_CPT_CODES = new Set(['87880', '87428', '81002', '82962'])
+  const CLIA_CPT_CODES = new Set(['87880', '87812', '81002', '82962'])
   const needsClia = PRACTICE_CLIA && cptCodes.some((c: any) => CLIA_CPT_CODES.has(String(c.code)))
 
   const providerParts = (claim.rendering_provider_name ?? '').split(' ')

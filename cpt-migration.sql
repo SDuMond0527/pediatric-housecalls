@@ -20,7 +20,7 @@ INSERT INTO fee_schedule (code, description, category, charge_amount, place_of_s
 ('99344','New patient home visit - moderate/high complexity','Procedure',495.00,'12'),
 ('99392','Established patient well visit age 1-4','Procedure',375.00,'12'),
 ('87880','Strep test, infectious agent detection by immunoassay','Procedure',85.00,'12'),
-('87428','Rapid antigen combo influenza/COVID test','Procedure',185.00,'12'),
+('87812','Rapid antigen combo influenza/COVID test','Procedure',185.00,'12'),
 ('90619','Meningococcal ACYW vaccine','Procedure',180.85,'12'),
 ('90715','TDaP vaccine','Procedure',68.00,'12'),
 ('90651','Gardasil 9 vaccine','Procedure',252.85,'12'),

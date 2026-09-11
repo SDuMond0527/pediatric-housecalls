@@ -56,7 +56,7 @@ export async function generateClaimForNote(
     ? await sql`SELECT address, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
 
-  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87428': 'QW', '94640': '25' }
+  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
   const cptCodes = allCptCodes
     .filter((c: any) => {
