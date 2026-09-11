@@ -173,6 +173,28 @@ export const providerCreateChild = (body: Record<string, unknown>) =>
 export const providerUpdateChild = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
+// Family-auth insurance card upload. Used during initial signup / intake
+// before any child_id exists — filename is keyed on family sub + side.
+export async function familyUploadInsuranceCard(familySub: string, file: File, side: 'front' | 'back'): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const data = reader.result as string
+        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
+        const filename = `insurance-cards/family/${familySub}/${side}-${Date.now()}.${ext}`
+        const json = await familyApiFetch<{ url: string }>('/api/upload-insurance-card', {
+          method: 'POST',
+          body: JSON.stringify({ data, filename }),
+        })
+        resolve(json.url)
+      } catch (e) { reject(e) }
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export async function providerUploadInsuranceCard(childId: string, file: File, side: 'front' | 'back'): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

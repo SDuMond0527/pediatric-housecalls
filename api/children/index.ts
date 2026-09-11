@@ -68,7 +68,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       try {
-        const { display_label, first_name, last_name, date_of_birth } = req.body
+        const b = req.body ?? {}
+        const { display_label, first_name, last_name, date_of_birth } = b
         const familyId = rows[0].id as string
 
         // (1) Reject the create if there's no first name — a child chart
@@ -77,6 +78,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const fn = String(first_name ?? '').trim()
         if (!fn) {
           return res.status(400).json({ error: "Child's first name is required." })
+        }
+
+        // Server-side guard: if the caller is providing intake fields
+        // (extended signup / provider "Add sibling"), require the full
+        // required set so we NEVER create a skeleton chart from an ingest
+        // that promised to collect all data. Callers that don't pass any
+        // intake fields still work (dedup / lookup paths above). See
+        // memory: feedback_all_patient_info_required_and_displayed.md
+        const REQUIRED_ALWAYS = [
+          'last_name', 'date_of_birth', 'gender',
+          'parent_phone', 'parent_email', 'parent_address',
+          'allergies', 'current_medications', 'medical_history',
+          'preferred_pharmacy', 'vaccination_status',
+        ] as const
+        const REQUIRED_IF_INSURED = [
+          'insurance_member_id', 'insurance_group_number',
+          'insurance_subscriber_name', 'insurance_subscriber_dob',
+          'insurance_subscriber_gender',
+          'insurance_card_front_url', 'insurance_card_back_url',
+        ] as const
+        const providingIntake = b.gender != null || b.allergies != null || b.preferred_pharmacy != null || b.insurance_provider != null
+        const nonEmpty = (v: any) => v != null && String(v).trim() !== ''
+        if (providingIntake) {
+          const missing: string[] = []
+          for (const k of REQUIRED_ALWAYS) if (!nonEmpty(b[k])) missing.push(k)
+          const pcpOk = nonEmpty(b.pcp) || nonEmpty(b.pcp_id)
+          if (!pcpOk) missing.push('pcp')
+          const isSelfPay = String(b.insurance_provider || '').toLowerCase() === 'self-pay'
+          if (!isSelfPay) {
+            if (!nonEmpty(b.insurance_provider)) missing.push('insurance_provider')
+            for (const k of REQUIRED_IF_INSURED) if (!nonEmpty(b[k])) missing.push(k)
+          }
+          if (missing.length) {
+            return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
+          }
         }
 
         const ln = String(last_name ?? '').trim()
@@ -162,10 +198,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `
         const inh = (inherit as any) ?? {}
 
+        // Prefer explicit body values (from intake), then family-wide
+        // inherited values, then null. Same rule for every field.
+        const pick = (k: string) => {
+          const v = b[k]
+          if (v != null && String(v).trim() !== '') return v
+          return inh[k] ?? null
+        }
+
         const [row] = await sql`
           INSERT INTO children (
             practice_id, display_label, first_name, last_name, family_id, date_of_birth,
+            gender,
             parent_phone, parent_email, parent_address, parent_city, parent_state, parent_zip,
+            allergies, current_medications, medical_history, vaccination_status,
             insurance_provider, insurance_member_id, insurance_group_number,
             insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
             insurance_card_front_url, insurance_card_back_url,
@@ -173,13 +219,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           )
           VALUES (
             ${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null},
-            ${inh.parent_phone   ?? null}, ${inh.parent_email   ?? null}, ${inh.parent_address ?? null},
-            ${inh.parent_city    ?? null}, ${inh.parent_state   ?? null}, ${inh.parent_zip     ?? null},
-            ${inh.insurance_provider           ?? null}, ${inh.insurance_member_id       ?? null}, ${inh.insurance_group_number     ?? null},
-            ${inh.insurance_subscriber_name    ?? null}, ${inh.insurance_subscriber_dob    ?? null}::date,
-            ${inh.insurance_subscriber_gender  ?? null}, ${inh.insurance_subscriber_relationship ?? null},
-            ${inh.insurance_card_front_url     ?? null}, ${inh.insurance_card_back_url     ?? null},
-            ${inh.preferred_pharmacy           ?? null}, ${inh.pcp                         ?? null}, ${inh.pcp_id ?? null}::uuid
+            ${pick('gender')},
+            ${pick('parent_phone')}, ${pick('parent_email')}, ${pick('parent_address')},
+            ${pick('parent_city')},  ${pick('parent_state')},  ${pick('parent_zip')},
+            ${pick('allergies')}, ${pick('current_medications')}, ${pick('medical_history')}, ${pick('vaccination_status')},
+            ${pick('insurance_provider')}, ${pick('insurance_member_id')}, ${pick('insurance_group_number')},
+            ${pick('insurance_subscriber_name')}, ${pick('insurance_subscriber_dob') || null}::date,
+            ${pick('insurance_subscriber_gender')}, ${pick('insurance_subscriber_relationship')},
+            ${pick('insurance_card_front_url')}, ${pick('insurance_card_back_url')},
+            ${pick('preferred_pharmacy')}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid
           )
           RETURNING *`
         return res.json(row)
