@@ -4,7 +4,7 @@ import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry,
   createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
-  getChildrenByFamilyIds, updateChild, createChild,
+  getChildrenByFamilyIds, providerUpdateChild as updateChild, providerCreateChild as createChild,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
