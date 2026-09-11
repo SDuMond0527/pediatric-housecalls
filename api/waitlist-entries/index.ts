@@ -158,7 +158,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(
             fp.email,
             NULLIF(TRIM(SUBSTRING(we.notes FROM 'Email:\s*([^|]+)')), '')
-          ) AS family_email_resolved
+          ) AS family_email_resolved,
+          COALESCE(
+            NULLIF(TRIM(we.visit_address), ''),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Address:\s*([^|]+)')), ''),
+            NULLIF(TRIM(CONCAT_WS(', ', fp.address_line1, fp.city)), ''),
+            (SELECT NULLIF(TRIM(CONCAT_WS(', ', parent_address, parent_city)), '') FROM children WHERE family_id = fp.id AND parent_address IS NOT NULL LIMIT 1)
+          ) AS patient_address
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -178,7 +184,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(
             fp.email,
             NULLIF(TRIM(SUBSTRING(we.notes FROM 'Email:\s*([^|]+)')), '')
-          ) AS family_email_resolved
+          ) AS family_email_resolved,
+          COALESCE(
+            NULLIF(TRIM(we.visit_address), ''),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Address:\s*([^|]+)')), ''),
+            NULLIF(TRIM(CONCAT_WS(', ', fp.address_line1, fp.city)), ''),
+            (SELECT NULLIF(TRIM(CONCAT_WS(', ', parent_address, parent_city)), '') FROM children WHERE family_id = fp.id AND parent_address IS NOT NULL LIMIT 1)
+          ) AS patient_address
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -197,7 +209,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             fp.phone,
             (SELECT parent_phone FROM children WHERE family_id = fp.id AND parent_phone IS NOT NULL LIMIT 1),
             NULLIF(TRIM(SUBSTRING(we.notes FROM 'Phone:\s*([^|]+)')), '')
-          ) AS family_phone
+          ) AS family_phone,
+          COALESCE(
+            NULLIF(TRIM(we.visit_address), ''),
+            NULLIF(TRIM(SUBSTRING(we.notes FROM 'Address:\s*([^|]+)')), ''),
+            NULLIF(TRIM(CONCAT_WS(', ', fp.address_line1, fp.city)), ''),
+            (SELECT NULLIF(TRIM(CONCAT_WS(', ', parent_address, parent_city)), '') FROM children WHERE family_id = fp.id AND parent_address IS NOT NULL LIMIT 1)
+          ) AS patient_address
         FROM waitlist_entries we
         LEFT JOIN family_profiles fp ON fp.id = we.family_id
         WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)

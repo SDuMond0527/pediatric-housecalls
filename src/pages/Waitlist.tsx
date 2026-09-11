@@ -25,6 +25,7 @@ interface WaitlistEntry {
   preferred_time_window: string | null
   complaint: string | null
   visit_address: string | null
+  patient_address: string | null
   children_selected: string | null
   requested_date: string | null
   notes: string | null
@@ -610,13 +611,20 @@ export function Waitlist() {
                 {(() => {
                   const noteMap = parseNotes(entry.notes)
                   const complaint = entry.complaint || noteMap.Complaint || ''
-                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient')
+                  const address = entry.patient_address || noteMap.Address || ''
+                  const noteEntries = Object.entries(noteMap).filter(([k]) => k !== 'Complaint' && k !== 'Patient' && k !== 'Address')
                   return (
                     <div className="mt-1 space-y-1">
                       {complaint && (
                         <div className="text-[12px]">
                           <span className="text-[#999]">Chief complaint: </span>
                           <span className="text-[#1A1A2E] font-medium">{complaint}</span>
+                        </div>
+                      )}
+                      {address && (
+                        <div className="text-[12px]">
+                          <span className="text-[#999]">Address: </span>
+                          <span className="text-[#1A1A2E] font-medium">{address}</span>
                         </div>
                       )}
                       {noteMap.Patient && (
