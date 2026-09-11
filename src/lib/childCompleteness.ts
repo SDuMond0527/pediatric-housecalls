@@ -64,6 +64,11 @@ export function getMissingChildFields(
   }
   return REQUIRED_CHILD_FIELDS.filter(f => {
     if (f.scope === 'if-not-self-pay' && isSelfPay) return false
+    // PCP is satisfied by EITHER the free-text `pcp` column OR a
+    // `pcp_id` reference to the pcps table. The patient chart display
+    // resolves via pcp_id first, so a chart that visually shows a
+    // pediatric practice name may have empty child.pcp.
+    if (f.key === 'pcp' && !isEmpty(child.pcp_id)) return false
     const own = child[f.key]
     const fam = familyFallback[f.key]
     return isEmpty(own) && isEmpty(fam)
