@@ -76,10 +76,103 @@ const STATUS_COLORS: Record<string, { variant: 'amber' | 'blue' | 'teal' | 'gray
   removed:   { variant: 'gray',  label: 'Removed' },
 }
 
+function WaitlistPatientDetails({ entry, child }: { entry: WaitlistEntry; child: any }) {
+  const noteMap = parseNotes(entry.notes)
+  const name = [child?.first_name, child?.last_name].filter(Boolean).join(' ') || noteMap['Patient'] || ''
+  const familyName = child?.family_display_name || entry.family_name || noteMap['Family'] || ''
+  const dob = child?.date_of_birth ? String(child.date_of_birth).split('T')[0] : (noteMap['DOB'] ? String(noteMap['DOB']).split('T')[0] : '')
+  const sex = child?.gender || ''
+  const phone = child?.parent_phone || child?.family_phone || entry.family_phone || noteMap['Phone'] || ''
+  const email = child?.parent_email || child?.family_email || entry.family_email || noteMap['Email'] || ''
+  const address = [child?.parent_address || child?.family_address_line1, child?.parent_city || child?.family_city].filter(Boolean).join(', ') || entry.patient_address || noteMap['Address'] || ''
+  const allergies = child?.allergies || noteMap['Allergies'] || ''
+  const meds = child?.current_medications || noteMap['Medications'] || ''
+  const pmh = child?.medical_history || noteMap['PMH'] || ''
+  const vax = child?.vaccination_status || noteMap['Vaccination status'] || noteMap['Vaccination'] || ''
+  const pcp = child?.pcp || noteMap['PCP'] || ''
+  const pharmacy = child?.preferred_pharmacy || noteMap['Pharmacy'] || ''
+  const insurance = child?.insurance_provider || noteMap['Insurance'] || ''
+  const memberId = child?.insurance_member_id || noteMap['Member ID'] || ''
+  const groupNum = child?.insurance_group_number || noteMap['Group #'] || ''
+  const subscriber = child?.insurance_subscriber_name || ''
+  const subscriberDob = child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : ''
+  const subscriberSex = child?.insurance_subscriber_gender || ''
+  const cardFront = child?.insurance_card_front_url || ''
+  const cardBack = child?.insurance_card_back_url || ''
+
+  const F = ({ label, value }: { label: string; value: string }) => value ? (
+    <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+  ) : null
+
+  const patientHas = name || familyName || dob || sex || phone || email || address
+  const clinicalHas = allergies || meds || pmh || vax || pcp || pharmacy
+  const insuranceHas = insurance || memberId || groupNum || subscriber || subscriberDob || subscriberSex || cardFront || cardBack
+  if (!patientHas && !clinicalHas && !insuranceHas) return null
+
+  return (
+    <div className="mt-3 space-y-2">
+      {patientHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Patient</div>
+          {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+          <F label="Family" value={familyName} />
+          <F label="Date of birth" value={dob} />
+          <F label="Sex" value={sex} />
+          {phone && (
+            <div className="text-[13px]">
+              <span className="text-[#999] text-[11px] block">Phone</span>
+              <div className="flex items-center justify-between gap-2">
+                <span>{phone}</span>
+                <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
+                   className="px-2 py-0.5 rounded bg-[#7F77DD] text-white text-[11px] font-medium hover:bg-[#534AB7] transition-colors flex-shrink-0">Call</a>
+              </div>
+            </div>
+          )}
+          <F label="Email" value={email} />
+          <F label="Address" value={address} />
+        </div>
+      )}
+      {clinicalHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Clinical</div>
+          <F label="Allergies" value={allergies} />
+          <F label="Medications" value={meds} />
+          <F label="Medical history / PMH" value={pmh} />
+          <F label="Vaccination status" value={vax} />
+          <F label="PCP" value={pcp} />
+          <F label="Preferred pharmacy" value={pharmacy} />
+        </div>
+      )}
+      {insuranceHas && (
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Insurance</div>
+          <F label="Insurance" value={insurance} />
+          <F label="Member ID" value={memberId} />
+          <F label="Group #" value={groupNum} />
+          <F label="Subscriber name" value={subscriber} />
+          <F label="Subscriber DOB" value={subscriberDob} />
+          <F label="Subscriber sex" value={subscriberSex} />
+          {(cardFront || cardBack) && (
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {cardFront && <a href={cardFront} target="_blank" rel="noopener noreferrer"><img src={cardFront} alt="Insurance card front" className="max-h-24 rounded border border-[#E8E8E4] object-contain" /></a>}
+              {cardBack && <a href={cardBack} target="_blank" rel="noopener noreferrer"><img src={cardBack} alt="Insurance card back" className="max-h-24 rounded border border-[#E8E8E4] object-contain" /></a>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Waitlist() {
   const { provider } = useAuth()
   const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
+  // Hydrated child records for each waitlist entry so the card can render
+  // every field (allergies, insurance, PCP, pharmacy, subscriber, card
+  // images) sourced from the linked child instead of the sparse notes
+  // field. See memory: feedback_all_patient_info_required_and_displayed.md
+  const [entryChildren, setEntryChildren] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState<WaitlistEntry | null>(null)
   const [acceptVisitType, setAcceptVisitType] = useState('')
@@ -322,6 +415,42 @@ export function Waitlist() {
   }
 
   useEffect(() => { fetchEntries() }, [provider])
+
+  // Hydrate the linked child record for every waitlist entry. Priority order:
+  //   1. entry.child_ids[0] — set explicitly by family portal / admin add
+  //   2. Fallback: name search + phone/DOB disambiguation from notes
+  // Cached in state so we don't refetch on rerender.
+  useEffect(() => {
+    entries.forEach(async entry => {
+      if (entry.id in entryChildren) return
+      try {
+        const explicitChildIds: string[] = Array.isArray((entry as any).child_ids) ? (entry as any).child_ids : []
+        if (explicitChildIds[0]) {
+          const rows = await apiFetch<any[]>(`/api/children?ids=${explicitChildIds[0]}`).catch(() => [])
+          if (rows?.[0]) { setEntryChildren(prev => ({ ...prev, [entry.id]: rows[0] })); return }
+        }
+        const noteMap = parseNotes(entry.notes)
+        const patientName = noteMap['Patient'] || entry.family_name || ''
+        if (!patientName) { setEntryChildren(prev => ({ ...prev, [entry.id]: null })); return }
+        const rows = await apiFetch<any[]>(`/api/children?search=${encodeURIComponent(patientName)}`)
+        if (!rows?.length) { setEntryChildren(prev => ({ ...prev, [entry.id]: null })); return }
+        const notePhone = String(entry.family_phone || noteMap['Phone'] || '').replace(/\D/g, '')
+        const noteDob = String(noteMap['DOB'] || '').split('T')[0]
+        const scored = rows.map((c: any) => {
+          const cPhone = String(c.parent_phone || c.family_phone || '').replace(/\D/g, '')
+          const cDob = c.date_of_birth ? String(c.date_of_birth).split('T')[0] : ''
+          let score = 0
+          if (notePhone && cPhone && notePhone === cPhone) score += 2
+          if (noteDob && cDob && noteDob === cDob) score += 1
+          return { c, score }
+        })
+        scored.sort((a, b) => b.score - a.score)
+        setEntryChildren(prev => ({ ...prev, [entry.id]: scored[0]?.c ?? null }))
+      } catch {
+        setEntryChildren(prev => ({ ...prev, [entry.id]: null }))
+      }
+    })
+  }, [entries])
 
   async function updateStatus(id: string, status: string) {
     await updateWaitlistEntry(id, { status })
@@ -654,6 +783,12 @@ export function Waitlist() {
                     </div>
                   )
                 })()}
+
+                {/* Full patient info sourced from the linked child record.
+                    Same three-panel Patient / Clinical / Insurance block that
+                    appointment cards and broadcast cards render, so every
+                    surface shows the same fields. */}
+                <WaitlistPatientDetails entry={entry} child={entryChildren[entry.id] ?? null} />
               </div>
 
               <div className="flex flex-col gap-1.5 flex-shrink-0">
