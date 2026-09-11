@@ -70,16 +70,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const { display_label, first_name, last_name, date_of_birth } = req.body
         const familyId = rows[0].id as string
-        const label = display_label || [first_name, last_name].filter(Boolean).join(' ') || 'Child'
 
-        // Link to existing provider-added record if names + DOB match
-        if (first_name?.trim() && last_name?.trim() && date_of_birth) {
+        // (1) Reject the create if there's no first name — a child chart
+        //     without a name is a duplicate waiting to happen. See memory:
+        //     feedback_all_patient_info_required_and_displayed.md
+        const fn = String(first_name ?? '').trim()
+        if (!fn) {
+          return res.status(400).json({ error: "Child's first name is required." })
+        }
+
+        const ln = String(last_name ?? '').trim()
+        const label = display_label || [fn, ln].filter(Boolean).join(' ') || 'Child'
+
+        // (2) Race guard — if this family created ANY child row in the last
+        //     10 seconds, treat this call as a double-click and return the
+        //     most recent row instead of inserting a fresh duplicate. This
+        //     is what produced Parker Deichmann's three identical empty
+        //     rows: the parent's "Add child" fired multiple times within
+        //     33 seconds.
+        const [recent] = await sql`
+          SELECT * FROM children
+          WHERE family_id = ${familyId}::uuid
+            AND practice_id = ${practiceId}::uuid
+            AND created_at > NOW() - INTERVAL '10 seconds'
+          ORDER BY created_at DESC
+          LIMIT 1`
+        if (recent) return res.json(recent)
+
+        // (3a) Dedup within the family — if the family already has a row
+        //      for a kid with this first name (matching last name and DOB
+        //      when supplied), return that row instead of duplicating.
+        const [sameFamilyMatch] = await sql`
+          SELECT * FROM children
+          WHERE family_id = ${familyId}::uuid
+            AND practice_id = ${practiceId}::uuid
+            AND first_name ILIKE ${fn}
+            AND (${ln} = '' OR last_name ILIKE ${ln})
+            AND (${date_of_birth ?? null}::date IS NULL OR date_of_birth = ${date_of_birth ?? null}::date)
+          ORDER BY created_at ASC
+          LIMIT 1`
+        if (sameFamilyMatch) return res.json(sameFamilyMatch)
+
+        // (3b) Link to an existing provider-added record (no family yet) if
+        //      names + DOB all match — same logic as before, unchanged.
+        if (ln && date_of_birth) {
           const existing = await sql`
             SELECT id FROM children
             WHERE practice_id = ${practiceId}::uuid
               AND family_id IS NULL
-              AND first_name ILIKE ${first_name.trim()}
-              AND last_name ILIKE ${last_name.trim()}
+              AND first_name ILIKE ${fn}
+              AND last_name ILIKE ${ln}
               AND date_of_birth = ${date_of_birth}
             LIMIT 1`
           if (existing.length) {
@@ -93,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const [row] = await sql`
           INSERT INTO children (practice_id, display_label, first_name, last_name, family_id, date_of_birth)
-          VALUES (${practiceId}::uuid, ${label}, ${first_name || null}, ${last_name || null}, ${familyId}::uuid, ${date_of_birth || null})
+          VALUES (${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null})
           RETURNING *`
         return res.json(row)
       } catch (e: any) {
