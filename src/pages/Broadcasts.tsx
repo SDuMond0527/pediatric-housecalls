@@ -171,8 +171,15 @@ export function Broadcasts() {
       const partnerLabel = isInHomeNeeded
         ? `${bc.pairing_initiator_name} (MD/NP — telemedicine)`
         : `${bc.pairing_initiator_name} (CMA — in-home)`
+      // Resolve child_id from the same lookup the display side already did so
+      // the claiming provider's Today card can pull the full child record.
+      const resolvedChild = broadcastChildren[bc.id] ?? null
+      const resolvedChildId: string | null = resolvedChild?.id ?? null
+      const patientFull = [bc.patient_first_name, bc.patient_last_name].filter(Boolean).join(' ')
       const noteParts = isRnIvSolo ? [
         `From broadcast · ordered by ${bc.created_by_name}`,
+        patientFull ? `PATIENT:${patientFull}` : '',
+        bc.patient_dob ? `DOB:${bc.patient_dob}` : '',
         bc.complaint ? `RNORDER:${bc.complaint}` : '',
         bc.patient_address ? `ADDR:${bc.patient_address}` : '',
         bc.family_email ? `PARENTEMAIL:${bc.family_email}` : '',
@@ -180,6 +187,8 @@ export function Broadcasts() {
       ].filter(Boolean) : [
         `Ref: ${pairRef}`,
         `Paired from broadcast`,
+        patientFull ? `PATIENT:${patientFull}` : '',
+        bc.patient_dob ? `DOB:${bc.patient_dob}` : '',
         bc.complaint ? `CC:${bc.complaint}` : '',
         bc.patient_address ? `ADDR:${bc.patient_address}` : '',
         bc.family_email ? `PARENTEMAIL:${bc.family_email}` : '',
@@ -204,6 +213,7 @@ export function Broadcasts() {
         // Solo RN IV: no second_provider_id — visit_type is not in DUAL_TYPES
         // so the appointments API will create a single row and skip pairing.
         ...(!isRnIvSolo && isInHomeNeeded && bc.pairing_initiator_id ? { second_provider_id: bc.pairing_initiator_id } : {}),
+        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
       })
 
       if ((apptResult as any)?.error) {
@@ -317,7 +327,16 @@ export function Broadcasts() {
 
     const isRnIvSolo = bc.visit_type === 'In-home IV fluids – RN only'
 
-    const noteParts = [`Broadcast: ${bc.patient_first_name} ${bc.patient_last_name}`]
+    // Resolve the child_id the same way the display hydration already does,
+    // so the RN's Today card can pull the full child record (address,
+    // allergies, insurance, pharmacy, PCP, etc.) — otherwise it renders only
+    // the fields we can pack into notes.
+    const resolvedChild = broadcastChildren[bc.id] ?? null
+    const resolvedChildId: string | null = resolvedChild?.id ?? null
+
+    const patientFull = [bc.patient_first_name, bc.patient_last_name].filter(Boolean).join(' ')
+    const noteParts = [`Broadcast: ${patientFull}`]
+    if (patientFull) noteParts.push(`PATIENT:${patientFull}`)
     if (bc.patient_dob) noteParts.push(`DOB:${bc.patient_dob}`)
     if (bc.patient_address) noteParts.push(`ADDR:${bc.patient_address}`)
     if (bc.family_phone) noteParts.push(`PARENTPHONE:${bc.family_phone}`)
@@ -336,6 +355,7 @@ export function Broadcasts() {
       zone: bc.patient_address || (bc as any).zone || 'Broadcast',
       scheduled_time: acceptTime,
       scheduled_date: acceptDate,
+      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
       status: 'upcoming',
       notes: noteParts.join('|'),
     })
