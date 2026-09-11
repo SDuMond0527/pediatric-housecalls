@@ -752,10 +752,43 @@ export function Today() {
                     setExpanded(next)
                     if (next) {
                       fetchCharmDetails(appt)
-                      if (appt.child_id && !(appt.id in childRecords)) {
-                        apiFetch<any[]>(`/api/children?ids=${appt.child_id}`)
-                          .then(rows => { if (rows?.[0]) setChildRecords(prev => ({ ...prev, [appt.id]: rows[0] })) })
-                          .catch(() => {})
+                      if (!(appt.id in childRecords)) {
+                        if (appt.child_id) {
+                          apiFetch<any[]>(`/api/children?ids=${appt.child_id}`)
+                            .then(rows => { if (rows?.[0]) setChildRecords(prev => ({ ...prev, [appt.id]: rows[0] })) })
+                            .catch(() => {})
+                        } else {
+                          // Legacy waitlist-accepted appointments have no child_id
+                          // link. Parse patient name from notes and match against
+                          // the practice's children (prefer phone/DOB match to
+                          // disambiguate). Display-only lookup — no DB writes.
+                          const noteBits: Record<string, string> = {}
+                          ;(appt.notes || '').split('|').forEach((part: string) => {
+                            const colon = part.indexOf(':')
+                            if (colon > 0) noteBits[part.slice(0, colon).trim()] = part.slice(colon + 1).trim()
+                          })
+                          const patientName = noteBits.PATIENT
+                          const notePhone = (noteBits.PARENTPHONE || '').replace(/\D/g, '')
+                          const noteDob = noteBits.DOB
+                          if (patientName) {
+                            apiFetch<any[]>(`/api/children?search=${encodeURIComponent(patientName)}`)
+                              .then(rows => {
+                                if (!rows?.length) return
+                                const scored = rows.map((c: any) => {
+                                  const cPhone = String(c.parent_phone || c.family_phone || '').replace(/\D/g, '')
+                                  const cDob = c.date_of_birth ? String(c.date_of_birth).split('T')[0] : ''
+                                  let score = 0
+                                  if (notePhone && cPhone && notePhone === cPhone) score += 2
+                                  if (noteDob && cDob && noteDob === cDob) score += 1
+                                  return { c, score }
+                                })
+                                scored.sort((a, b) => b.score - a.score)
+                                const best = scored[0]?.c
+                                if (best) setChildRecords(prev => ({ ...prev, [appt.id]: best }))
+                              })
+                              .catch(() => {})
+                          }
+                        }
                       }
                     }
                   }}>
