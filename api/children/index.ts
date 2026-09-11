@@ -131,9 +131,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
+        // Family-wide inheritance — a new sibling inherits every family-
+        // wide field from any existing sibling in the family, so the parent
+        // doesn't have to re-type pharmacy / PCP / insurance / address etc.
+        // for each kid. See memory: feedback_all_patient_info_required_and_displayed.md
+        const [inherit] = await sql`
+          SELECT
+            MAX(NULLIF(parent_phone,''))                          AS parent_phone,
+            MAX(NULLIF(parent_email,''))                          AS parent_email,
+            MAX(NULLIF(parent_address,''))                        AS parent_address,
+            MAX(NULLIF(parent_city,''))                           AS parent_city,
+            MAX(NULLIF(parent_state,''))                          AS parent_state,
+            MAX(NULLIF(parent_zip,''))                            AS parent_zip,
+            MAX(NULLIF(insurance_provider,''))                    AS insurance_provider,
+            MAX(NULLIF(insurance_group_number,''))                AS insurance_group_number,
+            MAX(NULLIF(insurance_subscriber_name,''))             AS insurance_subscriber_name,
+            MAX(insurance_subscriber_dob)                         AS insurance_subscriber_dob,
+            MAX(NULLIF(insurance_subscriber_gender,''))           AS insurance_subscriber_gender,
+            MAX(NULLIF(insurance_subscriber_relationship,''))     AS insurance_subscriber_relationship,
+            MAX(insurance_card_front_url)                         AS insurance_card_front_url,
+            MAX(insurance_card_back_url)                          AS insurance_card_back_url,
+            MAX(NULLIF(preferred_pharmacy,''))                    AS preferred_pharmacy,
+            MAX(NULLIF(pcp,''))                                   AS pcp,
+            MAX(pcp_id)                                           AS pcp_id
+          FROM children
+          WHERE family_id = ${familyId}::uuid
+            AND practice_id = ${practiceId}::uuid
+            AND (is_archived IS NULL OR is_archived = false)
+        `
+        const inh = (inherit as any) ?? {}
+
         const [row] = await sql`
-          INSERT INTO children (practice_id, display_label, first_name, last_name, family_id, date_of_birth)
-          VALUES (${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null})
+          INSERT INTO children (
+            practice_id, display_label, first_name, last_name, family_id, date_of_birth,
+            parent_phone, parent_email, parent_address, parent_city, parent_state, parent_zip,
+            insurance_provider, insurance_group_number,
+            insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
+            insurance_card_front_url, insurance_card_back_url,
+            preferred_pharmacy, pcp, pcp_id
+          )
+          VALUES (
+            ${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null},
+            ${inh.parent_phone   ?? null}, ${inh.parent_email   ?? null}, ${inh.parent_address ?? null},
+            ${inh.parent_city    ?? null}, ${inh.parent_state   ?? null}, ${inh.parent_zip     ?? null},
+            ${inh.insurance_provider           ?? null}, ${inh.insurance_group_number     ?? null},
+            ${inh.insurance_subscriber_name    ?? null}, ${inh.insurance_subscriber_dob    ?? null}::date,
+            ${inh.insurance_subscriber_gender  ?? null}, ${inh.insurance_subscriber_relationship ?? null},
+            ${inh.insurance_card_front_url     ?? null}, ${inh.insurance_card_back_url     ?? null},
+            ${inh.preferred_pharmacy           ?? null}, ${inh.pcp                         ?? null}, ${inh.pcp_id ?? null}::uuid
+          )
           RETURNING *`
         return res.json(row)
       } catch (e: any) {

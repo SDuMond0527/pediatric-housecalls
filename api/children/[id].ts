@@ -108,6 +108,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const dob = b.date_of_birth || null
       const newFirst = b.first_name || null
       const newLast  = b.last_name  || null
+
+      // Family-wide fields — cascade to every sibling in the same family.
+      // Parents typing these into any child's chart / intake should NOT
+      // have to repeat themselves for their other kids. See memory:
+      // feedback_all_patient_info_required_and_displayed.md
+      //
+      // Runs BEFORE the target-child UPDATE so the target row always ends
+      // up with the newest values too (the target's own UPDATE re-applies
+      // them via COALESCE with the same value — no conflict).
+      const FAMILY_WIDE_KEYS = [
+        'parent_phone', 'parent_email', 'parent_address',
+        'parent_city',  'parent_state', 'parent_zip',
+        'insurance_provider', 'insurance_group_number',
+        'insurance_subscriber_name', 'insurance_subscriber_dob',
+        'insurance_subscriber_gender', 'insurance_subscriber_relationship',
+        'insurance_card_front_url', 'insurance_card_back_url',
+        'preferred_pharmacy', 'pcp', 'pcp_id',
+      ] as const
+      const familyWideUpdate: Record<string, any> = {}
+      for (const k of FAMILY_WIDE_KEYS) {
+        const v = b[k]
+        if (v != null && String(v).trim() !== '') familyWideUpdate[k] = v
+      }
+      if (Object.keys(familyWideUpdate).length > 0) {
+        const [tgt] = await sql`SELECT family_id FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+        const familyId = (tgt as any)?.family_id
+        if (familyId) {
+          // Overwrite family-wide fields on ALL siblings (including target).
+          // These fields are the same for every kid in the family — new
+          // input wins. Per-child fields (name, DOB, allergies, meds, PMH,
+          // vaccination_status) are handled by the per-target UPDATE below.
+          await sql`
+            UPDATE children SET
+              parent_phone   = COALESCE(${familyWideUpdate.parent_phone   ?? null}, parent_phone),
+              parent_email   = COALESCE(${familyWideUpdate.parent_email   ?? null}, parent_email),
+              parent_address = COALESCE(${familyWideUpdate.parent_address ?? null}, parent_address),
+              parent_city    = COALESCE(${familyWideUpdate.parent_city    ?? null}, parent_city),
+              parent_state   = COALESCE(${familyWideUpdate.parent_state   ?? null}, parent_state),
+              parent_zip     = COALESCE(${familyWideUpdate.parent_zip     ?? null}, parent_zip),
+              insurance_provider           = COALESCE(${familyWideUpdate.insurance_provider           ?? null}, insurance_provider),
+              insurance_group_number       = COALESCE(${familyWideUpdate.insurance_group_number       ?? null}, insurance_group_number),
+              insurance_subscriber_name    = COALESCE(${familyWideUpdate.insurance_subscriber_name    ?? null}, insurance_subscriber_name),
+              insurance_subscriber_dob     = COALESCE(${familyWideUpdate.insurance_subscriber_dob     ?? null}::date, insurance_subscriber_dob),
+              insurance_subscriber_gender  = COALESCE(${familyWideUpdate.insurance_subscriber_gender  ?? null}, insurance_subscriber_gender),
+              insurance_subscriber_relationship = COALESCE(${familyWideUpdate.insurance_subscriber_relationship ?? null}, insurance_subscriber_relationship),
+              insurance_card_front_url     = COALESCE(${familyWideUpdate.insurance_card_front_url     ?? null}, insurance_card_front_url),
+              insurance_card_back_url      = COALESCE(${familyWideUpdate.insurance_card_back_url      ?? null}, insurance_card_back_url),
+              preferred_pharmacy           = COALESCE(${familyWideUpdate.preferred_pharmacy           ?? null}, preferred_pharmacy),
+              pcp                          = COALESCE(${familyWideUpdate.pcp                          ?? null}, pcp),
+              pcp_id                       = COALESCE(${familyWideUpdate.pcp_id                       ?? null}::uuid, pcp_id)
+            WHERE family_id = ${familyId}::uuid
+              AND practice_id = ${practiceId}::uuid
+              AND (is_archived IS NULL OR is_archived = false)
+          `
+        }
+      }
+
       const [row] = await sql`
         UPDATE children SET
           first_name           = COALESCE(${newFirst}, first_name),
