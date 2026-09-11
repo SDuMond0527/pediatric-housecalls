@@ -1,7 +1,7 @@
 {
-  "name": "Pediatric Housecalls",
-  "short_name": "PHC",
-  "description": "Pediatric Housecalls provider and family portal",
+  "name": "GoRoam Health",
+  "short_name": "GoRoam",
+  "description": "GoRoam Health provider and family portal",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
