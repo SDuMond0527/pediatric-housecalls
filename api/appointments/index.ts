@@ -91,10 +91,16 @@ async function createAppointmentCore(
       }
     }
     if (mdProviderId) {
+      // Secondary (MD/NP) side may have its OWN visit_type — different
+      // duration, different price, different CPT — when configured in the
+      // PAIRED_SECONDARY_VISIT_TYPE map. For CMA+tele the secondary
+      // visit_type falls back to the same as primary.
+      const secondaryVisitType = secondaryVisitTypeFor(visit_type)
+      const secondaryDur = VISIT_DURATIONS[secondaryVisitType] ?? VISIT_DURATIONS[visit_type] ?? 60
+      const secondaryEndTime = blockEndTime(scheduled_time, secondaryVisitType, null)
       const [nh2, nm2] = String(scheduled_time).split(':').map(Number)
       const newStart2 = nh2 * 60 + nm2
-      const newDur2 = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
-      const newEnd2 = newStart2 + newDur2
+      const newEnd2 = newStart2 + secondaryDur
       const mdExisting = await sql`
         SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
         FROM appointments
@@ -116,12 +122,12 @@ async function createAppointmentCore(
       const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
       ;[secondaryRow] = await sql`
         INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${secondaryVisitType}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${secondaryDur}, ${child_id ?? null}::uuid)
         RETURNING *`
       await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
       await sql`
         INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
-        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${endTime}, ${'appt:' + (secondaryRow as any).id})`.catch(() => {})
+        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${scheduled_date}::date, ${scheduled_date}::date, false, ${scheduled_time}, ${secondaryEndTime}, ${'appt:' + (secondaryRow as any).id})`.catch(() => {})
     }
     return { primary: primaryRow, secondary: secondaryRow }
   }
@@ -239,6 +245,21 @@ const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid vis
 const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
 const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
+
+// Split-type pair map: some paired visits have DIFFERENT visit_type strings
+// on each twin so each side can have its own duration, price, allowed_roles,
+// and billable claim. When missing from this map, both twins share the same
+// visit_type (existing CMA+tele behavior).
+const PAIRED_SECONDARY_VISIT_TYPE: Record<string, string> = {
+  // IV fluids pair — RN in-home + MD/NP telemedicine screening
+  'RN in-home IV fluids administration':        'Video telemedicine screening for IV fluids',
+  'Video telemedicine screening for IV fluids': 'RN in-home IV fluids administration',
+  'In-home IV fluids':                          'Video telemedicine screening for IV fluids',
+  'RN IV fluids':                               'Video telemedicine screening for IV fluids',
+  'RN IV fluid visit — paired with MD/NP screening': 'Video telemedicine screening for IV fluids',
+}
+const secondaryVisitTypeFor = (primary: string): string =>
+  PAIRED_SECONDARY_VISIT_TYPE[primary] || primary
 
 const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60,

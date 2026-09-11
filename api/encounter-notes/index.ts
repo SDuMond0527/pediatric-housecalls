@@ -84,6 +84,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (child_id) {
       await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
     }
+
+    // RN IV fluids note pending signature → ping Dr. Sara DuMond (matches
+    // the sign-restriction rule in EncounterNoteModal). Best-effort SMS +
+    // email so the note doesn't sit unsigned. Fire and forget — never blocks
+    // the response.
+    try {
+      const [apptRow] = await sql`SELECT visit_type FROM appointments WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      const visitType = String((apptRow as any)?.visit_type ?? '')
+      const isRnIvFluidsNote =
+        /iv/i.test(visitType)
+        && /fluid/i.test(visitType)
+        && /(rn|administration|in-home)/i.test(visitType)
+        && !/screening/i.test(visitType)
+      if (isRnIvFluidsNote) {
+        const [creatorRow] = provider_id
+          ? await sql`SELECT name, role FROM providers WHERE id = ${provider_id}::uuid LIMIT 1`
+          : [null]
+        const creatorRole = String((creatorRow as any)?.role ?? '')
+        const creatorName = String((creatorRow as any)?.name ?? '')
+        if (creatorRole && creatorRole !== 'MD' && creatorRole !== 'PNP') {
+          // Look up the supervising signer's phone/email. Currently Dr. Sara
+          // DuMond per practice policy — matches the vaccine signing rule.
+          const [signer] = await sql`SELECT name, phone, email FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`
+          const [childRow] = child_id
+            ? await sql`SELECT first_name, last_name FROM children WHERE id = ${child_id}::uuid LIMIT 1`
+            : [null]
+          const patientLabel = childRow
+            ? [String((childRow as any).first_name || ''), String((childRow as any).last_name || '')].filter(Boolean).join(' ')
+            : 'a patient'
+          const PORTAL_URL = process.env.PORTAL_URL || 'https://phc-team.com'
+          const PRACTICE_NAME = process.env.PRACTICE_NAME || 'Pediatric Housecalls'
+          const smsBody = `${PRACTICE_NAME}: ${creatorName || 'RN'} completed an IV fluids visit note for ${patientLabel}. Please sign — ${PORTAL_URL}/today`
+          const emailSubject = `[Sign] IV fluids note pending — ${patientLabel}`
+          const emailHtml = `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#1A1A2E;">
+<h2>${PRACTICE_NAME} — IV fluids note pending your signature</h2>
+<p><strong>${creatorName || 'The administering RN'}</strong> completed an in-home IV fluids visit note for <strong>${patientLabel}</strong> and left it as a draft for you to sign as the supervising / rendering provider.</p>
+<p><a href="${PORTAL_URL}/today" style="background:#7F77DD;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Open my schedule</a></p>
+</body></html>`
+          const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID || ''
+          const TWILIO_KEY = process.env.TWILIO_API_KEY_SID || ''
+          const TWILIO_SEC = process.env.TWILIO_API_KEY_SECRET || ''
+          const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || ''
+          const RESEND_KEY = process.env.RESEND_API_KEY || ''
+          const FROM_EMAIL = process.env.FROM_EMAIL || 'appointments@phcbooking.com'
+          if (signer?.phone && TWILIO_SID && TWILIO_KEY) {
+            fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Basic ${Buffer.from(`${TWILIO_KEY}:${TWILIO_SEC}`).toString('base64')}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: new URLSearchParams({ From: TWILIO_FROM, To: signer.phone as string, Body: smsBody }),
+            }).catch(e => console.error('[rn-iv-note] SMS err:', e))
+          }
+          if (signer?.email && RESEND_KEY) {
+            fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ from: `${PRACTICE_NAME} <${FROM_EMAIL}>`, to: signer.email, subject: emailSubject, html: emailHtml }),
+            }).catch(e => console.error('[rn-iv-note] email err:', e))
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[rn-iv-note] notify err:', e)
+    }
+
     return res.json(row)
   }
 

@@ -503,12 +503,22 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [patientSearching, setPatientSearching] = useState(false)
   const patientTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Vaccine encounters can only be signed by Dr. Sara DuMond — she is the
-  // supervising physician on all vaccine claims. Other staff can draft the
-  // note, but the Sign button is disabled for them.
+  // Vaccine encounters — and RN IV fluids administration encounters — can
+  // only be signed by Dr. Sara DuMond. She's the supervising physician and
+  // the rendering provider on those bills. The administering staff (RN/CMA)
+  // can draft the note, but the Sign button is disabled for them.
   const { provider: currentProvider } = useAuth()
   const isVaccineVisit = appointment.visit_type === 'In-home vaccine administration'
-  const canSignVaccineNote = !isVaccineVisit || currentProvider?.name === 'Dr. Sara DuMond'
+  // Match the RN in-home IV fluids administration visit type (contains both
+  // "iv" and "rn" or "in-home", case-insensitive). The MD/NP's paired tele
+  // screening row is NOT restricted this way — that gets signed by whoever
+  // did the video screening.
+  const isRnIvFluidsVisit = /iv/i.test(appointment.visit_type || '')
+    && /fluid/i.test(appointment.visit_type || '')
+    && /(rn|administration|in-home)/i.test(appointment.visit_type || '')
+    && !/screening/i.test(appointment.visit_type || '')
+  const requiresSupervisingSigner = isVaccineVisit || isRnIvFluidsVisit
+  const canSignVaccineNote = !requiresSupervisingSigner || currentProvider?.name === 'Dr. Sara DuMond'
 
   // Note type + template
   const [noteType, setNoteType] = useState<NoteType>(visitTypeToNoteType(appointment.visit_type))
