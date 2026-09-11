@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const FAMILY_WIDE_KEYS = [
         'parent_phone', 'parent_email', 'parent_address',
         'parent_city',  'parent_state', 'parent_zip',
-        'insurance_provider', 'insurance_group_number',
+        'insurance_provider', 'insurance_member_id', 'insurance_group_number',
         'insurance_subscriber_name', 'insurance_subscriber_dob',
         'insurance_subscriber_gender', 'insurance_subscriber_relationship',
         'insurance_card_front_url', 'insurance_card_back_url',
@@ -148,6 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               parent_state   = COALESCE(${familyWideUpdate.parent_state   ?? null}, parent_state),
               parent_zip     = COALESCE(${familyWideUpdate.parent_zip     ?? null}, parent_zip),
               insurance_provider           = COALESCE(${familyWideUpdate.insurance_provider           ?? null}, insurance_provider),
+              insurance_member_id          = COALESCE(${familyWideUpdate.insurance_member_id          ?? null}, insurance_member_id),
               insurance_group_number       = COALESCE(${familyWideUpdate.insurance_group_number       ?? null}, insurance_group_number),
               insurance_subscriber_name    = COALESCE(${familyWideUpdate.insurance_subscriber_name    ?? null}, insurance_subscriber_name),
               insurance_subscriber_dob     = COALESCE(${familyWideUpdate.insurance_subscriber_dob     ?? null}::date, insurance_subscriber_dob),

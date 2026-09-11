@@ -144,6 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             MAX(NULLIF(parent_state,''))                          AS parent_state,
             MAX(NULLIF(parent_zip,''))                            AS parent_zip,
             MAX(NULLIF(insurance_provider,''))                    AS insurance_provider,
+            MAX(NULLIF(insurance_member_id,''))                   AS insurance_member_id,
             MAX(NULLIF(insurance_group_number,''))                AS insurance_group_number,
             MAX(NULLIF(insurance_subscriber_name,''))             AS insurance_subscriber_name,
             MAX(insurance_subscriber_dob)                         AS insurance_subscriber_dob,
@@ -165,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           INSERT INTO children (
             practice_id, display_label, first_name, last_name, family_id, date_of_birth,
             parent_phone, parent_email, parent_address, parent_city, parent_state, parent_zip,
-            insurance_provider, insurance_group_number,
+            insurance_provider, insurance_member_id, insurance_group_number,
             insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
             insurance_card_front_url, insurance_card_back_url,
             preferred_pharmacy, pcp, pcp_id
@@ -174,7 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null},
             ${inh.parent_phone   ?? null}, ${inh.parent_email   ?? null}, ${inh.parent_address ?? null},
             ${inh.parent_city    ?? null}, ${inh.parent_state   ?? null}, ${inh.parent_zip     ?? null},
-            ${inh.insurance_provider           ?? null}, ${inh.insurance_group_number     ?? null},
+            ${inh.insurance_provider           ?? null}, ${inh.insurance_member_id       ?? null}, ${inh.insurance_group_number     ?? null},
             ${inh.insurance_subscriber_name    ?? null}, ${inh.insurance_subscriber_dob    ?? null}::date,
             ${inh.insurance_subscriber_gender  ?? null}, ${inh.insurance_subscriber_relationship ?? null},
             ${inh.insurance_card_front_url     ?? null}, ${inh.insurance_card_back_url     ?? null},
