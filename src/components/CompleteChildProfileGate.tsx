@@ -72,8 +72,13 @@ export function CompleteChildProfileGate({ children, family, onAllComplete }: Pr
         if (f.key === 'parent_email')   familyPatch.email         = raw
         if (f.key === 'parent_address') familyPatch.address_line1 = raw
       }
+      // Both writes must succeed. Previously updateMyFamily was silent-
+      // failed which left family_profiles stale — new siblings then
+      // couldn't inherit the parent's phone/email/address via the
+      // MAX() lookup on POST /api/children. See memory:
+      // feedback_extract_shared_code_first_try.md.
       if (Object.keys(familyPatch).length > 0) {
-        await updateMyFamily(familyPatch).catch(() => {})
+        await updateMyFamily(familyPatch)
       }
       await updateChild(current.child.id, childPatch)
 

@@ -173,6 +173,29 @@ export const providerCreateChild = (body: Record<string, unknown>) =>
 export const providerUpdateChild = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/children/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
+/**
+ * Compute which keys should be cleared (set to NULL) based on a before/after
+ * diff. A key is "cleared" if it was non-empty on `before` and empty on
+ * `after`. Feed the result into the `_clear` array of a PATCH payload so
+ * the server actually nulls the column (COALESCE would otherwise preserve
+ * the old value).
+ *
+ * See feedback_extract_shared_code_first_try.md — used by every edit form
+ * that needs to support wiping stale data.
+ */
+export function computeClears(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  keys: readonly string[],
+): string[] {
+  const isEmpty = (v: unknown) => v == null || (typeof v === 'string' && v.trim() === '')
+  const out: string[] = []
+  for (const k of keys) {
+    if (!isEmpty(before?.[k]) && isEmpty(after?.[k])) out.push(k)
+  }
+  return out
+}
+
 // Family-auth insurance card upload. Used during initial signup / intake
 // before any child_id exists — filename is keyed on family sub + side.
 export async function familyUploadInsuranceCard(familySub: string, file: File, side: 'front' | 'back'): Promise<string> {

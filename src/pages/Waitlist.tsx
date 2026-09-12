@@ -634,11 +634,24 @@ export function Waitlist() {
 
         const explicitChildIds = Array.isArray((accepting as any).child_ids) ? (accepting as any).child_ids : []
         if (explicitChildIds.length > 0) {
-          await Promise.all(explicitChildIds.map((cid: string) => updateChild(cid, patientPatch).catch(() => {})))
+          // Await each update so a failure to save patient info surfaces
+          // in the outer catch — previously wrapped in .catch(() => {})
+          // which meant admin thought the acceptance saved cleanly even
+          // when a linked child's record was left stale.
+          for (const cid of explicitChildIds as string[]) {
+            await updateChild(cid, patientPatch)
+          }
         } else if (matchedChildForPatch) {
           await updateChild(matchedChildForPatch.id, patientPatch)
         }
-      } catch { /* non-blocking */ }
+      } catch (e: any) {
+        // Log but don't block appointment creation — the appointment IS
+        // the primary record. Missing patient-info propagation is worse
+        // than losing the appointment; still surface it so admin knows
+        // to re-enter the intake data on the chart.
+        console.error('[waitlist accept] failed to propagate patient info to child(ren):', e)
+        setAcceptError(e?.message ? `Appointment created but patient info didn't save: ${e.message}` : 'Appointment created but patient info didn’t save.')
+      }
 
       const partnerAutoFound = isDual && apptResult?.primary !== undefined && !!apptResult.secondary
       const needsBroadcast = isDual && apptResult?.primary !== undefined && !apptResult.secondary

@@ -205,6 +205,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           vaccination_status   = COALESCE(${b.vaccination_status   ?? null}, vaccination_status)
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
+
+      // Explicit-clear support. Every field in b._clear (if it's on the
+      // whitelist) is set to NULL after the COALESCE-based update above.
+      // This lets a user actually wipe a stale allergy list or remove
+      // an old PCP entry — previously impossible because the client's
+      // `field || null` pattern converted empty strings to null, and
+      // COALESCE preserved the old value on null input. See memory:
+      // feedback_extract_shared_code_first_try.md.
+      const CLEARABLE = new Set([
+        'nickname',
+        'allergies', 'current_medications', 'medical_history',
+        'preferred_pharmacy', 'pcp', 'pcp_id', 'vaccination_status',
+        'insurance_provider', 'insurance_member_id', 'insurance_group_number',
+        'insurance_subscriber_name', 'insurance_subscriber_dob',
+        'insurance_subscriber_gender', 'insurance_subscriber_relationship',
+        'insurance_card_front_url', 'insurance_card_back_url',
+        // Contact fields — not typically cleared but allowed for editors.
+        'parent_phone', 'parent_email',
+        'parent_address', 'parent_city', 'parent_state', 'parent_zip',
+      ])
+      const requestedClears: unknown = (b as any)?._clear
+      const clears = Array.isArray(requestedClears)
+        ? (requestedClears as unknown[]).filter((k): k is string => typeof k === 'string' && CLEARABLE.has(k))
+        : []
+      if (clears.length > 0) {
+        // Build one UPDATE that nulls every requested clearable field.
+        // Neon serverless doesn't allow tagged-template column list
+        // interpolation, so we branch by field name.
+        for (const field of clears) {
+          switch (field) {
+            case 'nickname':                            await sql`UPDATE children SET nickname = NULL                            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'allergies':                           await sql`UPDATE children SET allergies = NULL                           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'current_medications':                 await sql`UPDATE children SET current_medications = NULL                 WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'medical_history':                     await sql`UPDATE children SET medical_history = NULL                     WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'preferred_pharmacy':                  await sql`UPDATE children SET preferred_pharmacy = NULL                  WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'pcp':                                 await sql`UPDATE children SET pcp = NULL                                 WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'pcp_id':                              await sql`UPDATE children SET pcp_id = NULL                              WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'vaccination_status':                  await sql`UPDATE children SET vaccination_status = NULL                  WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_provider':                  await sql`UPDATE children SET insurance_provider = NULL                  WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_member_id':                 await sql`UPDATE children SET insurance_member_id = NULL                 WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_group_number':              await sql`UPDATE children SET insurance_group_number = NULL              WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_subscriber_name':           await sql`UPDATE children SET insurance_subscriber_name = NULL           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_subscriber_dob':            await sql`UPDATE children SET insurance_subscriber_dob = NULL            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_subscriber_gender':         await sql`UPDATE children SET insurance_subscriber_gender = NULL         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_subscriber_relationship':   await sql`UPDATE children SET insurance_subscriber_relationship = NULL   WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_card_front_url':            await sql`UPDATE children SET insurance_card_front_url = NULL            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_card_back_url':             await sql`UPDATE children SET insurance_card_back_url = NULL             WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_phone':                        await sql`UPDATE children SET parent_phone = NULL                        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_email':                        await sql`UPDATE children SET parent_email = NULL                        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_address':                      await sql`UPDATE children SET parent_address = NULL                      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_city':                         await sql`UPDATE children SET parent_city = NULL                         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_state':                        await sql`UPDATE children SET parent_state = NULL                        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'parent_zip':                          await sql`UPDATE children SET parent_zip = NULL                          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+          }
+        }
+        // Re-fetch after nulls so the response reflects the cleared state.
+        const [refreshed] = await sql`SELECT * FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+        return res.json(refreshed)
+      }
+
       return res.json(row)
     } catch (err: any) {
       return res.status(500).json({ error: err.message ?? String(err) })

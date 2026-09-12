@@ -982,7 +982,19 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     setSigning(true)
     setSignError(null)
     try {
-      const vitalsPromise = saveVitals(buildVitalsBody()).catch(() => {})
+      // Save vitals FIRST and let any failure surface. Previously this was
+      // wrapped in .catch(() => {}) which meant a bad vitals payload would
+      // silently vanish while the note got signed successfully. Provider
+      // would think the visit was documented and only discover missing
+      // vitals reviewing later. See memory:
+      // feedback_api_numeric_sanitization.md (empty-string-to-numeric was
+      // the most common vitals-save failure).
+      try {
+        await saveVitals(buildVitalsBody())
+      } catch (e: any) {
+        setSignError(`Vitals didn't save — the note is not signed. ${e?.message ?? ''}`.trim())
+        return
+      }
       let note: any
       if (noteId) {
         note = await updateEncounterNote(noteId, { ...buildNoteBody(), is_signed: true })
@@ -994,7 +1006,6 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       setIsSigned(true)
       setCptOpen(false)
       if (!noteId) setNoteId(note.id)
-      await vitalsPromise
     } catch (e: any) {
       setSignError(e.message ?? 'Failed to sign note')
     } finally {

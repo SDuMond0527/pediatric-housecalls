@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react'
-import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard } from '../../lib/api'
+import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard, computeClears } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -215,13 +215,10 @@ export function FamilyProfile() {
     setChildSaveError(null)
     const edit = getChildEdit(child)
     try {
-      await updateChild(child.id, {
+      const patch: Record<string, unknown> = {
         first_name: edit.first_name || null,
         last_name: edit.last_name || null,
         date_of_birth: edit.date_of_birth || null,
-        // Self-pay overrides every insurance field. Provider is "Self-pay",
-        // everything else null. See memory:
-        // feedback_extract_shared_code_first_try.md
         insurance_provider:                edit.self_pay ? 'Self-pay' : (edit.insurance_provider || null),
         insurance_member_id:               edit.self_pay ? null : (edit.insurance_member_id || null),
         insurance_group_number:            edit.self_pay ? null : (edit.insurance_group_number || null),
@@ -236,7 +233,19 @@ export function FamilyProfile() {
         medical_history: edit.medical_history || null,
         preferred_pharmacy: edit.preferred_pharmacy || null,
         pcp: edit.pcp || null,
-      })
+      }
+      // Explicit clears — fields the user wiped out. Server nulls the
+      // corresponding columns; otherwise COALESCE preserves the old value
+      // and the parent can't ever remove stale data.
+      const clears = computeClears(child as any, edit as any, [
+        'allergies', 'current_medications', 'medical_history',
+        'preferred_pharmacy', 'pcp',
+        'insurance_provider', 'insurance_member_id', 'insurance_group_number',
+        'insurance_subscriber_name', 'insurance_subscriber_dob',
+        'insurance_subscriber_gender', 'insurance_subscriber_relationship',
+        'insurance_card_front_url', 'insurance_card_back_url',
+      ])
+      await updateChild(child.id, clears.length ? { ...patch, _clear: clears } : patch)
     } catch (e: any) {
       setChildSaveError(e.message)
       setSavingChildId(null)

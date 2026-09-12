@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
@@ -453,9 +453,20 @@ export function PatientChart() {
           insurance_subscriber_relationship: isSelf ? null : (insEdit.insurance_subscriber_relationship || null),
         }
       }
+      // Compute _clear: any field that went from non-empty on the current
+      // child to empty on the edit. Server nulls those columns; COALESCE
+      // would otherwise preserve the old value. See feedback_extract_
+      // shared_code_first_try.md.
+      const CLEARABLE_BY_SECTION: Record<string, string[]> = {
+        contact:   ['parent_phone', 'parent_email', 'parent_address', 'parent_city', 'parent_state', 'parent_zip'],
+        medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'pcp', 'pcp_id', 'vaccination_status'],
+        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship'],
+      }
+      const clears = computeClears(child ?? {}, body, CLEARABLE_BY_SECTION[section] || [])
+      const payload = clears.length ? { ...body, _clear: clears } : body
       const updated = await apiFetch<any>(`/api/children/${childId}`, {
         method: 'PATCH',
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       })
       setChild((prev: any) => ({ ...prev, ...updated }))
       setEditingSection(null)

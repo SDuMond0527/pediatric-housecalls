@@ -1214,12 +1214,20 @@ export function BookVisit() {
     if (booking.city)                     parentContactPatch.parent_city    = booking.city
     if (booking.state)                    parentContactPatch.parent_state   = booking.state
     if (booking.zip)                      parentContactPatch.parent_zip     = booking.zip
+    // Parent-contact patch and every child update below must succeed —
+    // silent failures previously meant the booking confirmed but the
+    // intake data (allergies, insurance, PCP, etc.) never landed on the
+    // child chart, leaving skeleton records. See memory:
+    // feedback_all_patient_info_required_and_displayed.md.
     if (Object.keys(parentContactPatch).length) {
-      booking.selectedChildIds.forEach(cid => updateChild(cid, parentContactPatch).catch(() => {}))
+      for (const cid of booking.selectedChildIds) {
+        await updateChild(cid, parentContactPatch)
+      }
     }
 
-    // Save identity fields (name, DOB, gender) first and separately for new patients —
-    // these must land on the record before anything else. Retried once on failure.
+    // Save identity fields (name, DOB, gender) first for new patients so
+    // they land before anything downstream. One retry on failure; a
+    // second failure surfaces and aborts the intake save.
     for (const childId of booking.selectedChildIds) {
       const intake = booking.childIntakes[childId]
       if (!intake || intake.hasProfile) continue
@@ -1234,40 +1242,42 @@ export function BookVisit() {
       try {
         await updateChild(childId, identity)
       } catch {
-        // retry once
-        await updateChild(childId, identity).catch(() => {})
+        await updateChild(childId, identity)
       }
     }
 
-    // Save ALL remaining patient profile data.
-    await Promise.allSettled([
-      ...booking.selectedChildIds.map(childId => {
-        const intake = booking.childIntakes[childId]
-        if (!intake) return Promise.resolve()
-        return updateChild(childId, {
-          insurance_provider: intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
-          insurance_member_id: intake.selfPay ? null : (intake.insuranceMemberId || null),
-          insurance_group_number: intake.insuranceGroupNumber || null,
-          insurance_subscriber_name: intake.insuranceSubscriberName || null,
-          insurance_subscriber_dob: intake.insuranceSubscriberDob || null,
-          insurance_subscriber_gender: intake.insuranceSubscriberGender || null,
-          insurance_subscriber_relationship: intake.insuranceSubscriberRelationship || null,
-          preferred_pharmacy: intake.preferredPharmacy || null,
-          pcp: intake.pcp || null,
-          pcp_id: intake.pcp_id || null,
-          allergies: intake.allergies || null,
-          current_medications: intake.currentMedications || null,
-          medical_history: intake.medicalHistory || null,
-          vaccination_status: intake.vaccinationStatus || null,
-        })
-      }),
-      ...Object.entries(booking.childIntakes)
-        .filter(([, intake]) => intake.insuranceCardFrontUrl && intake.insuranceCardBackUrl)
-        .map(([childId, intake]) => updateChild(childId, {
-          insurance_card_front_url: intake.insuranceCardFrontUrl,
-          insurance_card_back_url: intake.insuranceCardBackUrl,
-        })),
-    ])
+    // Save ALL remaining patient profile data. Self-pay overrides EVERY
+    // insurance field (previously only provider + member_id respected the
+    // toggle — group, subscriber, cards would still write stale values).
+    for (const childId of booking.selectedChildIds) {
+      const intake = booking.childIntakes[childId]
+      if (!intake) continue
+      await updateChild(childId, {
+        insurance_provider:                intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
+        insurance_member_id:               intake.selfPay ? null : (intake.insuranceMemberId || null),
+        insurance_group_number:            intake.selfPay ? null : (intake.insuranceGroupNumber || null),
+        insurance_subscriber_name:         intake.selfPay ? null : (intake.insuranceSubscriberName || null),
+        insurance_subscriber_dob:          intake.selfPay ? null : (intake.insuranceSubscriberDob || null),
+        insurance_subscriber_gender:       intake.selfPay ? null : (intake.insuranceSubscriberGender || null),
+        insurance_subscriber_relationship: intake.selfPay ? null : (intake.insuranceSubscriberRelationship || null),
+        preferred_pharmacy: intake.preferredPharmacy || null,
+        pcp: intake.pcp || null,
+        pcp_id: intake.pcp_id || null,
+        allergies: intake.allergies || null,
+        current_medications: intake.currentMedications || null,
+        medical_history: intake.medicalHistory || null,
+        vaccination_status: intake.vaccinationStatus || null,
+      })
+    }
+    // Card photos — also gated by self-pay.
+    for (const [childId, intake] of Object.entries(booking.childIntakes)) {
+      if (intake.selfPay) continue
+      if (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl) continue
+      await updateChild(childId, {
+        insurance_card_front_url: intake.insuranceCardFrontUrl,
+        insurance_card_back_url: intake.insuranceCardBackUrl,
+      })
+    }
 
     // Once the appointment row exists in the DB, the visit IS booked.
     // Any failure below must go straight to confirmation — never reset the
