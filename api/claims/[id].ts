@@ -373,8 +373,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }, 0)
       : null
 
+    // If the biller edits a claim currently in 'error' state, they're
+    // almost certainly fixing whatever Stedi rejected. Clear the stored
+    // rejection so the UI stops showing a stale "Submission failed"
+    // banner after the edit — otherwise the user thinks their fix didn't
+    // work (they hit save, refresh, and see the same red error, which
+    // is actually the frozen error from the previous submission).
+    // They'll press Submit to retry.
+    const clearStaleError = updates.status == null // don't override an explicit status change
+
     const [updated] = await sql`
       UPDATE claims SET
+        submission_error           = CASE WHEN ${clearStaleError} AND status = 'error' THEN NULL ELSE submission_error END,
+        stedi_response             = CASE WHEN ${clearStaleError} AND status = 'error' THEN NULL ELSE stedi_response END,
         payer_name                 = COALESCE(${updates.payer_name ?? null}, payer_name),
         payer_id                   = COALESCE(${updates.payer_id ?? null}, payer_id),
         member_id                  = COALESCE(${updates.member_id ?? null}, member_id),
@@ -394,7 +405,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rendering_provider_taxonomy = COALESCE(${updates.rendering_provider_taxonomy ?? null}, rendering_provider_taxonomy),
         place_of_service           = COALESCE(${updates.place_of_service ?? null}, place_of_service),
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
-        status                     = COALESCE(${updates.status ?? null}, status),
+        status                     = COALESCE(${updates.status ?? null}, CASE WHEN ${clearStaleError} AND status = 'error' THEN 'draft' ELSE status END),
         cpt_codes                  = COALESCE(${updates.cpt_codes != null ? JSON.stringify(updates.cpt_codes) : null}::jsonb, cpt_codes),
         diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
         total_charge               = COALESCE(${newTotal}, total_charge),
