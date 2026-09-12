@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyAppointmentClears } from '../_lib/applyClears'
+import { applyAppointmentClears } from '../lib/applyClears'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')

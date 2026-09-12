@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createHmac } from 'crypto'
-import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../_lib/applyEraPayment'
+import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../lib/applyEraPayment'
 
 // Stedi signs webhooks with HMAC-SHA256 — verify the header matches
 // Header name: confirm in Stedi dashboard → Webhooks → your endpoint → Signing secret

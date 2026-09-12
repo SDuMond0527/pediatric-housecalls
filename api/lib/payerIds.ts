@@ -1,5 +1,5 @@
 // Single source of truth for payer name → Stedi payer ID mapping. Used by
-// every claim-generation path (api/claims/index.ts, api/_lib/generateClaim.ts,
+// every claim-generation path (api/claims/index.ts, api/lib/generateClaim.ts,
 // and any future callers). See memory:
 // feedback_extract_shared_code_first_try.md — this mapping drifted between
 // two copies until we consolidated.

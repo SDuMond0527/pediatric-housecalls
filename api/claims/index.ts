@@ -13,7 +13,7 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
-import { resolvePayer } from '../_lib/payerIds'
+import { resolvePayer } from '../lib/payerIds'
 
 async function generateClaim(sql: any, encounterNoteId: string, practiceId: string) {
   const [existing] = await sql`
@@ -40,7 +40,7 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
     : [null]
 
   // Vaccine encounters are always billed under Dr. Sara DuMond as the
-  // rendering provider (see api/_lib/generateClaim.ts for the same rule).
+  // rendering provider (see api/lib/generateClaim.ts for the same rule).
   const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
   const [supervisingMd] = isVaccineVisit
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`

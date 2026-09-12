@@ -1043,7 +1043,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (offerPracticeId) {
         // Raw INSERT — this path used to delegate to createAppointmentCore for
-        // overlap + pairing logic, but that lived in api/_lib/ which Vercel
+        // overlap + pairing logic, but that lived in api/lib/ which Vercel
         // excludes from bundling. Kept simple to avoid the 500. TODO: rewire
         // through the shared helper once it lives outside _lib.
         await sql`INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes)

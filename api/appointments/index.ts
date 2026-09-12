@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-// Inlined from api/_lib/createAppointmentCore.ts. The _lib folder is treated
+// Inlined from api/lib/createAppointmentCore.ts. The _lib folder is treated
 // as private by Vercel and excluded from serverless function bundling, so any
 // import from it fails at runtime with a 500. Keeping this local to the file
 // avoids the outage.
@@ -238,7 +238,7 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
 
 // Paired-visit aliases. All three names for each pair map to the same
 // duration so historical names, current DB names, and the explicit renamed
-// versions all resolve correctly. Keep in sync with api/_lib/dualVisitTypes.ts
+// versions all resolve correctly. Keep in sync with api/lib/dualVisitTypes.ts
 // and src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
 const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']

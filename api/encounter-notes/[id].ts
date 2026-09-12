@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyEncounterNoteClears } from '../_lib/applyClears'
-import { resolvePayer } from '../_lib/payerIds'
+import { applyEncounterNoteClears } from '../lib/applyClears'
+import { resolvePayer } from '../lib/payerIds'
 
 async function generateClaimForNote(sql: any, encounterNoteId: string, practiceId: string) {
   const [existing] = await sql`
@@ -28,7 +28,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     : [null]
 
   // Vaccine encounters are always billed under Dr. Sara DuMond as the
-  // rendering provider (matches api/_lib/generateClaim.ts).
+  // rendering provider (matches api/lib/generateClaim.ts).
   const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
   const [supervisingMd] = isVaccineVisit
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../_lib/applyEraPayment'
+import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../lib/applyEraPayment'
 
 // Poll Stedi's remittances (835 ERAs) endpoint every 30 min as a
 // catch-up in case the webhook (api/webhooks/stedi-era.ts) missed a

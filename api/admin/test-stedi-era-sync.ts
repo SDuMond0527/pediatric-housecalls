@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../_lib/applyEraPayment'
+import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../lib/applyEraPayment'
 
 // Admin-triggered ERA sync — runs the exact same logic as the
 // scheduled cron (api/cron/stedi-era-poll.ts) but auths via the

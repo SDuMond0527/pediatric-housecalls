@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyFamilyProfileClears } from '../_lib/applyClears'
+import { applyFamilyProfileClears } from '../lib/applyClears'
 
 async function verifyFamilyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
