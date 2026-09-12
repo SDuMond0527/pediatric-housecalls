@@ -175,6 +175,10 @@ export function Shifts() {
       }).catch(() => {})
       setClaiming(null)
       await load()
+    } catch (e: any) {
+      // Previously try/finally with no catch — error was uncaught and
+      // provider walked away thinking they'd claimed a shift they hadn't.
+      alert(`Couldn't claim shift: ${e?.message ?? 'unknown error'}. Please try again.`)
     } finally {
       setSubmitting(false)
     }
@@ -187,6 +191,8 @@ export function Shifts() {
       await updateShiftTimes(editing.id, editing.start, editing.end)
       setEditing(null)
       await load()
+    } catch (e: any) {
+      alert(`Couldn't update shift times: ${e?.message ?? 'unknown error'}. Please try again.`)
     } finally {
       setSubmitting(false)
     }

@@ -564,6 +564,10 @@ export function AdminSchedule() {
       return
     }
 
+    // Pass the practice-configured duration so the server doesn't fall
+    // back to its hardcoded VISIT_DURATIONS map (which caused
+    // overlap-check misalignment).
+    const visitDurMin = byType[form.visit_type]?.duration_minutes ?? null
     await createAppointment({
       provider_id: form.provider_id,
       visit_type: form.visit_type,
@@ -572,6 +576,7 @@ export function AdminSchedule() {
       scheduled_date: form.scheduled_date,
       status: 'upcoming',
       notes: noteParts.length ? noteParts.join('|') : null,
+      duration_minutes: visitDurMin,
       ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
     })
 
@@ -1164,7 +1169,10 @@ export function AdminSchedule() {
                                                     if (!currentNote?.id) return
                                                     try {
                                                       await patchEncounterNote(currentNote.id, { cpt_codes: currentNote.cpt_codes })
-                                                    } catch { /* silent */ }
+                                                    } catch (e: any) {
+                                                      // Billing money bug — CPT codes MUST persist. Alert loudly.
+                                                      alert(`Couldn't save CPT code changes: ${e?.message ?? 'unknown error'}. The chart still shows your edit but it did NOT save — please refresh and try again.`)
+                                                    }
                                                   }}
                                                   placeholder="25"
                                                   className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]"

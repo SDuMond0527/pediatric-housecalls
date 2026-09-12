@@ -75,6 +75,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
     setSubmitting(true)
     setError(null)
     try {
+      // Pass practice-configured duration so the server honors
+      // practice_visit_types.duration_minutes instead of falling back
+      // to a hardcoded map.
+      const visitDur = visitTypes.find(vt => vt.visit_type === form.visit_type)?.duration_minutes ?? null
       const base = {
         visit_type: form.visit_type,
         zone: form.zone,
@@ -82,6 +86,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
         scheduled_time: to24h(form.scheduled_time),
         child_id: child.id,
         status: 'upcoming',
+        duration_minutes: visitDur,
       }
       const appt = await createAppointment({
         ...base,

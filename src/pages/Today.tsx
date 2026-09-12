@@ -580,6 +580,11 @@ export function Today() {
       return
     }
 
+    // Look up the practice-configured duration for this visit type so the
+    // server doesn't fall back to its hardcoded VISIT_DURATIONS map (which
+    // ignored practice_visit_types config and could cause overlap-check
+    // misalignment / double-books).
+    const visitDur = byType[addForm.visitType]?.duration_minutes ?? null
     await createAppointment({
       provider_id: providerId,
       visit_type: addForm.visitType,
@@ -588,6 +593,7 @@ export function Today() {
       scheduled_date: addForm.date,
       status: 'upcoming',
       notes: noteParts.join('|') || null,
+      duration_minutes: visitDur,
       ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
     })
 
