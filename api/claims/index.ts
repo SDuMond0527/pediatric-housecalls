@@ -13,7 +13,29 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
   return payload.sub
 }
 
-import { resolvePayer } from '../lib/payerIds'
+// PAYER_IDS inlined to avoid ANY cross-file imports inside api/ —
+// Vercel's serverless bundling has repeatedly bitten us on those (see
+// memory feedback_verify_after_every_push.md). If you add a payer, also
+// update: api/lib/payerIds.ts, api/lib/generateClaim.ts,
+// api/encounter-notes/[id].ts.
+const PAYER_IDS: Record<string, string> = {
+  'self pay': 'PP', 'self-pay': 'PP', 'selfpay': 'PP', 'self': 'PP',
+  'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
+  'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
+  'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',
+  'blue cross blue shield nc': 'UPICO',
+  'aetna': '60054', 'cigna': '62308',
+  'united healthcare': '87726', 'united health care': '87726', 'uhc': '87726',
+  'umr': '39026', 'humana': '61101',
+  'phcs': '52133', 'multiplan': '52133',
+  'coventry': '38217', 'select health': '53589',
+  'medcost': '56196', 'healthgram': '56162',
+  'bright health': '98798', 'bright healthcare': '98798',
+}
+function resolvePayer(name: string | null): string | null {
+  if (!name) return null
+  return PAYER_IDS[name.toLowerCase().trim()] ?? null
+}
 
 async function generateClaim(sql: any, encounterNoteId: string, practiceId: string) {
   const [existing] = await sql`
