@@ -33,7 +33,18 @@ interface WaitlistEntry {
   created_at: string
 }
 
-const EMPTY_ADD = { name: '', dob: '', email: '', phone: '', address: '', zip: '', state: '', visitType: '', complaint: '', preferredDate: '', preferredTime: '', allergies: '', medications: '', pmh: '', pcp: '', pharmacy: '', insurance: '', memberId: '', groupNum: '' }
+const EMPTY_ADD = {
+  name: '', dob: '', email: '', phone: '',
+  address: '', city: '', zip: '', state: '',
+  gender: '',
+  visitType: '', complaint: '',
+  preferredDate: '', preferredTime: '',
+  allergies: '', medications: '', pmh: '',
+  pcp: '', pharmacy: '', vaccinationStatus: '',
+  selfPay: false as boolean,
+  insurance: '', memberId: '', groupNum: '',
+  subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
+}
 
 const NOTE_ORDER = ['Patient', 'DOB', 'Email', 'Phone', 'Address', 'Allergies', 'Medications', 'PMH', 'PCP', 'Pharmacy', 'Insurance', 'Member ID', 'Group #', 'Complaint']
 
@@ -217,7 +228,7 @@ export function Waitlist() {
     fetchEntries()
   }
 
-  function setField(k: keyof typeof EMPTY_ADD, v: string) {
+  function setField(k: keyof typeof EMPTY_ADD, v: string | boolean) {
     setAddForm(f => ({ ...f, [k]: v }))
   }
 
@@ -284,7 +295,34 @@ export function Waitlist() {
   }
 
   async function submitAdd() {
-    if (!addForm.name || !addForm.phone || !addForm.zip || !addForm.state || !addForm.complaint) return
+    // Every REQUIRED_CHILD_FIELDS field must be present. Card photos are
+    // gathered later (impossible on a phone call). See:
+    // feedback_all_patient_info_required_and_displayed.md.
+    const missing =
+      !addForm.name?.trim() ? 'Patient name'
+      : !addForm.dob ? 'Date of birth'
+      : !addForm.gender ? 'Sex'
+      : !addForm.phone?.trim() ? 'Phone'
+      : !addForm.email?.trim() ? 'Email'
+      : !addForm.address?.trim() ? 'Address'
+      : !addForm.city?.trim() ? 'City'
+      : !addForm.state ? 'State'
+      : !addForm.zip?.trim() ? 'Zip'
+      : !addForm.allergies?.trim() ? 'Allergies (enter "NKDA" if none)'
+      : !addForm.medications?.trim() ? 'Current medications (enter "None" if none)'
+      : !addForm.pmh?.trim() ? 'PMH (enter "None" if none)'
+      : !addForm.pcp?.trim() ? 'PCP'
+      : !addForm.pharmacy?.trim() ? 'Pharmacy'
+      : !addForm.vaccinationStatus ? 'Vaccination status'
+      : !addForm.complaint?.trim() ? 'Chief complaint'
+      : (!addForm.selfPay && !addForm.insurance?.trim()) ? 'Insurance provider'
+      : (!addForm.selfPay && !addForm.memberId?.trim()) ? 'Member ID'
+      : (!addForm.selfPay && !addForm.groupNum?.trim()) ? 'Group #'
+      : (!addForm.selfPay && !addForm.subscriberName?.trim()) ? 'Subscriber name'
+      : (!addForm.selfPay && !addForm.subscriberDob) ? 'Subscriber DOB'
+      : (!addForm.selfPay && !addForm.subscriberGender) ? 'Subscriber sex'
+      : null
+    if (missing) { alert(`${missing} is required.`); return }
     setAddSubmitting(true)
 
     // Save every field the admin typed into a PERMANENT child record — not just
@@ -296,45 +334,37 @@ export function Waitlist() {
 
     let childId: string | null = null
     try {
+      const childPayload = {
+        gender: addForm.gender,
+        parent_phone:  addForm.phone,
+        parent_email:  addForm.email,
+        parent_address: addForm.address,
+        parent_city:   addForm.city,
+        parent_state:  addForm.state,
+        parent_zip:    addForm.zip,
+        pcp:           addForm.pcp,
+        preferred_pharmacy: addForm.pharmacy,
+        allergies: addForm.allergies,
+        current_medications: addForm.medications,
+        medical_history: addForm.pmh,
+        vaccination_status: addForm.vaccinationStatus,
+        insurance_provider:                addForm.selfPay ? 'Self-pay' : addForm.insurance,
+        insurance_member_id:               addForm.selfPay ? null : addForm.memberId,
+        insurance_group_number:            addForm.selfPay ? null : addForm.groupNum,
+        insurance_subscriber_name:         addForm.selfPay ? null : addForm.subscriberName,
+        insurance_subscriber_dob:          addForm.selfPay ? null : addForm.subscriberDob,
+        insurance_subscriber_gender:       addForm.selfPay ? null : addForm.subscriberGender,
+        insurance_subscriber_relationship: addForm.selfPay ? null : addForm.subscriberRelationship,
+      }
       if (selectedChild?.id) {
-        // Matched existing patient — update their profile with any new fields.
-        await updateChild(selectedChild.id, {
-          parent_phone:              addForm.phone || null,
-          parent_email:              addForm.email || null,
-          parent_address:            addForm.address || null,
-          parent_zip:                addForm.zip || null,
-          parent_state:              addForm.state || null,
-          date_of_birth:             addForm.dob || null,
-          allergies:                 addForm.allergies || null,
-          current_medications:       addForm.medications || null,
-          medical_history:           addForm.pmh || null,
-          pcp:                       addForm.pcp || null,
-          preferred_pharmacy:        addForm.pharmacy || null,
-          insurance_provider:        addForm.insurance || null,
-          insurance_member_id:       addForm.memberId || null,
-          insurance_group_number:    addForm.groupNum || null,
-        })
+        await updateChild(selectedChild.id, { ...childPayload, date_of_birth: addForm.dob })
         childId = selectedChild.id
       } else {
-        // New patient — create with EVERY field. Same field set no matter which
-        // ingest path (admin add vs family portal) landed us here.
         const created = await createChild({
           first_name: firstName || null,
           last_name:  lastName || null,
-          date_of_birth: addForm.dob || null,
-          parent_phone:  addForm.phone || null,
-          parent_email:  addForm.email || null,
-          parent_address: addForm.address || null,
-          parent_zip:    addForm.zip || null,
-          parent_state:  addForm.state || null,
-          pcp:           addForm.pcp || null,
-          preferred_pharmacy: addForm.pharmacy || null,
-          insurance_provider: addForm.insurance || null,
-          insurance_member_id: addForm.memberId || null,
-          insurance_group_number: addForm.groupNum || null,
-          allergies: addForm.allergies || null,
-          current_medications: addForm.medications || null,
-          medical_history: addForm.pmh || null,
+          date_of_birth: addForm.dob,
+          ...childPayload,
         })
         childId = created?.id ?? null
       }
@@ -888,17 +918,26 @@ export function Waitlist() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Date of birth *</label>
                   <input type="date" value={addForm.dob} onChange={e => setField('dob', e.target.value)}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                 </div>
-                <Input label="Email" type="email" placeholder="parent@email.com" value={addForm.email} onChange={e => setField('email', e.target.value)} />
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Sex *</label>
+                  <select value={addForm.gender} onChange={e => setField('gender', e.target.value)}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                    <option value="">Select…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
               </div>
+              <Input label="Email *" type="email" placeholder="parent@email.com" value={addForm.email} onChange={e => setField('email', e.target.value)} />
               <Input label="Phone *" placeholder="(704) 555-0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
-              <Input label="Visit address" placeholder="123 Main St, City, State" value={addForm.address} onChange={e => setField('address', e.target.value)} />
+              <Input label="Visit address *" placeholder="123 Main St" value={addForm.address} onChange={e => setField('address', e.target.value)} />
 
-              <div className="grid grid-cols-2 gap-3">
-                <Input label="Zip *" placeholder="28205" value={addForm.zip} onChange={e => setField('zip', e.target.value)} />
+              <div className="grid grid-cols-3 gap-3">
+                <Input label="City *" placeholder="Charlotte" value={addForm.city} onChange={e => setField('city', e.target.value)} />
                 <div>
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State *</label>
                   <select value={addForm.state} onChange={e => setField('state', e.target.value)}
@@ -909,6 +948,7 @@ export function Waitlist() {
                     <option value="VA">Virginia</option>
                   </select>
                 </div>
+                <Input label="Zip *" placeholder="28205" value={addForm.zip} onChange={e => setField('zip', e.target.value)} />
               </div>
 
               <div>
@@ -951,27 +991,79 @@ export function Waitlist() {
               {!selectedChild && (
                 <>
                   <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Clinical info</div>
-                  <Input label="Allergies" placeholder="e.g. Penicillin — or NKDA" value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
-                  <Input label="Current medications" placeholder="None, or list medications" value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
-                  <Input label="PMH" placeholder="Significant past medical history" value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
-                  <Input label="PCP" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
-                  <Input label="Pharmacy" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
+                  <Input label="Allergies *" placeholder='e.g. Penicillin — or "NKDA"' value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
+                  <Input label="Current medications *" placeholder='None, or list medications' value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
+                  <Input label="PMH *" placeholder='Significant past medical history — or "None"' value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="PCP *" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
+                    <Input label="Pharmacy *" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Vaccination status *</label>
+                    <select value={addForm.vaccinationStatus} onChange={e => setField('vaccinationStatus', e.target.value)}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
+                      <option value="">Select…</option>
+                      <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                      <option value="delayed">Delayed / alternative schedule</option>
+                      <option value="unvaccinated">Not vaccinated</option>
+                    </select>
+                  </div>
 
                   <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Insurance</div>
-                  <Input label="Insurance" placeholder="e.g. BCBS" value={addForm.insurance} onChange={e => setField('insurance', e.target.value)} />
+                  <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
+                    <input type="checkbox" checked={addForm.selfPay}
+                      onChange={e => setField('selfPay', e.target.checked)}
+                      className="mt-0.5" />
+                    <div>
+                      <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
+                      <div className="text-[11px] text-[#999]">Check this if the family is not filing insurance.</div>
+                    </div>
+                  </label>
+
+                  {!addForm.selfPay && (
+                  <>
+                  <Input label="Insurance *" placeholder="e.g. BCBS" value={addForm.insurance} onChange={e => setField('insurance', e.target.value)} />
                   <div className="grid grid-cols-2 gap-3">
-                    <Input label="Member ID" value={addForm.memberId} onChange={e => setField('memberId', e.target.value)} />
-                    <Input label="Group #" value={addForm.groupNum} onChange={e => setField('groupNum', e.target.value)} />
+                    <Input label="Member ID *" value={addForm.memberId} onChange={e => setField('memberId', e.target.value)} />
+                    <Input label="Group # *" value={addForm.groupNum} onChange={e => setField('groupNum', e.target.value)} />
                   </div>
+                  <Input label="Subscriber name *" placeholder="Full name of policyholder" value={addForm.subscriberName} onChange={e => setField('subscriberName', e.target.value)} />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber DOB *</label>
+                      <input type="date" value={addForm.subscriberDob} onChange={e => setField('subscriberDob', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD]" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex *</label>
+                      <select value={addForm.subscriberGender} onChange={e => setField('subscriberGender', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                        <option value="">Select</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Relationship *</label>
+                      <select value={addForm.subscriberRelationship} onChange={e => setField('subscriberRelationship', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
+                        <option value="Self">Self</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Child">Child</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-[#999]">Insurance card photos can be uploaded when the family logs in — those aren't required during phone triage.</p>
+                  </>
+                  )}
                 </>
               )}
             </div>
 
             <div className="flex gap-2 mt-5">
               <Button variant="secondary" className="flex-1" onClick={closeAddModal}>Cancel</Button>
-              <Button variant="teal" className="flex-1" loading={addSubmitting}
-                disabled={!addForm.name || !addForm.phone || !addForm.zip || !addForm.state || !addForm.complaint}
-                onClick={submitAdd}>
+              <Button variant="teal" className="flex-1" loading={addSubmitting} onClick={submitAdd}>
                 Add to waitlist
               </Button>
             </div>

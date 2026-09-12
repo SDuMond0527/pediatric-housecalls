@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { updateMyFamily, createChild, lookupChild } from '../../lib/api'
+import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -196,7 +196,7 @@ export function FamilySetup() {
                   index={i}
                   child={child}
                   removable={children.length > 1}
-                  familySub={user?.id || user?.email || 'unknown'}
+                  uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
                   onField={(k, v) => updateChildField(i, k, v)}
                   onRemove={() => setChildren(prev => prev.filter((_, idx) => idx !== i))}
                   onConfirmMatch={() => confirmMatch(i)}

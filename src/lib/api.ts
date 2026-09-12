@@ -195,6 +195,29 @@ export async function familyUploadInsuranceCard(familySub: string, file: File, s
   })
 }
 
+// Provider-auth insurance card upload used BEFORE a child_id exists
+// (during provider "Add patient" or "Add sibling" intake flows).
+// Keyed by timestamp under a pre-child prefix in blob storage.
+export async function providerUploadInsuranceCardPreChild(file: File, side: 'front' | 'back'): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const data = reader.result as string
+        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
+        const filename = `insurance-cards/pre-child/${Date.now()}-${side}.${ext}`
+        const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
+          method: 'POST',
+          body: JSON.stringify({ data, filename }),
+        })
+        resolve(json.url)
+      } catch (e) { reject(e) }
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export async function providerUploadInsuranceCard(childId: string, file: File, side: 'front' | 'back'): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

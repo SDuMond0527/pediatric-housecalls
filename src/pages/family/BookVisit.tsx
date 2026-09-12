@@ -17,7 +17,15 @@ import {
   getFamilyPcps,
   familyAddPcp,
   getFamilyPharmacies,
+  familyUploadInsuranceCard,
 } from '../../lib/api'
+import {
+  ChildIntakeForm,
+  emptyChild,
+  childIsComplete,
+  buildChildCreatePayload,
+  type ChildEntry,
+} from '../../components/ChildIntakeForm'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
@@ -471,8 +479,9 @@ export function BookVisit() {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
-  const [newChildFirst, setNewChildFirst] = useState('')
-  const [newChildLast, setNewChildLast] = useState('')
+  const [newChild, setNewChild] = useState<ChildEntry>(emptyChild())
+  const [addingChildError, setAddingChildError] = useState('')
+  const [addingChildSaving, setAddingChildSaving] = useState(false)
 
   // ─── Child selection ─────────────────────────────────────────────────────────
 
@@ -497,15 +506,39 @@ export function BookVisit() {
   }
 
   async function addNewChild() {
-    if (!newChildFirst.trim() || !newChildLast.trim() || !family) return
-    const data = await createChild({ first_name: newChildFirst.trim(), last_name: newChildLast.trim(), family_id: family.id }).catch(() => null)
-    if (data) {
-      await refreshFamily()
-      toggleChild(data.id, data.display_label || `${newChildFirst} ${newChildLast}`, false)
+    if (!family) return
+    const missing = childIsComplete(newChild)
+    if (missing) {
+      setAddingChildError(`${missing} is required. Every field must be filled in to add this child.`)
+      return
     }
-    setNewChildFirst('')
-    setNewChildLast('')
-    setAddingChild(false)
+    setAddingChildError('')
+    setAddingChildSaving(true)
+    try {
+      const parent = {
+        phone:   (family.phone || '').replace(/\D/g, ''),
+        email:   user?.email ?? null,
+        address: family.address_line1 || '',
+        city:    family.city || '',
+        state:   family.state || '',
+        zip:     family.zip || '',
+      }
+      const data = await createChild(buildChildCreatePayload(newChild, parent))
+      if (data) {
+        await refreshFamily()
+        toggleChild(data.id, data.display_label || `${newChild.first_name} ${newChild.last_name}`, false)
+      }
+      setNewChild(emptyChild())
+      setAddingChild(false)
+    } catch (e: any) {
+      setAddingChildError(e?.message || 'Failed to add child. Please try again.')
+    } finally {
+      setAddingChildSaving(false)
+    }
+  }
+
+  function updateNewChildField(field: keyof ChildEntry, value: string | boolean) {
+    setNewChild(prev => ({ ...prev, [field]: value } as ChildEntry))
   }
 
   // ─── Intake field update ──────────────────────────────────────────────────────
@@ -1468,18 +1501,27 @@ export function BookVisit() {
               )
             })}
 
-            {/* Add new child inline */}
+            {/* Add new child inline — full intake required per rule */}
             {addingChild ? (
-              <div className="p-3.5 border-2 border-[#7F77DD] rounded-xl bg-[#EEEDFE]">
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <Input placeholder="First name *"
-                    value={newChildFirst} onChange={e => setNewChildFirst(e.target.value)} />
-                  <Input placeholder="Last name *"
-                    value={newChildLast} onChange={e => setNewChildLast(e.target.value)} />
-                </div>
+              <div className="space-y-3">
+                <ChildIntakeForm
+                  child={newChild}
+                  removable={false}
+                  uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
+                  headerLabel="New child"
+                  onField={updateNewChildField}
+                  onRemove={() => {}}
+                  onConfirmMatch={() => setNewChild(prev => ({ ...prev, matchConfirmed: true, matchDismissed: false }))}
+                  onDismissMatch={() => setNewChild(prev => ({ ...prev, matchDismissed: true, matchConfirmed: false }))}
+                />
+                {addingChildError && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addingChildError}</div>}
+                <p className="text-[11px] text-[#999]">Every field is required. Nothing is saved until this child's profile is complete.</p>
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => { setAddingChild(false); setNewChildFirst(''); setNewChildLast('') }}>Cancel</Button>
-                  <Button size="sm" disabled={!newChildFirst.trim() || !newChildLast.trim()} onClick={addNewChild}>Add & select</Button>
+                  <Button variant="secondary" size="sm" disabled={addingChildSaving}
+                    onClick={() => { setAddingChild(false); setNewChild(emptyChild()); setAddingChildError('') }}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" loading={addingChildSaving} onClick={addNewChild}>Add &amp; select</Button>
                 </div>
               </div>
             ) : (

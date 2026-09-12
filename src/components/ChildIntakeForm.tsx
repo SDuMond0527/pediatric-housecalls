@@ -1,9 +1,8 @@
-import { useState } from 'react'
-import { Trash2, CheckCircle2, Upload } from 'lucide-react'
+import { Trash2, CheckCircle2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { familyUploadInsuranceCard } from '../lib/api'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { InsuranceEditor, type InsuranceValue } from './InsuranceEditor'
 
 // Shared per-child intake form used at family signup (FamilySetup) and
 // when adding a sibling from FamilyProfile. Same shape everywhere so we
@@ -118,13 +117,16 @@ export function buildChildCreatePayload(
 }
 
 export function ChildIntakeForm({
-  index, child, removable, familySub, headerLabel,
+  index, child, removable, uploadCard, headerLabel,
   onField, onRemove, onConfirmMatch, onDismissMatch,
 }: {
   index?: number
   child: ChildEntry
   removable: boolean
-  familySub: string
+  /** Uploader supplied by caller — family surfaces pass a family-auth
+   * upload, provider surfaces pass a provider-auth upload. This keeps
+   * the intake form usable from every ingest path. */
+  uploadCard: (file: File, side: 'front' | 'back') => Promise<string>
   headerLabel?: string
   onField: (k: keyof ChildEntry, v: string | boolean) => void
   onRemove: () => void
@@ -132,20 +134,24 @@ export function ChildIntakeForm({
   onDismissMatch: () => void
 }) {
   const showMatch = child.match && !child.matchDismissed
-  const [uploadingFront, setUploadingFront] = useState(false)
-  const [uploadingBack, setUploadingBack] = useState(false)
-  const [uploadErr, setUploadErr] = useState('')
 
-  async function uploadCard(file: File, side: 'front' | 'back') {
-    setUploadErr('')
-    if (side === 'front') setUploadingFront(true); else setUploadingBack(true)
-    try {
-      const url = await familyUploadInsuranceCard(familySub, file, side)
-      onField(side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', url)
-    } catch (e: any) {
-      setUploadErr(e?.message || 'Upload failed')
-    } finally {
-      if (side === 'front') setUploadingFront(false); else setUploadingBack(false)
+  // Adapt the ChildEntry state to the InsuranceValue shape the shared
+  // InsuranceEditor expects. onChange fans a patch back into onField.
+  const insuranceValue: InsuranceValue = {
+    self_pay: child.self_pay,
+    insurance_provider: child.insurance_provider,
+    insurance_member_id: child.insurance_member_id,
+    insurance_group_number: child.insurance_group_number,
+    insurance_subscriber_name: child.insurance_subscriber_name,
+    insurance_subscriber_dob: child.insurance_subscriber_dob,
+    insurance_subscriber_gender: child.insurance_subscriber_gender,
+    insurance_subscriber_relationship: child.insurance_subscriber_relationship,
+    insurance_card_front_url: child.insurance_card_front_url,
+    insurance_card_back_url: child.insurance_card_back_url,
+  }
+  function patchInsurance(patch: Partial<InsuranceValue>) {
+    for (const [k, v] of Object.entries(patch)) {
+      onField(k as keyof ChildEntry, v as string | boolean)
     }
   }
 
@@ -240,85 +246,16 @@ export function ChildIntakeForm({
         </div>
       </div>
 
-      {/* Insurance */}
+      {/* Insurance — delegated to shared InsuranceEditor */}
       <div className="border-t border-[#F1EFE8] pt-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</p>
-          <label className="flex items-center gap-1.5 text-[12px] text-[#555]">
-            <input type="checkbox" checked={child.self_pay}
-              onChange={e => onField('self_pay', e.target.checked)} />
-            Self-pay (no insurance)
-          </label>
-        </div>
-
-        {!child.self_pay && (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <Input label="Insurance provider *" placeholder="Blue Cross"
-                value={child.insurance_provider} onChange={e => onField('insurance_provider', e.target.value)} />
-              <Input label="Member ID *" placeholder="ABC123456"
-                value={child.insurance_member_id} onChange={e => onField('insurance_member_id', e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Input label="Group # *" placeholder="G00000001"
-                value={child.insurance_group_number} onChange={e => onField('insurance_group_number', e.target.value)} />
-              <Input label="Subscriber name *" placeholder="Full name"
-                value={child.insurance_subscriber_name} onChange={e => onField('insurance_subscriber_name', e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Input label="Subscriber DOB *" type="date"
-                value={child.insurance_subscriber_dob} onChange={e => onField('insurance_subscriber_dob', e.target.value)} />
-              <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex *</label>
-                <select value={child.insurance_subscriber_gender} onChange={e => onField('insurance_subscriber_gender', e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white">
-                  <option value="">Select</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <CardUpload label="Insurance card — front *"
-                url={child.insurance_card_front_url}
-                uploading={uploadingFront}
-                onFile={f => uploadCard(f, 'front')}
-                onClear={() => onField('insurance_card_front_url', '')} />
-              <CardUpload label="Insurance card — back *"
-                url={child.insurance_card_back_url}
-                uploading={uploadingBack}
-                onFile={f => uploadCard(f, 'back')}
-                onClear={() => onField('insurance_card_back_url', '')} />
-            </div>
-            {uploadErr && <div className="text-[12px] text-[#DC2626]">{uploadErr}</div>}
-          </>
-        )}
+        <p className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider">Insurance</p>
+        <InsuranceEditor
+          value={insuranceValue}
+          onChange={patchInsurance}
+          uploadCard={uploadCard}
+        />
       </div>
     </div>
   )
 }
 
-function CardUpload({ label, url, uploading, onFile, onClear }: {
-  label: string; url: string; uploading: boolean
-  onFile: (f: File) => void; onClear: () => void
-}) {
-  return (
-    <div>
-      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">{label}</label>
-      {url ? (
-        <div className="flex items-center gap-2">
-          <img src={url} className="h-16 rounded border border-[#E8E8E4] object-contain" />
-          <button onClick={onClear} className="text-[11px] text-[#DC2626]">Remove</button>
-        </div>
-      ) : (
-        <label className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-[#E8E8E4] rounded-lg text-[12px] text-[#555] cursor-pointer hover:bg-[#F1EFE8]">
-          <Upload size={12} />
-          {uploading ? 'Uploading…' : 'Choose photo'}
-          <input type="file" accept="image/*" className="hidden"
-            onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
-        </label>
-      )}
-    </div>
-  )
-}

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
-import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild } from '../../lib/api'
+import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -584,7 +584,7 @@ export function FamilyProfile() {
             <ChildIntakeForm
               child={newChild}
               removable={false}
-              familySub={user?.id || user?.email || 'unknown'}
+              uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
               headerLabel="New child"
               onField={updateNewChildField}
               onRemove={() => {}}

@@ -267,7 +267,11 @@ export function PatientChart() {
   const [siblingSubmitting, setSiblingSubmitting] = useState(false)
   const [siblingError, setSiblingError] = useState<string | null>(null)
   const [siblingDone, setSiblingDone] = useState(false)
-  const [sibling, setSibling] = useState({ first_name: '', last_name: '', date_of_birth: '', gender: '' })
+  const [sibling, setSibling] = useState({
+    first_name: '', last_name: '', date_of_birth: '', gender: '',
+    // Per-child clinical fields — cannot be inherited from the sibling.
+    allergies: '', current_medications: '', medical_history: '', vaccination_status: '',
+  })
 
   useEffect(() => {
     if (!childId) return
@@ -507,7 +511,16 @@ export function PatientChart() {
   }
 
   async function submitSibling() {
-    if (!sibling.first_name.trim() || !sibling.last_name.trim() || !sibling.date_of_birth || !sibling.gender) return
+    const check = (val: string, msg: string) => (!val.trim() ? msg : '')
+    const err = check(sibling.first_name, 'First name is required')
+      || check(sibling.last_name, 'Last name is required')
+      || (!sibling.date_of_birth ? 'Date of birth is required' : '')
+      || (!sibling.gender ? 'Sex is required' : '')
+      || check(sibling.allergies, 'Allergies is required (enter "NKDA" if none)')
+      || check(sibling.current_medications, 'Current medications is required (enter "None" if none)')
+      || check(sibling.medical_history, 'Medical history is required (enter "None" if none)')
+      || (!sibling.vaccination_status ? 'Vaccination status is required' : '')
+    if (err) { setSiblingError(err); return }
     setSiblingSubmitting(true)
     setSiblingError(null)
     try {
@@ -516,6 +529,10 @@ export function PatientChart() {
         last_name: sibling.last_name.trim(),
         date_of_birth: sibling.date_of_birth,
         gender: sibling.gender,
+        allergies: sibling.allergies.trim(),
+        current_medications: sibling.current_medications.trim(),
+        medical_history: sibling.medical_history.trim(),
+        vaccination_status: sibling.vaccination_status,
         family_id: child?.family_id || null,
         parent_name: child?.parent_name || null,
         parent_phone: child?.family_phone || child?.parent_phone || null,
@@ -534,7 +551,7 @@ export function PatientChart() {
         insurance_subscriber_gender: child?.insurance_subscriber_gender || null,
       })
       setSiblingDone(true)
-      setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' })
+      setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '', allergies: '', current_medications: '', medical_history: '', vaccination_status: '' })
       setTimeout(() => { setSiblingOpen(false); setSiblingDone(false) }, 1500)
     } catch (e: any) {
       setSiblingError(e.message ?? 'Failed to add sibling')
@@ -580,7 +597,7 @@ export function PatientChart() {
                 <CalendarPlus size={13} /> Book appointment
               </button>
               <button
-                onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '' }) }}
+                onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '', allergies: '', current_medications: '', medical_history: '', vaccination_status: '' }) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
                 <UserPlus size={13} /> Add sibling
               </button>
@@ -2201,6 +2218,38 @@ export function PatientChart() {
                       <option value="M">Male</option>
                       <option value="F">Female</option>
                       <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Per-child clinical fields — can't inherit from a sibling */}
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Drug &amp; food allergies <span className="text-[#991B1B]">*</span></label>
+                    <textarea rows={2} placeholder='Type "NKDA" if none'
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
+                      value={sibling.allergies} onChange={e => setSibling(s => ({ ...s, allergies: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Current medications <span className="text-[#991B1B]">*</span></label>
+                    <textarea rows={2} placeholder='Type "None" if none'
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
+                      value={sibling.current_medications} onChange={e => setSibling(s => ({ ...s, current_medications: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Medical history <span className="text-[#991B1B]">*</span></label>
+                    <textarea rows={2} placeholder='Type "None" if no significant history'
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
+                      value={sibling.medical_history} onChange={e => setSibling(s => ({ ...s, medical_history: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#999] block mb-1">Vaccination status <span className="text-[#991B1B]">*</span></label>
+                    <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
+                      value={sibling.vaccination_status} onChange={e => setSibling(s => ({ ...s, vaccination_status: e.target.value }))}>
+                      <option value="">Select…</option>
+                      <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                      <option value="delayed">Delayed / alternative schedule</option>
+                      <option value="unvaccinated">Not vaccinated</option>
                     </select>
                   </div>
                 </div>

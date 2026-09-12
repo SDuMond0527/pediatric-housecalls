@@ -10,6 +10,11 @@ const EMPTY_FORM = {
   first_name: '', last_name: '', date_of_birth: '', gender: '', nickname: '',
   parent_name: '', parent_phone: '', parent_email: '',
   parent_address: '', parent_city: '', parent_state: '', parent_zip: '',
+  // Medical — see feedback_all_patient_info_required_and_displayed.md.
+  allergies: '', current_medications: '', medical_history: '',
+  preferred_pharmacy: '', pcp: '', vaccination_status: '',
+  // Insurance / self-pay
+  self_pay: false as boolean,
   insurance_provider: '', insurance_member_id: '', insurance_group_number: '',
   insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '',
   insurance_subscriber_relationship: '',
@@ -125,14 +130,17 @@ export function Patients() {
 
   function field(key: keyof typeof EMPTY_FORM) {
     return {
-      value: form[key],
-      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      value: form[key] as any,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
         setForm(f => ({ ...f, [key]: e.target.value })),
     }
   }
 
   async function createPatient() {
-    const checks: [string, string][] = [
+    // Every REQUIRED_CHILD_FIELDS field must be present. See:
+    // src/lib/childCompleteness.ts +
+    // feedback_all_patient_info_required_and_displayed.md.
+    const baseChecks: [string, string][] = [
       [form.first_name.trim(), 'Given first name is required'],
       [form.last_name.trim(), 'Last name is required'],
       [form.date_of_birth, 'Date of birth is required'],
@@ -143,6 +151,14 @@ export function Patients() {
       [form.parent_city.trim(), 'City is required'],
       [form.parent_state.trim(), 'State is required'],
       [form.parent_zip.trim(), 'Zip code is required'],
+      [form.allergies.trim(), 'Allergies is required (enter "NKDA" if none)'],
+      [form.current_medications.trim(), 'Current medications is required (enter "None" if none)'],
+      [form.medical_history.trim(), 'Medical history is required (enter "None" if none)'],
+      [form.preferred_pharmacy.trim(), 'Preferred pharmacy is required'],
+      [form.pcp.trim(), 'Primary care provider is required'],
+      [form.vaccination_status, 'Vaccination status is required'],
+    ]
+    const insuranceChecks: [string, string][] = form.self_pay ? [] : [
       [form.insurance_provider.trim(), 'Insurance company is required'],
       [form.insurance_member_id.trim(), 'Member ID is required'],
       [form.insurance_group_number.trim(), 'Group number is required'],
@@ -153,7 +169,7 @@ export function Patients() {
       [cardFront ? 'ok' : '', 'Front of insurance card is required'],
       [cardBack ? 'ok' : '', 'Back of insurance card is required'],
     ]
-    for (const [val, msg] of checks) {
+    for (const [val, msg] of [...baseChecks, ...insuranceChecks]) {
       if (!val) { setSaveError(msg); return }
     }
 
@@ -173,23 +189,31 @@ export function Patients() {
         parent_city: form.parent_city.trim(),
         parent_state: form.parent_state.trim(),
         parent_zip: form.parent_zip.trim(),
-        insurance_provider: form.insurance_provider.trim(),
-        insurance_member_id: form.insurance_member_id.trim(),
-        insurance_group_number: form.insurance_group_number.trim(),
-        insurance_subscriber_name: form.insurance_subscriber_name.trim(),
-        insurance_subscriber_dob: form.insurance_subscriber_dob,
-        insurance_subscriber_gender: form.insurance_subscriber_gender,
-        insurance_subscriber_relationship: form.insurance_subscriber_relationship,
+        allergies: form.allergies.trim(),
+        current_medications: form.current_medications.trim(),
+        medical_history: form.medical_history.trim(),
+        preferred_pharmacy: form.preferred_pharmacy.trim(),
+        pcp: form.pcp.trim(),
+        vaccination_status: form.vaccination_status,
+        insurance_provider:                form.self_pay ? 'Self-pay' : form.insurance_provider.trim(),
+        insurance_member_id:               form.self_pay ? null : form.insurance_member_id.trim(),
+        insurance_group_number:            form.self_pay ? null : form.insurance_group_number.trim(),
+        insurance_subscriber_name:         form.self_pay ? null : form.insurance_subscriber_name.trim(),
+        insurance_subscriber_dob:          form.self_pay ? null : form.insurance_subscriber_dob,
+        insurance_subscriber_gender:       form.self_pay ? null : form.insurance_subscriber_gender,
+        insurance_subscriber_relationship: form.self_pay ? null : form.insurance_subscriber_relationship,
       })
 
-      const [frontUrl, backUrl] = await Promise.all([
-        providerUploadInsuranceCard(row.id, cardFront!, 'front'),
-        providerUploadInsuranceCard(row.id, cardBack!, 'back'),
-      ])
-      await providerUpdateChild(row.id, {
-        insurance_card_front_url: frontUrl,
-        insurance_card_back_url: backUrl,
-      })
+      if (!form.self_pay) {
+        const [frontUrl, backUrl] = await Promise.all([
+          providerUploadInsuranceCard(row.id, cardFront!, 'front'),
+          providerUploadInsuranceCard(row.id, cardBack!, 'back'),
+        ])
+        await providerUpdateChild(row.id, {
+          insurance_card_front_url: frontUrl,
+          insurance_card_back_url: backUrl,
+        })
+      }
 
       setNewPatientOpen(false)
       setForm(EMPTY_FORM)
@@ -386,9 +410,63 @@ export function Patients() {
             </div>
           </div>
 
+          {/* Medical */}
+          <div>
+            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Medical</div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+                  Drug &amp; food allergies<span className="text-[#C0392B] ml-0.5">*</span>
+                </label>
+                <textarea rows={2} placeholder='Type "NKDA" if none'
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none"
+                  {...field('allergies')} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+                  Current medications<span className="text-[#C0392B] ml-0.5">*</span>
+                </label>
+                <textarea rows={2} placeholder='Type "None" if none'
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none"
+                  {...field('current_medications')} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+                  Medical history<span className="text-[#C0392B] ml-0.5">*</span>
+                </label>
+                <textarea rows={2} placeholder='Type "None" if no significant history'
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none"
+                  {...field('medical_history')} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Preferred pharmacy" required placeholder="CVS on Main St" {...field('preferred_pharmacy')} />
+                <Input label="Primary care provider" required placeholder="Dr. Jane Smith" {...field('pcp')} />
+              </div>
+              <Select label="Vaccination status" required {...field('vaccination_status')}>
+                <option value="">— select —</option>
+                <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                <option value="delayed">Delayed / alternative schedule</option>
+                <option value="unvaccinated">Not vaccinated</option>
+              </Select>
+            </div>
+          </div>
+
           {/* Insurance */}
           <div>
             <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Insurance</div>
+
+            <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg mb-3 cursor-pointer hover:bg-[#FAFAF8]">
+              <input type="checkbox" checked={form.self_pay}
+                onChange={e => setForm(f => ({ ...f, self_pay: e.target.checked }))}
+                className="mt-0.5" />
+              <div>
+                <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
+                <div className="text-[11px] text-[#999]">Check this if the family is not filing insurance for this patient.</div>
+              </div>
+            </label>
+
+            {!form.self_pay && (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Input label="Insurance company" required placeholder="BlueCross BlueShield" {...field('insurance_provider')} />
@@ -415,6 +493,8 @@ export function Patients() {
               <CardUpload label="Front of card" file={cardFront} onChange={setCardFront} />
               <CardUpload label="Back of card" file={cardBack} onChange={setCardBack} />
             </div>
+            </>
+            )}
           </div>
 
           {saveError && (
