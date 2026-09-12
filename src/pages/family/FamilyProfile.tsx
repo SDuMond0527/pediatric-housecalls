@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react'
 import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
@@ -12,6 +12,7 @@ import {
   buildChildCreatePayload,
   type ChildEntry,
 } from '../../components/ChildIntakeForm'
+import { InsuranceEditor } from '../../components/InsuranceEditor'
 
 type ChildEdit = {
   first_name: string
@@ -21,6 +22,10 @@ type ChildEdit = {
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
+  insurance_subscriber_name: string
+  insurance_subscriber_dob: string
+  insurance_subscriber_gender: string
+  insurance_subscriber_relationship: string
   insurance_card_front_url: string
   insurance_card_back_url: string
   allergies: string
@@ -44,6 +49,10 @@ function childEditFrom(c: Child): ChildEdit {
     insurance_provider: isSelfPay ? '' : (c.insurance_provider || ''),
     insurance_member_id: c.insurance_member_id || '',
     insurance_group_number: c.insurance_group_number || '',
+    insurance_subscriber_name: (c as any).insurance_subscriber_name || '',
+    insurance_subscriber_dob: (c as any).insurance_subscriber_dob ? String((c as any).insurance_subscriber_dob).split('T')[0] : '',
+    insurance_subscriber_gender: (c as any).insurance_subscriber_gender || '',
+    insurance_subscriber_relationship: (c as any).insurance_subscriber_relationship || 'Child',
     insurance_card_front_url: c.insurance_card_front_url || '',
     insurance_card_back_url: c.insurance_card_back_url || '',
     allergies: c.allergies || '',
@@ -103,11 +112,13 @@ export function FamilyProfile() {
   const [addingChildSaving, setAddingChildSaving] = useState(false)
   const [addChildError, setAddChildError] = useState('')
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [uploadingChild, setUploadingChild] = useState<{ id: string; side: 'front' | 'back' } | null>(null)
+  // uploadingChild is still needed by uploadCardForChild's setUploadingChild
+  // (the shared InsuranceEditor manages its own spinner but the callback
+  // touches this ref while the upload is in flight so the family portal
+  // "uploading" state remains observable).
+  const [, setUploadingChild] = useState<{ id: string; side: 'front' | 'back' } | null>(null)
   const [archivingInsId, setArchivingInsId] = useState<string | null>(null)
   const [pastInsOpenId, setPastInsOpenId] = useState<string | null>(null)
-  const frontRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const backRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // Password
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
@@ -144,7 +155,10 @@ export function FamilyProfile() {
     }))
   }
 
-  async function uploadInsuranceCard(childId: string, file: File, side: 'front' | 'back') {
+  /** Upload a card image and return the URL. Caller is responsible for
+   * writing it into edit state (so this helper is compatible with both
+   * the local file-picker path and the shared InsuranceEditor). */
+  async function uploadCardForChild(childId: string, file: File, side: 'front' | 'back'): Promise<string> {
     setUploadingChild({ id: childId, side })
     setChildSaveError(null)
     try {
@@ -158,13 +172,12 @@ export function FamilyProfile() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Upload failed')
-      setChildField(childId, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', json.url)
-    } catch (e: any) {
-      setChildSaveError(e.message ?? 'Upload failed')
+      return json.url as string
     } finally {
       setUploadingChild(null)
     }
   }
+
 
   async function archiveInsurance(child: Child) {
     setArchivingInsId(child.id)
@@ -179,6 +192,10 @@ export function FamilyProfile() {
           insurance_provider: '',
           insurance_member_id: '',
           insurance_group_number: '',
+          insurance_subscriber_name: '',
+          insurance_subscriber_dob: '',
+          insurance_subscriber_gender: '',
+          insurance_subscriber_relationship: 'Child',
           insurance_card_front_url: '',
           insurance_card_back_url: '',
         },
@@ -205,11 +222,15 @@ export function FamilyProfile() {
         // Self-pay overrides every insurance field. Provider is "Self-pay",
         // everything else null. See memory:
         // feedback_extract_shared_code_first_try.md
-        insurance_provider:       edit.self_pay ? 'Self-pay' : (edit.insurance_provider || null),
-        insurance_member_id:      edit.self_pay ? null : (edit.insurance_member_id || null),
-        insurance_group_number:   edit.self_pay ? null : (edit.insurance_group_number || null),
-        insurance_card_front_url: edit.self_pay ? null : (edit.insurance_card_front_url || null),
-        insurance_card_back_url:  edit.self_pay ? null : (edit.insurance_card_back_url || null),
+        insurance_provider:                edit.self_pay ? 'Self-pay' : (edit.insurance_provider || null),
+        insurance_member_id:               edit.self_pay ? null : (edit.insurance_member_id || null),
+        insurance_group_number:            edit.self_pay ? null : (edit.insurance_group_number || null),
+        insurance_subscriber_name:         edit.self_pay ? null : (edit.insurance_subscriber_name || null),
+        insurance_subscriber_dob:          edit.self_pay ? null : (edit.insurance_subscriber_dob || null),
+        insurance_subscriber_gender:       edit.self_pay ? null : (edit.insurance_subscriber_gender || null),
+        insurance_subscriber_relationship: edit.self_pay ? null : (edit.insurance_subscriber_relationship || null),
+        insurance_card_front_url:          edit.self_pay ? null : (edit.insurance_card_front_url || null),
+        insurance_card_back_url:           edit.self_pay ? null : (edit.insurance_card_back_url || null),
         allergies: edit.allergies || null,
         current_medications: edit.current_medications || null,
         medical_history: edit.medical_history || null,
@@ -405,7 +426,7 @@ export function FamilyProfile() {
                       </div>
                     </div>
 
-                    {/* Insurance text fields */}
+                    {/* Insurance — via shared InsuranceEditor */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Insurance</p>
@@ -418,78 +439,27 @@ export function FamilyProfile() {
                           </button>
                         )}
                       </div>
-
-                      {/* Self-pay toggle */}
-                      <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg mb-3 cursor-pointer hover:bg-[#FAFAF8]">
-                        <input type="checkbox" checked={edit.self_pay}
-                          onChange={e => setChildField(c.id, 'self_pay', e.target.checked as any)}
-                          className="mt-0.5" />
-                        <div>
-                          <div className="text-[13px] font-medium text-[#1A1A2E]">We are self-pay (no insurance)</div>
-                          <div className="text-[11px] text-[#999]">Check this if you don't want to file insurance for this child's visits.</div>
-                        </div>
-                      </label>
-
-                      {!edit.self_pay && (
-                        <div className="space-y-2">
-                          <Input label="Insurance company / plan name *" placeholder="e.g. Blue Cross Blue Shield"
-                            value={edit.insurance_provider}
-                            onChange={e => setChildField(c.id, 'insurance_provider', e.target.value)} />
-                          <div className="grid grid-cols-2 gap-3">
-                            <Input label="Member ID *" placeholder="e.g. XYZ123456"
-                              value={edit.insurance_member_id}
-                              onChange={e => setChildField(c.id, 'insurance_member_id', e.target.value)} />
-                            <Input label="Group number *" placeholder="e.g. 12345"
-                              value={edit.insurance_group_number}
-                              onChange={e => setChildField(c.id, 'insurance_group_number', e.target.value)} />
-                          </div>
-                        </div>
-                      )}
+                      <InsuranceEditor
+                        value={{
+                          self_pay: edit.self_pay,
+                          insurance_provider: edit.insurance_provider,
+                          insurance_member_id: edit.insurance_member_id,
+                          insurance_group_number: edit.insurance_group_number,
+                          insurance_subscriber_name: edit.insurance_subscriber_name,
+                          insurance_subscriber_dob: edit.insurance_subscriber_dob,
+                          insurance_subscriber_gender: edit.insurance_subscriber_gender,
+                          insurance_subscriber_relationship: edit.insurance_subscriber_relationship,
+                          insurance_card_front_url: edit.insurance_card_front_url,
+                          insurance_card_back_url: edit.insurance_card_back_url,
+                        }}
+                        onChange={patch => {
+                          for (const [k, v] of Object.entries(patch)) {
+                            setChildField(c.id, k as keyof ChildEdit, v as any)
+                          }
+                        }}
+                        uploadCard={(f, s) => uploadCardForChild(c.id, f, s)}
+                      />
                     </div>
-
-                    {/* Insurance card photos — only when NOT self-pay */}
-                    {!edit.self_pay && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Insurance card photos *</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {(['front', 'back'] as const).map(side => {
-                          const url = side === 'front' ? edit.insurance_card_front_url : edit.insurance_card_back_url
-                          const isUploading = uploadingChild?.id === c.id && uploadingChild?.side === side
-                          return (
-                            <div key={side}>
-                              <input type="file" accept="image/*" className="hidden"
-                                ref={el => { if (side === 'front') frontRefs.current[c.id] = el; else backRefs.current[c.id] = el }}
-                                onChange={e => { if (e.target.files?.[0]) uploadInsuranceCard(c.id, e.target.files[0], side) }} />
-                              {url ? (
-                                <div className="relative rounded-lg overflow-hidden border border-[#E8E8E4] aspect-[1.6/1]">
-                                  <img src={url} alt={`Insurance card ${side}`} className="w-full h-full object-cover" />
-                                  <button
-                                    onClick={() => setChildField(c.id, side === 'front' ? 'insurance_card_front_url' : 'insurance_card_back_url', '')}
-                                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
-                                    <X size={12} />
-                                  </button>
-                                  <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] text-center py-1 capitalize">{side}</div>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => (side === 'front' ? frontRefs.current[c.id] : backRefs.current[c.id])?.click()}
-                                  className="w-full aspect-[1.6/1] border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#999] hover:text-[#7F77DD]">
-                                  {isUploading ? (
-                                    <div className="text-[12px]">Uploading...</div>
-                                  ) : (
-                                    <>
-                                      <Upload size={16} />
-                                      <div className="text-[12px] font-medium capitalize">{side} of card</div>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    )}
 
                     {/* Previous insurance policies */}
                     {Array.isArray((c as any).previous_insurance) && (c as any).previous_insurance.length > 0 && (

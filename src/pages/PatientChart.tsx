@@ -5,6 +5,7 @@ import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
+import { InsuranceEditor } from '../components/InsuranceEditor'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
@@ -988,74 +989,24 @@ export function PatientChart() {
                   </div>
                   {editingSection === 'insurance' ? (
                     <div className="space-y-3">
-                      {/* Self-pay toggle — hides insurance fields when checked */}
-                      <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
-                        <input type="checkbox" checked={insEdit.self_pay}
-                          onChange={e => setInsEdit(p => ({ ...p, self_pay: e.target.checked }))}
-                          className="mt-0.5" />
-                        <div>
-                          <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-                          <div className="text-[11px] text-[#999]">Check this if the family is not filing insurance for this patient.</div>
-                        </div>
-                      </label>
-
-                      {!insEdit.self_pay && (
-                      <>
-                      <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Insurance company / plan name *</label>
-                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          value={insEdit.insurance_provider} onChange={e => setInsEdit(p => ({ ...p, insurance_provider: e.target.value }))}
-                          placeholder="e.g. Blue Cross Blue Shield" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Member ID *</label>
-                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                            value={insEdit.insurance_member_id} onChange={e => setInsEdit(p => ({ ...p, insurance_member_id: e.target.value }))}
-                            placeholder="e.g. XYZ123456" />
-                        </div>
-                        <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Group number *</label>
-                          <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                            value={insEdit.insurance_group_number} onChange={e => setInsEdit(p => ({ ...p, insurance_group_number: e.target.value }))}
-                            placeholder="e.g. 12345" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Subscriber name *</label>
-                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          value={insEdit.insurance_subscriber_name} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_name: e.target.value }))}
-                          placeholder="e.g. John Smith" />
-                      </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Subscriber DOB *</label>
-                          <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                            value={insEdit.insurance_subscriber_dob} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_dob: e.target.value }))} />
-                        </div>
-                        <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Subscriber sex *</label>
-                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
-                            value={insEdit.insurance_subscriber_gender} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_gender: e.target.value }))}>
-                            <option value="">—</option>
-                            <option value="M">Male</option>
-                            <option value="F">Female</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Relationship to patient *</label>
-                          <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
-                            value={insEdit.insurance_subscriber_relationship} onChange={e => setInsEdit(p => ({ ...p, insurance_subscriber_relationship: e.target.value }))}>
-                            <option value="">—</option>
-                            <option value="Self">Self</option>
-                            <option value="Spouse">Spouse</option>
-                            <option value="Child">Child</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                      </div>
-                      </>
-                      )}
+                      <InsuranceEditor
+                        value={{
+                          self_pay: insEdit.self_pay,
+                          insurance_provider: insEdit.insurance_provider,
+                          insurance_member_id: insEdit.insurance_member_id,
+                          insurance_group_number: insEdit.insurance_group_number,
+                          insurance_subscriber_name: insEdit.insurance_subscriber_name,
+                          insurance_subscriber_dob: insEdit.insurance_subscriber_dob,
+                          insurance_subscriber_gender: insEdit.insurance_subscriber_gender,
+                          insurance_subscriber_relationship: insEdit.insurance_subscriber_relationship,
+                          // Card URLs live on the child record but aren't edited from
+                          // this form (upload happens elsewhere). Pass empty strings.
+                          insurance_card_front_url: '',
+                          insurance_card_back_url: '',
+                        }}
+                        onChange={patch => setInsEdit(p => ({ ...p, ...patch }))}
+                        showCards={false}
+                      />
                       {editError &&<div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => saveEdit('insurance')} disabled={editSaving}
