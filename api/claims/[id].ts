@@ -273,9 +273,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const addressStale = !claim.patient_address || !claim.patient_city || !claim.patient_state || !claim.patient_zip
       const subscriberStale = !claim.subscriber_name || !claim.subscriber_name.trim().includes(' ')
       if ((addressStale || subscriberStale) && claim.child_id) {
+        // Address can live in three places (per feedback_patient_address_everywhere.md):
+        //   1. family_profiles.address_line1 (canonical, new schema)
+        //   2. children.parent_address (older per-child column — Carson Yates 2026-09-11
+        //      had address here but not on family_profiles, so a family_profiles-only
+        //      refresh missed it and Aetna rejected with code 33 "dependent.address")
+        //   3. Sara's manual entry via claim edit form (claim.patient_address itself)
+        // Resolve via COALESCE across all sources at refresh time.
         const [row] = await sql`
           SELECT
-            fp.address_line1, fp.city, fp.state, fp.zip,
+            fp.address_line1 AS fp_addr, fp.city AS fp_city, fp.state AS fp_state, fp.zip AS fp_zip,
+            ch.parent_address AS ch_addr, ch.parent_city AS ch_city, ch.parent_state AS ch_state, ch.parent_zip AS ch_zip,
             ch.insurance_subscriber_name, ch.insurance_subscriber_dob,
             ch.insurance_subscriber_gender, ch.insurance_subscriber_relationship,
             ch.insurance_member_id, ch.insurance_group_number
@@ -290,10 +298,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         : childSub.includes(' ')   ? childSub
                         : (currentSub || childSub || null)
           const filled = {
-            patient_address:              claim.patient_address              || row.address_line1                     || null,
-            patient_city:                 claim.patient_city                 || row.city                              || null,
-            patient_state:                claim.patient_state                || row.state                             || null,
-            patient_zip:                  claim.patient_zip                  || row.zip                               || null,
+            patient_address:              claim.patient_address              || row.fp_addr || row.ch_addr             || null,
+            patient_city:                 claim.patient_city                 || row.fp_city || row.ch_city             || null,
+            patient_state:                claim.patient_state                || row.fp_state || row.ch_state           || null,
+            patient_zip:                  claim.patient_zip                  || row.fp_zip || row.ch_zip               || null,
             subscriber_name:              bestSub,
             subscriber_dob:               claim.subscriber_dob               || row.insurance_subscriber_dob          || null,
             subscriber_gender:            claim.subscriber_gender            || row.insurance_subscriber_gender       || null,
@@ -328,6 +336,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (subParts.length < 2) {
         return res.status(400).json({
           error: 'Subscriber name must include both a first and last name. Click "Edit patient & insurance info" and enter the full name of the insurance subscriber (e.g., the parent whose insurance covers the child).',
+        })
+      }
+      // Same for patient address — after the auto-refresh above,
+      // if address still isn't complete (all four of street/city/
+      // state/zip), fail with a clear message rather than shipping a
+      // partial payload to Stedi. Aetna and Blue Cross both reject
+      // with "dependent.address missing" (Carson Yates 2026-09-11).
+      if (!claim.patient_address || !claim.patient_city || !claim.patient_state || !claim.patient_zip) {
+        return res.status(400).json({
+          error: 'Patient address is incomplete. Click "Edit patient & insurance info" and enter the full street address (street, city, state, ZIP) — Aetna and Blue Cross reject claims without it.',
         })
       }
 

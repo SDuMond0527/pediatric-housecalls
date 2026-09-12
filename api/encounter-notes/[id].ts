@@ -69,6 +69,15 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   const [family] = child?.family_id
     ? await sql`SELECT address_line1, city, state, zip FROM family_profiles WHERE id = ${child.family_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
+  // Resolve address across all sources at snapshot time (family_profiles
+  // first, fallback to children.parent_* — Carson Yates 2026-09-11 had
+  // address on children.parent_address but not on family_profiles).
+  const resolvedAddr = {
+    line1: family?.address_line1 ?? child?.parent_address ?? null,
+    city:  family?.city          ?? child?.parent_city    ?? null,
+    state: family?.state         ?? child?.parent_state   ?? null,
+    zip:   family?.zip           ?? child?.parent_zip     ?? null,
+  }
 
   // Vaccine encounters are always billed under Dr. Sara DuMond as the
   // rendering provider (matches api/lib/generateClaim.ts).
@@ -119,7 +128,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
       ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
       ${child?.first_name ?? null}, ${child?.last_name ?? null},
       ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
-      ${family?.address_line1 ?? null}, ${family?.city ?? null}, ${family?.state ?? null}, ${family?.zip ?? null}
+      ${resolvedAddr.line1}, ${resolvedAddr.city}, ${resolvedAddr.state}, ${resolvedAddr.zip}
     )
     RETURNING *`
 
