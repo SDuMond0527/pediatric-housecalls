@@ -227,7 +227,7 @@ function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean,
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false,
     vaccinationStatus: (child as any)?.vaccination_status || '',
-    phiSharingConsent: false,
+    phiSharingConsent: !!(child as any)?.phi_sharing_consent,
     chiefComplaint: '', additionalInfo: '', textVisitPhotos: [],
   }
 }
@@ -3139,8 +3139,12 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             )}
           </div>}
 
-          {/* PHI sharing consent — new patients only */}
-          {!intake.hasProfile && (
+          {/* PHI sharing consent — always shown. Pre-checked from
+             child.phi_sharing_consent if previously consented. Was
+             hidden for returning patients via `!intake.hasProfile`
+             which silently blocked step2Valid() because the required
+             field could never be set. */}
+          {(
             <div className="border-t border-[#E8E8E4] pt-4 mt-1">
               <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">PHI sharing consent <span className="text-[#ff3b30]">*</span></p>
               <button
