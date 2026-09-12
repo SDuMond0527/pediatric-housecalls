@@ -2,6 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+// See feedback_utc_date_bug.md. Vercel runs UTC; new Date().toISOString()
+// after 8 PM ET returns tomorrow's date. Use for practice-local dates.
+function easternDateStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
@@ -92,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           insurance_subscriber_gender: current.insurance_subscriber_gender ?? null,
           insurance_card_front_url:  current.insurance_card_front_url  ?? null,
           insurance_card_back_url:   current.insurance_card_back_url   ?? null,
-          deactivated_at: new Date().toISOString().split('T')[0],
+          deactivated_at: easternDateStr(),
         }
         const hasData = entry.insurance_provider || entry.insurance_member_id || entry.insurance_group_number
         const history = [

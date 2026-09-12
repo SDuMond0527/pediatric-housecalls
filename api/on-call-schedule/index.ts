@@ -2,6 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+// See feedback_utc_date_bug.md.
+function easternDateStr(base?: Date): string {
+  return (base ?? new Date()).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
@@ -28,8 +33,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const { start, end } = req.query as Record<string, string>
-    const startDate = start || new Date().toISOString().split('T')[0]
-    const endDate = end || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+    const startDate = start || easternDateStr()
+    const endDate = end || easternDateStr(new Date(Date.now() + 14 * 86400000))
     const rows = await sql`
       SELECT oc.id, oc.date::text AS date, oc.state, oc.provider_id,
              oc.start_time, oc.end_time,

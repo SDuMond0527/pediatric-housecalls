@@ -2,6 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+// See feedback_utc_date_bug.md. Vercel runs UTC; new Date().toISOString()
+// after 8 PM ET returns tomorrow's date. Use this for practice-local dates.
+function easternDateStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
 const VISIT_DURATIONS: Record<string, number> = {
   'In-home sick visit': 60, 'Sports physical': 60, 'CMA + telemedicine': 60,
   'In-home IV fluids': 90, 'Video telemedicine': 30, 'Text visit': 15,
@@ -126,7 +132,7 @@ async function enrichPatient(token: string, patientId: string, intake: Record<st
   const allergies = intake.allergies || ''
   const isNKDA = ['nkda', 'none', 'no known allergies', ''].includes(allergies.toLowerCase().trim())
   if (!isNKDA) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = easternDateStr()
     for (const allergen of allergies.split(',').map(a => a.trim()).filter(Boolean)) {
       await charmFetch(`/patients/${patientId}/allergies`, {
         method: 'POST',

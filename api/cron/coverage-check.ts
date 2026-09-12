@@ -8,6 +8,20 @@ const TWILIO_FROM       = process.env.TWILIO_FROM_NUMBER || ''
 const ALERT_PHONE       = process.env.COVERAGE_ALERT_PHONE || ''
 const CRON_SECRET       = process.env.CRON_SECRET || ''
 
+// Vercel serverless runs UTC. Using new Date().toISOString() after
+// 8 PM ET returns tomorrow's date in the practice's local time —
+// wrong "today" string, wrong day-of-week for availability lookups,
+// wrong wording ("on <date>" instead of "today"), wrong deactivation
+// stamps. Always compute practice-local dates via these two helpers.
+// See feedback_utc_date_bug.md.
+function easternDateStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+function easternDayOfWeek(): number {
+  const wd = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(wd)
+}
+
 async function sendSMS(to: string, body: string) {
   const formData = new URLSearchParams({ From: TWILIO_FROM, To: to, Body: body })
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
@@ -28,9 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
-  const today = new Date()
-  const dayOfWeek = today.getDay()
-  const todayStr = today.toISOString().split('T')[0]
+  const dayOfWeek = easternDayOfWeek()
+  const todayStr = easternDateStr()
 
   // Get all non-waitlist zones across all practices
   const zones = await sql`
@@ -85,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (uncoveredZones.length > 0 && ALERT_PHONE) {
-    const dateStr = today.toLocaleDateString('en-US', {
+    const dateStr = new Date().toLocaleDateString('en-US', {
       timeZone: 'America/New_York',
       weekday: 'long', month: 'short', day: 'numeric',
     })

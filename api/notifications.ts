@@ -13,6 +13,13 @@ const TELEMEDICINE_URL  = process.env.TELEMEDICINE_URL || 'https://doxy.me/v2/ch
 const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || 'https://g.page/r/CeBMcqioHWlQEBM/review'
 const VENMO_HANDLE      = process.env.VENMO_HANDLE || '@Pediatric-Housecalls'
 
+// See feedback_utc_date_bug.md — using new Date().toISOString() after
+// 8 PM ET returns tomorrow's date and produces the wrong "today"
+// wording in messages. Always use this for practice-local "today".
+function easternDateStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
 // Paired-visit aliases. Kept in sync with api/appointments/index.ts,
 // api/appointments/[id].ts, src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
@@ -1501,7 +1508,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const familyPhone: string | null = bc.family_phone ?? null
       const familyEmail: string | null = bc.family_email ?? null
-      const acceptedDate: string = body.acceptedDate || new Date().toISOString().split('T')[0]
+      const acceptedDate: string = body.acceptedDate || easternDateStr()
       const acceptedTime: string = body.acceptedTime || '12:00'
 
       const [hRaw, mRaw] = acceptedTime.split(':').map(Number)
@@ -1509,7 +1516,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const h12 = hRaw % 12 || 12
       const timeFormatted = `${h12}:${mRaw.toString().padStart(2, '0')} ${ampm}`
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = easternDateStr()
       const whenStr = acceptedDate === today ? 'today' : `on ${acceptedDate}`
 
       const isVirtual = bc.request_type !== 'In-person house call'
