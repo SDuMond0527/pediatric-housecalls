@@ -13,6 +13,29 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
   return next
 }
 
+// Extract a human-readable summary from any known Stedi rejection
+// shape. Falls back to null when the shape is unknown so the caller
+// can show the raw JSON.
+function extractStediErrorSummary(details: any): string | null {
+  if (!details) return null
+  if (typeof details === 'string') return details
+  if (Array.isArray(details?.errors) && details.errors.length) {
+    return details.errors.map((e: any) => e.description || e.message || e.code || JSON.stringify(e)).join(' | ')
+  }
+  if (Array.isArray(details?.issues) && details.issues.length) {
+    return details.issues.map((i: any) => `${i.path ?? ''}: ${i.message ?? JSON.stringify(i)}`).join(' | ')
+  }
+  // Stedi's pre-EDI validation errors: a plain object of
+  // { "dotted.path": ["message"] } entries.
+  if (details && typeof details === 'object' && !Array.isArray(details) && !details.status) {
+    const entries = Object.entries(details)
+    if (entries.length && entries.every(([, v]) => Array.isArray(v))) {
+      return entries.map(([k, v]) => `${k}: ${(v as string[]).join(' ')}`).join(' | ')
+    }
+  }
+  return details?.message ?? null
+}
+
 type Tab = 'review' | 'submitted'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
@@ -101,6 +124,12 @@ export function AdminClaims() {
     member_id: string; group_number: string;
     subscriber_name: string; subscriber_dob: string; subscriber_gender: string;
   }>>({})
+  const [rejectionModal, setRejectionModal] = useState<{
+    message: string
+    summary: string
+    details: any
+    sentDependent?: any
+  } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -195,19 +224,18 @@ export function AdminClaims() {
       await submitClaim(claimId)
       await load()
     } catch (e: any) {
-      // If Stedi rejected, include BOTH its actual field-level
-      // complaint (details) and the dependent we sent — so we're
-      // never guessing. See Madelynn Rodgers debug 2026-09-11 where
-      // the alert showed only "rejected" without the real reason.
-      const parts: string[] = [e.message || 'Submission failed']
-      if (e.details) {
-        const detailText = typeof e.details === 'string' ? e.details : JSON.stringify(e.details, null, 2)
-        parts.push('\nStedi said:\n' + detailText)
-      }
-      if (e.sentDependent !== undefined) {
-        parts.push('\nDependent sent to Stedi:\n' + JSON.stringify(e.sentDependent, null, 2))
-      }
-      alert(parts.join('\n'))
+      // Show the FULL Stedi response in a scrollable modal — the
+      // browser's alert() truncates and the actual field-level reason
+      // hides in the tail of the JSON. Extract a bold summary and
+      // dump the raw response for copy/paste.
+      const details = e.details
+      const summary = extractStediErrorSummary(details) || e.message || 'Submission failed'
+      setRejectionModal({
+        message: e.message || 'Stedi rejected the claim',
+        summary,
+        details,
+        sentDependent: e.sentDependent,
+      })
       await load()
     } finally {
       setSubmitting(null)
@@ -1149,6 +1177,55 @@ export function AdminClaims() {
           onClose={() => setStatementClaim(null)}
           onSent={() => setStatementClaim(null)}
         />
+      )}
+
+      {rejectionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRejectionModal(null)}>
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#7F1D1D]">
+                <AlertCircle size={18} />
+                <h3 className="font-semibold">{rejectionModal.message}</h3>
+              </div>
+              <button onClick={() => setRejectionModal(null)} className="text-neutral-500 hover:text-neutral-900">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto space-y-4">
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">STEDI SAID</div>
+                <div className="bg-[#FEE2E2] border border-[#FCA5A5] text-[#7F1D1D] rounded p-3 text-sm whitespace-pre-wrap break-words">
+                  {rejectionModal.summary}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">FULL RESPONSE</div>
+                <pre className="bg-neutral-50 border border-neutral-200 rounded p-3 text-xs overflow-auto max-h-[40vh] whitespace-pre-wrap break-all">
+{typeof rejectionModal.details === 'string' ? rejectionModal.details : JSON.stringify(rejectionModal.details, null, 2)}
+                </pre>
+              </div>
+              {rejectionModal.sentDependent !== undefined && (
+                <div>
+                  <div className="text-xs font-semibold text-neutral-500 mb-1">DEPENDENT WE SENT</div>
+                  <pre className="bg-neutral-50 border border-neutral-200 rounded p-3 text-xs overflow-auto max-h-[30vh] whitespace-pre-wrap break-all">
+{JSON.stringify(rejectionModal.sentDependent, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  const text = JSON.stringify({ summary: rejectionModal.summary, details: rejectionModal.details, sentDependent: rejectionModal.sentDependent }, null, 2)
+                  navigator.clipboard.writeText(text)
+                }}
+                className="px-3 py-1.5 text-sm border border-neutral-300 rounded hover:bg-neutral-50">
+                Copy all
+              </button>
+              <Button variant="teal" onClick={() => setRejectionModal(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
