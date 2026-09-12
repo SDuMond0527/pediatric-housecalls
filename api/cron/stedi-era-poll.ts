@@ -14,10 +14,12 @@ import { neon } from '@neondatabase/serverless'
 const STEDI_API_KEY = process.env.STEDI_API_KEY || ''
 const CRON_SECRET   = process.env.CRON_SECRET   || ''
 
+// Discovered via Sara's Stedi portal Network tab 2026-09-11 — see the
+// same comment in api/admin/test-stedi-era-sync.ts for the story.
 const STEDI_REMITTANCES_LIST_URL =
-  'https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3'
+  'https://claims-manager.us.stedi.com/2025-09-01/eras'
 const STEDI_REMITTANCE_DETAIL_URL = (id: string) =>
-  `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3/${id}`
+  `https://claims-manager.us.stedi.com/2025-09-01/eras/${id}`
 
 interface ParsedEraPayment {
   amount_billed:          number | null

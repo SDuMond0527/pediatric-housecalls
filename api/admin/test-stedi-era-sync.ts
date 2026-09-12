@@ -9,10 +9,18 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 const STEDI_API_KEY = process.env.STEDI_API_KEY || ''
 
+// Discovered via Sara's Stedi portal Network tab 2026-09-11:
+//   List:                 claims-manager.us.stedi.com/2025-09-01/eras
+//   ERA metadata:         .../2025-09-01/eras/{id}                                    (public)
+//   Claim payments:       .../2025-09-01/internal/eras/{id}/claim-payment-information (INTERNAL)
+// The claim-payment-information URL has an `/internal/` prefix, which
+// may only accept browser session auth. If it 401s with our API key,
+// we need to ask Stedi support for the public equivalent (or accept
+// that we'll only see ERA-level totals until they publish one).
 const STEDI_REMITTANCES_LIST_URL =
-  'https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3'
+  'https://claims-manager.us.stedi.com/2025-09-01/eras'
 const STEDI_REMITTANCE_DETAIL_URL = (id: string) =>
-  `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3/${id}`
+  `https://claims-manager.us.stedi.com/2025-09-01/internal/eras/${id}/claim-payment-information?pageSize=100`
 
 async function verifyProviderToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -205,6 +213,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     errors: [] as string[],
     sampleUnmatchedPCNs: [] as string[],
     remittanceIds: [] as string[],
+    // Raw sample of the first claim-payment-information response — lets
+    // us adjust the parser without another round-trip if the response
+    // shape doesn't match what walkClaimPayments expects. Truncated.
+    sampleClaimPaymentResponse: '' as string,
+    detailStatusCodes: [] as string[],
   }
 
   try {
@@ -236,11 +249,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const detailRes = await fetch(STEDI_REMITTANCE_DETAIL_URL(remId), {
         headers: { Authorization: `Key ${STEDI_API_KEY}` },
       })
+      summary.detailStatusCodes.push(String(detailRes.status))
       if (!detailRes.ok) {
-        summary.errors.push(`Detail fetch ${remId}: HTTP ${detailRes.status}`)
+        const errBody = await detailRes.text().catch(() => '')
+        summary.errors.push(`Detail fetch ${remId}: HTTP ${detailRes.status} ${errBody.slice(0, 150)}`)
         continue
       }
       const detail = await detailRes.json()
+      // Save first response as a sample so we can see the actual shape.
+      if (!summary.sampleClaimPaymentResponse) {
+        summary.sampleClaimPaymentResponse = JSON.stringify(detail).slice(0, 1500)
+      }
 
       for (const { pcn, parsed } of walkClaimPayments(detail)) {
         const claim = await findClaimByPCN(sql, pcn)

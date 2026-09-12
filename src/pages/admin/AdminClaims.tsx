@@ -369,8 +369,19 @@ export function AdminClaims() {
               Sample unmatched PCNs: <span className="font-mono">{eraTestResult.sampleUnmatchedPCNs.join(', ')}</span>
             </div>
           )}
+          {eraTestResult.detailStatusCodes && eraTestResult.detailStatusCodes.length > 0 && (
+            <div className="text-[11px] mt-1 opacity-80">
+              Detail HTTP status codes: <span className="font-mono">{eraTestResult.detailStatusCodes.join(', ')}</span>
+            </div>
+          )}
           {eraTestResult.errors.length > 0 && (
             <div className="text-[11px] mt-1 opacity-80">Errors: {eraTestResult.errors.slice(0, 3).join(' · ')}</div>
+          )}
+          {eraTestResult.sampleClaimPaymentResponse && (
+            <details className="text-[11px] mt-2">
+              <summary className="cursor-pointer opacity-80">Raw sample of claim-payment-information response (click to expand)</summary>
+              <pre className="text-[10px] font-mono mt-1 p-2 bg-white/50 rounded whitespace-pre-wrap break-all">{eraTestResult.sampleClaimPaymentResponse}</pre>
+            </details>
           )}
         </div>
       )}

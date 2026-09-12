@@ -128,8 +128,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (claim.payer_id) params.set('tradingPartnerId', claim.payer_id)
       params.set('limit', '50')
 
+      // URL corrected 2026-09-11 — the previous
+      // healthcare.us.stedi.com/.../remittances/v3 was 404 forever
+      // and nobody noticed because the flow silently fell through.
       const listRes = await fetch(
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3?${params}`,
+        `https://claims-manager.us.stedi.com/2025-09-01/eras?${params}`,
         { headers: { Authorization: `Key ${stediApiKey}`, 'Content-Type': 'application/json' } }
       )
 
@@ -142,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!remId) continue
 
           const detailRes = await fetch(
-            `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/remittances/v3/${remId}`,
+            `https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}`,
             { headers: { Authorization: `Key ${stediApiKey}` } }
           )
           if (!detailRes.ok) continue

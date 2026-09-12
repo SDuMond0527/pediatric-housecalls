@@ -544,6 +544,8 @@ export const testStediEraSync = () =>
     errors: string[]
     sampleUnmatchedPCNs: string[]
     remittanceIds: string[]
+    sampleClaimPaymentResponse?: string
+    detailStatusCodes?: string[]
   }>('/api/admin/test-stedi-era-sync', { method: 'POST' })
 
 // ── AI ───────────────────────────────────────────────────────
