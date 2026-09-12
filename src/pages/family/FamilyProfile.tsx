@@ -33,10 +33,13 @@ type ChildEdit = {
 function childEditFrom(c: Child): ChildEdit {
   const providerLower = String(c.insurance_provider || '').toLowerCase()
   const isSelfPay = providerLower === 'self-pay' || providerLower === 'selfpay' || providerLower === 'self pay'
+  // <input type="date"> only accepts YYYY-MM-DD. The API returns an ISO
+  // timestamp like "2007-09-08T04:00:00.000Z", which would render as blank.
+  // Strip the time portion so the value is visible on the form.
   return {
     first_name: c.first_name || '',
     last_name: c.last_name || '',
-    date_of_birth: c.date_of_birth || '',
+    date_of_birth: c.date_of_birth ? String(c.date_of_birth).split('T')[0] : '',
     self_pay: isSelfPay,
     insurance_provider: isSelfPay ? '' : (c.insurance_provider || ''),
     insurance_member_id: c.insurance_member_id || '',
