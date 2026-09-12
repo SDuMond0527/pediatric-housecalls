@@ -90,7 +90,9 @@ function buildStediPayload(claim: any, testMode = false): object {
   // Patient control number max 20 chars — use first 20 of UUID without dashes
   const patientControlNumber = (claim.id ?? '').replace(/-/g, '').slice(0, 20)
 
-  const healthCareCodeInformation = diagnoses.map((d: any, i: number) => ({
+  // X12 837P HI segment caps a claim at 12 diagnoses total.
+  const claimDiagnoses = diagnoses.slice(0, 12)
+  const healthCareCodeInformation = claimDiagnoses.map((d: any, i: number) => ({
     diagnosisTypeCode: i === 0 ? 'ABK' : 'ABF',
     diagnosisCode: d.code,
   }))
@@ -103,7 +105,12 @@ function buildStediPayload(claim: any, testMode = false): object {
   const provFirst = providerParts[0] ?? ''
   const provLast  = providerParts.slice(1).join(' ') || provFirst
 
-  const diagnosisPointers = diagnoses.map((_: any, i: number) => String(i + 1))
+  // X12 837P caps each service line at 4 diagnosis pointers, even
+  // though the claim itself can carry up to 12 diagnoses. If the
+  // encounter has 5+ diagnoses stored, we still only reference the
+  // first 4 per line — otherwise Stedi rejects with "The length of
+  // the items must be `<= 4`."
+  const diagnosisPointers = diagnoses.slice(0, 4).map((_: any, i: number) => String(i + 1))
 
   const serviceLines = cptCodes.map((c: any) => {
     const units = parseInt(c.units, 10) || 1
@@ -256,6 +263,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!claim) return res.status(404).json({ error: 'Claim not found' })
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
+
+      // If the claim was generated before the family had an address on
+      // file, its patient_address snapshot is empty even though the
+      // family later filled it in. Rather than force the biller to
+      // hand-type the address into every stale claim, refresh missing
+      // patient address fields from family_profiles at submit time and
+      // persist the fill so subsequent views are correct too. This
+      // makes the "dependent.address missing" Stedi rejection
+      // (Madelynn Rodgers 2026-09-11) impossible to hit whenever the
+      // family record has the data.
+      const missingAny = !claim.patient_address || !claim.patient_city || !claim.patient_state || !claim.patient_zip
+      if (missingAny && claim.child_id) {
+        const [family] = await sql`
+          SELECT fp.address_line1, fp.city, fp.state, fp.zip
+          FROM children ch
+          LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+          WHERE ch.id = ${claim.child_id}::uuid AND ch.practice_id = ${practiceId}::uuid`
+        if (family) {
+          const filled = {
+            patient_address: claim.patient_address || family.address_line1 || null,
+            patient_city:    claim.patient_city    || family.city          || null,
+            patient_state:   claim.patient_state   || family.state         || null,
+            patient_zip:     claim.patient_zip     || family.zip           || null,
+          }
+          await sql`
+            UPDATE claims SET
+              patient_address = ${filled.patient_address},
+              patient_city    = ${filled.patient_city},
+              patient_state   = ${filled.patient_state},
+              patient_zip     = ${filled.patient_zip},
+              updated_at      = now()
+            WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+          Object.assign(claim, filled)
+        }
+      }
 
       const payload = buildStediPayload(claim, testMode)
 

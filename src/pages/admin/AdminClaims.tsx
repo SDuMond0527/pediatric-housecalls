@@ -195,11 +195,15 @@ export function AdminClaims() {
       await submitClaim(claimId)
       await load()
     } catch (e: any) {
-      // If Stedi rejected, include the dependent object we sent so
-      // Sara can eyeball whether address / dob / relationship are
-      // actually reaching the payload. Guessing from the DB was
-      // wrong before — see the Madelynn Rodgers debug 2026-09-11.
+      // If Stedi rejected, include BOTH its actual field-level
+      // complaint (details) and the dependent we sent — so we're
+      // never guessing. See Madelynn Rodgers debug 2026-09-11 where
+      // the alert showed only "rejected" without the real reason.
       const parts: string[] = [e.message || 'Submission failed']
+      if (e.details) {
+        const detailText = typeof e.details === 'string' ? e.details : JSON.stringify(e.details, null, 2)
+        parts.push('\nStedi said:\n' + detailText)
+      }
       if (e.sentDependent !== undefined) {
         parts.push('\nDependent sent to Stedi:\n' + JSON.stringify(e.sentDependent, null, 2))
       }
