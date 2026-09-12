@@ -920,18 +920,18 @@ export function BookVisit() {
       const intake = booking.childIntakes[childId]
       if (!intake) continue
 
-      // Identity fields — only need to write for new patients (returning ones
-      // already have these). Non-empty saves override safely.
-      if (!intake.hasProfile) {
-        await updateChild(childId, {
-          first_name:  intake.firstName || null,
-          last_name:   intake.lastName || null,
-          nickname:    intake.nickname || null,
-          date_of_birth: intake.dateOfBirth || null,
-          gender:      intake.gender || null,
-          phi_sharing_consent: intake.phiSharingConsent,
-        }).catch(() => {})
-      }
+      // Identity fields — write for every selected child. Intake
+      // form is now always visible so parents can edit identity on
+      // returning kids too. COALESCE keeps existing values when a
+      // field is null.
+      await updateChild(childId, {
+        first_name:  intake.firstName || null,
+        last_name:   intake.lastName || null,
+        nickname:    intake.nickname || null,
+        date_of_birth: intake.dateOfBirth || null,
+        gender:      intake.gender || null,
+        phi_sharing_consent: intake.phiSharingConsent,
+      }).catch(() => {})
 
       // Full profile save — runs for ALL children (new + returning) so any
       // updates the parent made in intake persist.
@@ -1015,25 +1015,20 @@ export function BookVisit() {
     return booking.selectedChildIds.every(id => {
       const intake = booking.childIntakes[id]
       if (!intake) return false
-      // Every field is required to be non-empty on the intake object. The
-      // intake pre-fills from the child record on load — so anything that's
-      // already saved from a previous visit passes automatically. Only truly
-      // EMPTY fields (never filled before, or blanked out) block submit.
-      // See memory: feedback_all_patient_info_required_and_displayed.md
+      // Every field required to be non-empty on the intake object.
+      // The intake pre-fills from the child record on load — so
+      // fields already saved from a previous visit pass automatically.
+      // Empty fields (never filled before, or blanked out) block submit
+      // and the form section now always renders so the parent can fill
+      // them in. See feedback_all_patient_info_required_and_displayed.md
+      // and feedback_no_branches_on_entry_origin.md.
       if (!intake.chiefComplaint) return false
-      // Insurance cards — require upload unless self-pay OR already on file.
       if (!intake.selfPay && !intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) return false
-      // Identity
       if (!intake.firstName || !intake.lastName || !intake.dateOfBirth || !intake.gender) return false
-      // Insurance details — required if not self-pay
       if (!intake.selfPay && (!intake.insuranceProvider || !intake.insuranceMemberId || !intake.insuranceGroupNumber || !intake.insuranceSubscriberName || !intake.insuranceSubscriberDob || !intake.insuranceSubscriberGender || !intake.insuranceSubscriberRelationship)) return false
-      // Clinical
       if (!intake.allergies || !intake.currentMedications || !intake.medicalHistory || !intake.preferredPharmacy) return false
-      // PCP — either a specific PCP or an explicit "no PCP" flag
       if (!intake.pcp_id && !intake.pcpNoPcp) return false
-      // Vaccination
       if (!intake.vaccinationStatus) return false
-      // PHI consent
       if (!intake.phiSharingConsent) return false
       return true
     })
@@ -1228,12 +1223,16 @@ export function BookVisit() {
       }
     }
 
-    // Save identity fields (name, DOB, gender) first for new patients so
-    // they land before anything downstream. One retry on failure; a
-    // second failure surfaces and aborts the intake save.
+    // Save identity fields (name, DOB, gender) for every selected
+    // child. Previously skipped when hasProfile was true — but the
+    // intake form is now always visible, so parents CAN update
+    // identity data even on kids with a partial profile, and those
+    // edits must persist. Empty intake fields are sent as null and
+    // preserved by the COALESCE-based PATCH endpoint. See
+    // feedback_all_patient_info_required_and_displayed.md.
     for (const childId of booking.selectedChildIds) {
       const intake = booking.childIntakes[childId]
-      if (!intake || intake.hasProfile) continue
+      if (!intake) continue
       const identity = {
         first_name: intake.firstName || null,
         last_name: intake.lastName || null,
@@ -2712,8 +2711,14 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
   return (
     <div className="space-y-5">
 
-      {/* Profile section — only shown if no existing Charm chart */}
-      {!intake.hasProfile && (
+      {/* Profile section — always rendered (see
+         feedback_all_patient_info_required_and_displayed.md).
+         Previously hidden whenever `hasProfile` was true, which
+         silently blocked bookings for kids whose record had *some*
+         data but was missing any of the 15+ fields step2Valid()
+         requires. Parents saw NO form and NO way to fill in what
+         was missing, only a disabled Continue button. */}
+      {(
         <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8]">
           <div className="flex items-center gap-2 mb-3">
             <User size={14} className="text-[#7F77DD]" />
