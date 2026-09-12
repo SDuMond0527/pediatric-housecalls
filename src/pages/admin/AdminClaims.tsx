@@ -51,7 +51,26 @@ export function AdminClaims() {
   const [tab, setTab] = useState<Tab>('review')
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpandedRaw] = useState<string | null>(null)
+
+  // Auto-mark ERA as seen when the biller expands a claim card that has
+  // era_received_at but no era_seen_at yet. Optimistic — updates local
+  // state first then persists.
+  function setExpanded(nextId: string | null) {
+    setExpandedRaw(nextId)
+    if (!nextId) return
+    const target = claims.find(c => c.id === nextId)
+    if (target?.era_received_at && !target?.era_seen_at) {
+      const nowIso = new Date().toISOString()
+      setClaims(prev => prev.map(c => c.id === nextId ? { ...c, era_seen_at: nowIso } : c))
+      updateClaim(nextId, { era_seen_at: nowIso }).catch(e => {
+        // Roll back local state if the persist failed so the badge count
+        // stays accurate.
+        console.error('[AdminClaims] mark era_seen_at failed:', e)
+        setClaims(prev => prev.map(c => c.id === nextId ? { ...c, era_seen_at: null } : c))
+      })
+    }
+  }
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
@@ -285,6 +304,9 @@ export function AdminClaims() {
   const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error')
   const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
   const readyCount      = baseVisibleClaims.filter(isReady).length
+  // Unseen ERA payments — bill can see how many new payments landed since
+  // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
+  const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`
@@ -300,6 +322,16 @@ export function AdminClaims() {
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
+
+      {unseenEraCount > 0 && (
+        <div className="mb-4 flex items-center gap-2 bg-[#E1F5EE] border border-[#5DCAA5] text-[#085041] px-4 py-2.5 rounded-xl">
+          <Zap size={14} />
+          <div className="text-[13px] font-medium">
+            {unseenEraCount} new ERA payment{unseenEraCount === 1 ? '' : 's'} posted — patient statements have been updated automatically.
+          </div>
+          <span className="ml-auto text-[11px] text-[#085041]/70">Click a claim to mark it seen.</span>
+        </div>
+      )}
 
       {/* Tabs + Ready-for-biller filter */}
       <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">

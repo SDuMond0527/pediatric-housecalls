@@ -41,6 +41,10 @@
     {
       "path": "/api/cron/waitlist-reminders",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/stedi-era-poll",
+      "schedule": "*/30 * * * *"
     }
   ],
   "routes": [

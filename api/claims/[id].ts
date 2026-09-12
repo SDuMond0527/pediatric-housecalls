@@ -378,6 +378,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cpt_codes                  = COALESCE(${updates.cpt_codes != null ? JSON.stringify(updates.cpt_codes) : null}::jsonb, cpt_codes),
         diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
         total_charge               = COALESCE(${newTotal}, total_charge),
+        era_seen_at                = COALESCE(${updates.era_seen_at ?? null}::timestamptz, era_seen_at),
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
     return res.json(updated)
