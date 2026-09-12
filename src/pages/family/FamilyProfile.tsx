@@ -1,11 +1,17 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp, Upload, X } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
 import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import type { Child } from '../../types/family'
+import {
+  ChildIntakeForm,
+  emptyChild,
+  childIsComplete,
+  buildChildCreatePayload,
+  type ChildEntry,
+} from '../../components/ChildIntakeForm'
 
 type ChildEdit = {
   first_name: string
@@ -81,9 +87,7 @@ export function FamilyProfile() {
 
   // Children
   const [addingChild, setAddingChild] = useState(false)
-  const [newFirst, setNewFirst] = useState('')
-  const [newLast, setNewLast] = useState('')
-  const [newDob, setNewDob] = useState('')
+  const [newChild, setNewChild] = useState<ChildEntry>(emptyChild())
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null)
   const [childEdits, setChildEdits] = useState<Record<string, ChildEdit>>({})
   const [savingChildId, setSavingChildId] = useState<string | null>(null)
@@ -91,9 +95,6 @@ export function FamilyProfile() {
   const [childSaveError, setChildSaveError] = useState<string | null>(null)
   const [addingChildSaving, setAddingChildSaving] = useState(false)
   const [addChildError, setAddChildError] = useState('')
-  const [childMatch, setChildMatch] = useState<{ id: string; first_name: string; last_name: string; date_of_birth: string; parent_phone: string | null; parent_email: string | null; parent_address: string | null } | null>(null)
-  const [childMatchConfirmed, setChildMatchConfirmed] = useState(false)
-  const [childMatchDismissed, setChildMatchDismissed] = useState(false)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uploadingChild, setUploadingChild] = useState<{ id: string; side: 'front' | 'back' } | null>(null)
   const [archivingInsId, setArchivingInsId] = useState<string | null>(null)
@@ -216,29 +217,44 @@ export function FamilyProfile() {
     setTimeout(() => setSavedChildId(null), 2500)
   }
 
-  function triggerChildLookup(first: string, last: string, dob: string) {
-    setChildMatch(null)
-    setChildMatchConfirmed(false)
-    setChildMatchDismissed(false)
-    if (!first.trim() || !last.trim() || !dob) return
-    if (lookupTimer.current) clearTimeout(lookupTimer.current)
-    lookupTimer.current = setTimeout(async () => {
-      try {
-        const match = await lookupChild(first.trim(), last.trim(), dob)
-        if (match) setChildMatch(match)
-      } catch { /* non-fatal */ }
-    }, 600)
+  function updateNewChildField(field: keyof ChildEntry, value: string | boolean) {
+    setNewChild(prev => ({ ...prev, [field]: value } as ChildEntry))
+
+    if (field === 'first_name' || field === 'last_name' || field === 'date_of_birth') {
+      const updated = { ...newChild, [field]: value } as ChildEntry
+      if (updated.first_name.trim() && updated.last_name.trim() && updated.date_of_birth) {
+        if (lookupTimer.current) clearTimeout(lookupTimer.current)
+        lookupTimer.current = setTimeout(async () => {
+          try {
+            const match = await lookupChild(updated.first_name.trim(), updated.last_name.trim(), updated.date_of_birth)
+            setNewChild(prev => ({ ...prev, match: match ?? null, matchDismissed: false, matchConfirmed: false }))
+          } catch { /* non-fatal */ }
+        }, 600)
+      }
+    }
   }
 
   async function addChild() {
-    if (!newFirst.trim()) return
+    const missing = childIsComplete(newChild)
+    if (missing) {
+      setAddChildError(`${missing} is required. Every field must be filled in before this child can be added.`)
+      return
+    }
     setAddingChildSaving(true)
     setAddChildError('')
     try {
-      await createChild({ first_name: newFirst.trim(), last_name: newLast.trim() || null, date_of_birth: newDob || null, display_label: [newFirst.trim(), newLast.trim()].filter(Boolean).join(' ') })
+      const parent = {
+        phone:   (family?.phone || '').replace(/\D/g, ''),
+        email:   user?.email ?? null,
+        address: family?.address_line1 || '',
+        city:    family?.city || '',
+        state:   family?.state || '',
+        zip:     family?.zip || '',
+      }
+      await createChild(buildChildCreatePayload(newChild, parent))
       await refreshFamily()
-      setNewFirst(''); setNewLast(''); setNewDob(''); setAddingChild(false)
-      setChildMatch(null); setChildMatchConfirmed(false); setChildMatchDismissed(false)
+      setNewChild(emptyChild())
+      setAddingChild(false)
     } catch (e: any) {
       setAddChildError(e?.message ?? 'Failed to add child. Please try again.')
     } finally {
@@ -538,48 +554,27 @@ export function FamilyProfile() {
         </div>
 
         {addingChild && (
-          <div className="mt-3 p-4 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8] space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="First name *" placeholder="Emma"
-                value={newFirst} onChange={e => { setNewFirst(e.target.value); triggerChildLookup(e.target.value, newLast, newDob) }} />
-              <Input label="Last name" placeholder="Smith"
-                value={newLast} onChange={e => { setNewLast(e.target.value); triggerChildLookup(newFirst, e.target.value, newDob) }} />
-            </div>
-            <Input label="Date of birth" type="date"
-              value={newDob} onChange={e => { setNewDob(e.target.value); triggerChildLookup(newFirst, newLast, e.target.value) }} />
-
-            {/* Existing profile match */}
-            {childMatch && !childMatchDismissed && !childMatchConfirmed && (
-              <div className="rounded-xl border border-[#7F77DD] bg-[#EEEDFE] p-4 space-y-3">
-                <p className="text-[13px] font-semibold text-[#3C3489]">We found an existing patient profile — is this your child?</p>
-                <div className="space-y-1 text-[13px] text-[#1A1A2E]">
-                  <div><span className="text-[#555]">Name: </span><strong>{childMatch.first_name} {childMatch.last_name}</strong></div>
-                  <div><span className="text-[#555]">Date of birth: </span><strong>{format(parseISO(String(childMatch.date_of_birth).split('T')[0]), 'MMMM d, yyyy')}</strong></div>
-                  {childMatch.parent_phone && <div><span className="text-[#555]">Phone: </span><strong>{childMatch.parent_phone}</strong></div>}
-                  {childMatch.parent_email && <div><span className="text-[#555]">Email: </span><strong>{childMatch.parent_email}</strong></div>}
-                  {childMatch.parent_address && <div><span className="text-[#555]">Address: </span><strong>{childMatch.parent_address}</strong></div>}
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <Button variant="primary" size="sm" onClick={() => setChildMatchConfirmed(true)}>
-                    <CheckCircle2 size={13} /> Yes, that's my child
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => setChildMatchDismissed(true)}>
-                    No, create new profile
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {childMatchConfirmed && (
-              <div className="rounded-lg bg-[#E1F5EE] border border-[#5DCAA5] px-3 py-2 flex items-center gap-2 text-[13px] text-[#085041]">
-                <CheckCircle2 size={14} /> Existing profile will be linked to your account.
-              </div>
-            )}
-
+          <div className="mt-3 space-y-3">
+            <ChildIntakeForm
+              child={newChild}
+              removable={false}
+              familySub={user?.id || user?.email || 'unknown'}
+              headerLabel="New child"
+              onField={updateNewChildField}
+              onRemove={() => {}}
+              onConfirmMatch={() => setNewChild(prev => ({ ...prev, matchConfirmed: true, matchDismissed: false }))}
+              onDismissMatch={() => setNewChild(prev => ({ ...prev, matchDismissed: true, matchConfirmed: false }))}
+            />
             {addChildError && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addChildError}</div>}
+            <p className="text-[11px] text-[#999]">
+              Every field is required. Nothing is saved until this child's profile is complete — same as when you first signed up.
+            </p>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" disabled={addingChildSaving} onClick={() => { setAddingChild(false); setNewFirst(''); setNewLast(''); setNewDob(''); setAddChildError(''); setChildMatch(null); setChildMatchConfirmed(false); setChildMatchDismissed(false) }}>Cancel</Button>
-              <Button size="sm" loading={addingChildSaving} disabled={!newFirst.trim()} onClick={addChild}>Add</Button>
+              <Button variant="secondary" size="sm" disabled={addingChildSaving}
+                onClick={() => { setAddingChild(false); setNewChild(emptyChild()); setAddChildError('') }}>
+                Cancel
+              </Button>
+              <Button size="sm" loading={addingChildSaving} onClick={addChild}>Add child</Button>
             </div>
           </div>
         )}
