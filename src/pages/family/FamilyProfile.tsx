@@ -17,6 +17,7 @@ type ChildEdit = {
   first_name: string
   last_name: string
   date_of_birth: string
+  self_pay: boolean
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
@@ -30,11 +31,14 @@ type ChildEdit = {
 }
 
 function childEditFrom(c: Child): ChildEdit {
+  const providerLower = String(c.insurance_provider || '').toLowerCase()
+  const isSelfPay = providerLower === 'self-pay' || providerLower === 'selfpay' || providerLower === 'self pay'
   return {
     first_name: c.first_name || '',
     last_name: c.last_name || '',
     date_of_birth: c.date_of_birth || '',
-    insurance_provider: c.insurance_provider || '',
+    self_pay: isSelfPay,
+    insurance_provider: isSelfPay ? '' : (c.insurance_provider || ''),
     insurance_member_id: c.insurance_member_id || '',
     insurance_group_number: c.insurance_group_number || '',
     insurance_card_front_url: c.insurance_card_front_url || '',
@@ -195,11 +199,14 @@ export function FamilyProfile() {
         first_name: edit.first_name || null,
         last_name: edit.last_name || null,
         date_of_birth: edit.date_of_birth || null,
-        insurance_provider: edit.insurance_provider || null,
-        insurance_member_id: edit.insurance_member_id || null,
-        insurance_group_number: edit.insurance_group_number || null,
-        insurance_card_front_url: edit.insurance_card_front_url || null,
-        insurance_card_back_url: edit.insurance_card_back_url || null,
+        // Self-pay overrides every insurance field. Provider is "Self-pay",
+        // everything else null. See memory:
+        // feedback_extract_shared_code_first_try.md
+        insurance_provider:       edit.self_pay ? 'Self-pay' : (edit.insurance_provider || null),
+        insurance_member_id:      edit.self_pay ? null : (edit.insurance_member_id || null),
+        insurance_group_number:   edit.self_pay ? null : (edit.insurance_group_number || null),
+        insurance_card_front_url: edit.self_pay ? null : (edit.insurance_card_front_url || null),
+        insurance_card_back_url:  edit.self_pay ? null : (edit.insurance_card_back_url || null),
         allergies: edit.allergies || null,
         current_medications: edit.current_medications || null,
         medical_history: edit.medical_history || null,
@@ -399,7 +406,7 @@ export function FamilyProfile() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">Insurance</p>
-                        {(c.insurance_provider || c.insurance_member_id) && (
+                        {(c.insurance_provider || c.insurance_member_id) && !edit.self_pay && (
                           <button
                             onClick={() => archiveInsurance(c)}
                             disabled={archivingInsId === c.id}
@@ -408,24 +415,39 @@ export function FamilyProfile() {
                           </button>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        <Input label="Insurance company / plan name" placeholder="e.g. Blue Cross Blue Shield"
-                          value={edit.insurance_provider}
-                          onChange={e => setChildField(c.id, 'insurance_provider', e.target.value)} />
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="Member ID" placeholder="e.g. XYZ123456"
-                            value={edit.insurance_member_id}
-                            onChange={e => setChildField(c.id, 'insurance_member_id', e.target.value)} />
-                          <Input label="Group number" placeholder="e.g. 12345"
-                            value={edit.insurance_group_number}
-                            onChange={e => setChildField(c.id, 'insurance_group_number', e.target.value)} />
+
+                      {/* Self-pay toggle */}
+                      <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg mb-3 cursor-pointer hover:bg-[#FAFAF8]">
+                        <input type="checkbox" checked={edit.self_pay}
+                          onChange={e => setChildField(c.id, 'self_pay', e.target.checked as any)}
+                          className="mt-0.5" />
+                        <div>
+                          <div className="text-[13px] font-medium text-[#1A1A2E]">We are self-pay (no insurance)</div>
+                          <div className="text-[11px] text-[#999]">Check this if you don't want to file insurance for this child's visits.</div>
                         </div>
-                      </div>
+                      </label>
+
+                      {!edit.self_pay && (
+                        <div className="space-y-2">
+                          <Input label="Insurance company / plan name *" placeholder="e.g. Blue Cross Blue Shield"
+                            value={edit.insurance_provider}
+                            onChange={e => setChildField(c.id, 'insurance_provider', e.target.value)} />
+                          <div className="grid grid-cols-2 gap-3">
+                            <Input label="Member ID *" placeholder="e.g. XYZ123456"
+                              value={edit.insurance_member_id}
+                              onChange={e => setChildField(c.id, 'insurance_member_id', e.target.value)} />
+                            <Input label="Group number *" placeholder="e.g. 12345"
+                              value={edit.insurance_group_number}
+                              onChange={e => setChildField(c.id, 'insurance_group_number', e.target.value)} />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Insurance card photos */}
+                    {/* Insurance card photos — only when NOT self-pay */}
+                    {!edit.self_pay && (
                     <div>
-                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Insurance card photos</p>
+                      <p className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Insurance card photos *</p>
                       <div className="grid grid-cols-2 gap-3">
                         {(['front', 'back'] as const).map(side => {
                           const url = side === 'front' ? edit.insurance_card_front_url : edit.insurance_card_back_url
@@ -464,6 +486,7 @@ export function FamilyProfile() {
                         })}
                       </div>
                     </div>
+                    )}
 
                     {/* Previous insurance policies */}
                     {Array.isArray((c as any).previous_insurance) && (c as any).previous_insurance.length > 0 && (

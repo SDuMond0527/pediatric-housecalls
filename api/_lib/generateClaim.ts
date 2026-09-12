@@ -1,23 +1,5 @@
 import type { NeonQueryFunction } from '@neondatabase/serverless'
-
-const PAYER_IDS: Record<string, string> = {
-  'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
-  'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
-  'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',
-  'blue cross blue shield nc': 'UPICO',
-  'aetna': '60054', 'cigna': '62308',
-  'united healthcare': '87726', 'united health care': '87726', 'uhc': '87726',
-  'umr': '39026', 'humana': '61101',
-  'phcs': '52133', 'multiplan': '52133',
-  'coventry': '38217', 'select health': '53589',
-  'medcost': '56196', 'healthgram': '56162',
-  'bright health': '98798', 'bright healthcare': '98798',
-}
-
-function resolvePayer(name: string | null): string | null {
-  if (!name) return null
-  return PAYER_IDS[name.toLowerCase().trim()] ?? null
-}
+import { resolvePayer } from './payerIds'
 
 export async function generateClaimForNote(
   sql: NeonQueryFunction<false, false>,
