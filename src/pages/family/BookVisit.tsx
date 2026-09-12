@@ -208,21 +208,49 @@ function to24hr(time: string) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 }
 
+// Postgres `date` columns come back through the Neon driver either as
+// a plain YYYY-MM-DD string OR as a Date/ISO timestamp. `<input
+// type="date">` requires YYYY-MM-DD or it silently renders blank —
+// which is why previously-saved DOBs looked "not saved" to parents.
+function toDateInputValue(v: any): string {
+  if (!v) return ''
+  if (v instanceof Date) return v.toISOString().split('T')[0]
+  return String(v).split('T')[0]
+}
+
+// Self-pay is derived from insurance_provider, not stored as its own
+// column. Detect it from any of the common spellings so the toggle
+// restores on subsequent bookings without the parent re-clicking it.
+function detectSelfPay(providerValue?: string | null): boolean {
+  const v = String(providerValue || '').toLowerCase().trim()
+  return v === 'self-pay' || v === 'selfpay' || v === 'self pay' || v === 'self'
+}
+
 function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean, child?: import('../../../src/types/family').Child): ChildIntake {
+  const isSelfPay = detectSelfPay(child?.insurance_provider)
   return {
     childId, displayLabel, hasProfile,
     cardOnFile: !!(child?.insurance_card_front_url && child?.insurance_card_back_url),
-    firstName: child?.first_name || '', lastName: child?.last_name || '', nickname: child?.nickname || '', dateOfBirth: child?.date_of_birth || '', gender: child?.gender || '',
-    insuranceProvider: child?.insurance_provider || '',
+    firstName: child?.first_name || '', lastName: child?.last_name || '', nickname: child?.nickname || '',
+    dateOfBirth: toDateInputValue(child?.date_of_birth),
+    gender: child?.gender || '',
+    // Show the *actual* insurance name when the family is insured; hide
+    // it (empty string) when the DB records self-pay, so the toggle
+    // controls visibility cleanly.
+    insuranceProvider: isSelfPay ? '' : (child?.insurance_provider || ''),
     insuranceMemberId: child?.insurance_member_id || '',
     insuranceGroupNumber: child?.insurance_group_number || '',
-    insuranceSubscriberName: child?.insurance_subscriber_name || '', insuranceSubscriberDob: child?.insurance_subscriber_dob || '', insuranceSubscriberGender: child?.insurance_subscriber_gender || '', insuranceSubscriberRelationship: child?.insurance_subscriber_relationship || '',
+    insuranceSubscriberName: child?.insurance_subscriber_name || '',
+    insuranceSubscriberDob: toDateInputValue(child?.insurance_subscriber_dob),
+    insuranceSubscriberGender: child?.insurance_subscriber_gender || '',
+    insuranceSubscriberRelationship: child?.insurance_subscriber_relationship || '',
     insuranceCardFrontUrl: child?.insurance_card_front_url || '',
     insuranceCardBackUrl: child?.insurance_card_back_url || '',
-    selfPay: false,
-    // No auto-fill defaults. If the field is empty on the child record, the
-    // intake field is empty and the parent must fill it before submit. See
-    // memory: feedback_all_patient_info_required_and_displayed.md
+    selfPay: isSelfPay,
+    // Pre-fill from child record. If the DB has the value, the field
+    // shows populated and the parent doesn't have to re-enter it. Only
+    // truly empty (never filled before) fields require input.
+    // See feedback_all_patient_info_required_and_displayed.md
     allergies: child?.allergies || '', currentMedications: child?.current_medications || '',
     medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
     pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false,
@@ -250,7 +278,7 @@ export function BookVisit() {
     visitType: '', selectedChildIds: [], childIntakes: {},
     activeChildTab: '', ivFluidsIntake: emptyIvFluids(),
     zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '',
-    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '',
+    zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '',
     phone: (family as any)?.phone || '', date: '', time: '',
     participantCount: 1, participantNames: '',
   })
@@ -1405,7 +1433,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '' })
           }}>Book another visit</Button>
         </div>
       </div>
