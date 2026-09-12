@@ -195,7 +195,16 @@ export function AdminClaims() {
       await submitClaim(claimId)
       await load()
     } catch (e: any) {
-      alert(e.message || 'Submission failed')
+      // If Stedi rejected, include the dependent object we sent so
+      // Sara can eyeball whether address / dob / relationship are
+      // actually reaching the payload. Guessing from the DB was
+      // wrong before — see the Madelynn Rodgers debug 2026-09-11.
+      const parts: string[] = [e.message || 'Submission failed']
+      if (e.sentDependent !== undefined) {
+        parts.push('\nDependent sent to Stedi:\n' + JSON.stringify(e.sentDependent, null, 2))
+      }
+      alert(parts.join('\n'))
+      await load()
     } finally {
       setSubmitting(null)
     }
@@ -450,9 +459,13 @@ export function AdminClaims() {
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (
-                              <span className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1">
-                                <AlertCircle size={11} /> Submission failed — click to retry
-                              </span>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); handleSubmit(c.id) }}
+                                disabled={submitting === c.id}
+                                className="text-[11px] text-[#DC2626] font-medium flex items-center gap-1 hover:underline disabled:opacity-60">
+                                <AlertCircle size={11} /> {submitting === c.id ? 'Retrying…' : 'Submission failed — click to retry'}
+                              </button>
                             ) : isSelfPay ? (
                               <span className="text-[12px] text-[#555]">
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#F1EFE8] text-[#555] mr-1.5">Self-Pay</span>

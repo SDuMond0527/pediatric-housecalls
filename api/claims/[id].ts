@@ -279,6 +279,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (testMode) {
             return res.json({ test: true, accepted: false, acknowledgment: stediData })
           }
+          // Log the payload we sent so we can see exactly what Stedi
+          // rejected — helps diagnose "dependent.address missing" style
+          // errors where the DB has the field but the payload doesn't
+          // for whatever reason.
+          console.error('[claims submit] Stedi rejected. Sent payload dependent:',
+            JSON.stringify(payload?.dependent ?? null),
+            'subscriber:',
+            JSON.stringify({
+              memberId: payload?.subscriber?.memberId,
+              paymentResponsibilityLevelCode: payload?.subscriber?.paymentResponsibilityLevelCode,
+              lastName: payload?.subscriber?.lastName,
+            }))
           const [updated] = await sql`
             UPDATE claims SET
               status = 'error',
@@ -286,7 +298,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               submission_error = ${JSON.stringify(stediData)},
               updated_at = now()
             WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
-          return res.status(422).json({ error: 'Stedi rejected the claim', details: stediData, claim: updated })
+          return res.status(422).json({
+            error: 'Stedi rejected the claim',
+            details: stediData,
+            claim: updated,
+            // Include the dependent object we sent so the client can
+            // display it in an alert — no more mystery about what
+            // was in the request.
+            sentDependent: payload?.dependent ?? null,
+          })
         }
       } catch (err: any) {
         if (testMode) {

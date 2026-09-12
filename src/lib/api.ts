@@ -432,8 +432,25 @@ export const getClaim = (id: string) =>
 export const updateClaim = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify(body) })
 
-export const submitClaim = (id: string) =>
-  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'submit' }) })
+export async function submitClaim(id: string) {
+  const headers = await authHeaders()
+  const res = await fetch(`/api/claims/${id}`, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'submit' }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    // Attach the payload dependent Stedi received so the UI can show
+    // exactly what was submitted when a rejection message like
+    // "dependent.address missing" doesn't match what the user sees.
+    const err: any = new Error(body.error || res.statusText || `HTTP ${res.status}`)
+    err.details = body.details
+    err.sentDependent = body.sentDependent
+    throw err
+  }
+  return res.status === 204 ? undefined : res.json()
+}
 
 export const testClaim = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'test' }) })
