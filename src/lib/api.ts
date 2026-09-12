@@ -529,6 +529,23 @@ export const sendPatientStatement = (id: string) =>
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
 
+// Admin-only: run the same ERA polling logic as the scheduled cron
+// on-demand. Returns a diagnostic JSON so we can verify the whole
+// Stedi → claim → patient_statement pipeline end-to-end.
+export const testStediEraSync = () =>
+  apiFetch<{
+    ok: boolean
+    diagnosis: string
+    fetched: number
+    matched: number
+    statementsCreated: number
+    statementsUpdated: number
+    unmatched: number
+    errors: string[]
+    sampleUnmatchedPCNs: string[]
+    remittanceIds: string[]
+  }>('/api/admin/test-stedi-era-sync', { method: 'POST' })
+
 // ── AI ───────────────────────────────────────────────────────
 export const draftEncounterNote = (body: {
   chief_complaint?: string

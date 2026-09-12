@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -52,6 +52,8 @@ export function AdminClaims() {
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpandedRaw] = useState<string | null>(null)
+  const [eraTestRunning, setEraTestRunning] = useState(false)
+  const [eraTestResult, setEraTestResult] = useState<Awaited<ReturnType<typeof testStediEraSync>> | null>(null)
 
   // Auto-mark ERA as seen when the biller expands a claim card that has
   // era_received_at but no era_seen_at yet. Optimistic — updates local
@@ -318,10 +320,60 @@ export function AdminClaims() {
           <h1 className="font-display text-[22px] font-medium text-[#1A1A2E]">Claims</h1>
           <p className="text-[13px] text-[#999] mt-0.5">Generate and submit insurance claims from signed encounter notes</p>
         </div>
-        <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#999] hover:text-[#555] transition-colors">
-          <RefreshCw size={13} /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              setEraTestRunning(true)
+              setEraTestResult(null)
+              try {
+                const r = await testStediEraSync()
+                setEraTestResult(r)
+                // Refresh claims list so any newly-updated ERA rows show up.
+                await load()
+              } catch (e: any) {
+                setEraTestResult({
+                  ok: false, diagnosis: `Request failed: ${e?.message ?? 'unknown error'}`,
+                  fetched: 0, matched: 0, statementsCreated: 0, statementsUpdated: 0, unmatched: 0,
+                  errors: [], sampleUnmatchedPCNs: [], remittanceIds: [],
+                } as any)
+              } finally {
+                setEraTestRunning(false)
+              }
+            }}
+            disabled={eraTestRunning}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
+            <Zap size={12} /> {eraTestRunning ? 'Testing…' : 'Test Stedi ERA sync'}
+          </button>
+          <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#999] hover:text-[#555] transition-colors">
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
       </div>
+
+      {eraTestResult && (
+        <div className={`mb-4 border rounded-xl px-4 py-3 ${eraTestResult.ok ? 'bg-[#F5F4FE] border-[#AFA9EC] text-[#3C3489]' : 'bg-[#FCEBEB] border-[#F4B4B4] text-[#791F1F]'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-[13px] font-medium">{eraTestResult.diagnosis || 'Test complete.'}</div>
+            <button onClick={() => setEraTestResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
+          </div>
+          <div className="text-[11px] mt-2 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1 opacity-90">
+            <div><span className="opacity-70">Fetched:</span> {eraTestResult.fetched}</div>
+            <div><span className="opacity-70">Matched:</span> {eraTestResult.matched}</div>
+            <div><span className="opacity-70">Statements created:</span> {eraTestResult.statementsCreated}</div>
+            <div><span className="opacity-70">Statements updated:</span> {eraTestResult.statementsUpdated}</div>
+            <div><span className="opacity-70">Unmatched:</span> {eraTestResult.unmatched}</div>
+            <div><span className="opacity-70">Errors:</span> {eraTestResult.errors.length}</div>
+          </div>
+          {eraTestResult.sampleUnmatchedPCNs.length > 0 && (
+            <div className="text-[11px] mt-2 opacity-80">
+              Sample unmatched PCNs: <span className="font-mono">{eraTestResult.sampleUnmatchedPCNs.join(', ')}</span>
+            </div>
+          )}
+          {eraTestResult.errors.length > 0 && (
+            <div className="text-[11px] mt-1 opacity-80">Errors: {eraTestResult.errors.slice(0, 3).join(' · ')}</div>
+          )}
+        </div>
+      )}
 
       {unseenEraCount > 0 && (
         <div className="mb-4 flex items-center gap-2 bg-[#E1F5EE] border border-[#5DCAA5] text-[#085041] px-4 py-2.5 rounded-xl">
