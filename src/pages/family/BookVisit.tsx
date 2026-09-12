@@ -3090,15 +3090,19 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
             </div>
           )}
 
-          {/* Insurance card upload — required for new patients; shown as "tap to update" if card already on file; hidden for established patients without a card */}
-          {!intake.selfPay && (!intake.hasProfile || intake.cardOnFile) && <div>
+          {/* Insurance card upload — always shown when not self-pay.
+             Label switches from "on file — tap to update" (cardOnFile
+             true) to "*" required (no cards on file, since
+             step2Valid requires cards for any non-self-pay booking).
+             Previously hidden for returning patients without cards on
+             file, which silently blocked step2Valid with no visible
+             upload UI. */}
+          {!intake.selfPay && <div>
             <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider mb-2">
               Insurance card photos — front & back{' '}
               {intake.cardOnFile
                 ? <span className="normal-case font-normal text-[#1D9E75]">on file — tap to update</span>
-                : intake.hasProfile
-                  ? <span className="normal-case font-normal text-[#999]">optional</span>
-                  : <span className="text-[#ff3b30]">*</span>}
+                : <span className="text-[#ff3b30]">*</span>}
             </p>
             <div className="grid grid-cols-2 gap-3">
               {(['front', 'back'] as const).map(side => {
