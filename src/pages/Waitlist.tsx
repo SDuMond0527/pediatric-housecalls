@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MapPin, Clock, CheckCircle2, X, Plus, Phone, XCircle, Pencil } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import {
-  apiFetch, getWaitlistEntries, updateWaitlistEntry,
+  apiFetch, getWaitlistEntries, updateWaitlistEntry, updateFamilyAsAdmin,
   createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
   getChildrenByFamilyIds, providerUpdateChild as updateChild, providerCreateChild as createChild,
 } from '../lib/api'
@@ -222,7 +222,21 @@ export function Waitlist() {
     if (editName) map['Patient'] = editName; else delete map['Patient']
     if (editPhone) map['Phone'] = editPhone; else delete map['Phone']
     if (editEmail) map['Email'] = editEmail; else delete map['Email']
+    // Update the notes snapshot for this specific waitlist entry AND
+    // the source-of-truth family_profiles + children rows so
+    // downstream consumers (cron reminders, card displays that join
+    // fp.phone, sibling records) all see the new values. Previously
+    // only the notes snapshot updated, so the waitlist SMS cron kept
+    // reading the stale family_profiles.phone (Sara DuMond 2026-09-12).
     await updateWaitlistEntry(editEntry.id, { notes: rebuildNotes(map) })
+    if (editEntry.family_id) {
+      const patch: Record<string, unknown> = {}
+      if (editPhone) patch.phone = editPhone
+      if (editEmail) patch.email = editEmail
+      if (Object.keys(patch).length) {
+        try { await updateFamilyAsAdmin(editEntry.family_id, patch) } catch (e) { console.error('updateFamilyAsAdmin failed', e) }
+      }
+    }
     setEditEntry(null)
     setEditSubmitting(false)
     fetchEntries()

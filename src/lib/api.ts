@@ -155,6 +155,14 @@ export const getFamilyById = (id: string) => apiFetch<any>(`/api/families/${id}`
 export const getFamiliesByIds = (ids: string[]) =>
   apiFetch<any[]>(`/api/families?ids=${ids.join(',')}`)
 
+// Admin-side family PATCH — used by Waitlist "edit patient info"
+// (and any other provider-facing surface) to update a family's
+// contact fields. Writes to family_profiles AND propagates to
+// children.parent_* so cron reminders and card displays both pick
+// up the new value.
+export const updateFamilyAsAdmin = (id: string, body: Record<string, unknown>) =>
+  apiFetch<{ ok: boolean }>('/api/families', { method: 'PATCH', body: JSON.stringify({ id, ...body }) })
+
 // ── Children ──────────────────────────────────────────────────
 export const lookupChild = (first: string, last: string, dob: string) =>
   familyApiFetch<{ id: string; first_name: string; last_name: string; date_of_birth: string; parent_phone: string | null; parent_email: string | null; parent_address: string | null } | null>(
