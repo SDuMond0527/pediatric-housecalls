@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { updateChild, updateMyFamily, uploadNotePhoto } from '../lib/api'
+import { updateChild, updateMyFamily, familyUploadInsuranceCard } from '../lib/api'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { getMissingChildFields, type RequiredField } from '../lib/childCompleteness'
@@ -120,7 +120,8 @@ export function CompleteChildProfileGate({ children, family, onAllComplete }: Pr
           <p className="text-[12px] text-[#999] uppercase tracking-wider mb-2 font-semibold">Missing information for {childName}</p>
           <div className="space-y-3">
             {current.missing.map(f => (
-              <ProfileFieldInput key={f.key} field={f} value={currentValues[f.key] ?? ''} onChange={v => setV(f.key, v)} />
+              <ProfileFieldInput key={f.key} field={f} value={currentValues[f.key] ?? ''} onChange={v => setV(f.key, v)}
+                familySub={family?.cognito_sub || family?.id || 'unknown'} />
             ))}
           </div>
         </div>
@@ -138,7 +139,7 @@ export function CompleteChildProfileGate({ children, family, onAllComplete }: Pr
   )
 }
 
-function ProfileFieldInput({ field, value, onChange }: { field: RequiredField; value: string; onChange: (v: string) => void }) {
+function ProfileFieldInput({ field, value, onChange, familySub }: { field: RequiredField; value: string; onChange: (v: string) => void; familySub: string }) {
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -146,7 +147,10 @@ function ProfileFieldInput({ field, value, onChange }: { field: RequiredField; v
     setErr(null)
     setUploading(true)
     try {
-      const url = await uploadNotePhoto(file)
+      // Family-facing gate MUST use family auth. Previously used
+      // uploadNotePhoto (provider auth) which 401'd for parents.
+      const side: 'front' | 'back' = field.key === 'insurance_card_front_url' ? 'front' : 'back'
+      const url = await familyUploadInsuranceCard(familySub, file, side)
       onChange(url)
     } catch (e: any) {
       setErr(e?.message || 'Upload failed')

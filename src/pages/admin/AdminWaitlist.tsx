@@ -85,7 +85,13 @@ export function AdminWaitlist() {
   async function markAsLost() {
     if (!lossEntryId || !lossReason) return
     setLossSubmitting(true)
-    await updateWaitlistEntry(lossEntryId, { status: 'removed', removal_reason: lossReason }).catch(() => {})
+    try {
+      await updateWaitlistEntry(lossEntryId, { status: 'removed', removal_reason: lossReason })
+    } catch (e: any) {
+      alert(`Couldn't mark waitlist entry as removed: ${e?.message ?? 'unknown error'}`)
+      setLossSubmitting(false)
+      return
+    }
     setLossEntryId(null)
     setLossReason('')
     setLossSubmitting(false)

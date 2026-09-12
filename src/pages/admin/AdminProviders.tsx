@@ -299,8 +299,14 @@ export function AdminProviders() {
                                     onChange={async () => {
                                       const current = p.states ?? []
                                       const next = checked ? current.filter(s => s !== state) : [...current, state]
-                                      await updateProvider(p.id, { states: next }).catch(() => {})
+                                      // Optimistic UI + surfaced error.
                                       setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, states: next } : pr))
+                                      try {
+                                        await updateProvider(p.id, { states: next })
+                                      } catch (e: any) {
+                                        alert(`Couldn't save provider states: ${e?.message ?? 'unknown error'}`)
+                                        setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, states: current } : pr))
+                                      }
                                     }} />
                                   <span className="text-[12px] text-[#555]">{state}</span>
                                 </label>
@@ -321,8 +327,13 @@ export function AdminProviders() {
                                       onChange={async () => {
                                         const current = p.zones ?? []
                                         const next = checked ? current.filter(z => z !== zone) : [...current, zone]
-                                        await updateProvider(p.id, { zones: next }).catch(() => {})
                                         setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, zones: next } : pr))
+                                        try {
+                                          await updateProvider(p.id, { zones: next })
+                                        } catch (e: any) {
+                                          alert(`Couldn't save provider zones: ${e?.message ?? 'unknown error'}`)
+                                          setProviders(prev => prev.map(pr => pr.id === p.id ? { ...pr, zones: current } : pr))
+                                        }
                                       }} />
                                     <span className="text-[12px] text-[#555]">{zone}</span>
                                   </label>

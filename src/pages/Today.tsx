@@ -93,7 +93,21 @@ export function Today() {
 
   // Add appointment
   const [adding, setAdding] = useState(false)
-  const [addForm, setAddForm] = useState({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', subscriberName: '', subscriberDob: '', subscriberGender: '', date: '', time: '', notes: '' })
+  const [addForm, setAddForm] = useState({
+    visitType: 'In-home sick visit',
+    zip: '', zone: '', address: '', city: '', state: '',
+    patientName: '', dob: '', gender: '',
+    phone: '', email: '',
+    // Clinical — required for new patients per
+    // feedback_all_patient_info_required_and_displayed.md
+    allergies: '', currentMedications: '', medicalHistory: '',
+    preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+    // Insurance — self-pay hides the rest
+    selfPay: false as boolean,
+    insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
+    subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
+    date: '', time: '', notes: '',
+  })
   const [addCustomTime, setAddCustomTime] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [allProviders, setAllProviders] = useState<{ id: string; name: string }[]>([])
@@ -390,7 +404,10 @@ export function Today() {
     const instructions = doneInstructions.trim() || null
     await updateAppointment(doneTarget.id, { status: 'done', after_visit_instructions: instructions })
     if (instructions && doneTarget.charm_appointment_id) {
-      void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
+      // Await so a failure to record instructions surfaces; previously
+      // `void` meant the provider believed the note went out when it
+      // might have silently 500'd.
+      await updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
     void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions })
     setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
@@ -401,7 +418,18 @@ export function Today() {
 
   function openAdd() {
     setAddForProviderId(provider?.id || '')
-    setAddForm({ visitType: 'In-home sick visit', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '', insurancePayer: '', insuranceMemberId: '', insuranceGroup: '', subscriberName: '', subscriberDob: '', subscriberGender: '', date: viewDate, time: '', notes: '' })
+    setAddForm({
+      visitType: 'In-home sick visit',
+      zip: '', zone: '', address: '', city: '', state: '',
+      patientName: '', dob: '', gender: '',
+      phone: '', email: '',
+      allergies: '', currentMedications: '', medicalHistory: '',
+      preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+      selfPay: false,
+      insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
+      subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
+      date: viewDate, time: '', notes: '',
+    })
     setAddCustomTime('')
     setPatientSearch('')
     setPatientResults([])
@@ -446,28 +474,49 @@ export function Today() {
   async function submitAdd() {
     const effectiveTime = addForm.time === '__custom__' ? addCustomTime : addForm.time
     if (!provider || !addForm.date || !effectiveTime || !addForm.visitType) return
+
+    // If we're creating a NEW patient (no selected match), require the
+    // full REQUIRED_CHILD_FIELDS set — no more skeleton charts from
+    // provider add-appointment. Existing-patient updates skip this so
+    // admins can still fast-book a returning patient without re-entering
+    // everything. See memory:
+    // feedback_all_patient_info_required_and_displayed.md.
+    if (!selectedPatient?.id && addForm.patientName) {
+      const missing =
+        !addForm.dob ? 'Date of birth'
+        : !addForm.gender ? 'Sex'
+        : !addForm.phone?.trim() ? 'Phone'
+        : !addForm.email?.trim() ? 'Email'
+        : !addForm.address?.trim() ? 'Address'
+        : !addForm.city?.trim() ? 'City'
+        : !addForm.state ? 'State'
+        : !addForm.zip?.trim() ? 'Zip'
+        : !addForm.allergies?.trim() ? 'Allergies (enter "NKDA" if none)'
+        : !addForm.currentMedications?.trim() ? 'Current medications (enter "None" if none)'
+        : !addForm.medicalHistory?.trim() ? 'Medical history (enter "None" if none)'
+        : !addForm.preferredPharmacy?.trim() ? 'Preferred pharmacy'
+        : !addForm.pcp?.trim() ? 'PCP'
+        : !addForm.vaccinationStatus ? 'Vaccination status'
+        : (!addForm.selfPay && !addForm.insurancePayer?.trim()) ? 'Insurance provider'
+        : (!addForm.selfPay && !addForm.insuranceMemberId?.trim()) ? 'Member ID'
+        : (!addForm.selfPay && !addForm.insuranceGroup?.trim()) ? 'Group #'
+        : (!addForm.selfPay && !addForm.subscriberName?.trim()) ? 'Subscriber name'
+        : (!addForm.selfPay && !addForm.subscriberDob) ? 'Subscriber DOB'
+        : (!addForm.selfPay && !addForm.subscriberGender) ? 'Subscriber sex'
+        : null
+      if (missing) { alert(`${missing} is required for a new patient.`); return }
+    }
     setAddSubmitting(true)
 
     const time24 = parseTime(effectiveTime)
 
-    const noteParts = []
-    if (addForm.patientName) noteParts.push(`PATIENT:${addForm.patientName}`)
-    if (addForm.dob) noteParts.push(`DOB:${addForm.dob}`)
-    if (addForm.gender) noteParts.push(`GENDER:${addForm.gender}`)
-    const fullAddr = addForm.address
-      ? (addForm.zip && !addForm.address.includes(addForm.zip) ? `${addForm.address.trim()} ${addForm.zip}` : addForm.address)
-      : ''
-    if (fullAddr) noteParts.push(`ADDR:${fullAddr}`)
-    if (addForm.zip) noteParts.push(`ZIP:${addForm.zip}`)
-    if (addForm.email) noteParts.push(`PARENTEMAIL:${addForm.email}`)
-    if (addForm.phone) noteParts.push(`PARENTPHONE:${addForm.phone}`)
-    if (addForm.insurancePayer) noteParts.push(`INSURANCE:${addForm.insurancePayer}`)
-    if (addForm.insuranceMemberId) noteParts.push(`MEMBERID:${addForm.insuranceMemberId}`)
-    if (addForm.insuranceGroup) noteParts.push(`GROUPNUM:${addForm.insuranceGroup}`)
-    if (addForm.subscriberName) noteParts.push(`SUBSCRIBER:${addForm.subscriberName}`)
-    if (addForm.subscriberDob) noteParts.push(`SUBSCRIBERDOB:${addForm.subscriberDob}`)
-    if (addForm.subscriberGender) noteParts.push(`SUBSCRIBERGENDER:${addForm.subscriberGender}`)
-    if (addForm.notes) noteParts.push(`NOTES:${addForm.notes}`)
+    // Only free-form notes go here. All structured fields (patient name,
+    // DOB, phone, address, insurance, subscriber, etc.) save to the
+    // child record via createChild/updateChild above — no more duplicated
+    // KEY:value dumps into appointment.notes that could drift from truth.
+    // See feedback_no_branches_on_entry_origin.md.
+    const noteParts: string[] = []
+    if (addForm.notes) noteParts.push(addForm.notes)
 
     const providerId = addForProviderId || provider.id
     const assignedProvider = allProviders.find(p => p.id === providerId)
@@ -477,40 +526,58 @@ export function Today() {
     // blocks. If the provider linked an existing patient we use their id; otherwise
     // we create the child row first (with full profile data) and use the returned id.
     let resolvedChildId: string | null = selectedPatient?.id ?? null
-    if (selectedPatient?.id) {
-      // Update the existing child with any new profile info the provider typed.
-      await apiFetch(`/api/children/${selectedPatient.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          parent_phone:   addForm.phone   || null,
-          parent_email:   addForm.email   || null,
-          parent_address: addForm.address || null,
-          parent_zip:     addForm.zip     || null,
-        }),
-      }).catch(() => {})
-    } else if (addForm.patientName) {
-      const [firstName, ...rest] = addForm.patientName.trim().split(' ')
-      const lastName = rest.join(' ')
-      const created = await apiFetch<any>('/api/children', {
-        method: 'POST',
-        body: JSON.stringify({
-          first_name:    firstName || null,
-          last_name:     lastName  || null,
-          date_of_birth: addForm.dob     || null,
-          gender:        addForm.gender  || null,
-          parent_phone:  addForm.phone   || null,
-          parent_email:  addForm.email   || null,
-          parent_address: addForm.address || null,
-          parent_zip:    addForm.zip     || null,
-          insurance_provider:         addForm.insurancePayer    || null,
-          insurance_member_id:        addForm.insuranceMemberId || null,
-          insurance_group_number:     addForm.insuranceGroup    || null,
-          insurance_subscriber_name:  addForm.subscriberName   || null,
-          insurance_subscriber_dob:   addForm.subscriberDob    || null,
-          insurance_subscriber_gender: addForm.subscriberGender || null,
-        }),
-      }).catch(() => null)
-      if (created?.id) resolvedChildId = created.id
+    try {
+      if (selectedPatient?.id) {
+        // Update the existing child with any new profile info the
+        // provider typed. Awaited + surfaced so a save failure aborts
+        // the appointment creation rather than silently drop data.
+        await apiFetch(`/api/children/${selectedPatient.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            parent_phone:   addForm.phone   || null,
+            parent_email:   addForm.email   || null,
+            parent_address: addForm.address || null,
+            parent_zip:     addForm.zip     || null,
+          }),
+        })
+      } else if (addForm.patientName) {
+        const [firstName, ...rest] = addForm.patientName.trim().split(' ')
+        const lastName = rest.join(' ')
+        const created = await apiFetch<any>('/api/children', {
+          method: 'POST',
+          body: JSON.stringify({
+            first_name:    firstName || null,
+            last_name:     lastName  || null,
+            date_of_birth: addForm.dob     || null,
+            gender:        addForm.gender  || null,
+            parent_phone:  addForm.phone   || null,
+            parent_email:  addForm.email   || null,
+            parent_address: addForm.address || null,
+            parent_city:   addForm.city    || null,
+            parent_state:  addForm.state   || null,
+            parent_zip:    addForm.zip     || null,
+            allergies:            addForm.allergies || null,
+            current_medications:  addForm.currentMedications || null,
+            medical_history:      addForm.medicalHistory || null,
+            preferred_pharmacy:   addForm.preferredPharmacy || null,
+            pcp:                  addForm.pcp || null,
+            vaccination_status:   addForm.vaccinationStatus || null,
+            insurance_provider:                addForm.selfPay ? 'Self-pay' : (addForm.insurancePayer    || null),
+            insurance_member_id:               addForm.selfPay ? null : (addForm.insuranceMemberId || null),
+            insurance_group_number:            addForm.selfPay ? null : (addForm.insuranceGroup    || null),
+            insurance_subscriber_name:         addForm.selfPay ? null : (addForm.subscriberName   || null),
+            insurance_subscriber_dob:          addForm.selfPay ? null : (addForm.subscriberDob    || null),
+            insurance_subscriber_gender:       addForm.selfPay ? null : (addForm.subscriberGender || null),
+            insurance_subscriber_relationship: addForm.selfPay ? null : (addForm.subscriberRelationship || null),
+          }),
+        })
+        if (created?.id) resolvedChildId = created.id
+      }
+    } catch (e: any) {
+      console.error('[Today submitAdd] child save failed:', e)
+      alert(`Couldn't save patient info: ${e?.message ?? 'unknown error'}. Appointment NOT created.`)
+      setAddSubmitting(false)
+      return
     }
 
     await createAppointment({
@@ -1490,10 +1557,53 @@ export function Today() {
                 </div>
               </div>
 
+              {/* Clinical — required for NEW patients per
+                  feedback_all_patient_info_required_and_displayed.md */}
+              {!selectedPatient?.id && addForm.patientName && (
+                <>
+                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Medical (required)</div>
+                  <textarea rows={2} placeholder='Drug &amp; food allergies * — type "NKDA" if none' value={addForm.allergies}
+                    onChange={e => setAddForm(f => ({ ...f, allergies: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] resize-none" />
+                  <textarea rows={2} placeholder='Current medications * — type "None" if none' value={addForm.currentMedications}
+                    onChange={e => setAddForm(f => ({ ...f, currentMedications: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] resize-none" />
+                  <textarea rows={2} placeholder='Medical history * — type "None" if no significant history' value={addForm.medicalHistory}
+                    onChange={e => setAddForm(f => ({ ...f, medicalHistory: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] resize-none" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" placeholder="Pharmacy *" value={addForm.preferredPharmacy}
+                      onChange={e => setAddForm(f => ({ ...f, preferredPharmacy: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
+                    <input type="text" placeholder="PCP *" value={addForm.pcp}
+                      onChange={e => setAddForm(f => ({ ...f, pcp: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
+                  </div>
+                  <select value={addForm.vaccinationStatus} onChange={e => setAddForm(f => ({ ...f, vaccinationStatus: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white">
+                    <option value="">Vaccination status *</option>
+                    <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                    <option value="delayed">Delayed / alternative schedule</option>
+                    <option value="unvaccinated">Not vaccinated</option>
+                  </select>
+                </>
+              )}
+
               <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Insurance</div>
 
+              <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
+                <input type="checkbox" checked={addForm.selfPay}
+                  onChange={e => setAddForm(f => ({ ...f, selfPay: e.target.checked }))} className="mt-0.5" />
+                <div>
+                  <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
+                  <div className="text-[11px] text-[#999]">Check this if the family isn't filing insurance.</div>
+                </div>
+              </label>
+
+              {!addForm.selfPay && (
+              <>
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance payer</label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance payer *</label>
                 <input type="text" placeholder="BlueCross BlueShield" value={addForm.insurancePayer}
                   onChange={e => setAddForm(f => ({ ...f, insurancePayer: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
@@ -1501,13 +1611,13 @@ export function Today() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Member ID</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Member ID *</label>
                   <input type="text" placeholder="XYZ123456" value={addForm.insuranceMemberId}
                     onChange={e => setAddForm(f => ({ ...f, insuranceMemberId: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Group #</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Group # *</label>
                   <input type="text" placeholder="GRP001" value={addForm.insuranceGroup}
                     onChange={e => setAddForm(f => ({ ...f, insuranceGroup: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
@@ -1515,21 +1625,21 @@ export function Today() {
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber name</label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber name *</label>
                 <input type="text" placeholder="John Smith" value={addForm.subscriberName}
                   onChange={e => setAddForm(f => ({ ...f, subscriberName: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber DOB</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber DOB *</label>
                   <input type="date" value={addForm.subscriberDob}
                     onChange={e => setAddForm(f => ({ ...f, subscriberDob: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Subscriber sex *</label>
                   <select value={addForm.subscriberGender} onChange={e => setAddForm(f => ({ ...f, subscriberGender: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
                     <option value="">Select…</option>
@@ -1538,7 +1648,19 @@ export function Today() {
                     <option value="Other">Other</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Relationship *</label>
+                  <select value={addForm.subscriberRelationship} onChange={e => setAddForm(f => ({ ...f, subscriberRelationship: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white">
+                    <option value="Self">Self</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
+              </>
+              )}
 
               <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Appointment details</div>
 
@@ -1552,31 +1674,48 @@ export function Today() {
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address</label>
-                <input type="text" placeholder="123 Main St, Charlotte, NC" value={addForm.address}
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address {(!selectedPatient?.id && addForm.patientName) && '*'}</label>
+                <input type="text" placeholder="123 Main St" value={addForm.address}
                   onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code</label>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">City {(!selectedPatient?.id && addForm.patientName) && '*'}</label>
+                  <input type="text" placeholder="Charlotte" value={addForm.city}
+                    onChange={e => setAddForm(f => ({ ...f, city: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State {(!selectedPatient?.id && addForm.patientName) && '*'}</label>
+                  <select value={addForm.state} onChange={e => setAddForm(f => ({ ...f, state: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white">
+                    <option value="">Select</option>
+                    <option value="NC">NC</option>
+                    <option value="SC">SC</option>
+                    <option value="VA">VA</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code {(!selectedPatient?.id && addForm.patientName) && '*'}</label>
                   <input type="text" placeholder="28277" maxLength={5} value={addForm.zip}
                     onChange={e => {
                       const zip = e.target.value
                       const detectedZone = zip.length === 5 ? (zipToZone[zip] || '') : ''
                       setAddForm(f => ({ ...f, zip, zone: detectedZone || f.zone }))
                     }}
-                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
                 </div>
-                <div>
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                    Zone {addForm.zip.length === 5 && zipToZone[addForm.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
-                  </label>
-                  <input type="text" placeholder="e.g. SouthPark" value={addForm.zone}
-                    onChange={e => setAddForm(f => ({ ...f, zone: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
-                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                  Zone {addForm.zip.length === 5 && zipToZone[addForm.zip] && <span className="text-[#1D9E75] normal-case font-normal">· auto-detected</span>}
+                </label>
+                <input type="text" placeholder="e.g. SouthPark" value={addForm.zone}
+                  onChange={e => setAddForm(f => ({ ...f, zone: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
               </div>
 
               <div>

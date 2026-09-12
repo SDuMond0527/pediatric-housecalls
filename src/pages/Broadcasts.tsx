@@ -228,7 +228,14 @@ export function Broadcasts() {
       // If the broadcast was spawned by a waitlist entry, mark it converted now
       // that the visit is actually booked.
       if ((bc as any).waitlist_entry_id) {
-        await updateWaitlistEntry((bc as any).waitlist_entry_id, { status: 'converted', converted_provider_id: provider.id }).catch(() => {})
+        // Await + surface. Previously silent — a failure here left the
+        // waitlist entry in 'broadcasting' state and it could re-broadcast.
+        try {
+          await updateWaitlistEntry((bc as any).waitlist_entry_id, { status: 'converted', converted_provider_id: provider.id })
+        } catch (e: any) {
+          console.error('[broadcasts] failed to mark waitlist entry converted:', e)
+          alert(`Pairing claimed but couldn't mark waitlist entry converted: ${e?.message ?? 'unknown error'}. Please mark it manually.`)
+        }
       }
 
       invokeNotifications({

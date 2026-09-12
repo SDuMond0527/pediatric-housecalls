@@ -204,7 +204,16 @@ export function AdminSchedule() {
 
   const [form, setForm] = useState({
     provider_id: '', visit_type: 'In-home sick visit',
-    zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '',
+    zip: '', zone: '', address: '', city: '', state: '',
+    patientName: '', dob: '', gender: '',
+    phone: '', email: '',
+    // Clinical + insurance — required for NEW patient adds per
+    // feedback_all_patient_info_required_and_displayed.md
+    allergies: '', currentMedications: '', medicalHistory: '',
+    preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+    selfPay: false as boolean,
+    insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
+    subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
     scheduled_time: '09:00', scheduled_date: format(new Date(), 'yyyy-MM-dd'),
   })
   const [patientSearch, setPatientSearch] = useState('')
@@ -365,13 +374,14 @@ export function AdminSchedule() {
     if (!doneTarget) return
     setDoneSubmitting(true)
     const instructions = doneInstructions.trim() || null
-    // Update status separately so it always succeeds even if after_visit_instructions column is missing
+    // Update status first, then instructions. Both awaited so admin
+    // knows if the after-visit instructions didn't save.
     await updateAppointment(doneTarget.id, { status: 'done' })
     if (instructions) {
-      void updateAppointment(doneTarget.id, { after_visit_instructions: instructions })
+      await updateAppointment(doneTarget.id, { after_visit_instructions: instructions })
     }
     if (instructions && doneTarget.charm_appointment_id) {
-      void updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
+      await updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
     void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
     setAppointments(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
@@ -465,48 +475,93 @@ export function AdminSchedule() {
   }
 
   async function addAppointment() {
+    // Require full REQUIRED_CHILD_FIELDS for a NEW patient. Existing
+    // patients skip this — admin can fast-book without re-entering intake.
+    if (!selectedPatient?.id && form.patientName) {
+      const missing =
+        !form.dob ? 'Date of birth'
+        : !form.gender ? 'Sex'
+        : !form.phone?.trim() ? 'Phone'
+        : !form.email?.trim() ? 'Email'
+        : !form.address?.trim() ? 'Address'
+        : !form.city?.trim() ? 'City'
+        : !form.state ? 'State'
+        : !form.zip?.trim() ? 'Zip'
+        : !form.allergies?.trim() ? 'Allergies (enter "NKDA" if none)'
+        : !form.currentMedications?.trim() ? 'Current medications (enter "None" if none)'
+        : !form.medicalHistory?.trim() ? 'Medical history (enter "None" if none)'
+        : !form.preferredPharmacy?.trim() ? 'Preferred pharmacy'
+        : !form.pcp?.trim() ? 'PCP'
+        : !form.vaccinationStatus ? 'Vaccination status'
+        : (!form.selfPay && !form.insurancePayer?.trim()) ? 'Insurance provider'
+        : (!form.selfPay && !form.insuranceMemberId?.trim()) ? 'Member ID'
+        : (!form.selfPay && !form.insuranceGroup?.trim()) ? 'Group #'
+        : (!form.selfPay && !form.subscriberName?.trim()) ? 'Subscriber name'
+        : (!form.selfPay && !form.subscriberDob) ? 'Subscriber DOB'
+        : (!form.selfPay && !form.subscriberGender) ? 'Subscriber sex'
+        : null
+      if (missing) { alert(`${missing} is required for a new patient.`); return }
+    }
+
+    // Structured patient data saves via createChild/updateChild — no
+    // more KEY:value dumps into appointment.notes.
+    // See feedback_no_branches_on_entry_origin.md.
     const noteParts: string[] = []
-    if (form.patientName) noteParts.push(`PATIENT:${form.patientName}`)
-    if (form.dob) noteParts.push(`DOB:${form.dob}`)
-    if (form.gender) noteParts.push(`GENDER:${form.gender}`)
-    const fullAddr = form.address
-      ? (form.zip && !form.address.includes(form.zip) ? `${form.address.trim()} ${form.zip}` : form.address)
-      : ''
-    if (fullAddr) noteParts.push(`ADDR:${fullAddr}`)
-    if (form.email) noteParts.push(`PARENTEMAIL:${form.email}`)
-    if (form.phone) noteParts.push(`PARENTPHONE:${form.phone}`)
 
     // Resolve child_id BEFORE creating the appointment so the schedule card
     // can pull the full Patient / Clinical / Insurance blocks from the child
     // record — no more relying on a display-side name-search fallback that
     // could pick the wrong kid if two share a first + last name.
     let resolvedChildId: string | null = selectedPatient?.id ?? null
-    if (selectedPatient?.id) {
-      await apiFetch(`/api/children/${selectedPatient.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          parent_phone:   form.phone   || null,
-          parent_email:   form.email   || null,
-          parent_address: form.address || null,
-          parent_zip:     form.zip     || null,
-        }),
-      }).catch(() => {})
-    } else if (form.patientName) {
-      const [firstName, ...rest] = form.patientName.trim().split(' ')
-      const created = await apiFetch<any>('/api/children', {
-        method: 'POST',
-        body: JSON.stringify({
-          first_name:     firstName      || null,
-          last_name:      rest.join(' ') || null,
-          date_of_birth:  form.dob       || null,
-          gender:         form.gender    || null,
-          parent_phone:   form.phone     || null,
-          parent_email:   form.email     || null,
-          parent_address: form.address   || null,
-          parent_zip:     form.zip       || null,
-        }),
-      }).catch(() => null)
-      if (created?.id) resolvedChildId = created.id
+    try {
+      if (selectedPatient?.id) {
+        // Await + surface: if patient info save fails, abort the appointment
+        // creation rather than silently drop the update.
+        await apiFetch(`/api/children/${selectedPatient.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            parent_phone:   form.phone   || null,
+            parent_email:   form.email   || null,
+            parent_address: form.address || null,
+            parent_zip:     form.zip     || null,
+          }),
+        })
+      } else if (form.patientName) {
+        const [firstName, ...rest] = form.patientName.trim().split(' ')
+        const created = await apiFetch<any>('/api/children', {
+          method: 'POST',
+          body: JSON.stringify({
+            first_name:     firstName      || null,
+            last_name:      rest.join(' ') || null,
+            date_of_birth:  form.dob       || null,
+            gender:         form.gender    || null,
+            parent_phone:   form.phone     || null,
+            parent_email:   form.email     || null,
+            parent_address: form.address   || null,
+            parent_city:    form.city      || null,
+            parent_state:   form.state     || null,
+            parent_zip:     form.zip       || null,
+            allergies:            form.allergies || null,
+            current_medications:  form.currentMedications || null,
+            medical_history:      form.medicalHistory || null,
+            preferred_pharmacy:   form.preferredPharmacy || null,
+            pcp:                  form.pcp || null,
+            vaccination_status:   form.vaccinationStatus || null,
+            insurance_provider:                form.selfPay ? 'Self-pay' : (form.insurancePayer    || null),
+            insurance_member_id:               form.selfPay ? null : (form.insuranceMemberId || null),
+            insurance_group_number:            form.selfPay ? null : (form.insuranceGroup    || null),
+            insurance_subscriber_name:         form.selfPay ? null : (form.subscriberName   || null),
+            insurance_subscriber_dob:          form.selfPay ? null : (form.subscriberDob    || null),
+            insurance_subscriber_gender:       form.selfPay ? null : (form.subscriberGender || null),
+            insurance_subscriber_relationship: form.selfPay ? null : (form.subscriberRelationship || null),
+          }),
+        })
+        if (created?.id) resolvedChildId = created.id
+      }
+    } catch (e: any) {
+      console.error('[AdminSchedule submitAdd] child save failed:', e)
+      alert(`Couldn't save patient info: ${e?.message ?? 'unknown error'}. Appointment NOT created.`)
+      return
     }
 
     await createAppointment({
@@ -522,7 +577,16 @@ export function AdminSchedule() {
 
     setModalOpen(false)
     fetchAppointments()
-    setForm(f => ({ ...f, provider_id: '', zip: '', zone: '', address: '', patientName: '', dob: '', gender: '', phone: '', email: '' }))
+    setForm(f => ({
+      ...f,
+      provider_id: '', zip: '', zone: '', address: '', city: '', state: '',
+      patientName: '', dob: '', gender: '', phone: '', email: '',
+      allergies: '', currentMedications: '', medicalHistory: '',
+      preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+      selfPay: false,
+      insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
+      subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
+    }))
     setPatientSearch(''); setPatientResults([]); setSelectedPatient(null)
   }
 
@@ -1460,6 +1524,86 @@ export function AdminSchedule() {
             </div>
           </div>
 
+          {/* Clinical + Insurance — required for NEW patient adds only.
+              Existing patients skip these fields (they already have them
+              on their chart). Per feedback_all_patient_info_required_and_
+              displayed.md — no more skeleton charts from admin add flows. */}
+          {!selectedPatient?.id && form.patientName && (
+            <>
+              <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Medical (required for new patient)</div>
+              <textarea rows={2} placeholder='Drug &amp; food allergies * — "NKDA" if none' value={form.allergies}
+                onChange={e => setForm(f => ({ ...f, allergies: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none" />
+              <textarea rows={2} placeholder='Current medications * — "None" if none' value={form.currentMedications}
+                onChange={e => setForm(f => ({ ...f, currentMedications: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none" />
+              <textarea rows={2} placeholder='Medical history * — "None" if no significant history' value={form.medicalHistory}
+                onChange={e => setForm(f => ({ ...f, medicalHistory: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" placeholder="Pharmacy *" value={form.preferredPharmacy}
+                  onChange={e => setForm(f => ({ ...f, preferredPharmacy: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+                <input type="text" placeholder="PCP *" value={form.pcp}
+                  onChange={e => setForm(f => ({ ...f, pcp: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+              </div>
+              <select value={form.vaccinationStatus} onChange={e => setForm(f => ({ ...f, vaccinationStatus: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white">
+                <option value="">Vaccination status *</option>
+                <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                <option value="delayed">Delayed / alternative schedule</option>
+                <option value="unvaccinated">Not vaccinated</option>
+              </select>
+
+              <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Insurance</div>
+              <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
+                <input type="checkbox" checked={form.selfPay}
+                  onChange={e => setForm(f => ({ ...f, selfPay: e.target.checked }))} className="mt-0.5" />
+                <div>
+                  <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
+                  <div className="text-[11px] text-[#999]">Check if not filing insurance.</div>
+                </div>
+              </label>
+              {!form.selfPay && (
+                <>
+                  <input type="text" placeholder="Insurance payer *" value={form.insurancePayer}
+                    onChange={e => setForm(f => ({ ...f, insurancePayer: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" placeholder="Member ID *" value={form.insuranceMemberId}
+                      onChange={e => setForm(f => ({ ...f, insuranceMemberId: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+                    <input type="text" placeholder="Group # *" value={form.insuranceGroup}
+                      onChange={e => setForm(f => ({ ...f, insuranceGroup: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+                  </div>
+                  <input type="text" placeholder="Subscriber name *" value={form.subscriberName}
+                    onChange={e => setForm(f => ({ ...f, subscriberName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <input type="date" value={form.subscriberDob}
+                      onChange={e => setForm(f => ({ ...f, subscriberDob: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" title="Subscriber DOB *" />
+                    <select value={form.subscriberGender} onChange={e => setForm(f => ({ ...f, subscriberGender: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white">
+                      <option value="">Subscriber sex *</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                    <select value={form.subscriberRelationship} onChange={e => setForm(f => ({ ...f, subscriberRelationship: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white">
+                      <option value="Self">Self</option>
+                      <option value="Spouse">Spouse</option>
+                      <option value="Child">Child</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider pt-1">Appointment details</div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1475,13 +1619,29 @@ export function AdminSchedule() {
                 className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans" />
             </div>
             <div className="col-span-2">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address</label>
-              <input type="text" placeholder="123 Main St, Charlotte, NC" value={form.address}
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit address {(!selectedPatient?.id && form.patientName) && '*'}</label>
+              <input type="text" placeholder="123 Main St" value={form.address}
                 onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                 className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code</label>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">City {(!selectedPatient?.id && form.patientName) && '*'}</label>
+              <input type="text" placeholder="Charlotte" value={form.city}
+                onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px]" />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">State {(!selectedPatient?.id && form.patientName) && '*'}</label>
+              <select value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white">
+                <option value="">Select</option>
+                <option value="NC">NC</option>
+                <option value="SC">SC</option>
+                <option value="VA">VA</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Zip code {(!selectedPatient?.id && form.patientName) && '*'}</label>
               <input type="text" placeholder="28277" maxLength={5} value={form.zip}
                 onChange={e => {
                   const zip = e.target.value

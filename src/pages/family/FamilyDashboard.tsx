@@ -61,9 +61,14 @@ export function FamilyDashboard() {
 
   async function leaveWaitlist(entryId: string) {
     setLeavingWaitlist(entryId)
-    await familyUpdateWaitlistEntry(entryId, { status: 'removed' }).catch(() => {})
-    setWaitlistEntries(prev => prev.filter(e => e.id !== entryId))
-    setLeavingWaitlist(null)
+    try {
+      await familyUpdateWaitlistEntry(entryId, { status: 'removed' })
+      setWaitlistEntries(prev => prev.filter(e => e.id !== entryId))
+    } catch (e: any) {
+      alert(`Couldn't remove waitlist entry: ${e?.message ?? 'unknown error'}. Please try again.`)
+    } finally {
+      setLeavingWaitlist(null)
+    }
   }
 
   async function fetchBookings() {

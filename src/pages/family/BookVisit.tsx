@@ -914,7 +914,7 @@ export function BookVisit() {
     if (booking.city)       familyPatch.city          = booking.city
     if (booking.state)      familyPatch.state         = booking.state
     if (booking.zip)        familyPatch.zip           = booking.zip
-    if (Object.keys(familyPatch).length) updateMyFamily(familyPatch).catch(() => {})
+    if (Object.keys(familyPatch).length) await updateMyFamily(familyPatch)
 
     for (const childId of selectedIds) {
       const intake = booking.childIntakes[childId]
@@ -1092,11 +1092,14 @@ export function BookVisit() {
         familyInvokeNotifications({ type: 'cpr_booking', bookingRequestId: newBooking.id }).catch(() => {})
       }
 
+      // Compliance timestamps — must persist. Previously silent-failed
+      // which meant families could complete bookings without their
+      // agreements/payment-policy acceptance being recorded.
       if (needsAgreements) {
-        updateMyFamily({ agreements_accepted_at: new Date().toISOString() }).catch(() => {})
+        await updateMyFamily({ agreements_accepted_at: new Date().toISOString() })
       }
       if (needsPaymentPolicy) {
-        updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
+        await updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() })
       }
 
       submittingRef.current = false
@@ -1204,7 +1207,7 @@ export function BookVisit() {
     if (booking.state)        contactUpdate.state         = booking.state
     if (booking.zip)          contactUpdate.zip           = booking.zip
     if (booking.phone)        contactUpdate.phone         = booking.phone
-    if (Object.keys(contactUpdate).length) updateMyFamily(contactUpdate).catch(e => console.error('updateMyFamily failed:', e))
+    if (Object.keys(contactUpdate).length) await updateMyFamily(contactUpdate)
 
     const parentContactPatch: Record<string, unknown> = {}
     if (family?.display_name)             parentContactPatch.parent_name    = family.display_name
@@ -1331,14 +1334,17 @@ export function BookVisit() {
 
     await refreshFamily()
 
+    // Compliance timestamps + referral source — all awaited. Silent-fail
+    // previously meant families booked visits without their consent
+    // acceptance being recorded.
     if (referralSource.trim() && !(family as any)?.referral_source) {
-      updateMyFamily({ referral_source: referralSource.trim() }).catch(() => {})
+      await updateMyFamily({ referral_source: referralSource.trim() })
     }
     if (needsAgreements) {
-      updateMyFamily({ agreements_accepted_at: new Date().toISOString() }).catch(() => {})
+      await updateMyFamily({ agreements_accepted_at: new Date().toISOString() })
     }
     if (needsPaymentPolicy) {
-      updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() }).catch(() => {})
+      await updateMyFamily({ payment_policy_accepted_at: new Date().toISOString() })
     }
 
     setSubmitting(false)
