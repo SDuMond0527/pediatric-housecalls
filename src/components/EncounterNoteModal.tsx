@@ -618,14 +618,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       setSaveFormName('')
       setSaveFormShare(false)
       setEditingTemplateId(null)
-    } catch { /* ignore */ } finally {
+    } catch (e: any) {
+      alert(`Couldn't save template: ${e?.message ?? 'unknown error'}. Please try again.`)
+    } finally {
       setSavingTemplate(false)
     }
   }
 
   async function deleteCustomTemplate(id: string) {
-    await deleteNoteTemplate(id).catch(() => {})
-    setCustomTemplates(prev => prev.filter(t => t.id !== id))
+    try {
+      await deleteNoteTemplate(id)
+      setCustomTemplates(prev => prev.filter(t => t.id !== id))
+    } catch (e: any) {
+      alert(`Couldn't delete template: ${e?.message ?? 'unknown error'}. Please try again.`)
+    }
   }
 
   function openSaveForm(template?: any) {
@@ -870,6 +876,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       try {
         const url = `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&df=code,name&terms=${encodeURIComponent(q)}&maxList=8`
         const resp = await fetch(url)
+        if (!resp.ok) throw new Error(`ICD-10 lookup failed (${resp.status})`)
         const data = await resp.json()
         const codes: string[] = data[1] ?? []
         const displayRows: string[][] = data[3] ?? []

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { applyNoteTemplateClears } from '../_lib/applyClears'
 
 async function verifyToken(authHeader: string | undefined): Promise<{ sub: string }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -48,6 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         provider_id = CASE WHEN ${is_shared ?? null} = true THEN NULL ELSE provider_id END
       WHERE id = ${id}::uuid
       RETURNING *`
+    // _clear support — see feedback_extract_shared_code_first_try.md
+    const requestedClears = (req.body as any)?._clear
+    if (Array.isArray(requestedClears) && requestedClears.length > 0) {
+      await applyNoteTemplateClears(sql, id, provider.practice_id, requestedClears)
+      const [refreshed] = await sql`SELECT * FROM note_templates WHERE id = ${id}::uuid`
+      return res.json(refreshed)
+    }
     return res.json(row)
   }
 

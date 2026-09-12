@@ -116,13 +116,19 @@ export function AdminProviders() {
   async function save(p: ProviderWithContact) {
     const edit = getEdit(p)
     setSavingId(p.id)
-    await updateProvider(p.id, {
-      phone: edit.phone || null,
-      email: edit.email || null,
-      home_address: edit.home_address || null,
-      npi: edit.npi || null,
-      taxonomy_code: edit.taxonomy_code || null,
-    }).catch(() => {})
+    try {
+      await updateProvider(p.id, {
+        phone: edit.phone || null,
+        email: edit.email || null,
+        home_address: edit.home_address || null,
+        npi: edit.npi || null,
+        taxonomy_code: edit.taxonomy_code || null,
+      })
+    } catch (e: any) {
+      alert(`Couldn't save provider: ${e?.message ?? 'unknown error'}. Please try again.`)
+      setSavingId(null)
+      return
+    }
     const data = await getProviders().catch(() => null)
     if (data) setProviders(data as ProviderWithContact[])
     setSavingId(null)

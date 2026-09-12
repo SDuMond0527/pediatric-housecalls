@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { applyFamilyProfileClears } from '../_lib/applyClears'
 
 async function verifyFamilyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -82,6 +83,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           payment_policy_accepted_at = COALESCE(EXCLUDED.payment_policy_accepted_at, family_profiles.payment_policy_accepted_at),
           practice_id = COALESCE(family_profiles.practice_id, EXCLUDED.practice_id)
         RETURNING *`
+
+      // _clear support — parents can wipe their referral source, display
+      // name, address, etc. See feedback_extract_shared_code_first_try.md.
+      const requestedClears = (req.body as any)?._clear
+      if (Array.isArray(requestedClears) && requestedClears.length > 0) {
+        await applyFamilyProfileClears(sql, sub, requestedClears)
+        const [refreshed] = await sql`SELECT * FROM family_profiles WHERE cognito_sub = ${sub}`
+        return res.json(refreshed)
+      }
       return res.json(row)
     } catch (e: any) {
       return res.status(500).json({ error: e.message ?? String(e) })

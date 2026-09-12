@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { applyEncounterNoteClears } from '../_lib/applyClears'
 
 const PAYER_IDS: Record<string, string> = {
   'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
@@ -350,6 +351,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (signing && row?.id) {
         try { await generateClaimForNote(sql, row.id, practiceId) }
         catch (err: any) { console.error('[claim] Auto-generation failed:', err?.message) }
+      }
+
+      // _clear support — let providers wipe SOAP sections they mistyped.
+      // See feedback_extract_shared_code_first_try.md.
+      const requestedClears = (req.body as any)?._clear
+      if (Array.isArray(requestedClears) && requestedClears.length > 0) {
+        await applyEncounterNoteClears(sql, id, practiceId, requestedClears)
+        const [refreshed] = await sql`SELECT * FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+        return res.json(refreshed)
       }
       return res.json(row)
     } catch (err: any) {

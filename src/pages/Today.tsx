@@ -409,7 +409,13 @@ export function Today() {
       // might have silently 500'd.
       await updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions })
+    // Await + surface — if the post-visit email fails, the family won't
+    // get their after-visit instructions; provider needs to know.
+    try {
+      await invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id, instructions })
+    } catch (e: any) {
+      alert(`Visit marked done but the after-visit email didn't send: ${e?.message ?? 'unknown error'}. Please resend it manually.`)
+    }
     setAppts(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')

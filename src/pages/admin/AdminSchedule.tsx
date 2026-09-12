@@ -383,7 +383,12 @@ export function AdminSchedule() {
     if (instructions && doneTarget.charm_appointment_id) {
       await updateBookingRequest(doneTarget.charm_appointment_id, { after_visit_instructions: instructions })
     }
-    void invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
+    // Await + surface — parent needs the after-visit email to actually send.
+    try {
+      await invokeNotifications({ type: 'post_visit_email', appointmentId: doneTarget.id })
+    } catch (e: any) {
+      alert(`Visit marked done but the after-visit email didn't send: ${e?.message ?? 'unknown error'}. Please resend it manually.`)
+    }
     setAppointments(prev => prev.map(a => a.id === doneTarget!.id ? { ...a, status: 'done' } : a))
     setDoneTarget(null)
     setDoneInstructions('')

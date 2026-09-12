@@ -172,8 +172,12 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
   }
 
   async function handleDelete(id: string) {
-    await deletePracticeZone(id).catch(() => {})
-    setZones(prev => prev.filter(z => z.id !== id))
+    try {
+      await deletePracticeZone(id)
+      setZones(prev => prev.filter(z => z.id !== id))
+    } catch (e: any) {
+      alert(`Couldn't delete zone: ${e?.message ?? 'unknown error'}`)
+    }
   }
 
   return (
@@ -302,8 +306,12 @@ function VisitTypePanel({ practiceId, practiceName }: { practiceId: string; prac
   }
 
   async function handleDelete(id: string) {
-    await deletePracticeVisitType(id).catch(() => {})
-    setVisitTypes(prev => prev.filter(v => v.id !== id))
+    try {
+      await deletePracticeVisitType(id)
+      setVisitTypes(prev => prev.filter(v => v.id !== id))
+    } catch (e: any) {
+      alert(`Couldn't delete visit type: ${e?.message ?? 'unknown error'}`)
+    }
   }
 
   return (

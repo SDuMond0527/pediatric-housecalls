@@ -373,22 +373,10 @@ export function Waitlist() {
       // Don't block waitlist entry creation — better a note-only entry than losing the request
     }
 
-    // Notes carry a human-readable dump of everything for legacy display.
-    const noteParts: string[] = []
-    noteParts.push(`Patient: ${addForm.name}`)
-    if (addForm.dob) noteParts.push(`DOB: ${addForm.dob}`)
-    if (addForm.email) noteParts.push(`Email: ${addForm.email}`)
-    if (addForm.phone) noteParts.push(`Phone: ${addForm.phone}`)
-    if (addForm.address) noteParts.push(`Address: ${addForm.address}`)
-    if (addForm.allergies) noteParts.push(`Allergies: ${addForm.allergies}`)
-    if (addForm.medications) noteParts.push(`Medications: ${addForm.medications}`)
-    if (addForm.pmh) noteParts.push(`PMH: ${addForm.pmh}`)
-    if (addForm.pcp) noteParts.push(`PCP: ${addForm.pcp}`)
-    if (addForm.pharmacy) noteParts.push(`Pharmacy: ${addForm.pharmacy}`)
-    if (addForm.insurance) noteParts.push(`Insurance: ${addForm.insurance}`)
-    if (addForm.memberId) noteParts.push(`Member ID: ${addForm.memberId}`)
-    if (addForm.groupNum) noteParts.push(`Group #: ${addForm.groupNum}`)
-    if (addForm.complaint) noteParts.push(`Complaint: ${addForm.complaint}`)
+    // Patient info now saves to the child record + waitlist_entries columns
+    // — no more duplicated KEY:value dumps into notes. Display still falls
+    // back to parsing notes for legacy pre-fix entries. See:
+    // feedback_no_branches_on_entry_origin.md.
 
     try {
       const preferredWindow = [
@@ -402,7 +390,7 @@ export function Waitlist() {
         state: addForm.state,
         complaint: addForm.complaint,
         preferred_time_window: preferredWindow,
-        notes: noteParts.join(' | '),
+        notes: null,
         child_ids: childId ? [childId] : [],
       })
       if (newEntry?.id) {

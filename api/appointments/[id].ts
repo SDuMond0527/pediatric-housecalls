@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { applyAppointmentClears } from '../_lib/applyClears'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -148,8 +149,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } else if (after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE appointments SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
+  } else if (Array.isArray((req.body as any)?._clear) && (req.body as any)._clear.length > 0) {
+    // Pure clear-only request — no other fields to update.
+    // Fall through to the clear logic below, then re-fetch.
+    ;[row] = await sql`SELECT * FROM appointments WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid`
   } else {
     return res.status(400).json({ error: 'No valid fields' })
+  }
+
+  // Explicit-clear support — see feedback_extract_shared_code_first_try.md.
+  // Runs AFTER the COALESCE-based UPDATE above; nulls any whitelisted
+  // columns the client explicitly asked to clear.
+  const requestedClears = (req.body as any)?._clear
+  if (Array.isArray(requestedClears) && requestedClears.length > 0) {
+    await applyAppointmentClears(sql, id, practiceId, requestedClears)
+    ;[row] = await sql`SELECT * FROM appointments WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid`
   }
   res.json(row)
 }
