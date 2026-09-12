@@ -506,7 +506,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rendering_provider_taxonomy = COALESCE(${updates.rendering_provider_taxonomy ?? null}, rendering_provider_taxonomy),
         place_of_service           = COALESCE(${updates.place_of_service ?? null}, place_of_service),
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
-        status                     = COALESCE(${updates.status ?? null}, CASE WHEN ${clearStaleError} AND status = 'error' THEN 'draft' ELSE status END),
+        status                     = COALESCE(${updates.status ?? null}, CASE WHEN ${clearStaleError} AND status = 'error' THEN 'pending_review' ELSE status END),
         cpt_codes                  = COALESCE(${updates.cpt_codes != null ? JSON.stringify(updates.cpt_codes) : null}::jsonb, cpt_codes),
         diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
         total_charge               = COALESCE(${newTotal}, total_charge),

@@ -134,12 +134,15 @@ export function AdminClaims() {
   async function load() {
     setLoading(true)
     try {
-      const [review, errored, submitted] = await Promise.all([
+      // Fetch draft too — belt-and-suspenders so no claim can ever be
+      // in a status that this page doesn't render, even accidentally.
+      const [review, errored, submitted, draft] = await Promise.all([
         getClaims('pending_review'),
         getClaims('error'),
         getClaims('submitted'),
+        getClaims('draft'),
       ])
-      setClaims([...review, ...errored, ...submitted])
+      setClaims([...review, ...errored, ...submitted, ...draft])
     } catch (e: any) {
       alert('Failed to load claims: ' + (e.message ?? 'Unknown error'))
     } finally {
@@ -344,8 +347,8 @@ export function AdminClaims() {
   const isReady = (c: any) => !!c.ready_for_biller_at
   const baseVisibleClaims = claims.filter(c => !isSelfPayWithSentStatement(c))
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
-  const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error')
-  const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error')
+  const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')
+  const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error' && c.status !== 'draft')
   const readyCount      = baseVisibleClaims.filter(isReady).length
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
