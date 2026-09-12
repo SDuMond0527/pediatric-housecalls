@@ -33,6 +33,30 @@ function requireEnv(name: string): string {
 }
 
 /**
+ * Wrap `page.waitForURL` so a timeout produces an ACTIONABLE failure
+ * message instead of "waitForURL: timeout." Captures the current URL,
+ * whatever error banner text is on the page, and the login button's
+ * enabled state. Without this, every Playwright failure email tonight
+ * has been useless — we only knew the wait timed out, not why.
+ */
+async function waitForUrlOrExplain(page: Page, pattern: RegExp, ctx: string): Promise<void> {
+  try {
+    await page.waitForURL(pattern, { timeout: 15_000 })
+  } catch (err) {
+    const url = page.url()
+    const errorBanner = await page.locator('.bg-\\[\\#FCEBEB\\], [role="alert"]').first().textContent().catch(() => '')
+    const bodySnippet = (await page.locator('body').textContent().catch(() => '') || '').slice(0, 400).replace(/\s+/g, ' ').trim()
+    throw new Error(
+      `${ctx} timed out waiting for URL ${pattern}.\n` +
+      `  Current URL: ${url}\n` +
+      `  Error banner: ${(errorBanner || '').trim() || '(none)'}\n` +
+      `  Body snippet: ${bodySnippet}\n` +
+      `  Original: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
+}
+
+/**
  * Log in as a provider or admin. Uses TEST_ADMIN_EMAIL + TEST_ADMIN_PASSWORD.
  * (Sara uses one account for both admin and clinical roles per her setup.)
  */
@@ -45,9 +69,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await page.locator('input[type="password"]').first().fill(password)
   await page.getByRole('button', { name: /sign in to provider portal/i }).click()
 
-  // Wait for the landing page to appear — a provider always lands somewhere
-  // that has "Add appointment" or the schedule header.
-  await page.waitForURL(/\/(today|schedule|patients|admin)/, { timeout: 15_000 })
+  await waitForUrlOrExplain(page, /\/(today|schedule|patients|admin)/, 'loginAsAdmin')
 }
 
 /**
@@ -62,5 +84,5 @@ export async function loginAsFamily(page: Page): Promise<void> {
   await page.locator('input[type="password"]').first().fill(password)
   await page.getByRole('button', { name: /sign in/i }).click()
 
-  await page.waitForURL(/\/family\/(dashboard|book|home|profile)/, { timeout: 15_000 })
+  await waitForUrlOrExplain(page, /\/family\/(dashboard|book|home|profile)/, 'loginAsFamily')
 }
