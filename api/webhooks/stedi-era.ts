@@ -31,59 +31,55 @@ interface ParsedEraPayment {
   patient_non_covered:    number | null
 }
 
-function walkClaimPayments(eraBody: any): Array<{ pcn: string; parsed: ParsedEraPayment }> {
-  const out: Array<{ pcn: string; parsed: ParsedEraPayment }> = []
-  const interchanges = eraBody?.interchanges ?? [eraBody]
-  for (const interchange of interchanges) {
-    const groups = interchange?.functionalGroups ?? interchange?.functionalGroup ?? [interchange]
-    for (const group of groups) {
-      const txSets = group?.transactionSets ?? group?.transactionSet ?? eraBody?.transactionSets ?? []
-      for (const txSet of txSets) {
-        const claims = txSet?.claimPaymentInformation ?? txSet?.claimPayments ?? txSet?.detail?.claimPaymentInformation ?? []
-        for (const cp of claims) {
-          const pcn = String(cp?.patientControlNumber ?? cp?.patientAccountNumber ?? '').trim()
-          if (!pcn) continue
-          const amountBilled     = parseFloat(cp?.totalClaimChargeAmount ?? 0) || null
-          const insurancePayment = parseFloat(cp?.claimPaymentAmount ?? cp?.paymentAmount ?? 0) || null
-          let contractualAdj = 0, deductible = 0, coinsurance = 0, copay = 0, nonCovered = 0
-          for (const grp of (cp?.claimAdjustmentInformation ?? cp?.adjustmentGroups ?? cp?.claimAdjustments ?? [])) {
-            const gc = grp?.adjustmentGroupCode ?? grp?.claimAdjustmentGroupCode ?? ''
-            const details = grp?.adjustmentDetails ?? grp?.claimAdjustments ?? grp?.adjustments ?? []
-            for (const d of details) {
-              const code   = d?.adjustmentReasonCode ?? d?.claimAdjustmentReasonCode ?? ''
-              const amount = parseFloat(d?.adjustmentAmount ?? 0)
-              if (gc === 'CO' && code === '45') contractualAdj += amount
-              if (gc === 'PR' && code === '1')  deductible     += amount
-              if (gc === 'PR' && code === '2')  coinsurance    += amount
-              if (gc === 'PR' && code === '3')  copay          += amount
-              if (gc === 'PR' && code === '96') nonCovered     += amount
-            }
-          }
-          out.push({
-            pcn,
-            parsed: {
-              amount_billed:          amountBilled,
-              insurance_payment:      insurancePayment,
-              contractual_adjustment: contractualAdj || null,
-              patient_deductible:     deductible     || null,
-              patient_coinsurance:    coinsurance    || null,
-              patient_copay:          copay          || null,
-              patient_non_covered:    nonCovered     || null,
-            },
-          })
-        }
-      }
-    }
+// Parser verified end-to-end via Sara's Test button 2026-09-11.
+// Response shape: { items: [{ patientControlNumber, claimId,
+// totalClaimChargeAmount, paidAmount, ... }] }. No line-level
+// adjustments in this endpoint — those columns stay null.
+function walkClaimPayments(body: any): Array<{ pcn: string; stediClaimId: string | null; parsed: ParsedEraPayment }> {
+  const items: any[] = Array.isArray(body?.items)
+    ? body.items
+    : Array.isArray(body) ? body
+    : []
+  const out: Array<{ pcn: string; stediClaimId: string | null; parsed: ParsedEraPayment }> = []
+  for (const item of items) {
+    const pcn = String(item?.patientControlNumber ?? '').trim()
+    if (!pcn) continue
+    const billed = parseFloat(item?.totalClaimChargeAmount ?? '0')
+    const paid   = parseFloat(item?.paidAmount ?? '0')
+    out.push({
+      pcn,
+      stediClaimId: item?.claimId ? String(item.claimId) : null,
+      parsed: {
+        amount_billed:          Number.isFinite(billed) ? billed : null,
+        insurance_payment:      Number.isFinite(paid) ? paid : null,
+        contractual_adjustment: null,
+        patient_deductible:     null,
+        patient_coinsurance:    null,
+        patient_copay:          null,
+        patient_non_covered:    null,
+      },
+    })
   }
   return out
 }
 
-async function findClaimByPCN(sql: any, pcn: string): Promise<any | null> {
+async function findClaimByStediIdOrPCN(sql: any, stediClaimId: string | null, pcn: string): Promise<any | null> {
+  if (stediClaimId) {
+    const rows = await sql`
+      SELECT id, practice_id, encounter_note_id, appointment_id, child_id,
+             payer_name, payer_id, service_date, cpt_codes,
+             patient_first_name, patient_last_name, patient_dob, patient_gender,
+             era_received_at, era_seen_at, stedi_claim_id
+      FROM claims
+      WHERE stedi_claim_id = ${stediClaimId}
+      LIMIT 1`
+    if (rows[0]) return rows[0]
+  }
   const rows = await sql`
     SELECT id, practice_id, encounter_note_id, appointment_id, child_id,
            payer_name, payer_id, service_date, cpt_codes,
            patient_first_name, patient_last_name, patient_dob, patient_gender,
-           era_received_at, era_seen_at
+           era_received_at, era_seen_at, stedi_claim_id
     FROM claims
     WHERE REPLACE(id::text, '-', '') ILIKE ${pcn + '%'}
     LIMIT 1`
@@ -181,8 +177,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let skipped = 0
   const errors: string[] = []
 
-  for (const { pcn, parsed } of walkClaimPayments(event)) {
-    const claim = await findClaimByPCN(sql, pcn)
+  for (const { pcn, stediClaimId, parsed } of walkClaimPayments(event)) {
+    const claim = await findClaimByStediIdOrPCN(sql, stediClaimId, pcn)
     if (!claim) { skipped++; continue }
     try {
       const { statementCreated } = await applyEraPaymentToClaim(sql, claim, parsed, event)
