@@ -608,8 +608,9 @@ export function AdminClaims() {
                                   onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], group_number: e.target.value } }))} />
                               </div>
                               <div>
-                                <label className="text-[11px] text-[#555] block mb-1">Subscriber name</label>
+                                <label className="text-[11px] text-[#555] block mb-1">Subscriber full name (first AND last)</label>
                                 <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                  placeholder="e.g., Sarah Rodgers"
                                   value={editPatient[c.id].subscriber_name}
                                   onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], subscriber_name: e.target.value } }))} />
                               </div>

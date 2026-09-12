@@ -53,7 +53,13 @@ export function insuranceIsComplete(v: InsuranceValue, opts?: { requireCards?: b
   if (!v.insurance_provider.trim()) return 'Insurance provider'
   if (!v.insurance_member_id.trim()) return 'Member ID'
   if (!v.insurance_group_number.trim()) return 'Group #'
-  if (!v.insurance_subscriber_name.trim()) return 'Subscriber name'
+  const subName = v.insurance_subscriber_name.trim()
+  if (!subName) return 'Subscriber name'
+  // Payer 837P requires both first and last name for the subscriber.
+  // A single-word entry (e.g., "Rodgers") passes the not-empty check
+  // but Blue Cross rejects at Stedi with code 33 "Missing First Name."
+  // Catch it here so it can never reach the claim submitter.
+  if (subName.split(/\s+/).filter(Boolean).length < 2) return 'Subscriber first AND last name'
   if (!v.insurance_subscriber_dob) return 'Subscriber DOB'
   if (!v.insurance_subscriber_gender) return 'Subscriber sex'
   if (opts?.requireCards !== false) {
@@ -134,7 +140,7 @@ export function InsuranceEditor({
 
           {showSubscriber && (
             <>
-              <Input label="Subscriber name *" placeholder="Full name"
+              <Input label="Subscriber full name (first AND last) *" placeholder="e.g., Sarah Rodgers"
                 value={value.insurance_subscriber_name}
                 onChange={e => onChange({ insurance_subscriber_name: e.target.value })} />
               <div className="grid grid-cols-3 gap-2">

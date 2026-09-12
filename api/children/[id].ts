@@ -48,6 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const b = req.body
 
+      // Subscriber name must include both first + last if provided.
+      // Empty is fine (self-pay / not-yet-collected). Single-word is
+      // rejected downstream by Blue Cross — catch it here so bad data
+      // never lands in children.insurance_subscriber_name.
+      if (b?.insurance_subscriber_name && String(b.insurance_subscriber_name).trim()) {
+        const parts = String(b.insurance_subscriber_name).trim().split(/\s+/).filter(Boolean)
+        if (parts.length < 2) {
+          return res.status(400).json({ error: 'Subscriber name must include both first and last name (e.g., "Sarah Rodgers").' })
+        }
+      }
+
       // ── Archive / unarchive patient ──────────────────────────────────────────
       if (b._action === 'archive') {
         const [row] = await sql`

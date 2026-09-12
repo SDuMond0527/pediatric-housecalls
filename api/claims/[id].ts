@@ -264,39 +264,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
 
-      // If the claim was generated before the family had an address on
-      // file, its patient_address snapshot is empty even though the
-      // family later filled it in. Rather than force the biller to
-      // hand-type the address into every stale claim, refresh missing
-      // patient address fields from family_profiles at submit time and
-      // persist the fill so subsequent views are correct too. This
-      // makes the "dependent.address missing" Stedi rejection
-      // (Madelynn Rodgers 2026-09-11) impossible to hit whenever the
-      // family record has the data.
-      const missingAny = !claim.patient_address || !claim.patient_city || !claim.patient_state || !claim.patient_zip
-      if (missingAny && claim.child_id) {
-        const [family] = await sql`
-          SELECT fp.address_line1, fp.city, fp.state, fp.zip
+      // If the claim's snapshot of patient address or subscriber info
+      // is stale, refresh from the linked child/family record at
+      // submit time and persist. This prevents Stedi rejections like
+      //   "dependent.address missing"   (Madelynn Rodgers 2026-09-11)
+      //   "Missing First Name (Subscriber)"  (Madelynn Rodgers 2026-09-11)
+      // whenever the correct data now lives on the family/child.
+      const addressStale = !claim.patient_address || !claim.patient_city || !claim.patient_state || !claim.patient_zip
+      const subscriberStale = !claim.subscriber_name || !claim.subscriber_name.trim().includes(' ')
+      if ((addressStale || subscriberStale) && claim.child_id) {
+        const [row] = await sql`
+          SELECT
+            fp.address_line1, fp.city, fp.state, fp.zip,
+            ch.insurance_subscriber_name, ch.insurance_subscriber_dob,
+            ch.insurance_subscriber_gender, ch.insurance_subscriber_relationship,
+            ch.insurance_member_id, ch.insurance_group_number
           FROM children ch
           LEFT JOIN family_profiles fp ON fp.id = ch.family_id
           WHERE ch.id = ${claim.child_id}::uuid AND ch.practice_id = ${practiceId}::uuid`
-        if (family) {
+        if (row) {
+          const currentSub = (claim.subscriber_name ?? '').trim()
+          const childSub   = (row.insurance_subscriber_name ?? '').trim()
+          // Prefer a name with both first + last over a single-word one.
+          const bestSub = currentSub.includes(' ') ? currentSub
+                        : childSub.includes(' ')   ? childSub
+                        : (currentSub || childSub || null)
           const filled = {
-            patient_address: claim.patient_address || family.address_line1 || null,
-            patient_city:    claim.patient_city    || family.city          || null,
-            patient_state:   claim.patient_state   || family.state         || null,
-            patient_zip:     claim.patient_zip     || family.zip           || null,
+            patient_address:              claim.patient_address              || row.address_line1                     || null,
+            patient_city:                 claim.patient_city                 || row.city                              || null,
+            patient_state:                claim.patient_state                || row.state                             || null,
+            patient_zip:                  claim.patient_zip                  || row.zip                               || null,
+            subscriber_name:              bestSub,
+            subscriber_dob:               claim.subscriber_dob               || row.insurance_subscriber_dob          || null,
+            subscriber_gender:            claim.subscriber_gender            || row.insurance_subscriber_gender       || null,
+            subscriber_relationship:      claim.subscriber_relationship      || row.insurance_subscriber_relationship || null,
+            member_id:                    claim.member_id                    || row.insurance_member_id               || null,
+            group_number:                 claim.group_number                 || row.insurance_group_number            || null,
           }
           await sql`
             UPDATE claims SET
-              patient_address = ${filled.patient_address},
-              patient_city    = ${filled.patient_city},
-              patient_state   = ${filled.patient_state},
-              patient_zip     = ${filled.patient_zip},
-              updated_at      = now()
+              patient_address         = ${filled.patient_address},
+              patient_city            = ${filled.patient_city},
+              patient_state           = ${filled.patient_state},
+              patient_zip             = ${filled.patient_zip},
+              subscriber_name         = ${filled.subscriber_name},
+              subscriber_dob          = ${filled.subscriber_dob}::date,
+              subscriber_gender       = ${filled.subscriber_gender},
+              subscriber_relationship = ${filled.subscriber_relationship},
+              member_id               = ${filled.member_id},
+              group_number            = ${filled.group_number},
+              updated_at              = now()
             WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
           Object.assign(claim, filled)
         }
+      }
+
+      // Hard fail with a clear, actionable message BEFORE hitting
+      // Stedi if the subscriber name is still just a single word (or
+      // empty). Blue Cross rejects with the useless code-33 EDI
+      // message otherwise. Better to catch it here and tell the
+      // biller exactly what to fix.
+      const subParts = (claim.subscriber_name ?? '').trim().split(/\s+/).filter(Boolean)
+      if (subParts.length < 2) {
+        return res.status(400).json({
+          error: 'Subscriber name must include both a first and last name. Click "Edit patient & insurance info" and enter the full name of the insurance subscriber (e.g., the parent whose insurance covers the child).',
+        })
       }
 
       const payload = buildStediPayload(claim, testMode)
@@ -387,6 +419,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           total_charge = ${insuranceTotal}
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
       return res.json(updated)
+    }
+
+    // Subscriber name must include first + last if being written.
+    // Empty is fine, single-word is not — Blue Cross rejects (code 33).
+    if (fields?.subscriber_name && String(fields.subscriber_name).trim()) {
+      const parts = String(fields.subscriber_name).trim().split(/\s+/).filter(Boolean)
+      if (parts.length < 2) {
+        return res.status(400).json({ error: 'Subscriber name must include both first and last name (e.g., "Sarah Rodgers").' })
+      }
     }
 
     // General field update (payer_id, payer_name, cpt_codes, etc.)

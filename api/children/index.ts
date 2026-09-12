@@ -371,6 +371,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ln = String(last_name ?? '').trim()
     if (!fn) return res.status(400).json({ error: "Child's first name is required." })
 
+    // Subscriber name: if any is provided, require both first + last.
+    // Empty (self-pay / not-yet-collected) is fine. Single-word entries
+    // get rejected by Blue Cross downstream — catch them at ingest so
+    // no claim can be built from bad subscriber data.
+    if (insurance_subscriber_name && String(insurance_subscriber_name).trim()) {
+      const parts = String(insurance_subscriber_name).trim().split(/\s+/).filter(Boolean)
+      if (parts.length < 2) {
+        return res.status(400).json({ error: 'Subscriber name must include both first and last name (e.g., "Sarah Rodgers").' })
+      }
+    }
+
     if (family_id) {
       const [recent] = await sql`
         SELECT * FROM children
