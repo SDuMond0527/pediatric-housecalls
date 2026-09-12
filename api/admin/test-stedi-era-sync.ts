@@ -1,23 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { walkClaimPayments, findClaimByPCN, applyEraPaymentToClaim } from '../lib/applyEraPayment'
 
-// Admin-triggered ERA sync — runs the exact same logic as the
-// scheduled cron (api/cron/stedi-era-poll.ts) but auths via the
-// admin's provider token instead of CRON_SECRET. Wired into the
-// AdminClaims page as a "Test Stedi ERA sync" button so Sara can
-// verify the pipeline end-to-end without touching Vercel / terminal.
-//
-// The response JSON tells us:
-//   fetched          — how many remittances Stedi returned
-//   matched          — how many claim payments matched a local claim
-//   statementsCreated — new patient_statement rows written
-//   statementsUpdated — existing rows refreshed
-//   unmatched        — payments whose PCN didn't match any local claim
-//   errors           — per-claim write errors
-//   sampleUnmatchedPCNs — up to 5 unmatched PCNs so we can eyeball them
-//   remittanceIds    — the Stedi remittance IDs we fetched (for cross-ref)
+// Admin-triggered ERA sync — same pipeline as the scheduled cron but
+// authed via admin provider token. Wired to a button on AdminClaims so
+// Sara can verify end-to-end. Every helper is inlined — see comment in
+// api/cron/stedi-era-poll.ts for the reason.
 
 const STEDI_API_KEY = process.env.STEDI_API_KEY || ''
 
@@ -37,6 +25,149 @@ async function verifyProviderToken(authHeader: string | undefined): Promise<stri
   return payload.sub as string
 }
 
+interface ParsedEraPayment {
+  amount_billed:          number | null
+  insurance_payment:      number | null
+  contractual_adjustment: number | null
+  patient_deductible:     number | null
+  patient_coinsurance:    number | null
+  patient_copay:          number | null
+  patient_non_covered:    number | null
+}
+
+function walkClaimPayments(eraBody: any): Array<{ pcn: string; parsed: ParsedEraPayment }> {
+  const out: Array<{ pcn: string; parsed: ParsedEraPayment }> = []
+  const interchanges = eraBody?.interchanges ?? [eraBody]
+  for (const interchange of interchanges) {
+    const groups = interchange?.functionalGroups ?? interchange?.functionalGroup ?? [interchange]
+    for (const group of groups) {
+      const txSets = group?.transactionSets ?? group?.transactionSet ?? eraBody?.transactionSets ?? []
+      for (const txSet of txSets) {
+        const claims = txSet?.claimPaymentInformation ?? txSet?.claimPayments ?? txSet?.detail?.claimPaymentInformation ?? []
+        for (const cp of claims) {
+          const pcn = String(cp?.patientControlNumber ?? cp?.patientAccountNumber ?? '').trim()
+          if (!pcn) continue
+          const amountBilled     = parseFloat(cp?.totalClaimChargeAmount ?? 0) || null
+          const insurancePayment = parseFloat(cp?.claimPaymentAmount ?? cp?.paymentAmount ?? 0) || null
+          let contractualAdj = 0, deductible = 0, coinsurance = 0, copay = 0, nonCovered = 0
+          for (const grp of (cp?.claimAdjustmentInformation ?? cp?.adjustmentGroups ?? cp?.claimAdjustments ?? [])) {
+            const gc = grp?.adjustmentGroupCode ?? grp?.claimAdjustmentGroupCode ?? ''
+            const details = grp?.adjustmentDetails ?? grp?.claimAdjustments ?? grp?.adjustments ?? []
+            for (const d of details) {
+              const code   = d?.adjustmentReasonCode ?? d?.claimAdjustmentReasonCode ?? ''
+              const amount = parseFloat(d?.adjustmentAmount ?? 0)
+              if (gc === 'CO' && code === '45') contractualAdj += amount
+              if (gc === 'PR' && code === '1')  deductible     += amount
+              if (gc === 'PR' && code === '2')  coinsurance    += amount
+              if (gc === 'PR' && code === '3')  copay          += amount
+              if (gc === 'PR' && code === '96') nonCovered     += amount
+            }
+          }
+          out.push({
+            pcn,
+            parsed: {
+              amount_billed:          amountBilled,
+              insurance_payment:      insurancePayment,
+              contractual_adjustment: contractualAdj || null,
+              patient_deductible:     deductible     || null,
+              patient_coinsurance:    coinsurance    || null,
+              patient_copay:          copay          || null,
+              patient_non_covered:    nonCovered     || null,
+            },
+          })
+        }
+      }
+    }
+  }
+  return out
+}
+
+async function findClaimByPCN(sql: any, pcn: string): Promise<any | null> {
+  const rows = await sql`
+    SELECT id, practice_id, encounter_note_id, appointment_id, child_id,
+           payer_name, payer_id, service_date, cpt_codes,
+           patient_first_name, patient_last_name, patient_dob, patient_gender,
+           era_received_at, era_seen_at
+    FROM claims
+    WHERE REPLACE(id::text, '-', '') ILIKE ${pcn + '%'}
+    LIMIT 1`
+  return rows[0] ?? null
+}
+
+async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPayment, eraRaw: any): Promise<{ statementCreated: boolean }> {
+  await sql`
+    UPDATE claims SET
+      era_received_at            = COALESCE(era_received_at, NOW()),
+      era_raw                    = ${JSON.stringify(eraRaw)}::jsonb,
+      amount_billed_era          = ${parsed.amount_billed},
+      insurance_payment_era      = ${parsed.insurance_payment},
+      contractual_adjustment_era = ${parsed.contractual_adjustment},
+      patient_deductible_era     = ${parsed.patient_deductible},
+      patient_coinsurance_era    = ${parsed.patient_coinsurance},
+      patient_copay_era          = ${parsed.patient_copay},
+      patient_non_covered_era    = ${parsed.patient_non_covered},
+      updated_at                 = NOW()
+    WHERE id = ${claim.id}`
+
+  const patientResp = (parsed.patient_copay ?? 0) + (parsed.patient_deductible ?? 0) + (parsed.patient_coinsurance ?? 0) + (parsed.patient_non_covered ?? 0)
+  const remaining = (parsed.amount_billed ?? 0) - (parsed.insurance_payment ?? 0) - (parsed.contractual_adjustment ?? 0)
+
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id} LIMIT 1`
+  if (existing) {
+    await sql`
+      UPDATE patient_statements SET
+        amount_billed          = COALESCE(${parsed.amount_billed}, amount_billed),
+        insurance_payment      = COALESCE(${parsed.insurance_payment}, insurance_payment),
+        contractual_adjustment = COALESCE(${parsed.contractual_adjustment}, contractual_adjustment),
+        patient_copay          = COALESCE(${parsed.patient_copay}, patient_copay),
+        patient_deductible     = COALESCE(${parsed.patient_deductible}, patient_deductible),
+        patient_coinsurance    = COALESCE(${parsed.patient_coinsurance}, patient_coinsurance),
+        patient_non_covered    = COALESCE(${parsed.patient_non_covered}, patient_non_covered),
+        remaining_balance      = COALESCE(${remaining}, remaining_balance),
+        total_amount_due       = COALESCE(${patientResp}, total_amount_due),
+        updated_at             = NOW()
+      WHERE id = ${existing.id}`
+    return { statementCreated: false }
+  }
+
+  let email: string | null = null
+  let phone: string | null = null
+  if (claim.child_id) {
+    const [ch] = await sql`
+      SELECT ch.parent_email, ch.parent_phone,
+             fp.email AS family_email, fp.phone AS family_phone
+      FROM children ch LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+      WHERE ch.id = ${claim.child_id}::uuid
+      LIMIT 1`
+    if (ch) {
+      email = ch.parent_email || ch.family_email || null
+      phone = ch.parent_phone || ch.family_phone || null
+    }
+  }
+
+  await sql`
+    INSERT INTO patient_statements (
+      practice_id, claim_id,
+      patient_first_name, patient_last_name, patient_dob,
+      date_of_service, cpt_codes,
+      patient_email, patient_phone,
+      amount_billed, insurance_payment, contractual_adjustment,
+      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+      status, created_at, updated_at
+    ) VALUES (
+      ${claim.practice_id}::uuid, ${claim.id},
+      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+      ${email}, ${phone},
+      ${parsed.amount_billed}, ${parsed.insurance_payment}, ${parsed.contractual_adjustment},
+      ${parsed.patient_copay}, ${parsed.patient_deductible}, ${parsed.patient_coinsurance}, ${parsed.patient_non_covered},
+      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+      'draft', NOW(), NOW()
+    )`
+  return { statementCreated: true }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -52,8 +183,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
   if (!provider.is_admin) return res.status(403).json({ error: 'Admin only' })
 
-  // Guard: STEDI_API_KEY must be present. If it isn't, tell the admin
-  // explicitly — this is the most common cause of "nothing happens."
   if (!STEDI_API_KEY) {
     return res.status(200).json({
       ok: false,
@@ -63,8 +192,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  // Idempotent column bootstrap for the era_seen_at column that drives
-  // the AdminClaims notification badge.
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS era_seen_at timestamptz` } catch {}
 
   const summary = {
@@ -122,7 +249,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (summary.sampleUnmatchedPCNs.length < 5) summary.sampleUnmatchedPCNs.push(pcn)
           continue
         }
-        // Only process claims for this admin's practice.
         if (claim.practice_id !== provider.practice_id) continue
         try {
           const { statementCreated } = await applyEraPaymentToClaim(sql, claim, parsed, detail)
@@ -135,7 +261,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Diagnostic messaging based on what we found.
     if (summary.matched === 0 && summary.unmatched === 0) {
       summary.diagnosis = `Fetched ${summary.fetched} remittance(s) from Stedi, but none contained a claim payment we could parse. The JSON structure may have changed — check Stedi's API docs or share a raw remittance for me to look at.`
     } else if (summary.matched === 0 && summary.unmatched > 0) {

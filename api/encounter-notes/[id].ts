@@ -1,8 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyEncounterNoteClears } from '../lib/applyClears'
-import { resolvePayer } from '../lib/payerIds'
+// Inlined from api/lib/applyClears.ts + api/lib/payerIds.ts — see
+// comment in api/appointments/[id].ts explaining why.
+const ENCOUNTER_NOTES_CLEARABLE = new Set<string>([
+  'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
+  'vaccine_administrations', 'iv_administration',
+])
+async function applyEncounterNoteClears(
+  sql: any,
+  id: string,
+  practiceId: string,
+  requested: unknown,
+): Promise<void> {
+  const clears = Array.isArray(requested)
+    ? (requested as unknown[]).filter((k): k is string => typeof k === 'string' && ENCOUNTER_NOTES_CLEARABLE.has(k))
+    : []
+  for (const field of clears) {
+    switch (field) {
+      case 'chief_complaint':          await sql`UPDATE encounter_notes SET chief_complaint          = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'subjective':               await sql`UPDATE encounter_notes SET subjective               = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'objective':                await sql`UPDATE encounter_notes SET objective                = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'assessment':               await sql`UPDATE encounter_notes SET assessment               = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'plan':                     await sql`UPDATE encounter_notes SET plan                     = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'vaccine_administrations':  await sql`UPDATE encounter_notes SET vaccine_administrations  = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'iv_administration':        await sql`UPDATE encounter_notes SET iv_administration        = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+    }
+  }
+}
+const PAYER_IDS_INLINE: Record<string, string> = {
+  'self pay': 'PP', 'self-pay': 'PP', 'selfpay': 'PP', 'self': 'PP',
+  'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
+  'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
+  'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',
+  'blue cross blue shield nc': 'UPICO',
+  'aetna': '60054', 'cigna': '62308',
+  'united healthcare': '87726', 'united health care': '87726', 'uhc': '87726',
+  'umr': '39026', 'humana': '61101',
+  'phcs': '52133', 'multiplan': '52133',
+  'coventry': '38217', 'select health': '53589',
+  'medcost': '56196', 'healthgram': '56162',
+  'bright health': '98798', 'bright healthcare': '98798',
+}
+function resolvePayer(name: string | null): string | null {
+  if (!name) return null
+  return PAYER_IDS_INLINE[name.toLowerCase().trim()] ?? null
+}
 
 async function generateClaimForNote(sql: any, encounterNoteId: string, practiceId: string) {
   const [existing] = await sql`

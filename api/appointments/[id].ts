@@ -1,7 +1,34 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyAppointmentClears } from '../lib/applyClears'
+// Inlined from api/lib/applyClears.ts — Vercel treats every .ts file
+// inside api/ as a serverless function. Files in api/lib/ that only
+// export helpers (no default handler) crash the deploy with
+// FUNCTION_INVOCATION_FAILED. Every consumer keeps its own copy of the
+// helper. Keep in sync with peers.
+const APPOINTMENTS_CLEARABLE = new Set<string>([
+  'notes', 'after_visit_instructions', 'zone',
+  'duration_minutes', 'second_provider_id',
+])
+async function applyAppointmentClears(
+  sql: any,
+  id: string,
+  practiceId: string,
+  requested: unknown,
+): Promise<void> {
+  const clears = Array.isArray(requested)
+    ? (requested as unknown[]).filter((k): k is string => typeof k === 'string' && APPOINTMENTS_CLEARABLE.has(k))
+    : []
+  for (const field of clears) {
+    switch (field) {
+      case 'notes':                    await sql`UPDATE appointments SET notes                    = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'after_visit_instructions': await sql`UPDATE appointments SET after_visit_instructions = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'zone':                     await sql`UPDATE appointments SET zone                     = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'duration_minutes':         await sql`UPDATE appointments SET duration_minutes         = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'second_provider_id':       await sql`UPDATE appointments SET second_provider_id       = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+    }
+  }
+}
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')

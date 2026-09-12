@@ -1,7 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyNoteTemplateClears } from '../lib/applyClears'
+// Inlined from api/lib/applyClears.ts — see comment in
+// api/appointments/[id].ts explaining why.
+const NOTE_TEMPLATES_CLEARABLE = new Set<string>(['subjective', 'objective', 'plan'])
+async function applyNoteTemplateClears(
+  sql: any,
+  id: string,
+  practiceId: string,
+  requested: unknown,
+): Promise<void> {
+  const clears = Array.isArray(requested)
+    ? (requested as unknown[]).filter((k): k is string => typeof k === 'string' && NOTE_TEMPLATES_CLEARABLE.has(k))
+    : []
+  for (const field of clears) {
+    switch (field) {
+      case 'subjective': await sql`UPDATE note_templates SET subjective = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'objective':  await sql`UPDATE note_templates SET objective  = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'plan':       await sql`UPDATE note_templates SET plan       = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+    }
+  }
+}
 
 async function verifyToken(authHeader: string | undefined): Promise<{ sub: string }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')

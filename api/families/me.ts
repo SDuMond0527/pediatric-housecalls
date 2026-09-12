@@ -1,7 +1,33 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { applyFamilyProfileClears } from '../lib/applyClears'
+// Inlined from api/lib/applyClears.ts — see comment in
+// api/appointments/[id].ts explaining why.
+const FAMILY_PROFILE_CLEARABLE = new Set<string>([
+  'display_name', 'phone',
+  'address_line1', 'city', 'state', 'zip',
+  'referral_source',
+])
+async function applyFamilyProfileClears(
+  sql: any,
+  cognitoSub: string,
+  requested: unknown,
+): Promise<void> {
+  const clears = Array.isArray(requested)
+    ? (requested as unknown[]).filter((k): k is string => typeof k === 'string' && FAMILY_PROFILE_CLEARABLE.has(k))
+    : []
+  for (const field of clears) {
+    switch (field) {
+      case 'display_name':    await sql`UPDATE family_profiles SET display_name    = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'phone':           await sql`UPDATE family_profiles SET phone           = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'address_line1':   await sql`UPDATE family_profiles SET address_line1   = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'city':            await sql`UPDATE family_profiles SET city            = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'state':           await sql`UPDATE family_profiles SET state           = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'zip':             await sql`UPDATE family_profiles SET zip             = NULL WHERE cognito_sub = ${cognitoSub}`; break
+      case 'referral_source': await sql`UPDATE family_profiles SET referral_source = NULL WHERE cognito_sub = ${cognitoSub}`; break
+    }
+  }
+}
 
 async function verifyFamilyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
