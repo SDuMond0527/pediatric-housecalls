@@ -226,34 +226,48 @@ function detectSelfPay(providerValue?: string | null): boolean {
   return v === 'self-pay' || v === 'selfpay' || v === 'self pay' || v === 'self'
 }
 
-function emptyIntake(childId: string, displayLabel: string, hasProfile: boolean, child?: import('../../../src/types/family').Child): ChildIntake {
-  const isSelfPay = detectSelfPay(child?.insurance_provider)
+function emptyIntake(
+  childId: string,
+  displayLabel: string,
+  hasProfile: boolean,
+  child?: import('../../../src/types/family').Child,
+  // Newly-added siblings inherit family-wide fields (insurance, PCP,
+  // pharmacy, subscriber info, cards) from an existing sibling's row.
+  // Matches the FAMILY_WIDE_KEYS propagation in api/children/[id].ts,
+  // so the client-side pre-fill mirrors what the server would set
+  // anyway after the first save. Parents can still override on the
+  // rare "siblings on different plans" case.
+  sibling?: import('../../../src/types/family').Child | null,
+): ChildIntake {
+  const provider = child?.insurance_provider || sibling?.insurance_provider
+  const isSelfPay = detectSelfPay(provider)
   return {
     childId, displayLabel, hasProfile,
-    cardOnFile: !!(child?.insurance_card_front_url && child?.insurance_card_back_url),
+    cardOnFile: !!((child?.insurance_card_front_url ?? sibling?.insurance_card_front_url) && (child?.insurance_card_back_url ?? sibling?.insurance_card_back_url)),
+    // Per-child fields — no sibling fallback.
     firstName: child?.first_name || '', lastName: child?.last_name || '', nickname: child?.nickname || '',
     dateOfBirth: toDateInputValue(child?.date_of_birth),
     gender: child?.gender || '',
-    // Show the *actual* insurance name when the family is insured; hide
-    // it (empty string) when the DB records self-pay, so the toggle
-    // controls visibility cleanly.
-    insuranceProvider: isSelfPay ? '' : (child?.insurance_provider || ''),
-    insuranceMemberId: child?.insurance_member_id || '',
-    insuranceGroupNumber: child?.insurance_group_number || '',
-    insuranceSubscriberName: child?.insurance_subscriber_name || '',
-    insuranceSubscriberDob: toDateInputValue(child?.insurance_subscriber_dob),
-    insuranceSubscriberGender: child?.insurance_subscriber_gender || '',
-    insuranceSubscriberRelationship: child?.insurance_subscriber_relationship || '',
-    insuranceCardFrontUrl: child?.insurance_card_front_url || '',
-    insuranceCardBackUrl: child?.insurance_card_back_url || '',
+    // Family-wide fields — fall back to sibling data on new-child add.
+    insuranceProvider: isSelfPay ? '' : (provider || ''),
+    insuranceMemberId: child?.insurance_member_id || sibling?.insurance_member_id || '',
+    insuranceGroupNumber: child?.insurance_group_number || sibling?.insurance_group_number || '',
+    insuranceSubscriberName: child?.insurance_subscriber_name || sibling?.insurance_subscriber_name || '',
+    insuranceSubscriberDob: toDateInputValue(child?.insurance_subscriber_dob || sibling?.insurance_subscriber_dob),
+    insuranceSubscriberGender: child?.insurance_subscriber_gender || sibling?.insurance_subscriber_gender || '',
+    insuranceSubscriberRelationship: child?.insurance_subscriber_relationship || sibling?.insurance_subscriber_relationship || '',
+    insuranceCardFrontUrl: child?.insurance_card_front_url || sibling?.insurance_card_front_url || '',
+    insuranceCardBackUrl: child?.insurance_card_back_url || sibling?.insurance_card_back_url || '',
     selfPay: isSelfPay,
-    // Pre-fill from child record. If the DB has the value, the field
-    // shows populated and the parent doesn't have to re-enter it. Only
-    // truly empty (never filled before) fields require input.
-    // See feedback_all_patient_info_required_and_displayed.md
+    // Per-child clinical — no sibling fallback (differs per kid).
     allergies: child?.allergies || '', currentMedications: child?.current_medications || '',
-    medicalHistory: child?.medical_history || '', preferredPharmacy: child?.preferred_pharmacy || '',
-    pcp: child?.pcp || '', pcp_id: child?.pcp_id || null, pcpNoPcp: false,
+    medicalHistory: child?.medical_history || '',
+    // Family-wide: pharmacy and PCP shared per family record.
+    preferredPharmacy: child?.preferred_pharmacy || sibling?.preferred_pharmacy || '',
+    pcp: child?.pcp || sibling?.pcp || '',
+    pcp_id: child?.pcp_id || sibling?.pcp_id || null,
+    pcpNoPcp: false,
+    // Per-child vax + consent.
     vaccinationStatus: (child as any)?.vaccination_status || '',
     phiSharingConsent: !!(child as any)?.phi_sharing_consent,
     chiefComplaint: '', additionalInfo: '', textVisitPhotos: [],
@@ -522,7 +536,16 @@ export function BookVisit() {
     const newIntakes = { ...booking.childIntakes }
     if (!isSelected && !newIntakes[childId]) {
       const child = children.find(c => c.id === childId)
-      newIntakes[childId] = emptyIntake(childId, displayLabel, hasProfile, child)
+      // Fallback sibling: the first OTHER child in the family that has
+      // any family-wide field populated. Used to pre-fill insurance,
+      // subscriber info, PCP, pharmacy, and card URLs onto brand-new
+      // siblings so parents don't re-enter shared data.
+      const sibling = children.find(c => c.id !== childId && (
+        c.insurance_provider || c.insurance_member_id ||
+        c.pcp_id || c.pcp || c.preferred_pharmacy ||
+        c.insurance_subscriber_name || c.insurance_card_front_url
+      )) ?? null
+      newIntakes[childId] = emptyIntake(childId, displayLabel, hasProfile, child, sibling)
     }
 
     setBooking(b => ({
@@ -964,13 +987,19 @@ export function BookVisit() {
       // Full profile save — runs for ALL children (new + returning) so any
       // updates the parent made in intake persist.
       await updateChild(childId, {
+        // Self-pay guards every insurance field consistent with the
+        // normal submit path (line ~1286). Prior asymmetry meant a
+        // self-pay family using the waitlist could write stale
+        // subscriber/card data. Now both paths behave identically.
         insurance_provider:                intake.selfPay ? 'Self-Pay' : (intake.insuranceProvider || null),
         insurance_member_id:               intake.selfPay ? null : (intake.insuranceMemberId || null),
-        insurance_group_number:            intake.insuranceGroupNumber || null,
-        insurance_subscriber_name:         intake.insuranceSubscriberName || null,
-        insurance_subscriber_dob:          intake.insuranceSubscriberDob || null,
-        insurance_subscriber_gender:       intake.insuranceSubscriberGender || null,
-        insurance_subscriber_relationship: intake.insuranceSubscriberRelationship || null,
+        insurance_group_number:            intake.selfPay ? null : (intake.insuranceGroupNumber || null),
+        insurance_subscriber_name:         intake.selfPay ? null : (intake.insuranceSubscriberName || null),
+        insurance_subscriber_dob:          intake.selfPay ? null : (intake.insuranceSubscriberDob || null),
+        insurance_subscriber_gender:       intake.selfPay ? null : (intake.insuranceSubscriberGender || null),
+        insurance_subscriber_relationship: intake.selfPay ? null : (intake.insuranceSubscriberRelationship || null),
+        insurance_card_front_url:          intake.selfPay ? null : (intake.insuranceCardFrontUrl || null),
+        insurance_card_back_url:           intake.selfPay ? null : (intake.insuranceCardBackUrl || null),
         preferred_pharmacy:                intake.preferredPharmacy || null,
         pcp:                               intake.pcp || null,
         pcp_id:                            intake.pcp_id || null,
@@ -978,14 +1007,13 @@ export function BookVisit() {
         current_medications:               intake.currentMedications || null,
         medical_history:                   intake.medicalHistory || null,
         vaccination_status:                intake.vaccinationStatus || null,
-        insurance_card_front_url:          intake.insuranceCardFrontUrl || null,
-        insurance_card_back_url:           intake.insuranceCardBackUrl || null,
         parent_name:                       family.display_name || null,
         parent_email:                      family.email || null,
         parent_phone:                      effectivePhone || null,
         parent_address:                    booking.visitAddress || null,
-        parent_zip:                        booking.zip || null,
+        parent_city:                       booking.city || null,
         parent_state:                      booking.state || null,
+        parent_zip:                        booking.zip || null,
       }).catch(() => {})
     }
 
