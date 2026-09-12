@@ -789,8 +789,9 @@ export function AdminClaims() {
                               </div>
                             ) : (
                               <div className="space-y-1">
-                                {(c.diagnoses ?? []).map((d: any) => (
+                                {(c.diagnoses ?? []).map((d: any, i: number) => (
                                   <div key={d.code} className="text-[12px] text-[#1A1A2E]">
+                                    <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#999] mr-1">{i + 1}</span>
                                     <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
                                   </div>
                                 ))}
@@ -924,17 +925,35 @@ export function AdminClaims() {
                               </div>
                             ) : (
                               <div className="space-y-1">
-                                {(c.cpt_codes ?? []).map((cp: any) => {
+                                {(c.cpt_codes ?? []).map((cp: any, cpIdx: number) => {
                                   const units = parseInt(cp.units, 10) || 1
                                   const lineTotal = (parseFloat(cp.charge_amount ?? 0) || 0) * units
+                                  const pointers: number[] = Array.isArray(cp.diagnosis_pointers) ? cp.diagnosis_pointers : []
                                   return (
-                                  <div key={cp.code} className="flex justify-between text-[12px]">
-                                    <span className="text-[#1A1A2E]">
-                                      <span className="font-semibold text-[#555]">{cp.code}</span>
-                                      {cp.modifier && <span className="ml-1 text-[10px] font-semibold text-[#F5943A]">-{cp.modifier}</span>}
-                                      {' '}{cp.description}
-                                      {units > 1 && <span className="ml-1 text-[10px] text-[#555]">× {units} units</span>}
-                                    </span>
+                                  <div key={cp.code} className="flex justify-between items-start text-[12px] gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-[#1A1A2E]">
+                                        <span className="font-semibold text-[#555]">{cp.code}</span>
+                                        {cp.modifier && <span className="ml-1 text-[10px] font-semibold text-[#F5943A]">-{cp.modifier}</span>}
+                                        {' '}{cp.description}
+                                        {units > 1 && <span className="ml-1 text-[10px] text-[#555]">× {units} units</span>}
+                                      </span>
+                                      <DxLineButton
+                                        claim={c}
+                                        cpIndex={cpIdx}
+                                        pointers={pointers}
+                                        onSave={async (nextPointers) => {
+                                          const nextCpt = (c.cpt_codes ?? []).map((x: any, i: number) =>
+                                            i === cpIdx ? { ...x, diagnosis_pointers: nextPointers } : x)
+                                          try {
+                                            await updateClaim(c.id, { cpt_codes: nextCpt })
+                                            await load()
+                                          } catch (e: any) {
+                                            alert(e?.message || 'Failed to save Dx assignments')
+                                          }
+                                        }}
+                                      />
+                                    </div>
                                     <span className="text-[#1A1A2E] font-medium ml-2 flex-shrink-0">{fmtMoney(lineTotal)}</span>
                                   </div>
                                   )
@@ -1230,6 +1249,131 @@ export function AdminClaims() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Per-line Dx assignment picker. Shows a small "Dx: 1, 3" badge plus
+// a link that opens a popover of the claim's diagnoses with numbered
+// checkboxes and up/down reorder arrows. Max 4 checked (X12 837P
+// per-line pointer cap). Empty selection persists as [] — the payload
+// builder falls back to "all diagnoses up to 4" for CPT lines that
+// have no explicit selection, so pre-existing claims aren't
+// regressed. Save is optimistic-then-reload via the parent's onSave.
+function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
+  claim: any
+  cpIndex: number
+  pointers: number[]
+  onSave: (next: number[]) => Promise<void> | void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<number[]>(pointers)
+  const [saving, setSaving] = useState(false)
+  const diagnoses: any[] = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
+
+  const openPopover = () => {
+    setDraft(pointers)
+    setOpen(true)
+  }
+  const toggle = (n: number) => {
+    setDraft(cur => {
+      if (cur.includes(n)) return cur.filter(x => x !== n)
+      if (cur.length >= 4) return cur
+      return [...cur, n]
+    })
+  }
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= draft.length) return
+    setDraft(cur => {
+      const next = [...cur]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+  const save = async () => {
+    setSaving(true)
+    try {
+      await onSave(draft)
+      setOpen(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const badge = pointers.length ? `Dx: ${pointers.join(', ')}` : 'Dx: all'
+
+  return (
+    <div className="relative inline-block ml-2">
+      <button
+        type="button"
+        onClick={openPopover}
+        disabled={diagnoses.length === 0}
+        className="text-[10px] px-1.5 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#F1EFE8] disabled:opacity-40 disabled:cursor-not-allowed">
+        {badge}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 top-6 left-0 w-80 bg-white border border-[#E8E8E4] rounded-lg shadow-lg p-3">
+            <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">
+              Link diagnoses to this CPT line
+            </div>
+            <div className="text-[11px] text-[#999] mb-2">
+              First checked = primary. Max 4. Empty = all diagnoses apply.
+            </div>
+            {diagnoses.length === 0 ? (
+              <div className="text-[12px] text-[#999] italic py-2">No diagnoses on this claim yet.</div>
+            ) : (
+              <div className="space-y-1 max-h-64 overflow-auto">
+                {diagnoses.map((d: any, i: number) => {
+                  const dxNumber = i + 1
+                  const orderIdx = draft.indexOf(dxNumber)
+                  const checked = orderIdx >= 0
+                  const disabled = !checked && draft.length >= 4
+                  return (
+                    <div key={d.code} className={`flex items-center gap-2 text-[12px] p-1 rounded ${checked ? 'bg-[#F1EFE8]' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggle(dxNumber)} />
+                      <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#999]">{dxNumber}</span>
+                      <span className="flex-1 min-w-0 truncate">
+                        <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
+                      </span>
+                      {checked && (
+                        <>
+                          <span className="text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] rounded px-1">
+                            #{orderIdx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={orderIdx === 0}
+                            onClick={() => move(orderIdx, orderIdx - 1)}
+                            className="text-[10px] text-[#555] disabled:opacity-30">▲</button>
+                          <button
+                            type="button"
+                            disabled={orderIdx === draft.length - 1}
+                            onClick={() => move(orderIdx, orderIdx + 1)}
+                            className="text-[10px] text-[#555] disabled:opacity-30">▼</button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-3 pt-2 border-t border-[#F1EFE8]">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-[11px] px-2 py-1 text-[#555] hover:underline">Cancel</button>
+              <Button size="sm" variant="teal" loading={saving} onClick={save}>Save</Button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

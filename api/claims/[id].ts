@@ -110,7 +110,24 @@ function buildStediPayload(claim: any, testMode = false): object {
   // encounter has 5+ diagnoses stored, we still only reference the
   // first 4 per line — otherwise Stedi rejects with "The length of
   // the items must be `<= 4`."
-  const diagnosisPointers = diagnoses.slice(0, 4).map((_: any, i: number) => String(i + 1))
+  const defaultDiagnosisPointers = diagnoses.slice(0, 4).map((_: any, i: number) => String(i + 1))
+  // Per-CPT-line diagnosis pointer resolver. If the CPT entry has an
+  // explicit diagnosis_pointers array (set by the biller via the "Dx"
+  // per-line picker in AdminClaims), use those — filtered to valid
+  // indices (1..diagnoses.length) and capped at 4. Otherwise fall
+  // back to "all diagnoses up to 4" so pre-existing claims and
+  // freshly-generated ones both work.
+  const pointersForLine = (cp: any): string[] => {
+    if (Array.isArray(cp?.diagnosis_pointers) && cp.diagnosis_pointers.length) {
+      const valid = cp.diagnosis_pointers
+        .map((n: any) => parseInt(n, 10))
+        .filter((n: number) => Number.isInteger(n) && n >= 1 && n <= diagnoses.length)
+        .slice(0, 4)
+        .map(String)
+      if (valid.length) return valid
+    }
+    return defaultDiagnosisPointers
+  }
 
   const serviceLines = cptCodes.map((c: any) => {
     const units = parseInt(c.units, 10) || 1
@@ -125,7 +142,7 @@ function buildStediPayload(claim: any, testMode = false): object {
       measurementUnit: 'UN',
       serviceUnitCount: String(units),
       compositeDiagnosisCodePointers: {
-        diagnosisCodePointers: diagnosisPointers,
+        diagnosisCodePointers: pointersForLine(c),
       },
     },
     renderingProvider: {
