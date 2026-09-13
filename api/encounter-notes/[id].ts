@@ -49,9 +49,18 @@ function resolvePayer(name: string | null): string | null {
 
 async function generateClaimForNote(sql: any, encounterNoteId: string, practiceId: string) {
   const [existing] = await sql`
-    SELECT id FROM claims WHERE encounter_note_id = ${encounterNoteId}::uuid AND practice_id = ${practiceId}::uuid
+    SELECT id, status FROM claims WHERE encounter_note_id = ${encounterNoteId}::uuid AND practice_id = ${practiceId}::uuid
   `
-  if (existing) return { skipped: 'Claim already exists' }
+  // If a submitted / accepted claim already exists, leave it alone
+  // (billers do NOT want auto-sync overwriting frozen claims). But
+  // if the claim is still editable (pending_review / error / draft),
+  // fall through so we can re-sync it below with any newly-added
+  // CPT codes or diagnoses on the note. Previously this bailed out
+  // for ALL existing claims, which meant re-signing a note never
+  // updated its claim — Sara DuMond 2026-09-13: virtual visit claim
+  // showed $0 empty after 99213 was added and note re-signed.
+  const isEditable = !existing || ['pending_review', 'error', 'draft'].includes(String(existing.status))
+  if (existing && !isEditable) return { skipped: 'Claim already submitted' }
 
   const [note] = await sql`SELECT * FROM encounter_notes WHERE id = ${encounterNoteId}::uuid AND practice_id = ${practiceId}::uuid`
   if (!note) return { error: 'Note not found' }
@@ -106,31 +115,49 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   const payerName = child?.insurance_provider ?? null
   const payerId = resolvePayer(payerName)
 
-  const [claim] = await sql`
-    INSERT INTO claims (
-      practice_id, encounter_note_id, appointment_id, child_id, provider_id,
-      payer_name, payer_id,
-      subscriber_name, subscriber_dob, subscriber_gender, member_id, group_number,
-      service_date, place_of_service,
-      diagnoses, cpt_codes, total_charge,
-      rendering_provider_name, rendering_provider_npi, rendering_provider_taxonomy,
-      patient_first_name, patient_last_name, patient_dob, patient_gender,
-      patient_address, patient_city, patient_state, patient_zip
-    ) VALUES (
-      ${practiceId}::uuid, ${encounterNoteId}::uuid,
-      ${note.appointment_id ?? null}::uuid, ${note.child_id ?? null}::uuid, ${note.provider_id ?? null}::uuid,
-      ${payerName}, ${payerId},
-      ${child?.insurance_subscriber_name ?? null}, ${child?.insurance_subscriber_dob ?? null},
-      ${child?.insurance_subscriber_gender ?? null}, ${child?.insurance_member_id ?? null},
-      ${child?.insurance_group_number ?? null},
-      ${appt?.scheduled_date ?? null}, ${pos},
-      ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
-      ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
-      ${child?.first_name ?? null}, ${child?.last_name ?? null},
-      ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
-      ${resolvedAddr.line1}, ${resolvedAddr.city}, ${resolvedAddr.state}, ${resolvedAddr.zip}
-    )
-    RETURNING *`
+  let claim: any
+  if (existing) {
+    // Editable claim already exists — refresh cpt_codes / diagnoses /
+    // total from the note, plus keep patient snapshot fields in sync
+    // if they've been improved via family updates since first sign.
+    ;[claim] = await sql`
+      UPDATE claims SET
+        cpt_codes    = ${JSON.stringify(cptCodes)}::jsonb,
+        diagnoses    = ${JSON.stringify(note.diagnoses ?? [])}::jsonb,
+        total_charge = ${total},
+        place_of_service = COALESCE(${pos}, place_of_service),
+        payer_name   = COALESCE(${payerName}, payer_name),
+        payer_id     = COALESCE(${payerId}, payer_id),
+        updated_at   = now()
+      WHERE id = ${existing.id}
+      RETURNING *`
+  } else {
+    ;[claim] = await sql`
+      INSERT INTO claims (
+        practice_id, encounter_note_id, appointment_id, child_id, provider_id,
+        payer_name, payer_id,
+        subscriber_name, subscriber_dob, subscriber_gender, member_id, group_number,
+        service_date, place_of_service,
+        diagnoses, cpt_codes, total_charge,
+        rendering_provider_name, rendering_provider_npi, rendering_provider_taxonomy,
+        patient_first_name, patient_last_name, patient_dob, patient_gender,
+        patient_address, patient_city, patient_state, patient_zip
+      ) VALUES (
+        ${practiceId}::uuid, ${encounterNoteId}::uuid,
+        ${note.appointment_id ?? null}::uuid, ${note.child_id ?? null}::uuid, ${note.provider_id ?? null}::uuid,
+        ${payerName}, ${payerId},
+        ${child?.insurance_subscriber_name ?? null}, ${child?.insurance_subscriber_dob ?? null},
+        ${child?.insurance_subscriber_gender ?? null}, ${child?.insurance_member_id ?? null},
+        ${child?.insurance_group_number ?? null},
+        ${appt?.scheduled_date ?? null}, ${pos},
+        ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
+        ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
+        ${child?.first_name ?? null}, ${child?.last_name ?? null},
+        ${child?.date_of_birth ?? null}, ${child?.gender ?? null},
+        ${resolvedAddr.line1}, ${resolvedAddr.city}, ${resolvedAddr.state}, ${resolvedAddr.zip}
+      )
+      RETURNING *`
+  }
 
   return { claim }
 }
