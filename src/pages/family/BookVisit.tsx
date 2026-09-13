@@ -1033,7 +1033,12 @@ export function BookVisit() {
       visit_type: booking.visitType || null,
       zip: booking.zip,
       state: booking.state || null,
-      preferred_time_window: null,
+      // Persist the parent's dropdown selection from the "Join the
+      // waitlist" modal (waitlistTime — set by the "Preferred time
+      // window" <select> at line ~2470). This field was hardcoded
+      // null before, so admin waitlist cards showed no preference
+      // even when the parent chose one. Sara DuMond 2026-09-13.
+      preferred_time_window: waitlistTime || null,
       notes: noteParts.join(' | '),
       status: 'waiting',
     }).catch(() => null)
