@@ -314,6 +314,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`
     if (!row) return res.status(404).json({ error: 'Note not found' })
+
+    // Sync any editable linked claim so post-signing edits (e.g., admin
+    // adding a TextE / self-pay code that the provider forgot) actually
+    // reach the claim. Only sync when the claim is still editable
+    // (not submitted / not error). Sara DuMond 2026-09-13 — text visit
+    // claim stayed at $0 after TextE was added post-signing.
+    if (cpt_codes != null || diagnoses != null) {
+      const nextCpts = Array.isArray(row.cpt_codes) ? row.cpt_codes : []
+      const nextTotal = nextCpts.reduce((s: number, c: any) => {
+        const charge = parseFloat(c.charge_amount) || 0
+        const units = parseInt(c.units, 10) || 1
+        return s + charge * units
+      }, 0)
+      await sql`
+        UPDATE claims SET
+          cpt_codes    = COALESCE(${cpt_codes  != null ? JSON.stringify(nextCpts)   : null}::jsonb, cpt_codes),
+          diagnoses    = COALESCE(${diagnoses  != null ? JSON.stringify(row.diagnoses ?? []) : null}::jsonb, diagnoses),
+          total_charge = COALESCE(${cpt_codes  != null ? nextTotal                    : null}, total_charge),
+          updated_at   = now()
+        WHERE encounter_note_id = ${id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND status IN ('pending_review', 'error', 'draft')`
+    }
     return res.json(row)
   }
 
