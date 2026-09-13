@@ -31,7 +31,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { appointment_id, child_id } = req.query as Record<string, string>
 
     if (appointment_id) {
-      const rows = await sql`SELECT * FROM encounter_notes WHERE appointment_id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      // Include child.medical_history so the modal can auto-populate
+      // the Medical History section on a fresh draft (uses the current
+      // chart value) and know what to display for signed notes (uses
+      // en.medical_history_snapshot frozen at signing time).
+      const rows = await sql`
+        SELECT en.*, ch.medical_history AS child_medical_history
+        FROM encounter_notes en
+        LEFT JOIN children ch ON ch.id = en.child_id
+        WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
+        LIMIT 1`
       return res.json(rows[0] ?? null)
     }
 

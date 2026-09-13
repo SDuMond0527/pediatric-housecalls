@@ -322,8 +322,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId    = providerRows[0].practice_id as string
   const currentProviderName = providerRows[0].name as string
 
+  // Idempotent column bootstrap for the freeze-at-sign medical
+  // history snapshot. Safe on every request.
+  try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS medical_history_snapshot text` } catch {}
+
   if (req.method === 'GET') {
-    const rows = await sql`SELECT * FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+    const rows = await sql`
+      SELECT en.*, ch.medical_history AS child_medical_history
+      FROM encounter_notes en
+      LEFT JOIN children ch ON ch.id = en.child_id
+      WHERE en.id = ${id}::uuid AND en.practice_id = ${practiceId}::uuid
+      LIMIT 1`
     return res.json(rows[0] ?? null)
   }
 
@@ -372,7 +381,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!existing) return res.status(404).json({ error: 'Note not found' })
 
-      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration } = req.body
+      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot } = req.body
 
       const unlocking = is_signed === false
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
@@ -410,6 +419,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             photos          = COALESCE(${photos != null ? JSON.stringify(photos) : null}::jsonb, photos),
             vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
             iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
+            medical_history_snapshot = COALESCE(${medical_history_snapshot ?? null}, medical_history_snapshot),
             child_id        = COALESCE(${child_id ?? null}::uuid, child_id),
             is_signed       = ${signing},
             signed_at       = CASE WHEN ${signing} THEN now() WHEN ${unlocking} THEN NULL ELSE signed_at END,
@@ -431,6 +441,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (signing && row?.child_id) {
         try { await faxNoteToPcp(row, practiceId, sql) }
         catch (err: any) { console.error('[fax] PCP fax failed:', err?.message) }
+      }
+      // On sign, propagate the note's medical_history_snapshot back to
+      // the child record so the chart tab stays current. The snapshot
+      // on this note is frozen; the child record is the live version.
+      if (signing && row?.child_id && medical_history_snapshot !== undefined && medical_history_snapshot !== null) {
+        try {
+          await sql`
+            UPDATE children SET
+              medical_history = ${medical_history_snapshot},
+              updated_at = NOW()
+            WHERE id = ${row.child_id}::uuid AND practice_id = ${practiceId}::uuid`
+        } catch (err: any) { console.error('[medical-history sync] failed:', err?.message) }
       }
       if (signing && row?.id) {
         try { await generateClaimForNote(sql, row.id, practiceId) }

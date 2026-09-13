@@ -143,7 +143,7 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines' | 'medical_history'>('overview')
   const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -360,6 +360,7 @@ export function PatientChart() {
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
+    { key: 'medical_history' as const, label: 'Medical History', count: null },
     { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
@@ -1329,6 +1330,10 @@ export function PatientChart() {
               </div>
             )}
 
+            {activeTab === 'medical_history' && child && (
+              <MedicalHistoryTab child={child} setChild={setChild} />
+            )}
+
             {activeTab === 'encounters' && (
               <div>
                 {notes.length === 0 ? (
@@ -2266,6 +2271,85 @@ export function PatientChart() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Dedicated Medical History tab — same source column as the Overview
+// tab's medical section (children.medical_history), so edits from
+// either surface stay in sync. Every provider and admin can edit
+// (add, update, delete). The value here also auto-populates the
+// Medical History section on every new encounter note.
+function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater: any) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<string>(String(child?.medical_history ?? ''))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const payload: any = draft.trim().length ? { medical_history: draft } : { _clear: ['medical_history'] }
+      const updated = await apiFetch<any>(`/api/children/${child.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })
+      setChild((prev: any) => ({ ...prev, ...updated }))
+      setEditing(false)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const current = String(child?.medical_history ?? '').trim()
+
+  return (
+    <div className="max-w-4xl">
+      <div className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+        <div className="p-5 border-b border-[#F1EFE8] flex items-center justify-between">
+          <div>
+            <h3 className="text-[15px] font-semibold text-[#1A1A2E]">Medical History</h3>
+            <p className="text-[12px] text-[#999] mt-0.5">Auto-populated into every new encounter note. Any provider or admin can edit.</p>
+          </div>
+          {!editing && (
+            <button
+              onClick={() => { setDraft(current); setEditing(true) }}
+              className="text-[12px] px-3 py-1.5 rounded-md border border-[#E8E8E4] hover:bg-[#F1EFE8] text-[#555]">
+              Edit
+            </button>
+          )}
+        </div>
+        <div className="p-5">
+          {editing ? (
+            <div className="space-y-3">
+              <textarea
+                rows={10}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                placeholder="Past medical history (chronic conditions, hospitalizations, surgeries, developmental history, family history, etc.)"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 bg-white" />
+              {error && <div className="text-[12px] text-[#DC2626]">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setEditing(false)} disabled={saving}
+                  className="text-[12px] px-3 py-1.5 rounded-md border border-[#E8E8E4] text-[#555] hover:bg-[#F1EFE8] disabled:opacity-60">
+                  Cancel
+                </button>
+                <button onClick={save} disabled={saving}
+                  className="text-[12px] px-3 py-1.5 rounded-md bg-[#7F77DD] text-white hover:bg-[#534AB7] disabled:opacity-60">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            current
+              ? <div className="text-[14px] text-[#1A1A2E] whitespace-pre-wrap leading-relaxed">{current}</div>
+              : <div className="text-[13px] text-[#999] italic">No medical history recorded yet. Click Edit to add.</div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -752,6 +752,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [cptSearch, setCptSearch] = useState('')
   const [cptOpen, setCptOpen] = useState(false)
 
+  // Medical history — frozen-at-sign design. For a draft: initializes
+  // from the child's current chart value; provider can edit here and
+  // it syncs back to the chart on sign. For a signed note: shows
+  // note.medical_history_snapshot (immutable historical record).
+  const [medicalHistory, setMedicalHistory] = useState<string>('')
+
   // Photos
   const [photos, setPhotos] = useState<{ url: string; caption: string }[]>([])
   const [photoUploading, setPhotoUploading] = useState(false)
@@ -791,19 +797,30 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [note, vitalsData, schedule, templates] = await Promise.all([
+      const [note, vitalsData, schedule, templates, childData] = await Promise.all([
         getEncounterNote({ appointment_id: appointment.id }).catch(() => null),
         getVitals({ appointment_id: appointment.id }).catch(() => null),
         getFeeSchedule().catch(() => []),
         getNoteTemplates().catch(() => []),
+        // Fetch child so we can pre-fill Medical History when the note
+        // doesn't yet exist (fresh visit). For existing notes, the
+        // GET already returns child_medical_history via JOIN.
+        childId ? getChildrenByIds([childId]).catch(() => []) : Promise.resolve([]),
       ])
       setCustomTemplates(templates)
       setFeeSchedule(schedule)
+      const childRecord = Array.isArray(childData) && childData.length ? childData[0] : null
       let resolvedChildId = childId
       logAudit('view_encounter_note', 'appointment', appointment.id)
       if (note) {
         setNoteId(note.id)
         setIsSigned(note.is_signed)
+        // Medical history: signed notes lock to the snapshot taken at
+        // sign time; drafts and new notes pre-fill from the child's
+        // current chart value returned by the JOIN.
+        setMedicalHistory(note.is_signed
+          ? (note.medical_history_snapshot ?? '')
+          : (note.medical_history_snapshot ?? note.child_medical_history ?? ''))
         setChiefComplaint(note.chief_complaint ?? '')
         setSubjective(note.subjective ?? '')
         setObjective(note.objective ?? '')
@@ -826,7 +843,9 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           }
         }
       } else {
-        // New note — auto-apply template
+        // New note — auto-apply template + pre-fill Medical History
+        // from the child's current chart value.
+        setMedicalHistory(childRecord?.medical_history ?? '')
         const type = visitTypeToNoteType(appointment.visit_type)
         if (type === 'In-home vaccine administration') {
           setVaccineEntries([emptyVaccine()])
@@ -932,6 +951,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       diagnoses,
       cpt_codes: cptCodes,
       photos,
+      // Include current textarea value as the snapshot. For drafts,
+      // this preserves in-progress edits. On sign, the server writes
+      // this back to children.medical_history so the chart stays in
+      // sync AND freezes it on the note for historical accuracy.
+      medical_history_snapshot: medicalHistory,
     }
   }
 
@@ -1826,6 +1850,25 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </>
               )
             })()}
+
+            {/* Medical History — freeze-at-sign. Auto-populates from
+                the child's chart record. Provider can edit; on sign
+                the value is stored on this note (immutable) AND
+                synced back to the chart (living record). */}
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
+            <section>
+              <div className={sectionHeader}>Medical History</div>
+              <p className="text-[11px] text-[#999] mb-1.5">
+                {readOnly
+                  ? 'Frozen as of when this note was signed.'
+                  : 'Auto-populated from the chart. Edits here save back to the chart on sign.'}
+              </p>
+              <textarea rows={3} placeholder="Past medical history…" value={medicalHistory}
+                disabled={readOnly}
+                onChange={e => setMedicalHistory(e.target.value)}
+                className={textareaCls} />
+            </section>
+            )}
 
             {/* Subjective */}
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
