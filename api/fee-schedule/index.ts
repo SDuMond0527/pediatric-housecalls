@@ -44,8 +44,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('[fee-schedule] cpt swap err:', e)
   }
 
+  // Idempotent column bootstrap for NDC (National Drug Code). Some payers
+  // require an NDC attached to a service line for vaccine and drug CPTs.
+  // The value stored here is the raw NDC as the biller/provider wrote it
+  // (e.g., "49281-590-58"). Normalization to the 11-digit no-dash format
+  // that X12 837P requires happens at Stedi payload emission time.
+  try { await sql`ALTER TABLE fee_schedule ADD COLUMN IF NOT EXISTS ndc_code text` } catch {}
+
+  // Seed the initial NDC mappings idempotently. Only writes when ndc_code
+  // is currently NULL, so a manual override in the DB won't get clobbered
+  // on the next request.
+  try {
+    await sql`UPDATE fee_schedule SET ndc_code = '49281-590-58'  WHERE code = '90619' AND ndc_code IS NULL`
+    await sql`UPDATE fee_schedule SET ndc_code = '49281-0400-89' WHERE code = '90715' AND ndc_code IS NULL`
+    await sql`UPDATE fee_schedule SET ndc_code = '0487-9501-25'  WHERE code = 'J7613' AND ndc_code IS NULL`
+  } catch (e) { console.error('[fee-schedule] ndc seed err:', e) }
+
   const rows = await sql`
-    SELECT code, description, category, charge_amount, place_of_service
+    SELECT code, description, category, charge_amount, place_of_service, ndc_code
     FROM fee_schedule
     WHERE is_active = true AND practice_id = ${practiceId}::uuid
     ORDER BY category, code

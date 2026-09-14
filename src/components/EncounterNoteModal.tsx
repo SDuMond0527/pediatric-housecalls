@@ -389,6 +389,11 @@ interface CptCode {
   charge_amount: number
   modifier?: string
   units?: number
+  // NDC (National Drug Code) attached to this line for vaccines/drugs
+  // that payers require it for. Sourced from fee_schedule.ndc_code on
+  // pick; flows through to encounter_notes.cpt_codes[i].ndc_code, then
+  // to claims.cpt_codes[i].ndc_code, then to the Stedi payload.
+  ndc_code?: string | null
 }
 
 const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
@@ -2090,7 +2095,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               {cptCodes.length > 0 && (
                 <div className="space-y-1.5 mb-3">
                   {cptCodes.map(c => (
-                    <div key={c.code} className="flex items-center justify-between px-3 py-2 bg-white border border-[#E8E8E4] rounded-lg gap-2">
+                    <div key={c.code} className="px-3 py-2 bg-white border border-[#E8E8E4] rounded-lg">
+                      <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${c.category === 'Procedure' ? 'bg-[#EEEDFE] text-[#3C3489]' : 'bg-[#FEF3E8] text-[#633806]'}`}>
                           {c.code}
@@ -2138,6 +2144,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                           </button>
                         )}
                       </div>
+                      </div>
+                      {c.ndc_code && (
+                        <div className="text-[11px] text-[#555] mt-1 pl-1">
+                          <span className="text-[#999]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {/* Total */}

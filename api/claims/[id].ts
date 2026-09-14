@@ -129,9 +129,26 @@ function buildStediPayload(claim: any, testMode = false): object {
     return defaultDiagnosisPointers
   }
 
+  // Normalize a raw NDC (as the biller/provider typed it, e.g.
+  // "49281-590-58" or "0487-9501-25") to the 11-digit no-dash format
+  // that X12 837P requires. Each segment gets left-padded with zeros
+  // to the standard 5-4-2 shape, then dashes are stripped. Returns
+  // null if the input can't be split into 3 segments totaling <= 11
+  // digits (safer to omit than to send garbage).
+  const normalizeNdc = (raw: any): string | null => {
+    if (!raw) return null
+    const parts = String(raw).trim().split('-')
+    if (parts.length !== 3) return null
+    const [a, b, c] = parts
+    if (a.length > 5 || b.length > 4 || c.length > 2) return null
+    const padded = a.padStart(5, '0') + b.padStart(4, '0') + c.padStart(2, '0')
+    return /^\d{11}$/.test(padded) ? padded : null
+  }
+
   const serviceLines = cptCodes.map((c: any) => {
     const units = parseInt(c.units, 10) || 1
     const lineCharge = (parseFloat(c.charge_amount ?? 0) * units).toFixed(2)
+    const normalizedNdc = normalizeNdc(c.ndc_code)
     return {
     serviceDate: fmtDate8(claim.service_date),
     professionalService: {
@@ -144,6 +161,20 @@ function buildStediPayload(claim: any, testMode = false): object {
       compositeDiagnosisCodePointers: {
         diagnosisCodePointers: pointersForLine(c),
       },
+      // NDC (National Drug Code) attached when the CPT/HCPCS has one
+      // seeded on fee_schedule.ndc_code. NOTE 2026-09-14: Stedi's
+      // public docs were truncated/redirecting when I looked up the
+      // exact field name, so `drugIdentification` + `serviceIdQualifier`
+      // + `nationalDrugCode` is my best guess from the X12 837P spec.
+      // Test-submit an NDC-bearing claim via the "Test Claim" button
+      // before going live; if Stedi rejects with a field-name error,
+      // adjust these key names to match their actual schema.
+      ...(normalizedNdc ? {
+        drugIdentification: {
+          serviceIdQualifier: 'N4',
+          nationalDrugCode: normalizedNdc,
+        },
+      } : {}),
     },
     renderingProvider: {
       providerType: 'RenderingProvider',

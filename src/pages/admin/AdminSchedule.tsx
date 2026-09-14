@@ -188,7 +188,7 @@ export function AdminSchedule() {
   const [unlockingNote, setUnlockingNote] = useState<string | null>(null)
   const [editNote, setEditNote] = useState<{ apptId: string; section: 'dx' | 'cpt' } | null>(null)
   const [editDx, setEditDx] = useState<Array<{ code: string; name: string }>>([])
-  const [editCpt, setEditCpt] = useState<Array<{ code: string; description: string; category: string; charge_amount: number; modifier?: string }>>([])
+  const [editCpt, setEditCpt] = useState<Array<{ code: string; description: string; category: string; charge_amount: number; modifier?: string; ndc_code?: string | null }>>([])
   const [icdQuery, setIcdQuery] = useState('')
   const [icdResults, setIcdResults] = useState<Array<{ code: string; name: string }>>([])
   const [icdLoading, setIcdLoading] = useState(false)
@@ -1059,7 +1059,8 @@ export function AdminSchedule() {
                                     <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Edit CPT Codes</div>
                                     <div className="space-y-2">
                                       {editCpt.map((c, i) => (
-                                        <div key={i} className="flex items-center gap-2">
+                                        <div key={i}>
+                                        <div className="flex items-center gap-2">
                                           <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-16 flex-shrink-0">{c.code}</span>
                                           <span className="text-[#555] text-[12px] flex-1 truncate min-w-0">{c.description}</span>
                                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -1073,6 +1074,12 @@ export function AdminSchedule() {
                                             className="text-[#999] hover:text-[#c00] transition-colors flex-shrink-0">
                                             <X size={13} />
                                           </button>
+                                        </div>
+                                        {c.ndc_code && (
+                                          <div className="text-[10px] text-[#555] pl-[68px] mt-0.5">
+                                            <span className="text-[#999]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
+                                          </div>
+                                        )}
                                         </div>
                                       ))}
                                     </div>
