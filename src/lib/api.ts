@@ -51,8 +51,45 @@ async function familyApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export const getAppointments = (params: Record<string, string>) =>
   apiFetch<any[]>(`/api/appointments?${new URLSearchParams(params)}`)
 
-export const createAppointment = (body: Record<string, unknown>) =>
-  apiFetch<any>('/api/appointments', { method: 'POST', body: JSON.stringify(body) })
+// createAppointment preserves the server's error `code` on the thrown
+// error (e.g., 'overlap'), so callers can trigger a confirmation
+// dialog and retry with allow_overlap when the provider genuinely
+// wants to double-book.
+export async function createAppointment(body: Record<string, unknown>): Promise<any> {
+  const headers = await authHeaders()
+  const res = await fetch('/api/appointments', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ error: res.statusText }))
+    const err: any = new Error(errBody.error || res.statusText || `HTTP ${res.status}`)
+    err.code = errBody.code
+    err.status = res.status
+    throw err
+  }
+  return res.status === 204 ? undefined : res.json()
+}
+
+// Shared overlap-retry helper. Provider surfaces (Today, AdminSchedule,
+// Waitlist accept) all use this instead of createAppointment directly.
+// On an overlap-code 409, calls the confirm callback; on confirm,
+// retries with allow_overlap=true. Any other error rethrows.
+export async function createAppointmentWithOverlapRetry(
+  body: Record<string, unknown>,
+  confirmOverlap: (message: string) => boolean | Promise<boolean>,
+): Promise<any> {
+  try {
+    return await createAppointment(body)
+  } catch (e: any) {
+    if (e?.code === 'overlap') {
+      const ok = await confirmOverlap(e.message || 'That time overlaps another appointment on this provider\'s schedule. Book anyway?')
+      if (ok) return createAppointment({ ...body, allow_overlap: true })
+    }
+    throw e
+  }
+}
 
 export const updateAppointment = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(body) })

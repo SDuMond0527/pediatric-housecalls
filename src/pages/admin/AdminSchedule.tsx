@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { apiFetch, getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
+import { apiFetch, getProviders, getAppointments, createAppointmentWithOverlapRetry, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -573,17 +573,20 @@ export function AdminSchedule() {
     // back to its hardcoded VISIT_DURATIONS map (which caused
     // overlap-check misalignment).
     const visitDurMin = byType[form.visit_type]?.duration_minutes ?? null
-    await createAppointment({
-      provider_id: form.provider_id,
-      visit_type: form.visit_type,
-      zone: form.zone || form.address || 'Unspecified',
-      scheduled_time: form.scheduled_time,
-      scheduled_date: form.scheduled_date,
-      status: 'upcoming',
-      notes: noteParts.length ? noteParts.join('|') : null,
-      duration_minutes: visitDurMin,
-      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
-    })
+    await createAppointmentWithOverlapRetry(
+      {
+        provider_id: form.provider_id,
+        visit_type: form.visit_type,
+        zone: form.zone || form.address || 'Unspecified',
+        scheduled_time: form.scheduled_time,
+        scheduled_date: form.scheduled_date,
+        status: 'upcoming',
+        notes: noteParts.length ? noteParts.join('|') : null,
+        duration_minutes: visitDurMin,
+        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+      },
+      msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
+    )
 
     setModalOpen(false)
     fetchAppointments()

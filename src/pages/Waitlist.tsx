@@ -3,7 +3,7 @@ import { MapPin, Clock, CheckCircle2, X, Plus, Phone, XCircle, Pencil } from 'lu
 import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry, updateFamilyAsAdmin,
-  createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
+  createAppointmentWithOverlapRetry, invokeNotifications, createWaitlistEntry, createBroadcast,
   getChildrenByFamilyIds, providerUpdateChild as updateChild, providerCreateChild as createChild,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -599,17 +599,20 @@ export function Waitlist() {
         }
       } catch { /* non-blocking */ }
 
-      const apptResult = await createAppointment({
-        provider_id: provider.id,
-        visit_type: finalVisitType,
-        zone: accepting.zip,
-        scheduled_time: time24,
-        scheduled_date: date,
-        status: 'upcoming',
-        notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
-        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
-        ...(isDual ? { state: accepting.state || null } : {}),
-      })
+      const apptResult = await createAppointmentWithOverlapRetry(
+        {
+          provider_id: provider.id,
+          visit_type: finalVisitType,
+          zone: accepting.zip,
+          scheduled_time: time24,
+          scheduled_date: date,
+          status: 'upcoming',
+          notes: apptNoteParts.join('|') || `From waitlist · Zip: ${accepting.zip}`,
+          ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+          ...(isDual ? { state: accepting.state || null } : {}),
+        },
+        msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
+      )
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 

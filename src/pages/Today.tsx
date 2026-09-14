@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
-  getAppointments, createAppointment, updateAppointment,
+  getAppointments, createAppointmentWithOverlapRetry, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
@@ -591,17 +591,20 @@ export function Today() {
     // ignored practice_visit_types config and could cause overlap-check
     // misalignment / double-books).
     const visitDur = byType[addForm.visitType]?.duration_minutes ?? null
-    await createAppointment({
-      provider_id: providerId,
-      visit_type: addForm.visitType,
-      zone: addForm.zone || addForm.address || 'Unspecified',
-      scheduled_time: time24,
-      scheduled_date: addForm.date,
-      status: 'upcoming',
-      notes: noteParts.join('|') || null,
-      duration_minutes: visitDur,
-      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
-    })
+    await createAppointmentWithOverlapRetry(
+      {
+        provider_id: providerId,
+        visit_type: addForm.visitType,
+        zone: addForm.zone || addForm.address || 'Unspecified',
+        scheduled_time: time24,
+        scheduled_date: addForm.date,
+        status: 'upcoming',
+        notes: noteParts.join('|') || null,
+        duration_minutes: visitDur,
+        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+      },
+      msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
+    )
 
     setAddSubmitting(false)
     setAdding(false)
