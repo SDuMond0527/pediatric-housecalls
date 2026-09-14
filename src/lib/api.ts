@@ -22,12 +22,51 @@ async function publicFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
+/**
+ * Error thrown by apiFetch. Carries the structured fields the API returns
+ * alongside the message — notably `code: 'overlap'` and `conflicts`, which the
+ * scheduling screens use to offer a deliberate double-book.
+ */
+export interface ApiError extends Error {
+  status?: number
+  code?: string
+  conflicts?: ScheduleConflict[]
+}
+
+export interface ScheduleConflict {
+  id: string
+  visit_type: string
+  scheduled_time: string
+  duration_minutes: number
+  provider_id: string
+  provider_name: string | null
+}
+
+interface ApiErrorBody {
+  error?: string
+  code?: string
+  conflicts?: ScheduleConflict[]
+}
+
+function toApiError(body: ApiErrorBody | undefined, res: Response): ApiError {
+  const err = new Error(body?.error || res.statusText || `HTTP ${res.status}`) as ApiError
+  err.status = res.status
+  if (body?.code) err.code = body.code
+  if (body?.conflicts) err.conflicts = body.conflicts
+  return err
+}
+
+/** True when a booking failed only because it collides with an existing visit. */
+export function isOverlapError(e: unknown): e is ApiError {
+  return !!e && typeof e === 'object' && (e as ApiError).code === 'overlap'
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders()
   const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+    throw toApiError(err, res)
   }
   // 204 No Content responses have empty bodies — res.json() would throw
   // SyntaxError. This bit every DELETE endpoint: the DB row was deleted
@@ -53,6 +92,15 @@ export const getAppointments = (params: Record<string, string>) =>
 
 export const createAppointment = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/appointments', { method: 'POST', body: JSON.stringify(body) })
+
+/**
+ * Provider/admin booking that deliberately overrides the duration/overlap rule
+ * (double-booking or overlapping visits on a provider's schedule). The server
+ * only honors `allow_overlap` for provider and admin tokens — a family token
+ * is always held to strict, non-overlapping visit-type time blocks.
+ */
+export const createAppointmentAllowingOverlap = (body: Record<string, unknown>) =>
+  createAppointment({ ...body, allow_overlap: true })
 
 export const updateAppointment = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(body) })

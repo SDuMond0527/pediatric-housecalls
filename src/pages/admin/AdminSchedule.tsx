@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
 import { format, addDays } from 'date-fns'
-import { apiFetch, getProviders, getAppointments, createAppointment, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
+import { apiFetch, getProviders, getAppointments, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { EncounterNoteModal } from '../../components/EncounterNoteModal'
+import { useDoubleBookConfirm } from '../../components/DoubleBookConfirm'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { displayVisitType } from '../../lib/appointmentDisplay'
+import { findDoubleBookedIds } from '../../lib/overlap'
 import type { Appointment, Provider } from '../../types'
 
 function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: any; error: string | null } | undefined; onCheck: () => void }) {
@@ -146,6 +148,9 @@ function t(time24: string): string {
 }
 
 export function AdminSchedule() {
+  // Providers/admins may deliberately double-book or overlap visits; this
+  // prompts for confirmation and then re-books with the override.
+  const { bookWithOverlapPrompt, doubleBookModal } = useDoubleBookConfirm()
   const { zipToZone } = usePracticeZones()
   const { visitTypes, byType } = usePracticeVisitTypes()
   const [providers, setProviders] = useState<Provider[]>([])
@@ -573,7 +578,7 @@ export function AdminSchedule() {
     // back to its hardcoded VISIT_DURATIONS map (which caused
     // overlap-check misalignment).
     const visitDurMin = byType[form.visit_type]?.duration_minutes ?? null
-    await createAppointment({
+    const booked = await bookWithOverlapPrompt({
       provider_id: form.provider_id,
       visit_type: form.visit_type,
       zone: form.zone || form.address || 'Unspecified',
@@ -584,6 +589,9 @@ export function AdminSchedule() {
       duration_minutes: visitDurMin,
       ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
     })
+    // null = the time overlapped and the admin chose to pick another time.
+    // Leave the form open with their entries intact.
+    if (!booked) return
 
     setModalOpen(false)
     fetchAppointments()
@@ -600,6 +608,13 @@ export function AdminSchedule() {
     setPatientSearch(''); setPatientResults([]); setSelectedPatient(null)
   }
 
+  // Overlapping visits are allowed on the staff side, so mark them clearly
+  // rather than letting two visits silently stack at the same hour.
+  const doubleBookedIds = findDoubleBookedIds(
+    appointments,
+    vt => byType[vt ?? '']?.duration_minutes,
+  )
+
   const grouped = providers
     .filter(p => !filterProvider || p.id === filterProvider)
     .map(p => ({
@@ -610,6 +625,7 @@ export function AdminSchedule() {
 
   return (
     <div>
+      {doubleBookModal}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Schedule</div>
         <div className="flex items-center gap-2">
@@ -760,6 +776,7 @@ export function AdminSchedule() {
                       <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{displayVisitType(appt)}</span>
                       <span className="text-[12px] text-[#555] hidden sm:block">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</span>
                       <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
+                      {doubleBookedIds.has(appt.id) && <Badge variant="amber">Double-booked</Badge>}
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
                       <ChevronDown size={13} className={`text-[#999] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
