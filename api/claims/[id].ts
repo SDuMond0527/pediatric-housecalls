@@ -392,6 +392,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // Refresh NDC codes from the fee schedule onto any CPT entry
+      // that doesn't already carry one. Existing claims whose entries
+      // were snapshotted before fee_schedule.ndc_code was seeded (or
+      // before this feature shipped) get their NDCs auto-filled at
+      // submit time — but ONLY where the entry is currently missing
+      // one. Manually-typed NDC overrides are preserved.
+      if (Array.isArray(claim.cpt_codes) && claim.cpt_codes.length > 0) {
+        const codesNeedingNdc = claim.cpt_codes
+          .filter((cpt: any) => cpt?.code && !cpt.ndc_code)
+          .map((cpt: any) => String(cpt.code))
+        if (codesNeedingNdc.length > 0) {
+          const feeRows = await sql`
+            SELECT code, ndc_code FROM fee_schedule
+            WHERE practice_id = ${practiceId}::uuid
+              AND code = ANY(${codesNeedingNdc}::text[])
+              AND ndc_code IS NOT NULL`
+          const ndcByCode = new Map<string, string>()
+          for (const row of feeRows) {
+            if (row.code && row.ndc_code) ndcByCode.set(String(row.code), String(row.ndc_code))
+          }
+          if (ndcByCode.size > 0) {
+            let changed = false
+            const nextCpts = claim.cpt_codes.map((cpt: any) => {
+              if (cpt?.code && !cpt.ndc_code && ndcByCode.has(String(cpt.code))) {
+                changed = true
+                return { ...cpt, ndc_code: ndcByCode.get(String(cpt.code)) }
+              }
+              return cpt
+            })
+            if (changed) {
+              await sql`
+                UPDATE claims SET
+                  cpt_codes = ${JSON.stringify(nextCpts)}::jsonb,
+                  updated_at = now()
+                WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+              claim.cpt_codes = nextCpts
+            }
+          }
+        }
+      }
+
       // Hard fail with a clear, actionable message BEFORE hitting
       // Stedi if the subscriber name is still just a single word (or
       // empty). Blue Cross rejects with the useless code-33 EDI
