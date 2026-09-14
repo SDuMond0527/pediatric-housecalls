@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, CalendarPlus } from 'lucide-react'
 import { Button } from './ui/Button'
-import { invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
-import { useDoubleBookConfirm } from './DoubleBookConfirm'
+import { createAppointment, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
 import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { DUAL_VISIT_TYPES, isCmaTelePair } from '../lib/dualVisitTypes'
@@ -16,8 +15,6 @@ interface Props {
 }
 
 export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
-  // Providers/admins may deliberately double-book or overlap a schedule.
-  const { bookWithOverlapPrompt, doubleBookModal } = useDoubleBookConfirm()
   const { visitTypes, loading: vtLoading } = usePracticeVisitTypes()
   const [providers, setProviders] = useState<any[]>([])
   const [zones, setZones] = useState<string[]>([])
@@ -91,14 +88,11 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
         status: 'upcoming',
         duration_minutes: visitDur,
       }
-      const appt = await bookWithOverlapPrompt({
+      const appt = await createAppointment({
         ...base,
         provider_id: form.provider_id,
         second_provider_id: isDual ? form.second_provider_id : undefined,
       })
-      // null = the time overlapped and the user chose to pick another time.
-      // Leave the form open so they can change it.
-      if (!appt) return
       // Notify primary provider
       const primaryId = appt.primary?.id ?? appt.id
       await invokeNotifications({ type: 'chart_booked', appointmentId: primaryId })
@@ -228,7 +222,6 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
           </div>
         </form>
       </div>
-      {doubleBookModal}
     </div>
   )
 }

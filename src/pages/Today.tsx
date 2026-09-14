@@ -2,14 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
 import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
 import {
-  getAppointments, updateAppointment,
+  getAppointments, createAppointment, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
   chargeCard, apiFetch, getOnCallSchedule, getCmaSchedule,
 } from '../lib/api'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
-import { useDoubleBookConfirm } from '../components/DoubleBookConfirm'
 import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from '../components/CmaOrderModal'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,7 +18,6 @@ import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeZones } from '../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { displayVisitType } from '../lib/appointmentDisplay'
-import { findDoubleBookedIds } from '../lib/overlap'
 import type { Appointment } from '../types'
 
 function to12h(time24: string): string {
@@ -83,9 +81,6 @@ interface ScheduleBlock {
 }
 
 export function Today() {
-  // Providers may deliberately double-book or overlap their own schedule;
-  // this confirms the collision, then re-books with the override.
-  const { bookWithOverlapPrompt, doubleBookModal } = useDoubleBookConfirm()
   const { provider } = useAuth()
   const { zipToZone } = usePracticeZones()
   const { visitTypes, byType } = usePracticeVisitTypes()
@@ -596,7 +591,7 @@ export function Today() {
     // ignored practice_visit_types config and could cause overlap-check
     // misalignment / double-books).
     const visitDur = byType[addForm.visitType]?.duration_minutes ?? null
-    const booked = await bookWithOverlapPrompt({
+    await createAppointment({
       provider_id: providerId,
       visit_type: addForm.visitType,
       zone: addForm.zone || addForm.address || 'Unspecified',
@@ -607,12 +602,6 @@ export function Today() {
       duration_minutes: visitDur,
       ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
     })
-    // null = the time overlapped and the provider chose to pick another time.
-    // Keep the add form open so nothing they typed is lost.
-    if (!booked) {
-      setAddSubmitting(false)
-      return
-    }
 
     setAddSubmitting(false)
     setAdding(false)
@@ -714,16 +703,8 @@ export function Today() {
     ? TIME_SLOTS.slice(TIME_SLOTS.indexOf(blockForm.startTime) + 1)
     : TIME_SLOTS
 
-  // Overlapping visits are allowed on the provider side, so surface them
-  // instead of letting two visits silently stack at the same hour.
-  const doubleBookedIds = findDoubleBookedIds(
-    appts,
-    vt => byType[vt ?? '']?.duration_minutes,
-  )
-
   return (
     <div>
-      {doubleBookModal}
       {/* ── Header ── */}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">
@@ -903,7 +884,6 @@ export function Today() {
             {appts.map(appt => {
               const vt = byType[appt.visit_type]
               const isExpanded = expanded === appt.id
-              const isDoubleBooked = doubleBookedIds.has(appt.id)
 
 
               return (
@@ -962,7 +942,6 @@ export function Today() {
                       <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
                     </div>
                     <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
-                    {isDoubleBooked && <Badge variant="amber">Double-booked</Badge>}
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
                     <ChevronDown size={14} className={`text-[#999] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />

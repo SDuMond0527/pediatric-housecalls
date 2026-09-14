@@ -108,14 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return (twins[0] as any)?.id ?? null
   }
 
-  // Full appointment edit (visit type, provider, date, time).
-  //
-  // No overlap check here by design. This endpoint authenticates against the
-  // provider pool only, so every caller is a provider or admin — and staff are
-  // allowed to move a visit onto a time that already has one (double-booking /
-  // overlapping their own schedule). Parents cannot reach this endpoint; the
-  // strict duration blocks they book against are enforced in
-  // api/appointments/index.ts.
+  // Full appointment edit (visit type, provider, date, time)
   if (visit_type !== undefined || provider_id !== undefined || scheduled_date !== undefined || scheduled_time !== undefined) {
     const twinId = (scheduled_date !== undefined || scheduled_time !== undefined) ? await findTwinId() : null
 
