@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { MapPin, Clock, AlertCircle, Plus, X, AlertTriangle } from 'lucide-react'
 import {
   getBroadcasts, createBroadcast, updateBroadcast,
-  invokeNotifications, updateWaitlistEntry,
+  createAppointment, invokeNotifications, updateWaitlistEntry,
   apiFetch,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
-import { useDoubleBookConfirm } from '../components/DoubleBookConfirm'
 import { format } from 'date-fns'
 import type { Broadcast } from '../types'
 
@@ -114,8 +113,6 @@ function defaultAcceptTime() {
 }
 
 export function Broadcasts() {
-  // Providers/admins may deliberately double-book or overlap a schedule.
-  const { bookWithOverlapPrompt, doubleBookModal } = useDoubleBookConfirm()
   const { provider } = useAuth()
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
@@ -204,7 +201,7 @@ export function Broadcasts() {
       // uses the pairing initiator as the paired provider instead of the on-call
       // schedule. The initiator committed to being the MD/NP for this specific
       // pair via the broadcast — respect that.
-      const apptResult = await bookWithOverlapPrompt({
+      const apptResult = await createAppointment({
         provider_id: provider.id,
         visit_type: bc.visit_type || 'CMA + tele',
         zone: (bc as any).zone || bc.patient_address || 'Broadcast',
@@ -219,9 +216,9 @@ export function Broadcasts() {
         ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
       })
 
-      // null = the time overlapped and the provider chose not to double-book.
-      // Leave the broadcast open so someone else can claim it.
-      if (!apptResult) {
+      if ((apptResult as any)?.error) {
+        // Overlap on primary or secondary — surface it and leave broadcast open.
+        alert((apptResult as any).error)
         setActing(null)
         return
       }
@@ -363,7 +360,7 @@ export function Broadcasts() {
     }
     if (!isSolo) noteParts.push(`Request: ${bc.request_type}`)
 
-    const claimed = await bookWithOverlapPrompt({
+    await createAppointment({
       provider_id: provider.id,
       visit_type: bc.visit_type || (bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine'),
       zone: bc.patient_address || (bc as any).zone || 'Broadcast',
@@ -373,12 +370,6 @@ export function Broadcasts() {
       status: 'upcoming',
       notes: noteParts.join('|'),
     })
-    // null = the time overlapped and the provider chose not to double-book.
-    // Leave the broadcast open so someone else can claim it.
-    if (!claimed) {
-      setActing(null)
-      return
-    }
 
     await updateBroadcast(bc.id, { is_open: false })
 
@@ -407,7 +398,6 @@ export function Broadcasts() {
 
   return (
     <div>
-      {doubleBookModal}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Broadcasts</div>
         <div className="flex items-center gap-2">
