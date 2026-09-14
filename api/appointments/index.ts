@@ -18,20 +18,25 @@ interface CreateAppointmentInput {
   child_id?: string | null
   state?: string | null
   second_provider_id?: string | null
+  // Provider/admin double-book override. When true, skips the
+  // "overlaps another appointment" check. Endpoint gates this on
+  // auth.type === 'provider' so family callers can never bypass.
+  allow_overlap?: boolean
 }
 interface CreateAppointmentResult {
   primary: any
   secondary: any
   error?: string
+  errorCode?: 'overlap'
 }
 async function createAppointmentCore(
   sql: ReturnType<typeof neon>,
   practiceId: string,
   input: CreateAppointmentInput,
 ): Promise<CreateAppointmentResult> {
-  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = input
+  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = input
   const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
-  {
+  if (!allow_overlap) {
     const [nh, nm] = String(scheduled_time).split(':').map(Number)
     const newStart = nh * 60 + nm
     const newDur = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
@@ -46,7 +51,7 @@ async function createAppointmentCore(
       const exStart = eh * 60 + em
       const exEnd = exStart + (row.duration_minutes ?? 60)
       if (newStart < exEnd && newEnd > exStart) {
-        return { primary: null, secondary: null, error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.' }
+        return { primary: null, secondary: null, error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.', errorCode: 'overlap' }
       }
     }
   }
@@ -325,7 +330,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = req.body
+    // One-shot: drop the partial unique index that prevented any
+    // duplicate (provider, date, time) rows. Providers/admins need
+    // the ability to double- and triple-book themselves — the code-
+    // level overlap check (with allow_overlap for override) becomes
+    // the sole guard. Idempotent — no-op after the first run.
+    try { await sql`DROP INDEX IF EXISTS unique_provider_date_time` } catch (e) { console.error('[appointments] drop index err:', e) }
+
+    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = req.body
 
     // Server-side availability guard for family-originated bookings.
     // Providers/admins may schedule outside normal hours intentionally.
@@ -336,12 +348,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (slotError) return res.status(409).json({ error: slotError })
     }
 
+    // Only providers/admins can bypass overlap. Any allow_overlap
+    // from a family caller is silently dropped — parents cannot
+    // double-book even if they craft the request by hand.
+    const provAllowOverlap = auth.type === 'provider' && Boolean(allow_overlap)
+
     const result = await createAppointmentCore(sql, practiceId, {
       provider_id, visit_type, zone, scheduled_time, scheduled_date,
       status, notes, duration_minutes, child_id,
       state: bodyState, second_provider_id,
+      allow_overlap: provAllowOverlap,
     })
-    if (result.error) return res.status(409).json({ error: result.error })
+    if (result.error) return res.status(409).json({ error: result.error, code: result.errorCode })
 
     if (DUAL_VISIT_TYPES.includes(visit_type)) {
       // Legacy response shape — some callers read .cma / .rn / .md; some read .primary / .secondary.
