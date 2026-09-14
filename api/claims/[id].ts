@@ -161,20 +161,6 @@ function buildStediPayload(claim: any, testMode = false): object {
       compositeDiagnosisCodePointers: {
         diagnosisCodePointers: pointersForLine(c),
       },
-      // NDC (National Drug Code) attached when the CPT/HCPCS has one
-      // seeded on fee_schedule.ndc_code. NOTE 2026-09-14: Stedi's
-      // public docs were truncated/redirecting when I looked up the
-      // exact field name, so `drugIdentification` + `serviceIdQualifier`
-      // + `nationalDrugCode` is my best guess from the X12 837P spec.
-      // Test-submit an NDC-bearing claim via the "Test Claim" button
-      // before going live; if Stedi rejects with a field-name error,
-      // adjust these key names to match their actual schema.
-      ...(normalizedNdc ? {
-        drugIdentification: {
-          serviceIdQualifier: 'N4',
-          nationalDrugCode: normalizedNdc,
-        },
-      } : {}),
     },
     renderingProvider: {
       providerType: 'RenderingProvider',
@@ -183,6 +169,20 @@ function buildStediPayload(claim: any, testMode = false): object {
       lastName: provLast,
       ...(claim.rendering_provider_taxonomy ? { taxonomyCode: claim.rendering_provider_taxonomy } : {}),
     },
+    // NDC (National Drug Code) attached when the CPT/HCPCS has one
+    // seeded on fee_schedule.ndc_code. First guess (2026-09-14) put
+    // this block inside professionalService — Stedi rejected with
+    // "unknown field drugIdentification, expected one of ..." where
+    // the list did NOT include drugIdentification. Moving to the
+    // service-line level (sibling to professionalService + rendering
+    // provider) — same level as renderingProvider, which Stedi is
+    // known to accept there. Test-submit again to confirm.
+    ...(normalizedNdc ? {
+      drugIdentification: {
+        serviceIdQualifier: 'N4',
+        nationalDrugCode: normalizedNdc,
+      },
+    } : {}),
     }
   })
 
