@@ -188,7 +188,7 @@ export function AdminSchedule() {
   const [unlockingNote, setUnlockingNote] = useState<string | null>(null)
   const [editNote, setEditNote] = useState<{ apptId: string; section: 'dx' | 'cpt' } | null>(null)
   const [editDx, setEditDx] = useState<Array<{ code: string; name: string }>>([])
-  const [editCpt, setEditCpt] = useState<Array<{ code: string; description: string; category: string; charge_amount: number; modifier?: string; ndc_code?: string | null }>>([])
+  const [editCpt, setEditCpt] = useState<Array<{ code: string; description: string; category: string; charge_amount: number; modifier?: string; ndc_code?: string | null; ndc_unit_count?: number | null }>>([])
   const [icdQuery, setIcdQuery] = useState('')
   const [icdResults, setIcdResults] = useState<Array<{ code: string; name: string }>>([])
   const [icdLoading, setIcdLoading] = useState(false)

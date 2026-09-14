@@ -394,6 +394,10 @@ interface CptCode {
   // pick; flows through to encounter_notes.cpt_codes[i].ndc_code, then
   // to claims.cpt_codes[i].ndc_code, then to the Stedi payload.
   ndc_code?: string | null
+  // Per-dose mL amount (from fee_schedule.ndc_unit_count). Multiplied
+  // by CPT units at Stedi payload emission to produce
+  // nationalDrugUnitCount.
+  ndc_unit_count?: number | null
 }
 
 const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }

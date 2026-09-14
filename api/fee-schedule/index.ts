@@ -50,21 +50,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // (e.g., "49281-590-58"). Normalization to the 11-digit no-dash format
   // that X12 837P requires happens at Stedi payload emission time.
   try { await sql`ALTER TABLE fee_schedule ADD COLUMN IF NOT EXISTS ndc_code text` } catch {}
+  // Per-dose mL amount used to populate Stedi's nationalDrugUnitCount.
+  // Vaccines are typically 0.5 mL; nebulized drug solutions vary.
+  try { await sql`ALTER TABLE fee_schedule ADD COLUMN IF NOT EXISTS ndc_unit_count numeric(6,3)` } catch {}
 
-  // Seed the initial NDC mappings idempotently. Only writes when ndc_code
-  // is currently NULL, so a manual override in the DB won't get clobbered
-  // on the next request.
+  // Seed the initial NDC mappings idempotently. Only writes when the
+  // target field is currently NULL, so manual DB overrides survive.
   try {
     await sql`UPDATE fee_schedule SET ndc_code = '49281-590-58'  WHERE code = '90619' AND ndc_code IS NULL`
     await sql`UPDATE fee_schedule SET ndc_code = '49281-0400-89' WHERE code = '90715' AND ndc_code IS NULL`
     await sql`UPDATE fee_schedule SET ndc_code = '0487-9501-25'  WHERE code = 'J7613' AND ndc_code IS NULL`
+    await sql`UPDATE fee_schedule SET ndc_unit_count = 0.5 WHERE code = '90619' AND ndc_unit_count IS NULL`
+    await sql`UPDATE fee_schedule SET ndc_unit_count = 0.5 WHERE code = '90715' AND ndc_unit_count IS NULL`
+    await sql`UPDATE fee_schedule SET ndc_unit_count = 3   WHERE code = 'J7613' AND ndc_unit_count IS NULL`
   } catch (e) { console.error('[fee-schedule] ndc seed err:', e) }
 
   const rows = await sql`
-    SELECT code, description, category, charge_amount, place_of_service, ndc_code
+    SELECT code, description, category, charge_amount, place_of_service, ndc_code, ndc_unit_count
     FROM fee_schedule
     WHERE is_active = true AND practice_id = ${practiceId}::uuid
     ORDER BY category, code
   `
-  return res.json(rows.map(r => ({ ...r, charge_amount: parseFloat(r.charge_amount as string) })))
+  return res.json(rows.map(r => ({
+    ...r,
+    charge_amount: parseFloat(r.charge_amount as string),
+    ndc_unit_count: r.ndc_unit_count != null ? parseFloat(r.ndc_unit_count as string) : null,
+  })))
 }

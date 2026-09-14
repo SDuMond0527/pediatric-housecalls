@@ -887,7 +887,7 @@ export function AdminClaims() {
                                           .map(fs => (
                                             <button key={fs.code}
                                               onClick={() => {
-                                                setEditCpt(prev => ({ ...prev, [c.id]: [...prev[c.id], { code: fs.code, description: fs.description, charge_amount: fs.charge_amount, ndc_code: (fs as any).ndc_code ?? null }] }))
+                                                setEditCpt(prev => ({ ...prev, [c.id]: [...prev[c.id], { code: fs.code, description: fs.description, charge_amount: fs.charge_amount, ndc_code: (fs as any).ndc_code ?? null, ndc_unit_count: (fs as any).ndc_unit_count ?? null }] }))
                                                 setCptSearch(prev => ({ ...prev, [c.id]: '' }))
                                                 setCptOpen(prev => ({ ...prev, [c.id]: false }))
                                               }}

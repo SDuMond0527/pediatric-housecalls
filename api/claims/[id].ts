@@ -181,7 +181,16 @@ function buildStediPayload(claim: any, testMode = false): object {
       drugIdentification: {
         serviceIdQualifier: 'N4',
         nationalDrugCode: normalizedNdc,
-        nationalDrugUnitCount: String(units),
+        // Per-dose mL amount × number of CPT units administered.
+        // ndc_unit_count comes from fee_schedule (0.5 for vaccines,
+        // 3 for J7613 albuterol nebulizer). If a code has no per-
+        // dose amount seeded, fall back to CPT units so we still
+        // send something valid.
+        nationalDrugUnitCount: String(
+          c.ndc_unit_count != null
+            ? Number(c.ndc_unit_count) * units
+            : units
+        ),
         // 'ML' = milliliters. Fits all three currently-seeded codes
         // (90619 Menveo, 90715 Adacel, J7613 albuterol nebulizer
         // solution) — all dosed in mL. If a future code needs a
@@ -407,26 +416,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // one. Manually-typed NDC overrides are preserved.
       if (Array.isArray(claim.cpt_codes) && claim.cpt_codes.length > 0) {
         const codesNeedingNdc = claim.cpt_codes
-          .filter((cpt: any) => cpt?.code && !cpt.ndc_code)
+          .filter((cpt: any) => cpt?.code && (!cpt.ndc_code || cpt.ndc_unit_count == null))
           .map((cpt: any) => String(cpt.code))
         if (codesNeedingNdc.length > 0) {
           const feeRows = await sql`
-            SELECT code, ndc_code FROM fee_schedule
+            SELECT code, ndc_code, ndc_unit_count FROM fee_schedule
             WHERE practice_id = ${practiceId}::uuid
               AND code = ANY(${codesNeedingNdc}::text[])
-              AND ndc_code IS NOT NULL`
-          const ndcByCode = new Map<string, string>()
+              AND (ndc_code IS NOT NULL OR ndc_unit_count IS NOT NULL)`
+          const ndcByCode = new Map<string, { ndc_code: string | null; ndc_unit_count: number | null }>()
           for (const row of feeRows) {
-            if (row.code && row.ndc_code) ndcByCode.set(String(row.code), String(row.ndc_code))
+            ndcByCode.set(String(row.code), {
+              ndc_code: row.ndc_code ? String(row.ndc_code) : null,
+              ndc_unit_count: row.ndc_unit_count != null ? parseFloat(row.ndc_unit_count as any) : null,
+            })
           }
           if (ndcByCode.size > 0) {
             let changed = false
             const nextCpts = claim.cpt_codes.map((cpt: any) => {
-              if (cpt?.code && !cpt.ndc_code && ndcByCode.has(String(cpt.code))) {
-                changed = true
-                return { ...cpt, ndc_code: ndcByCode.get(String(cpt.code)) }
-              }
-              return cpt
+              const seed = cpt?.code ? ndcByCode.get(String(cpt.code)) : undefined
+              if (!seed) return cpt
+              const next = { ...cpt }
+              if (!cpt.ndc_code && seed.ndc_code) { next.ndc_code = seed.ndc_code; changed = true }
+              if (cpt.ndc_unit_count == null && seed.ndc_unit_count != null) { next.ndc_unit_count = seed.ndc_unit_count; changed = true }
+              return next
             })
             if (changed) {
               await sql`
