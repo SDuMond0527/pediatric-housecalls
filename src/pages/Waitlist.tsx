@@ -3,13 +3,14 @@ import { MapPin, Clock, CheckCircle2, X, Plus, Phone, XCircle, Pencil } from 'lu
 import { format, isValid } from 'date-fns'
 import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry, updateFamilyAsAdmin,
-  createAppointment, invokeNotifications, createWaitlistEntry, createBroadcast,
+  invokeNotifications, createWaitlistEntry, createBroadcast,
   getChildrenByFamilyIds, providerUpdateChild as updateChild, providerCreateChild as createChild,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { useDoubleBookConfirm } from '../components/DoubleBookConfirm'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { DUAL_VISIT_TYPES, isIvFluidsPair } from '../lib/dualVisitTypes'
@@ -176,6 +177,8 @@ function WaitlistPatientDetails({ entry, child }: { entry: WaitlistEntry; child:
 }
 
 export function Waitlist() {
+  // Providers/admins may deliberately double-book or overlap a schedule.
+  const { bookWithOverlapPrompt, doubleBookModal } = useDoubleBookConfirm()
   const { provider } = useAuth()
   const { visitTypes } = usePracticeVisitTypes()
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
@@ -599,7 +602,7 @@ export function Waitlist() {
         }
       } catch { /* non-blocking */ }
 
-      const apptResult = await createAppointment({
+      const apptResult = await bookWithOverlapPrompt({
         provider_id: provider.id,
         visit_type: finalVisitType,
         zone: accepting.zip,
@@ -610,6 +613,9 @@ export function Waitlist() {
         ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
         ...(isDual ? { state: accepting.state || null } : {}),
       })
+      // null = the time overlapped and the user chose to pick another time.
+      // Leave the entry on the waitlist so it can be scheduled again.
+      if (!apptResult) return
 
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
@@ -731,6 +737,7 @@ export function Waitlist() {
 
   return (
     <div>
+      {doubleBookModal}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Waitlist</div>

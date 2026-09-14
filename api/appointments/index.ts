@@ -18,35 +18,109 @@ interface CreateAppointmentInput {
   child_id?: string | null
   state?: string | null
   second_provider_id?: string | null
+  /**
+   * Deliberate double-book / overlap override. Only ever set for
+   * provider- and admin-authenticated requests (see the handler below).
+   * Family-authenticated requests can never turn this on, so parents stay
+   * held to strict, non-overlapping visit-type time blocks.
+   */
+  allow_overlap?: boolean
+}
+interface ScheduleConflict {
+  id: string
+  visit_type: string
+  scheduled_time: string
+  duration_minutes: number
+  provider_id: string
+  provider_name: string | null
 }
 interface CreateAppointmentResult {
   primary: any
   secondary: any
   error?: string
+  /** 'overlap' when the only thing blocking the booking is a time collision. */
+  code?: string
+  conflicts?: ScheduleConflict[]
 }
-async function createAppointmentCore(
+
+function to12h(t: string): string {
+  const [h, m] = String(t).split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hr = h % 12 === 0 ? 12 : h % 12
+  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+/**
+ * Every non-cancelled appointment on this provider's day whose time block
+ * collides with [time, time + durationMinutes).
+ */
+async function findOverlaps(
+  sql: ReturnType<typeof neon>,
+  practiceId: string,
+  providerId: string,
+  date: string,
+  time: string,
+  durationMinutes: number,
+  excludeId?: string | null,
+): Promise<ScheduleConflict[]> {
+  const [nh, nm] = String(time).split(':').map(Number)
+  const newStart = nh * 60 + nm
+  const newEnd = newStart + durationMinutes
+  const rows = await sql`
+    SELECT a.id, a.visit_type, a.scheduled_time, a.provider_id,
+           COALESCE(a.duration_minutes, 60) AS duration_minutes,
+           p.name AS provider_name
+    FROM appointments a
+    LEFT JOIN providers p ON p.id = a.provider_id
+    WHERE a.provider_id = ${providerId}::uuid AND a.practice_id = ${practiceId}::uuid
+      AND a.scheduled_date = ${date}::date AND a.status != 'cancelled'
+      AND (${excludeId ?? null}::uuid IS NULL OR a.id != ${excludeId ?? null}::uuid)`
+  return (rows as Array<Record<string, unknown>>)
+    .filter(r => {
+      const [eh, em] = String(r.scheduled_time).split(':').map(Number)
+      const exStart = eh * 60 + em
+      const exEnd = exStart + (Number(r.duration_minutes) || 60)
+      return newStart < exEnd && newEnd > exStart
+    })
+    .map(r => ({
+      id: String(r.id),
+      visit_type: String(r.visit_type ?? ''),
+      scheduled_time: String(r.scheduled_time),
+      duration_minutes: Number(r.duration_minutes) || 60,
+      provider_id: String(r.provider_id),
+      provider_name: (r.provider_name ?? null) as string | null,
+    }))
+}
+
+/** "9:00 AM In-home sick visit (60 min)" — joined for a readable message. */
+function describeConflicts(conflicts: ScheduleConflict[]): string {
+  return conflicts
+    .map(c => `${to12h(c.scheduled_time)} ${c.visit_type || 'visit'} (${c.duration_minutes} min)`)
+    .join(', ')
+}
+// Exported for tests; Vercel only ever invokes the default handler below.
+export async function createAppointmentCore(
   sql: ReturnType<typeof neon>,
   practiceId: string,
   input: CreateAppointmentInput,
 ): Promise<CreateAppointmentResult> {
-  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = input
+  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = input
   const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
-  {
-    const [nh, nm] = String(scheduled_time).split(':').map(Number)
-    const newStart = nh * 60 + nm
+  // Duration/overlap rule. Visit-type time blocks are enforced for everyone by
+  // default; providers and admins may deliberately double-book or overlap a
+  // schedule by re-submitting with allow_overlap: true. The handler only ever
+  // sets that flag for provider/admin tokens, so a parent booking always lands
+  // here with allow_overlap falsy and is held to a strict, exclusive block.
+  if (!allow_overlap) {
     const newDur = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
-    const newEnd = newStart + newDur
-    const existing = await sql`
-      SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
-      FROM appointments
-      WHERE provider_id = ${provider_id}::uuid AND practice_id = ${practiceId}::uuid
-        AND scheduled_date = ${scheduled_date}::date AND status != 'cancelled'`
-    for (const row of existing as Array<{ scheduled_time: string; duration_minutes: number }>) {
-      const [eh, em] = String(row.scheduled_time).split(':').map(Number)
-      const exStart = eh * 60 + em
-      const exEnd = exStart + (row.duration_minutes ?? 60)
-      if (newStart < exEnd && newEnd > exStart) {
-        return { primary: null, secondary: null, error: 'That time overlaps another appointment on this provider\'s schedule. Please choose a different time.' }
+    const conflicts = await findOverlaps(sql, practiceId, provider_id, scheduled_date, scheduled_time, newDur)
+    if (conflicts.length) {
+      return {
+        primary: null,
+        secondary: null,
+        error: `That time overlaps ${describeConflicts(conflicts)} on this provider's schedule.`,
+        code: 'overlap',
+        conflicts,
       }
     }
   }
@@ -98,23 +172,21 @@ async function createAppointmentCore(
       const secondaryVisitType = secondaryVisitTypeFor(visit_type)
       const secondaryDur = VISIT_DURATIONS[secondaryVisitType] ?? VISIT_DURATIONS[visit_type] ?? 60
       const secondaryEndTime = blockEndTime(scheduled_time, secondaryVisitType, null)
-      const [nh2, nm2] = String(scheduled_time).split(':').map(Number)
-      const newStart2 = nh2 * 60 + nm2
-      const newEnd2 = newStart2 + secondaryDur
-      const mdExisting = await sql`
-        SELECT scheduled_time, COALESCE(duration_minutes, 60) AS duration_minutes
-        FROM appointments
-        WHERE provider_id = ${mdProviderId}::uuid AND practice_id = ${practiceId}::uuid
-          AND scheduled_date = ${scheduled_date}::date AND status != 'cancelled'
-          AND id != ${(primaryRow as any).id}::uuid`
-      for (const row of mdExisting as Array<{ scheduled_time: string; duration_minutes: number }>) {
-        const [eh, em] = String(row.scheduled_time).split(':').map(Number)
-        const exStart = eh * 60 + em
-        const exEnd = exStart + (row.duration_minutes ?? 60)
-        if (newStart2 < exEnd && newEnd2 > exStart) {
+      // Same override rule on the paired MD/NP side of a dual visit.
+      if (!allow_overlap) {
+        const mdConflicts = await findOverlaps(
+          sql, practiceId, mdProviderId, scheduled_date, scheduled_time, secondaryDur, (primaryRow as any).id,
+        )
+        if (mdConflicts.length) {
           await sql`UPDATE appointments SET status = 'cancelled' WHERE id = ${(primaryRow as any).id}::uuid`
           await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + (primaryRow as any).id} AND practice_id = ${practiceId}::uuid`.catch(() => {})
-          return { primary: null, secondary: null, error: `${mdName || 'The paired provider'} is no longer available at that time — please choose a different slot.` }
+          return {
+            primary: null,
+            secondary: null,
+            error: `${mdName || 'The paired provider'} already has ${describeConflicts(mdConflicts)} at that time.`,
+            code: 'overlap',
+            conflicts: mdConflicts,
+          }
         }
       }
       const partnerRoleLabel = isCmaTelePair(visit_type) ? 'MD/NP — telemedicine' : 'MD/NP — telemedicine screening'
@@ -154,12 +226,14 @@ function toMin(t: string): number {
   return h * 60 + m
 }
 
-async function validateProviderSlot(
+// Exported for tests; Vercel only ever invokes the default handler below.
+export async function validateProviderSlot(
   sql: ReturnType<typeof neon>,
   providerId: string,
   visitType: string,
   date: string,
   time: string,
+  durationMinutes: number,
 ): Promise<string | null> {
   const dayOfWeek = new Date(date + 'T12:00:00').getDay()
   const [availRows, overrideRows, vtRows] = await Promise.all([
@@ -189,9 +263,15 @@ async function validateProviderSlot(
   }
   if (winEnd <= winStart) return 'Provider has no availability for this visit type on this date'
   const reqMin = toMin(time)
+  const fmt = (m: number) => `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`
   if (reqMin < winStart || reqMin >= winEnd) {
-    const fmt = (m: number) => `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`
     return `Requested time ${time} is outside this provider's available hours (${fmt(winStart)}–${fmt(winEnd)})`
+  }
+  // Strict time block for family bookings: the FULL visit duration has to fit
+  // inside the window, not just its start time. A 60-minute visit cannot start
+  // 30 minutes before the provider's day ends.
+  if (reqMin + durationMinutes > winEnd) {
+    return `A ${durationMinutes}-minute visit starting at ${time} runs past this provider's available hours (${fmt(winStart)}–${fmt(winEnd)}). Please choose an earlier time.`
   }
   return null
 }
@@ -327,11 +407,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id } = req.body
 
+    // Scheduling-rule override. Providers and admins run their own schedules:
+    // when they knowingly choose to double-book or overlap visits, the platform
+    // lets them. Parents never get this — the flag is dropped for family tokens
+    // no matter what the request body says, so the family booking flow stays
+    // bound to strict, non-overlapping visit-type time blocks.
+    const allowOverlap = auth.type === 'provider' && req.body?.allow_overlap === true
+
     // Server-side availability guard for family-originated bookings.
     // Providers/admins may schedule outside normal hours intentionally.
     if (auth.type === 'family' && provider_id && scheduled_time && scheduled_date) {
+      const familyDuration = duration_minutes ?? VISIT_DURATIONS[visit_type] ?? 60
       const slotError = await validateProviderSlot(
-        sql, provider_id, visit_type, scheduled_date, scheduled_time
+        sql, provider_id, visit_type, scheduled_date, scheduled_time, familyDuration
       )
       if (slotError) return res.status(409).json({ error: slotError })
     }
@@ -339,9 +427,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await createAppointmentCore(sql, practiceId, {
       provider_id, visit_type, zone, scheduled_time, scheduled_date,
       status, notes, duration_minutes, child_id,
-      state: bodyState, second_provider_id,
+      state: bodyState, second_provider_id, allow_overlap: allowOverlap,
     })
-    if (result.error) return res.status(409).json({ error: result.error })
+    if (result.error) {
+      // Providers/admins get the machine-readable code + conflict list so the
+      // UI can offer "double-book anyway". Families just get a plain message —
+      // for them the slot is simply unavailable.
+      if (auth.type === 'provider' && result.code === 'overlap') {
+        return res.status(409).json({ error: result.error, code: 'overlap', conflicts: result.conflicts ?? [] })
+      }
+      return res.status(409).json({
+        error: result.code === 'overlap'
+          ? 'That time is no longer available. Please choose a different time.'
+          : result.error,
+      })
+    }
 
     if (DUAL_VISIT_TYPES.includes(visit_type)) {
       // Legacy response shape — some callers read .cma / .rn / .md; some read .primary / .secondary.
