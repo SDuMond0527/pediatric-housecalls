@@ -182,6 +182,12 @@ function buildStediPayload(claim: any, testMode = false): object {
         serviceIdQualifier: 'N4',
         nationalDrugCode: normalizedNdc,
         nationalDrugUnitCount: String(units),
+        // 'ML' = milliliters. Fits all three currently-seeded codes
+        // (90619 Menveo, 90715 Adacel, J7613 albuterol nebulizer
+        // solution) — all dosed in mL. If a future code needs a
+        // different unit (F2 IU, GR grams, ME mg, UN units),
+        // move this to a per-code column in fee_schedule.
+        measurementUnitCode: 'ML',
       },
     } : {}),
     }
