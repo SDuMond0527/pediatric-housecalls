@@ -34,12 +34,19 @@ function getFacilityAddress(renderingProviderName: string | null) {
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
-  // Only include valid CPT codes (exactly 5 alphanumeric chars, not starting with CV) — strips all convenience fees and internal codes
+  // Strip every convenience / self-pay / internal code before the
+  // Stedi payload is built. Filter on category — matches the post-
+  // submit stored-claim filter at the bottom of this file
+  // (line ~547). Previously this used a regex that only excluded
+  // codes starting with "CV" — that missed custom codes like VAXCV,
+  // Selfpay, SlfpayIV, SLFUrine, etc. that don't start with "CV",
+  // so they were sent to Stedi and rejected as invalid HCPCS.
+  // Format sanity check kept as a belt-and-suspenders: a Procedure-
+  // category code that isn't 5 alphanumeric chars is data-entry
+  // corruption we shouldn't silently ship.
   const cptCodes  = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
-    .filter((c: any) => {
-      const code = String(c.code ?? '')
-      return /^[A-Z0-9]{5}$/i.test(code) && !/^CV/i.test(code)
-    })
+    .filter((c: any) => c.category !== 'Non-Covered Services')
+    .filter((c: any) => /^[A-Z0-9]{5}$/i.test(String(c.code ?? '')))
     .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
   const billableTotal = cptCodes.reduce((s: number, c: any) => {
     const charge = parseFloat(c.charge_amount) || 0
