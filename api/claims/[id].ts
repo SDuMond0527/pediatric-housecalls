@@ -204,6 +204,23 @@ function buildStediPayload(claim: any, testMode = false): object {
       gender: mapGender(claim.subscriber_gender),
       dateOfBirth: fmtDate8(claim.subscriber_dob),
       ...(claim.group_number ? { groupNumber: claim.group_number } : {}),
+      // Guarantor (subscriber) address. In pediatric practice the
+      // subscriber is a parent living at the same address as the
+      // child, so we reuse claim.patient_* here — which the submit-
+      // time refresh already populates via COALESCE across
+      // claim.patient_address → family_profiles.address_line1 →
+      // children.parent_address. If a future edge case has the
+      // subscriber at a different address (divorced parents, etc.),
+      // add explicit subscriber_address_* columns to the claims
+      // table and swap them in here.
+      ...(claim.patient_address ? {
+        address: {
+          address1: claim.patient_address,
+          ...(claim.patient_city ? { city: claim.patient_city } : {}),
+          state: claim.patient_state ?? '',
+          postalCode: (claim.patient_zip ?? '').replace(/\D/g, '').slice(0, 9),
+        },
+      } : {}),
     },
     dependent: {
       firstName: claim.patient_first_name ?? '',
