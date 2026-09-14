@@ -1276,18 +1276,43 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<number[]>(pointers)
   const [saving, setSaving] = useState(false)
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const diagnoses: any[] = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
 
   const openPopover = () => {
     setDraft(pointers)
     // Fixed-position the popover using the button's rect so ancestor
-    // overflow: hidden can't clip it (Sara DuMond 2026-09-14: bottom
-    // of the popover was cut off by the parent claim card).
+    // overflow: hidden can't clip it. Also choose direction (below/
+    // above the button) and horizontal offset based on available
+    // viewport space, so the popover never runs off any edge. Sara
+    // DuMond 2026-09-14 caught the "opens off the bottom" case when
+    // the button is near the viewport bottom.
     if (buttonRef.current) {
       const r = buttonRef.current.getBoundingClientRect()
-      setCoords({ top: r.bottom + 4, left: r.left })
+      const POPOVER_WIDTH = 320
+      const MARGIN = 12
+      const spaceBelow = window.innerHeight - r.bottom - MARGIN
+      const spaceAbove = r.top - MARGIN
+      // If there's meaningful room below, open below. Otherwise flip
+      // above the button and cap by the space above.
+      const openAbove = spaceBelow < 200 && spaceAbove > spaceBelow
+      // Keep the popover on-screen horizontally: shift left if it
+      // would overflow the right edge.
+      const left = Math.min(r.left, window.innerWidth - POPOVER_WIDTH - MARGIN)
+      if (openAbove) {
+        setCoords({
+          bottom: window.innerHeight - r.top + 4,
+          left: Math.max(MARGIN, left),
+          maxHeight: spaceAbove,
+        })
+      } else {
+        setCoords({
+          top: r.bottom + 4,
+          left: Math.max(MARGIN, left),
+          maxHeight: spaceBelow,
+        })
+      }
     }
     setOpen(true)
   }
@@ -1335,9 +1360,10 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
           <div
             className="fixed z-50 w-80 bg-white border border-[#E8E8E4] rounded-lg shadow-lg p-3 flex flex-col"
             style={{
-              top: coords.top,
+              ...(coords.top !== undefined ? { top: coords.top } : {}),
+              ...(coords.bottom !== undefined ? { bottom: coords.bottom } : {}),
               left: coords.left,
-              maxHeight: 'calc(100vh - 24px)',
+              maxHeight: coords.maxHeight,
             }}>
             <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2 flex-shrink-0">
               Link diagnoses to this CPT line
