@@ -170,17 +170,18 @@ function buildStediPayload(claim: any, testMode = false): object {
       ...(claim.rendering_provider_taxonomy ? { taxonomyCode: claim.rendering_provider_taxonomy } : {}),
     },
     // NDC (National Drug Code) attached when the CPT/HCPCS has one
-    // seeded on fee_schedule.ndc_code. First guess (2026-09-14) put
-    // this block inside professionalService — Stedi rejected with
-    // "unknown field drugIdentification, expected one of ..." where
-    // the list did NOT include drugIdentification. Moving to the
-    // service-line level (sibling to professionalService + rendering
-    // provider) — same level as renderingProvider, which Stedi is
-    // known to accept there. Test-submit again to confirm.
+    // seeded on fee_schedule.ndc_code. Location: service-line level
+    // (sibling to professionalService + renderingProvider) — Stedi
+    // confirmed this via 277CA on 2026-09-14. Also required inside
+    // the block per Stedi's schema: `nationalDrugUnitCount`. Sara
+    // preferred not to surface unit count in the UI, so it's set
+    // here silently from the CPT's units value (1 for vaccines, N
+    // for J-codes with variable dosing).
     ...(normalizedNdc ? {
       drugIdentification: {
         serviceIdQualifier: 'N4',
         nationalDrugCode: normalizedNdc,
+        nationalDrugUnitCount: String(units),
       },
     } : {}),
     }
