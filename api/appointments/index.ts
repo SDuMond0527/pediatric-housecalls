@@ -66,17 +66,21 @@ async function findOverlaps(
   const [nh, nm] = String(time).split(':').map(Number)
   const newStart = nh * 60 + nm
   const newEnd = newStart + durationMinutes
+  // Deliberately the same shape as the long-standing booked-slots query: no
+  // table alias, no join, and no parameter that can be NULL. An earlier
+  // version joined `providers` for a display name and excluded the twin row
+  // with a nullable ::uuid parameter; that crashed the function and took
+  // booking down. Excluding the twin and picking the display name are both
+  // done in JS below, where they cannot fail.
   const rows = await sql`
-    SELECT a.id, a.visit_type, a.scheduled_time, a.provider_id,
-           COALESCE(a.duration_minutes, 60) AS duration_minutes,
-           p.name AS provider_name
-    FROM appointments a
-    LEFT JOIN providers p ON p.id = a.provider_id
-    WHERE a.provider_id = ${providerId}::uuid AND a.practice_id = ${practiceId}::uuid
-      AND a.scheduled_date = ${date}::date AND a.status != 'cancelled'
-      AND (${excludeId ?? null}::uuid IS NULL OR a.id != ${excludeId ?? null}::uuid)`
+    SELECT id, visit_type, scheduled_time, provider_id,
+           COALESCE(duration_minutes, 60) AS duration_minutes
+    FROM appointments
+    WHERE provider_id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid
+      AND scheduled_date = ${date}::date AND status != 'cancelled'`
   return (rows as Array<Record<string, unknown>>)
     .filter(r => {
+      if (excludeId && String(r.id) === String(excludeId)) return false
       const [eh, em] = String(r.scheduled_time).split(':').map(Number)
       const exStart = eh * 60 + em
       const exEnd = exStart + (Number(r.duration_minutes) || 60)
@@ -88,7 +92,9 @@ async function findOverlaps(
       scheduled_time: String(r.scheduled_time),
       duration_minutes: Number(r.duration_minutes) || 60,
       provider_id: String(r.provider_id),
-      provider_name: (r.provider_name ?? null) as string | null,
+      // Not looked up — every conflict is on the provider the booker just
+      // picked, so the name adds nothing the screen doesn't already show.
+      provider_name: null,
     }))
 }
 
