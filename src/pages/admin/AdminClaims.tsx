@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
@@ -1275,10 +1276,19 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<number[]>(pointers)
   const [saving, setSaving] = useState(false)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
   const diagnoses: any[] = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
 
   const openPopover = () => {
     setDraft(pointers)
+    // Fixed-position the popover using the button's rect so ancestor
+    // overflow: hidden can't clip it (Sara DuMond 2026-09-14: bottom
+    // of the popover was cut off by the parent claim card).
+    if (buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect()
+      setCoords({ top: r.bottom + 4, left: r.left })
+    }
     setOpen(true)
   }
   const toggle = (n: number) => {
@@ -1310,28 +1320,35 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
   const badge = pointers.length ? `Dx: ${pointers.join(', ')}` : 'Dx: all'
 
   return (
-    <div className="relative inline-block ml-2">
+    <div className="inline-block ml-2">
       <button
+        ref={buttonRef}
         type="button"
         onClick={openPopover}
         disabled={diagnoses.length === 0}
         className="text-[10px] px-1.5 py-0.5 rounded border border-[#7F77DD] text-[#7F77DD] hover:bg-[#F1EFE8] disabled:opacity-40 disabled:cursor-not-allowed">
         {badge}
       </button>
-      {open && (
+      {open && coords && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 top-6 left-0 w-80 bg-white border border-[#E8E8E4] rounded-lg shadow-lg p-3">
-            <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">
+          <div
+            className="fixed z-50 w-80 bg-white border border-[#E8E8E4] rounded-lg shadow-lg p-3 flex flex-col"
+            style={{
+              top: coords.top,
+              left: coords.left,
+              maxHeight: 'calc(100vh - 24px)',
+            }}>
+            <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2 flex-shrink-0">
               Link diagnoses to this CPT line
             </div>
-            <div className="text-[11px] text-[#999] mb-2">
+            <div className="text-[11px] text-[#999] mb-2 flex-shrink-0">
               First checked = primary. Max 4. Empty = all diagnoses apply.
             </div>
             {diagnoses.length === 0 ? (
               <div className="text-[12px] text-[#999] italic py-2">No diagnoses on this claim yet.</div>
             ) : (
-              <div className="space-y-1 max-h-64 overflow-auto">
+              <div className="space-y-1 flex-1 min-h-0 overflow-auto">
                 {diagnoses.map((d: any, i: number) => {
                   const dxNumber = i + 1
                   const orderIdx = draft.indexOf(dxNumber)
@@ -1370,7 +1387,7 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
                 })}
               </div>
             )}
-            <div className="flex justify-end gap-2 mt-3 pt-2 border-t border-[#F1EFE8]">
+            <div className="flex justify-end gap-2 mt-3 pt-2 border-t border-[#F1EFE8] flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -1378,7 +1395,8 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
               <Button size="sm" variant="teal" loading={saving} onClick={save}>Save</Button>
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   )
