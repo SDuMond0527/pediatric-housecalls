@@ -505,6 +505,13 @@ export function Waitlist() {
       Allergies: 'ALLERGY', Medications: 'MEDS', PMH: 'PMH',
       PCP: 'PCP', Pharmacy: 'PHARMACY', Insurance: 'INSURANCE',
       'Member ID': 'MID', 'Group #': 'GRP',
+      // Family-side waitlist entries put the chief complaint into
+      // the notes field ("Complaint: ..."), not the dedicated
+      // complaint column. Without this mapping the CC was silently
+      // dropped when converting to an appointment (Sara DuMond
+      // 2026-09-14). Admin-added entries use the column and are
+      // handled by the accepting.complaint push a few lines below.
+      Complaint: 'CC',
     }
     const apptNoteParts: string[] = []
     if (accepting.zip) apptNoteParts.push(`ZIP:${accepting.zip}`)
