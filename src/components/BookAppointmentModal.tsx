@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, CalendarPlus } from 'lucide-react'
 import { Button } from './ui/Button'
-import { createAppointment, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
+import { createAppointmentWithOverlapRetry, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
 import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { DUAL_VISIT_TYPES, isCmaTelePair } from '../lib/dualVisitTypes'
@@ -88,11 +88,14 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
         status: 'upcoming',
         duration_minutes: visitDur,
       }
-      const appt = await createAppointment({
-        ...base,
-        provider_id: form.provider_id,
-        second_provider_id: isDual ? form.second_provider_id : undefined,
-      })
+      const appt = await createAppointmentWithOverlapRetry(
+        {
+          ...base,
+          provider_id: form.provider_id,
+          second_provider_id: isDual ? form.second_provider_id : undefined,
+        },
+        msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
+      )
       // Notify primary provider
       const primaryId = appt.primary?.id ?? appt.id
       await invokeNotifications({ type: 'chart_booked', appointmentId: primaryId })

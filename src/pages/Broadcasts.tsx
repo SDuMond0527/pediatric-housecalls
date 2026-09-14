@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { MapPin, Clock, AlertCircle, Plus, X, AlertTriangle } from 'lucide-react'
 import {
   getBroadcasts, createBroadcast, updateBroadcast,
-  createAppointment, invokeNotifications, updateWaitlistEntry,
+  createAppointmentWithOverlapRetry, invokeNotifications, updateWaitlistEntry,
   apiFetch,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -201,7 +201,7 @@ export function Broadcasts() {
       // uses the pairing initiator as the paired provider instead of the on-call
       // schedule. The initiator committed to being the MD/NP for this specific
       // pair via the broadcast — respect that.
-      const apptResult = await createAppointment({
+      const apptResult = await createAppointmentWithOverlapRetry({
         provider_id: provider.id,
         visit_type: bc.visit_type || 'CMA + tele',
         zone: (bc as any).zone || bc.patient_address || 'Broadcast',
@@ -214,7 +214,7 @@ export function Broadcasts() {
         // so the appointments API will create a single row and skip pairing.
         ...(!isRnIvSolo && isInHomeNeeded && bc.pairing_initiator_id ? { second_provider_id: bc.pairing_initiator_id } : {}),
         ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
-      })
+      }, msg => window.confirm(`${msg}\n\nOK to double-book this provider?`))
 
       if ((apptResult as any)?.error) {
         // Overlap on primary or secondary — surface it and leave broadcast open.
@@ -360,16 +360,19 @@ export function Broadcasts() {
     }
     if (!isSolo) noteParts.push(`Request: ${bc.request_type}`)
 
-    await createAppointment({
-      provider_id: provider.id,
-      visit_type: bc.visit_type || (bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine'),
-      zone: bc.patient_address || (bc as any).zone || 'Broadcast',
-      scheduled_time: acceptTime,
-      scheduled_date: acceptDate,
-      ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
-      status: 'upcoming',
-      notes: noteParts.join('|'),
-    })
+    await createAppointmentWithOverlapRetry(
+      {
+        provider_id: provider.id,
+        visit_type: bc.visit_type || (bc.request_type === 'In-person house call' ? 'In-home sick visit' : 'Video telemedicine'),
+        zone: bc.patient_address || (bc as any).zone || 'Broadcast',
+        scheduled_time: acceptTime,
+        scheduled_date: acceptDate,
+        ...(resolvedChildId ? { child_id: resolvedChildId } : {}),
+        status: 'upcoming',
+        notes: noteParts.join('|'),
+      },
+      msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
+    )
 
     await updateBroadcast(bc.id, { is_open: false })
 
