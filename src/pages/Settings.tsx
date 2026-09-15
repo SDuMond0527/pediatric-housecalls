@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { KeyRound, CheckCircle2, Phone } from 'lucide-react'
+import { KeyRound, CheckCircle2, Phone, MapPin } from 'lucide-react'
 import { updatePassword } from 'aws-amplify/auth'
-import { updateProvider } from '../lib/api'
+import { updateProvider, getPracticeZones } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -31,6 +31,34 @@ export function Settings() {
   const [secureTextSaved, setSecureTextSaved] = useState(false)
   const [secureTextSaving, setSecureTextSaving] = useState(false)
   const [secureTextError, setSecureTextError] = useState('')
+
+  const [availableZones, setAvailableZones] = useState<string[]>([])
+  const [providerZones, setProviderZones] = useState<string[]>(((provider as any)?.zones ?? []) as string[])
+  const [zonesError, setZonesError] = useState('')
+  const [zonesSaved, setZonesSaved] = useState(false)
+
+  useEffect(() => {
+    getPracticeZones()
+      .then(rows => setAvailableZones(rows.map((r: any) => r.zone_name)))
+      .catch(() => setAvailableZones([]))
+  }, [])
+
+  async function toggleZone(zone: string) {
+    if (!provider) return
+    const isOn = providerZones.includes(zone)
+    const next = isOn ? providerZones.filter(z => z !== zone) : [...providerZones, zone]
+    setProviderZones(next)
+    setZonesError('')
+    try {
+      await updateProvider(provider.id, { zones: next })
+      await refreshProvider()
+      setZonesSaved(true)
+      setTimeout(() => setZonesSaved(false), 2000)
+    } catch (e: any) {
+      setProviderZones(providerZones)
+      setZonesError(e?.message ?? 'Failed to save service areas')
+    }
+  }
 
   async function savePhone() {
     if (!provider) return
@@ -102,6 +130,33 @@ export function Settings() {
             {phoneError && <div className="text-[13px] text-[#791F1F]">{phoneError}</div>}
             <Button size="sm" loading={phoneSaving} onClick={savePhone}>Save number</Button>
           </div>
+        </div>
+
+        {/* Service areas the provider covers */}
+        <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin size={16} className="text-[#7F77DD]" />
+            <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Service areas</h2>
+          </div>
+          <p className="text-[12px] text-[#999] mb-4">Zones you cover. Families in these zones will be able to book with you.</p>
+          {availableZones.length === 0 ? (
+            <p className="text-[12px] text-[#999]">No zones configured for this practice yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {availableZones.map(zone => {
+                const on = providerZones.includes(zone)
+                return (
+                  <label key={zone} className="flex items-center gap-1.5 cursor-pointer bg-[#FAFAF8] hover:bg-[#F0EFFA] rounded-lg px-2.5 py-1.5 border border-[#E8E8E4]">
+                    <input type="checkbox" checked={on} className="w-3.5 h-3.5 accent-[#7F77DD]"
+                      onChange={() => toggleZone(zone)} />
+                    <span className="text-[12px] text-[#333]">{zone}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {zonesSaved && <div className="flex items-center gap-2 text-[13px] text-[#085041] mt-3"><CheckCircle2 size={14} /> Saved!</div>}
+          {zonesError && <div className="text-[13px] text-[#791F1F] mt-3">{zonesError}</div>}
         </div>
 
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">

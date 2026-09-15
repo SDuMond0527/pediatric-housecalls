@@ -14,8 +14,9 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  let sub: string
   try {
-    await verifyToken(req.headers.authorization)
+    sub = await verifyToken(req.headers.authorization)
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -26,6 +27,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { id } = req.query as { id: string }
   const b = req.body
+
+  // Auth gate: caller must either be admin OR the provider whose row is being
+  // updated. Without this, any authenticated provider could PATCH another
+  // provider's phone, NPI, zones, etc.
+  const [caller] = await sql`
+    SELECT id, is_admin, is_super_admin
+    FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!caller) return res.status(403).json({ error: 'Provider not found' })
+  const isSelf = caller.id === id
+  if (!isSelf && !caller.is_admin && !caller.is_super_admin) {
+    return res.status(403).json({ error: 'Cannot update another provider' })
+  }
 
   const updates: string[] = []
   if (b.phone !== undefined)               updates.push('phone')
