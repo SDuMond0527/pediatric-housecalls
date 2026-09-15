@@ -587,7 +587,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                      'patient_first_name', 'patient_last_name', 'patient_dob', 'patient_gender',
                      'patient_address', 'patient_city', 'patient_state', 'patient_zip',
                      'rendering_provider_npi', 'rendering_provider_taxonomy',
-                     'place_of_service', 'service_date', 'status', 'cpt_codes', 'diagnoses']
+                     'place_of_service', 'service_date', 'status', 'cpt_codes', 'diagnoses',
+                     'era_seen_at']
     const updates: Record<string, any> = {}
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key]
