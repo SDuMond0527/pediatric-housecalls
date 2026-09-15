@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { PatientStatementModal } from './PatientStatementModal'
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -81,6 +82,49 @@ export function AdminClaims() {
   const [eraTestResult, setEraTestResult] = useState<Awaited<ReturnType<typeof testStediEraSync>> | null>(null)
   const [backfillRunning, setBackfillRunning] = useState(false)
   const [backfillResult, setBackfillResult] = useState<Awaited<ReturnType<typeof backfillStediCas>> | null>(null)
+
+  const { provider: currentProvider } = useAuth()
+  const [providerList, setProviderList] = useState<any[]>([])
+  useEffect(() => {
+    getProviders()
+      .then(rows => setProviderList((rows ?? []).filter((p: any) => p.is_active && p.role !== 'admin')))
+      .catch(() => setProviderList([]))
+  }, [])
+
+  // Per-claim "Notify provider" state: which claim's form is open, its
+  // selected provider, the message draft, and the sending flag. Keyed
+  // by claim id so multiple could be prepared at once without stepping
+  // on each other. Cleared on send success.
+  const [notifyOpen, setNotifyOpen] = useState<Record<string, boolean>>({})
+  const [notifyForm, setNotifyForm] = useState<Record<string, { providerId: string; message: string }>>({})
+  const [notifySending, setNotifySending] = useState<Record<string, boolean>>({})
+  const [notifyResult, setNotifyResult] = useState<Record<string, string>>({})
+
+  async function handleSendNotify(claimId: string) {
+    const form = notifyForm[claimId]
+    if (!form?.providerId || !form?.message?.trim()) {
+      setNotifyResult(prev => ({ ...prev, [claimId]: 'Please pick a provider and enter a question.' }))
+      return
+    }
+    setNotifySending(prev => ({ ...prev, [claimId]: true }))
+    setNotifyResult(prev => ({ ...prev, [claimId]: '' }))
+    try {
+      const r = await sendBillerQuestion({
+        claimId,
+        providerId: form.providerId,
+        question: form.message.trim(),
+        billerName: currentProvider?.name || undefined,
+      })
+      const sentParts = [r.emailSent ? 'email' : null, r.smsSent ? 'text' : null].filter(Boolean).join(' + ')
+      setNotifyResult(prev => ({ ...prev, [claimId]: sentParts ? `Sent via ${sentParts} to ${r.providerName ?? 'provider'}.` : 'Sent — but no email or phone on file for that provider.' }))
+      setNotifyForm(prev => ({ ...prev, [claimId]: { providerId: '', message: '' } }))
+      setTimeout(() => setNotifyOpen(prev => ({ ...prev, [claimId]: false })), 1400)
+    } catch (e: any) {
+      setNotifyResult(prev => ({ ...prev, [claimId]: e?.message ?? 'Failed to send.' }))
+    } finally {
+      setNotifySending(prev => ({ ...prev, [claimId]: false }))
+    }
+  }
 
   // Auto-mark ERA as seen when the biller expands a claim card that has
   // era_received_at but no era_seen_at yet. Optimistic — updates local
@@ -360,6 +404,68 @@ export function AdminClaims() {
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`
+
+  // "Notify provider" collapsible per-claim. Same JSX in both tabs, so
+  // pulled into a local closure over component state. The button lives
+  // inline with the other claim actions; the form only renders when
+  // opened for that claim id.
+  function renderNotifySection(claim: any) {
+    const isOpen = !!notifyOpen[claim.id]
+    const form = notifyForm[claim.id] ?? { providerId: '', message: '' }
+    const sending = !!notifySending[claim.id]
+    const result = notifyResult[claim.id] ?? ''
+    return (
+      <div className="border-t border-[#F1EFE8] pt-3">
+        <button
+          type="button"
+          onClick={() => {
+            setNotifyOpen(prev => ({ ...prev, [claim.id]: !isOpen }))
+            setNotifyResult(prev => ({ ...prev, [claim.id]: '' }))
+          }}
+          className="flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors">
+          {isOpen ? 'Cancel notify' : 'Notify provider'}
+        </button>
+        {isOpen && (
+          <div className="mt-3 bg-[#F9F9F7] border border-[#E8E8E4] rounded-lg p-3 space-y-2">
+            <div className="text-[11px] text-[#555]">
+              Sending to a provider about <strong>{[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ') || 'this patient'}</strong> · DOB {fmtDate(claim.patient_dob)} · Visit {fmtDate(claim.service_date)}
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-[#555] block mb-1">Provider</label>
+              <select
+                value={form.providerId}
+                onChange={e => setNotifyForm(prev => ({ ...prev, [claim.id]: { ...form, providerId: e.target.value } }))}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]">
+                <option value="">— select provider —</option>
+                {providerList.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}{p.role ? ` (${p.role})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-[#555] block mb-1">Question</label>
+              <textarea
+                value={form.message}
+                onChange={e => setNotifyForm(prev => ({ ...prev, [claim.id]: { ...form, message: e.target.value } }))}
+                placeholder="What do you need to ask the provider about this encounter?"
+                rows={4}
+                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD] resize-none" />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSendNotify(claim.id)}
+                disabled={sending}
+                className="text-[12px] font-medium px-3 py-1.5 rounded-lg bg-[#7F77DD] text-white hover:bg-[#3C3489] transition-colors disabled:opacity-50">
+                {sending ? 'Sending…' : 'Send'}
+              </button>
+              {result && <span className={`text-[11px] ${result.startsWith('Sent') ? 'text-[#085041]' : 'text-[#791F1F]'}`}>{result}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="p-8">
@@ -1105,6 +1211,7 @@ export function AdminClaims() {
                               </span>
                             )}
                           </div>
+                          {renderNotifySection(c)}
                           {isSelfPay ? (
                             <Button variant="teal" onClick={() => setStatementClaim(c)}>
                               <Receipt size={13} className="mr-1.5" /> Generate patient statement
@@ -1255,6 +1362,7 @@ export function AdminClaims() {
                             </span>
                           )}
                         </div>
+                        {renderNotifySection(c)}
                       </div>
                     )}
                   </div>

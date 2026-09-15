@@ -2044,6 +2044,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true })
     }
 
+    // ── Biller question to provider ─────────────────────────────────────────
+    // Biller opens a claim in AdminClaims, clicks "Notify provider", picks
+    // a provider from the dropdown, and free-texts a question. We send an
+    // email + SMS that identifies the patient (name + DOB), the encounter
+    // date, and includes the question text so the provider knows exactly
+    // which chart to look up. Signed with billerName from the caller's
+    // session so the provider knows who's asking.
+    if (body.type === 'biller_question_to_provider') {
+      const { claimId, providerId, question, billerName } = body
+      if (!claimId || !providerId) return res.status(400).json({ ok: false, error: 'claimId and providerId required' })
+      if (!question || !String(question).trim()) return res.status(400).json({ ok: false, error: 'Question required' })
+
+      const [claim] = await sql`
+        SELECT patient_first_name, patient_last_name, patient_dob, service_date, encounter_note_id
+        FROM claims WHERE id = ${String(claimId)}::uuid LIMIT 1`
+      if (!claim) return res.status(404).json({ ok: false, error: 'Claim not found' })
+
+      const [prov] = await sql`SELECT name, email, phone FROM providers WHERE id = ${String(providerId)}::uuid LIMIT 1`
+      if (!prov) return res.status(404).json({ ok: false, error: 'Provider not found' })
+
+      const patientName = [claim.patient_first_name, claim.patient_last_name].filter(Boolean).join(' ') || 'the patient'
+      const fmtLocal = (d: any) => {
+        if (!d) return 'unknown'
+        try {
+          const s = d instanceof Date ? d.toISOString() : String(d)
+          const [y, m, day] = s.split('T')[0].split('-').map(Number)
+          if (isNaN(y) || isNaN(m) || isNaN(day)) return s.split('T')[0] || 'unknown'
+          return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        } catch { return 'unknown' }
+      }
+      const dob   = fmtLocal(claim.patient_dob)
+      const doe   = fmtLocal(claim.service_date)
+      const asker = String(billerName || 'The billing team').trim()
+      const q     = String(question).trim()
+
+      // Encounter note lives at /patients if we have its id — sends the
+      // provider to the specific note. Fallback = /admin/claims where
+      // they can find it themselves.
+      const noteLink = claim.encounter_note_id
+        ? `${PORTAL_URL}/patients?note=${claim.encounter_note_id}`
+        : `${PORTAL_URL}/admin/claims`
+
+      const smsBody = `${PRACTICE_NAME}: ${asker} has a billing question about ${patientName} (DOB ${dob}, visit ${doe}). "${q.slice(0, 240)}${q.length > 240 ? '…' : ''}" — Reply or view: ${noteLink}`
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:560px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+<tr><td style="background:#1A1A2E;padding:24px 32px;">
+  <div style="font-size:18px;font-weight:600;color:#fff;">${logo('#7F77DD')}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">Billing question</div>
+</td></tr>
+<tr><td style="padding:28px 32px;">
+  <p style="font-size:14px;margin:0 0 20px;line-height:1.6;">${asker} has a question about a recent encounter:</p>
+  <div style="background:#F9F9F7;border:1px solid #E8E8E4;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+    <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Patient</div>
+    <div style="font-size:16px;font-weight:600;">${patientName}</div>
+    <div style="font-size:13px;color:#555;margin-top:6px;">DOB ${dob} · Visit ${doe}</div>
+  </div>
+  <div style="background:#EEEDFE;border:1px solid #AFA9EC;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+    <div style="font-size:11px;color:#3C3489;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Question from ${asker}</div>
+    <div style="font-size:14px;white-space:pre-wrap;line-height:1.55;">${q.replace(/</g, '&lt;')}</div>
+  </div>
+  <p style="font-size:13px;color:#666;margin:0 0 8px;">
+    <a href="${noteLink}" style="color:#7F77DD;font-weight:500;">Open this encounter in the portal →</a>
+  </p>
+  <p style="font-size:12px;color:#999;margin:16px 0 0;">Reply to this email or open the portal to answer — the biller is waiting on your response before finalizing the claim.</p>
+</td></tr>
+</table></td></tr></table></body></html>`
+
+      let emailSent = false, smsSent = false
+      if (prov.email) {
+        await sendEmail(prov.email, `Billing question about ${patientName} (visit ${doe})`, html)
+          .then(() => { emailSent = true })
+          .catch(e => console.error('biller-question email failed:', e))
+      }
+      if (prov.phone) {
+        await sendSMS(prov.phone, smsBody)
+          .then(() => { smsSent = true })
+          .catch(e => console.error('biller-question SMS failed:', e))
+      }
+      return res.json({ ok: true, emailSent, smsSent, providerName: prov.name })
+    }
+
     // ── Shift claimed ─────────────────────────────────────────────────────────
     if (body.type === 'shift_claimed') {
       const { providerName, providerId, date, state } = body

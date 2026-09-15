@@ -609,6 +609,12 @@ export const testStediEraSync = () =>
     timelineStatusCodes?: string[]
   }>('/api/admin/test-stedi-era-sync', { method: 'POST' })
 
+// Biller opens a claim → asks a provider a question (email + SMS).
+export const sendBillerQuestion = (body: { claimId: string; providerId: string; question: string; billerName?: string }) =>
+  apiFetch<{ ok: boolean; emailSent: boolean; smsSent: boolean; providerName?: string }>(
+    '/api/notifications',
+    { method: 'POST', body: JSON.stringify({ type: 'biller_question_to_provider', ...body }) })
+
 // Admin-only: backfill CAS breakdown from historical 835s.
 export const backfillStediCas = (days = 60) =>
   apiFetch<{
