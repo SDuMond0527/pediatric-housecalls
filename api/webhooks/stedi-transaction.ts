@@ -148,6 +148,7 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
       updated_at                 = NOW()
     WHERE id = ${claimId}::uuid`
   const patientRespSubtotal = +(cas.patient_deductible + cas.patient_coinsurance + cas.patient_copay + cas.patient_non_covered).toFixed(2)
+  const paidInFull = patientRespSubtotal === 0
   const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
   if (stmt) {
     await sql`
@@ -160,6 +161,8 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
         total_amount_due       = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${patientRespSubtotal} ELSE total_amount_due END,
         total_amount_due_text  = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${String(patientRespSubtotal)} ELSE total_amount_due_text END,
         remaining_balance      = CASE WHEN COALESCE(remaining_balance, 0) = 0 THEN COALESCE(amount_billed, 0) - COALESCE(insurance_payment, 0) - COALESCE(contractual_adjustment, ${cas.contractual_adjustment}, 0) ELSE remaining_balance END,
+        status                 = CASE WHEN status = 'draft' AND ${paidInFull} THEN 'paid' ELSE status END,
+        paid_at                = CASE WHEN status = 'draft' AND ${paidInFull} THEN NOW() ELSE paid_at END,
         updated_at             = NOW()
       WHERE id = ${stmt.id}`
   }

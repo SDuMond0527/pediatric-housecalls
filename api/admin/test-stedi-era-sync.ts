@@ -90,6 +90,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     ? parsed.patient_responsibility
     : (parsed.patient_copay ?? 0) + (parsed.patient_deductible ?? 0) + (parsed.patient_coinsurance ?? 0) + (parsed.patient_non_covered ?? 0)
   const remaining = (parsed.amount_billed ?? 0) - (parsed.insurance_payment ?? 0) - (parsed.contractual_adjustment ?? 0)
+  const paidInFull = patientResp === 0
 
   const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id} LIMIT 1`
   if (existing) {
@@ -104,6 +105,8 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
         patient_non_covered    = COALESCE(${parsed.patient_non_covered}, patient_non_covered),
         remaining_balance      = COALESCE(${remaining}, remaining_balance),
         total_amount_due       = COALESCE(${patientResp}, total_amount_due),
+        status                 = CASE WHEN status = 'draft' AND ${paidInFull} THEN 'paid' ELSE status END,
+        paid_at                = CASE WHEN status = 'draft' AND ${paidInFull} THEN NOW() ELSE paid_at END,
         updated_at             = NOW()
       WHERE id = ${existing.id}`
     return { statementCreated: false }
@@ -124,6 +127,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     }
   }
 
+  const newStatus = paidInFull ? 'paid' : 'draft'
   await sql`
     INSERT INTO patient_statements (
       practice_id, claim_id,
@@ -133,7 +137,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
       amount_billed, insurance_payment, contractual_adjustment,
       patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
       remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, created_at, updated_at
+      status, paid_at, created_at, updated_at
     ) VALUES (
       ${claim.practice_id}::uuid, ${claim.id},
       ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
@@ -142,7 +146,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
       ${parsed.amount_billed}, ${parsed.insurance_payment}, ${parsed.contractual_adjustment},
       ${parsed.patient_copay}, ${parsed.patient_deductible}, ${parsed.patient_coinsurance}, ${parsed.patient_non_covered},
       ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      'draft', NOW(), NOW()
+      ${newStatus}, ${paidInFull ? new Date().toISOString() : null}, NOW(), NOW()
     )`
   return { statementCreated: true }
 }

@@ -162,6 +162,12 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     : (parsed.patient_copay ?? 0) + (parsed.patient_deductible ?? 0) + (parsed.patient_coinsurance ?? 0) + (parsed.patient_non_covered ?? 0)
   const remaining = (parsed.amount_billed ?? 0) - (parsed.insurance_payment ?? 0) - (parsed.contractual_adjustment ?? 0)
 
+  // Insurance-paid-in-full detection: when the ERA says the patient
+  // owes $0 (deductible + coinsurance + copay + non-covered all resolve
+  // to nothing), auto-mark the statement 'paid' so the biller doesn't
+  // send a statement to a family who doesn't owe anything. Only flip
+  // draft → paid; a sent statement stays 'sent' (biller handles).
+  const paidInFull = patientResp === 0
   const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id} LIMIT 1`
   if (existing) {
     await sql`
@@ -175,6 +181,8 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
         patient_non_covered    = COALESCE(${parsed.patient_non_covered}, patient_non_covered),
         remaining_balance      = COALESCE(${remaining}, remaining_balance),
         total_amount_due       = COALESCE(${patientResp}, total_amount_due),
+        status                 = CASE WHEN status = 'draft' AND ${paidInFull} THEN 'paid' ELSE status END,
+        paid_at                = CASE WHEN status = 'draft' AND ${paidInFull} THEN NOW() ELSE paid_at END,
         updated_at             = NOW()
       WHERE id = ${existing.id}`
     return { statementCreated: false }
@@ -195,6 +203,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     }
   }
 
+  const newStatus = paidInFull ? 'paid' : 'draft'
   await sql`
     INSERT INTO patient_statements (
       practice_id, claim_id,
@@ -204,7 +213,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
       amount_billed, insurance_payment, contractual_adjustment,
       patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
       remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, created_at, updated_at
+      status, paid_at, created_at, updated_at
     ) VALUES (
       ${claim.practice_id}::uuid, ${claim.id},
       ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
@@ -213,7 +222,7 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
       ${parsed.amount_billed}, ${parsed.insurance_payment}, ${parsed.contractual_adjustment},
       ${parsed.patient_copay}, ${parsed.patient_deductible}, ${parsed.patient_coinsurance}, ${parsed.patient_non_covered},
       ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      'draft', NOW(), NOW()
+      ${newStatus}, ${paidInFull ? new Date().toISOString() : null}, NOW(), NOW()
     )`
   return { statementCreated: true }
 }
@@ -339,12 +348,14 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
       updated_at                 = NOW()
     WHERE id = ${claimId}::uuid`
   const patientRespSubtotal = +(cas.patient_deductible + cas.patient_coinsurance + cas.patient_copay + cas.patient_non_covered).toFixed(2)
+  const paidInFull = patientRespSubtotal === 0
   const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
   if (stmt) {
     // COALESCE preserves biller category edits. total_amount_due /
     // remaining_balance get repaired only when they were stuck at 0
     // from the old code path (before CAS support) — biller-set
-    // non-zero values win.
+    // non-zero values win. Insurance-paid-in-full auto-marks 'paid'
+    // (only when still 'draft' — biller decides on 'sent' statements).
     await sql`
       UPDATE patient_statements SET
         patient_deductible     = COALESCE(patient_deductible,     ${cas.patient_deductible}),
@@ -355,6 +366,8 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
         total_amount_due       = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${patientRespSubtotal} ELSE total_amount_due END,
         total_amount_due_text  = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${String(patientRespSubtotal)} ELSE total_amount_due_text END,
         remaining_balance      = CASE WHEN COALESCE(remaining_balance, 0) = 0 THEN COALESCE(amount_billed, 0) - COALESCE(insurance_payment, 0) - COALESCE(contractual_adjustment, ${cas.contractual_adjustment}, 0) ELSE remaining_balance END,
+        status                 = CASE WHEN status = 'draft' AND ${paidInFull} THEN 'paid' ELSE status END,
+        paid_at                = CASE WHEN status = 'draft' AND ${paidInFull} THEN NOW() ELSE paid_at END,
         updated_at             = NOW()
       WHERE id = ${stmt.id}`
   }
