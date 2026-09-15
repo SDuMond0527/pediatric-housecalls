@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
-import crypto from 'node:crypto'
+import { Webhook } from 'standardwebhooks'
 
 // Stedi transaction.processed webhook receiver.
 //
@@ -179,65 +179,24 @@ async function readRawBody(req: VercelRequest): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8')
 }
 
-// Standard Webhooks verification (spec: https://www.standardwebhooks.com/).
-// Stedi's Event Destinations follow this convention per docs:
-//   webhook-id, webhook-timestamp, webhook-signature headers
-//   secret is base64 in `whsec_` prefix form
-//   signed_payload = `${id}.${timestamp}.${rawBody}`
-//   signature = base64(HMAC-SHA256(signed_payload, secretBytes))
-//   header may contain multiple sigs separated by space: "v1,sig1 v1,sig2"
-// Reject if timestamp is off by more than 5 minutes (replay guard).
-function verifyStediSignature(headers: Record<string, string | string[] | undefined>, rawBody: string, secret: string): { ok: true } | { ok: false; reason: string; debug?: Record<string, unknown> } {
-  const id = String(headers['webhook-id'] ?? '')
-  const ts = String(headers['webhook-timestamp'] ?? '')
-  const sig = String(headers['webhook-signature'] ?? '')
-  if (!id || !ts || !sig) return { ok: false, reason: 'Missing webhook-id / webhook-timestamp / webhook-signature header' }
-
-  const tsNum = Number(ts)
-  if (!Number.isFinite(tsNum)) return { ok: false, reason: 'Invalid webhook-timestamp' }
-  const now = Math.floor(Date.now() / 1000)
-  if (Math.abs(now - tsNum) > 300) return { ok: false, reason: `webhook-timestamp outside 5-minute tolerance (now=${now} ts=${tsNum} delta=${now - tsNum}s)` }
-
-  const secretBase64 = secret.startsWith('whsec_') ? secret.slice(6) : secret
-  let secretBytes: Buffer
+// Delegates verification to the audited `standardwebhooks` library —
+// the exact same code Stedi's own docs (event-destinations-message-handling)
+// point at as the reference implementation. Handles secret normalization
+// (`whsec_` prefix / base64 decoding), signed-payload construction
+// (`${id}.${timestamp}.${rawBody}`), and the space-separated
+// `v1,BASE64SIG` header format. Throws on mismatch; returns void on ok.
+function verifyStediSignature(headers: Record<string, string | string[] | undefined>, rawBody: string, secret: string): { ok: true } | { ok: false; reason: string } {
   try {
-    secretBytes = Buffer.from(secretBase64, 'base64')
-  } catch {
-    return { ok: false, reason: 'Invalid secret encoding' }
-  }
-
-  const signedPayload = `${id}.${ts}.${rawBody}`
-  const expected = crypto.createHmac('sha256', secretBytes).update(signedPayload).digest('base64')
-
-  // Header format: "v1,BASE64SIG v1,BASE64SIG2 ..."
-  const providedSigs = sig.split(' ')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => s.includes(',') ? s.split(',')[1] : s)
-
-  for (const provided of providedSigs) {
-    try {
-      const a = Buffer.from(provided, 'base64')
-      const b = Buffer.from(expected, 'base64')
-      if (a.length === b.length && crypto.timingSafeEqual(a, b)) return { ok: true }
-    } catch { /* try next candidate */ }
-  }
-  return {
-    ok: false,
-    reason: 'No signature matched',
-    debug: {
-      webhook_id: id,
-      webhook_timestamp: ts,
-      webhook_signature_header: sig,
-      provided_signatures: providedSigs,
-      expected_signature: expected,
-      secret_prefix: secret.slice(0, 6),
-      secret_bytes_length: secretBytes.length,
-      raw_body_length: rawBody.length,
-      raw_body_first_120_chars: rawBody.slice(0, 120),
-      raw_body_last_60_chars: rawBody.slice(-60),
-      signed_payload_length: signedPayload.length,
-    },
+    const flatHeaders: Record<string, string> = {}
+    for (const [k, v] of Object.entries(headers)) {
+      if (v == null) continue
+      flatHeaders[k.toLowerCase()] = Array.isArray(v) ? v[0] : v
+    }
+    const wh = new Webhook(secret)
+    wh.verify(rawBody, flatHeaders)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, reason: e?.message ?? String(e) }
   }
 }
 
@@ -273,14 +232,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const verified = verifyStediSignature(req.headers as any, rawBody, STEDI_WEBHOOK_SECRET)
   if (!verified.ok) {
-    // Temp diagnostic log — surfaces the exact mismatch in Vercel
-    // function logs so we can diagnose why Stedi's signature is being
-    // rejected. Remove once verified working.
-    console.error('[stedi-transaction] signature FAILED:', JSON.stringify({
-      reason: verified.reason,
-      debug: verified.debug ?? null,
-      headers_present: Object.keys(req.headers),
-    }))
+    console.error('[stedi-transaction] signature FAILED:', verified.reason, 'headers:', Object.keys(req.headers))
     return res.status(401).json({ error: 'Signature verification failed', reason: verified.reason })
   }
 
