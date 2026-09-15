@@ -645,6 +645,13 @@ export function AdminClaims() {
                 const missingPayer = !c.payer_id && !isSelfPay
                 const isError = c.status === 'error'
                 const readyForBiller = !!c.ready_for_biller_at
+                // Any Non-Covered CPT on the claim means there's something
+                // the family owes directly (Text e-visit, CPR class,
+                // convenience fee, etc.), independent of what the current
+                // payer field says. Statement button appears based on that.
+                const hasNonCoveredCpt = Array.isArray(c.cpt_codes)
+                  && c.cpt_codes.some((code: any) => code?.category === 'Non-Covered Services')
+                const showStatementButton = isSelfPay || hasNonCoveredCpt
                 const stediError = (() => {
                   if (!c.submission_error) return null
                   try {
@@ -1216,18 +1223,21 @@ export function AdminClaims() {
                             )}
                           </div>
                           {renderNotifySection(c)}
-                          {isSelfPay ? (
-                            <Button variant="teal" onClick={() => setStatementClaim(c)}>
-                              <Receipt size={13} className="mr-1.5" /> Generate patient statement
-                            </Button>
-                          ) : (
-                            <Button variant="teal"
-                              loading={submitting === c.id}
-                              disabled={!!submitting || missingPayer}
-                              onClick={() => handleSubmit(c.id)}>
-                              <Send size={13} className="mr-1.5" /> Submit to insurance
-                            </Button>
-                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {showStatementButton && (
+                              <Button variant="teal" onClick={() => setStatementClaim(c)}>
+                                <Receipt size={13} className="mr-1.5" /> Generate patient statement
+                              </Button>
+                            )}
+                            {!isSelfPay && (
+                              <Button variant={showStatementButton ? 'secondary' : 'teal'}
+                                loading={submitting === c.id}
+                                disabled={!!submitting || missingPayer}
+                                onClick={() => handleSubmit(c.id)}>
+                                <Send size={13} className="mr-1.5" /> Submit to insurance
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
