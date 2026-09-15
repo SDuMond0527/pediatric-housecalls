@@ -397,7 +397,11 @@ export function AdminClaims() {
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
   const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')
   const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error' && c.status !== 'draft')
-  const readyCount      = baseVisibleClaims.filter(isReady).length
+  // Only count claims she still has to act on — same status filter as
+  // reviewClaims. Once she submits a claim, ready_for_biller_at stays
+  // set on the row (biller attribution), but for the counter it's
+  // stale — she's already handled that one.
+  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')).length
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
