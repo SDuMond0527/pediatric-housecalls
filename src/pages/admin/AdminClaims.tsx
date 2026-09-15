@@ -435,9 +435,25 @@ export function AdminClaims() {
         <div className="mb-4 flex items-center gap-2 bg-[#E1F5EE] border border-[#5DCAA5] text-[#085041] px-4 py-2.5 rounded-xl">
           <Zap size={14} />
           <div className="text-[13px] font-medium">
-            {unseenEraCount} new ERA payment{unseenEraCount === 1 ? '' : 's'} posted — patient statements have been updated automatically.
+            {unseenEraCount} new ERA payment{unseenEraCount === 1 ? '' : 's'} posted — look for the pulsing <span className="mx-1 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold">NEW</span> badge on claims below.
           </div>
-          <span className="ml-auto text-[11px] text-[#085041]/70">Click a claim to mark it seen.</span>
+          <button
+            onClick={async () => {
+              const nowIso = new Date().toISOString()
+              const targets = claims.filter((c: any) => c.era_received_at && !c.era_seen_at)
+              // Optimistic local update first so the banner disappears
+              // immediately; roll back if any persist fails.
+              setClaims(prev => prev.map(c => targets.some(t => t.id === c.id) ? { ...c, era_seen_at: nowIso } : c))
+              try {
+                await Promise.all(targets.map(t => updateClaim(t.id, { era_seen_at: nowIso })))
+              } catch (e: any) {
+                console.error('[AdminClaims] Mark all seen failed:', e)
+                await load()
+              }
+            }}
+            className="ml-auto text-[12px] font-medium px-3 py-1 rounded-lg bg-white border border-[#5DCAA5] text-[#085041] hover:bg-[#E1F5EE] transition-colors">
+            Mark all as seen
+          </button>
         </div>
       )}
 
@@ -1088,7 +1104,12 @@ export function AdminClaims() {
                           <div className="text-[14px] font-medium text-[#1A1A2E]">
                             {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
                             <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
-                            {c.era_received_at && (
+                            {c.era_received_at && !c.era_seen_at && (
+                              <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
+                                <Zap size={9} /> NEW ERA
+                              </span>
+                            )}
+                            {c.era_received_at && c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
                                 <Zap size={9} /> ERA received
                               </span>
