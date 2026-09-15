@@ -84,9 +84,15 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
   const cptCodes = allCptCodes
   const total = cptCodes.reduce((s: number, c: any) => s + (parseFloat(c.charge_amount) || 0), 0)
   const insuranceCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
+  // If every CPT on the note is Non-Covered Services (Text e-visit,
+  // CPR class, etc.), there is nothing insurance would pay — force
+  // self-pay so the biller gets a "Generate patient statement" button
+  // instead of "Submit to insurance" for a claim that would only be
+  // rejected. Family's insurance-on-file is irrelevant here.
+  const forceSelfPay = allCptCodes.length > 0 && insuranceCodes.length === 0
   const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
-  const payerName = child?.insurance_provider ?? null
-  const payerId = resolvePayer(payerName)
+  const payerName = forceSelfPay ? 'Self Pay' : (child?.insurance_provider ?? null)
+  const payerId   = forceSelfPay ? 'PP'       : resolvePayer(child?.insurance_provider ?? null)
 
   const [claim] = await sql`
     INSERT INTO claims (
