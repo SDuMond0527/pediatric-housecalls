@@ -39,18 +39,13 @@ function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any;
         )}
       </div>
 
-      <div className="px-5 py-4 border-b border-white/8">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-[#F1EFE8] flex items-center justify-center text-[11px] font-medium text-[#888780] flex-shrink-0">
-            {provider?.initials || 'A'}
-          </div>
-          <div>
-            <div className="text-[13px] font-medium text-white">{provider?.name || 'Admin'}</div>
-            <div className="text-[11px] text-white/40 mt-0.5">Administrator</div>
-          </div>
+      <div className="px-5 py-4 border-b border-white/8 flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-full bg-[#F1EFE8] flex items-center justify-center text-[11px] font-medium text-[#888780] flex-shrink-0">
+          {provider?.initials || 'A'}
         </div>
-        <div className="text-[10.5px] text-[#AFA9EC] mt-2.5 leading-snug italic">
-          {dailyAffirmation()}
+        <div>
+          <div className="text-[13px] font-medium text-white">{provider?.name || 'Admin'}</div>
+          <div className="text-[11px] text-white/40 mt-0.5">Administrator</div>
         </div>
       </div>
 
@@ -99,6 +94,13 @@ function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any;
       </div>
     </aside>
   )
+}
+
+function greetingFor(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
 export function AdminLayout() {
@@ -152,6 +154,19 @@ export function AdminLayout() {
           </button>
           <span className="font-display font-medium text-white">{PRACTICE_NAME}</span>
         </div>
+        {/* Greeting bar — visible above every admin page. Mirrors the
+            Today page's header so admins get the same warm welcome as
+            providers. */}
+        {provider && (
+          <div className="bg-white border-b border-[#E8E8E4] px-6 md:px-8 py-4">
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">
+              {greetingFor()}, {(provider.name || 'friend').split(' ').slice(-2)[0]}!
+            </div>
+            <div className="text-[12px] text-[#7F77DD] mt-0.5 font-medium">
+              {dailyAffirmation()}
+            </div>
+          </div>
+        )}
         <Outlet />
       </div>
     </div>
