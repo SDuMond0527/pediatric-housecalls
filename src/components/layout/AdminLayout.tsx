@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 import { getEraCount } from '../../lib/api'
+import { dailyAffirmation } from '../../lib/affirmations'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -38,13 +39,18 @@ function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any;
         )}
       </div>
 
-      <div className="px-5 py-4 border-b border-white/8 flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-full bg-[#F1EFE8] flex items-center justify-center text-[11px] font-medium text-[#888780] flex-shrink-0">
-          {provider?.initials || 'A'}
+      <div className="px-5 py-4 border-b border-white/8">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-full bg-[#F1EFE8] flex items-center justify-center text-[11px] font-medium text-[#888780] flex-shrink-0">
+            {provider?.initials || 'A'}
+          </div>
+          <div>
+            <div className="text-[13px] font-medium text-white">{provider?.name || 'Admin'}</div>
+            <div className="text-[11px] text-white/40 mt-0.5">Administrator</div>
+          </div>
         </div>
-        <div>
-          <div className="text-[13px] font-medium text-white">{provider?.name || 'Admin'}</div>
-          <div className="text-[11px] text-white/40 mt-0.5">Administrator</div>
+        <div className="text-[10.5px] text-[#AFA9EC] mt-2.5 leading-snug italic">
+          {dailyAffirmation()}
         </div>
       </div>
 

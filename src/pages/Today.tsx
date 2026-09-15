@@ -13,6 +13,7 @@ import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderMo
 import { CmaOrderModal, type CmaOrderContext } from '../components/CmaOrderModal'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
+import { dailyAffirmation } from '../lib/affirmations'
 import { Button } from '../components/ui/Button'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeZones } from '../hooks/usePracticeZones'
@@ -697,49 +698,7 @@ export function Today() {
     return 'Good evening'
   }
 
-  // Daily rotating affirmation. Same message for the whole day, changes
-  // over midnight. Index is day-of-year mod list length so every provider
-  // sees the same message on any given day (nice for shared moments —
-  // "did you see today's?"). Add/remove freely; length doesn't matter.
-  const AFFIRMATIONS = [
-    'You are stronger than you think and softer than you know.',
-    'Remember you are beautiful, capable, and needed.',
-    'A house call from you today is a small act of grace.',
-    'You do work that matters. Every visit, every note, every call.',
-    "You've got this. And if you don't, that's still okay.",
-    'Take up space. You earned every inch of this expertise.',
-    'The way you show up for these families is a gift.',
-    'Rest is productive. So is joy. So is a decent lunch.',
-    'You are not behind. You are exactly where you are.',
-    'The care you give is medicine — for them and for you.',
-    'Be as gentle with yourself as you are with a sick toddler.',
-    'You are a whole person, not a to-do list. Both today.',
-    'This job is hard. You are harder. In the best way.',
-    'Someone out there is better because of a decision you made.',
-    'Your calm in a chaotic moment is a superpower.',
-    'You are allowed to feel proud of yourself.',
-    'You are not too much. The world is just often too little.',
-    'Small wins count. Charting counts. Coffee counts.',
-    'You bring your own light — and it is enough.',
-    'The families who see you know how lucky they are.',
-    'You are worth the same kindness you extend all day.',
-    'Rooting for you. Every single visit.',
-    'Take one breath just for you before the next patient.',
-    "Some days you're the healer. Some days you rest. Both matter.",
-    'The little things you do have huge ripples.',
-    'You are steady, thoughtful, and kind. That heals people.',
-    'Your instincts are good. Trust them today.',
-    'Slow is smooth. Smooth is fast. You know the pace.',
-    'You are exactly the doctor / provider a scared parent needs.',
-    "Whatever today brings — you'll figure it out. You always do.",
-    'Compassion looks good on you.',
-    "Today's version of 'enough' is enough.",
-    'You make the hard stuff look human. That is real skill.',
-    'Someone thought of you today with gratitude.',
-    'You are the reason a family sleeps easier tonight.',
-  ]
-  const dayIndex = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000)
-  const dailyAffirmation = AFFIRMATIONS[dayIndex % AFFIRMATIONS.length]
+  const affirmation = dailyAffirmation()
 
   if (!provider) return null
 
@@ -759,7 +718,7 @@ export function Today() {
             {greeting()}, {firstName}!
           </div>
           <div className="text-[12px] text-[#7F77DD] mt-0.5 font-medium">
-            {dailyAffirmation}
+            {affirmation}
           </div>
         </div>
         <div className="flex items-center gap-2">
