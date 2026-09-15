@@ -645,13 +645,18 @@ export function AdminClaims() {
                 const missingPayer = !c.payer_id && !isSelfPay
                 const isError = c.status === 'error'
                 const readyForBiller = !!c.ready_for_biller_at
-                // Any Non-Covered CPT on the claim means there's something
-                // the family owes directly (Text e-visit, CPR class,
-                // convenience fee, etc.), independent of what the current
-                // payer field says. Statement button appears based on that.
-                const hasNonCoveredCpt = Array.isArray(c.cpt_codes)
-                  && c.cpt_codes.some((code: any) => code?.category === 'Non-Covered Services')
-                const showStatementButton = isSelfPay || hasNonCoveredCpt
+                // Only show the "Generate patient statement" button when
+                // there's nothing for insurance to bill — either the
+                // payer is Self Pay, or every CPT on the claim is a
+                // Non-Covered Services code (Text e-visit alone, CPR
+                // class alone, etc). Mixed visits — a real sick visit
+                // 99349 plus a convenience fee, for example — still go
+                // through insurance first, and the patient statement
+                // gets generated from the ERA later.
+                const cpts: any[] = Array.isArray(c.cpt_codes) ? c.cpt_codes : []
+                const allCptsNonCovered = cpts.length > 0
+                  && cpts.every((code: any) => code?.category === 'Non-Covered Services')
+                const showStatementButton = isSelfPay || allCptsNonCovered
                 const stediError = (() => {
                   if (!c.submission_error) return null
                   try {
