@@ -232,8 +232,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const verified = verifyStediSignature(req.headers as any, rawBody, STEDI_WEBHOOK_SECRET)
   if (!verified.ok) {
-    console.error('[stedi-transaction] signature FAILED:', verified.reason, 'headers:', Object.keys(req.headers))
-    return res.status(401).json({ error: 'Signature verification failed', reason: verified.reason })
+    const s = STEDI_WEBHOOK_SECRET
+    const trimmed = s.trim()
+    const afterPrefix = trimmed.startsWith('whsec_') ? trimmed.slice(6) : trimmed
+    // Safe metadata — never emits the actual secret, only shape info that
+    // lets us diagnose which of the common copy-paste failure modes is
+    // in play. Written into the response body so it appears in Stedi's
+    // failed-delivery dashboard (Sara doesn't have to open Vercel logs).
+    const diagnostic = {
+      secret_configured: !!s,
+      secret_char_length: s.length,
+      secret_trimmed_length: trimmed.length,
+      secret_had_leading_or_trailing_whitespace: s.length !== trimmed.length,
+      secret_starts_with_whsec: trimmed.startsWith('whsec_'),
+      secret_contains_only_base64_chars_after_prefix: /^[A-Za-z0-9+/=_-]+$/.test(afterPrefix),
+      after_prefix_length: afterPrefix.length,
+      after_prefix_first_2: afterPrefix.slice(0, 2),
+      after_prefix_last_2: afterPrefix.slice(-2),
+      body_bytes: rawBody.length,
+      webhook_id_present: 'webhook-id' in req.headers,
+      webhook_ts_present: 'webhook-timestamp' in req.headers,
+      webhook_sig_present: 'webhook-signature' in req.headers,
+    }
+    console.error('[stedi-transaction] signature FAILED:', verified.reason, JSON.stringify(diagnostic))
+    return res.status(401).json({ error: 'Signature verification failed', reason: verified.reason, diagnostic })
   }
 
   let payload: any
