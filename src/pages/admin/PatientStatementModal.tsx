@@ -117,12 +117,24 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     setPatientNonCovered(stmt.patient_non_covered ?? '')
     setRemainingBalance(stmt.remaining_balance ?? '')
     setPriorBalance(stmt.prior_balance ?? '')
-    // Auto-compute from CPT codes when statement amounts are blank/zero
+    // Auto-compute from CPT codes ONLY when the statement never had
+    // an explicit value (server returned null/undefined). If the
+    // biller explicitly saved a 0 — e.g., the whole claim was zeroed
+    // out by contractual adjustment and there's nothing owed —
+    // treating 0 as "empty" and falling back to the CPT total made
+    // the save appear to revert. Trust an explicit 0. Sara DuMond
+    // 2026-09-15.
     const computed = cptTotal(claim.cpt_codes ?? stmt.cpt_codes)
-    const billed = parseFloat(stmt.amount_billed) || 0
-    const due    = parseFloat(stmt.total_amount_due) || 0
-    setAmountBilled(billed   > 0 ? String(billed)   : computed > 0 ? String(computed) : '')
-    setTotalAmountDue(due    > 0 ? String(due)       : computed > 0 ? String(computed) : '')
+    setAmountBilled(
+      stmt.amount_billed != null ? String(stmt.amount_billed)
+      : computed > 0 ? String(computed)
+      : ''
+    )
+    setTotalAmountDue(
+      stmt.total_amount_due != null ? String(stmt.total_amount_due)
+      : computed > 0 ? String(computed)
+      : ''
+    )
   }
 
   function buildPayload() {
