@@ -123,10 +123,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
             <CalendarPlus size={18} className="text-[#7F77DD]" />
             <div>
               <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Book Appointment</h2>
-              <p className="text-[12px] text-[#999]">{childName}</p>
+              <p className="text-[12px] text-[#1A1A2E]">{childName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-[#999] hover:text-[#333] transition-colors">
+          <button onClick={onClose} className="text-[#1A1A2E] hover:text-[#333] transition-colors">
             <X size={18} />
           </button>
         </div>

@@ -42,7 +42,7 @@ function BroadcastPatientDetails({ bc, child }: { bc: Broadcast; child: any }) {
   const cardBack = child?.insurance_card_back_url || ''
 
   const F = ({ label, value }: { label: string; value: string }) => value ? (
-    <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+    <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">{label}</span>{value}</div>
   ) : null
 
   const patientHas = name || familyName || dob || sex || phone || email || address
@@ -56,13 +56,13 @@ function BroadcastPatientDetails({ bc, child }: { bc: Broadcast; child: any }) {
       {patientHas && (
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Patient</div>
-          {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+          {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
           <F label="Family" value={familyName} />
           <F label="Date of birth" value={dob} />
           <F label="Sex" value={sex} />
           {phone && (
             <div className="text-[13px]">
-              <span className="text-[#999] text-[11px] block">Phone</span>
+              <span className="text-[#1A1A2E] text-[11px] block">Phone</span>
               <div className="flex items-center justify-between gap-2">
                 <span>{phone}</span>
                 <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
@@ -417,13 +417,13 @@ export function Broadcasts() {
         </p>
 
         {loading ? (
-          <div className="text-[#999] text-sm">Loading...</div>
+          <div className="text-[#1A1A2E] text-sm">Loading...</div>
         ) : broadcasts.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-12 h-12 rounded-xl bg-[#F1EFE8] flex items-center justify-center mx-auto mb-3">
-              <AlertCircle size={20} className="text-[#999]" />
+              <AlertCircle size={20} className="text-[#1A1A2E]" />
             </div>
-            <p className="text-[14px] text-[#999]">No open broadcast requests right now.</p>
+            <p className="text-[14px] text-[#1A1A2E]">No open broadcast requests right now.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -471,9 +471,9 @@ export function Broadcasts() {
                         <div className="text-[13px] text-[#1A1A2E] font-medium">{bc.complaint}</div>
                       </div>
                     ) : (
-                      bc.complaint && <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
+                      bc.complaint && <p><span className="text-[#1A1A2E] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
                     )}
-                    {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#999]" />{bc.patient_address}</p>}
+                    {bc.patient_address && <p className="flex items-start gap-1"><MapPin size={11} className="mt-0.5 flex-shrink-0 text-[#1A1A2E]" />{bc.patient_address}</p>}
                   </div>
                   <BroadcastPatientDetails bc={bc} child={broadcastChildren[bc.id] ?? null} />
                   <div className="flex gap-2 mt-3">
@@ -482,7 +482,7 @@ export function Broadcasts() {
                         {claimLabel}
                       </Button>
                     ) : (
-                      <span className="text-[12px] text-[#999] self-center italic">Needs {bc.pairing_role_needed}</span>
+                      <span className="text-[12px] text-[#1A1A2E] self-center italic">Needs {bc.pairing_role_needed}</span>
                     )}
                     <Button variant="secondary" size="sm" disabled={acting === bc.id} onClick={() => pass(bc.id)}>
                       Pass
@@ -506,19 +506,19 @@ export function Broadcasts() {
                   </div>
                   <div className="space-y-1 text-[13px] text-[#555]">
                     {bc.patient_dob && (
-                      <p><span className="text-[#999] text-[11px] uppercase tracking-wider">DOB </span>{bc.patient_dob}</p>
+                      <p><span className="text-[#1A1A2E] text-[11px] uppercase tracking-wider">DOB </span>{bc.patient_dob}</p>
                     )}
                     {bc.patient_address && (
                       <p className="flex items-start gap-1">
-                        <MapPin size={11} className="text-[#999] flex-shrink-0 mt-0.5" />
+                        <MapPin size={11} className="text-[#1A1A2E] flex-shrink-0 mt-0.5" />
                         {bc.patient_address}
                       </p>
                     )}
                     {bc.complaint && (
-                      <p><span className="text-[#999] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
+                      <p><span className="text-[#1A1A2E] text-[11px] uppercase tracking-wider">Notes </span>{bc.complaint}</p>
                     )}
                     {bc.created_by_name && (
-                      <p className="flex items-center gap-1 text-[12px] text-[#999] mt-2">
+                      <p className="flex items-center gap-1 text-[12px] text-[#1A1A2E] mt-2">
                         <Clock size={11} />
                         Sent by {bc.created_by_name} · {format(new Date(bc.created_at), 'MMM d, h:mm a')}
                       </p>
@@ -547,7 +547,7 @@ export function Broadcasts() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Confirm acceptance</h2>
-              <button onClick={() => setAcceptingBc(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setAcceptingBc(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>
@@ -577,7 +577,7 @@ export function Broadcasts() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">New broadcast</h2>
-              <button onClick={() => setCreating(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setCreating(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>

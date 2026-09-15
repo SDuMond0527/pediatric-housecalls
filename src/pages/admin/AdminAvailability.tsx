@@ -47,18 +47,18 @@ export function AdminAvailability() {
     load()
   }, [])
 
-  if (loading) return <div className="p-8 text-[#999] text-[13px]">Loading…</div>
+  if (loading) return <div className="p-8 text-[#1A1A2E] text-[13px]">Loading…</div>
   if (error) return <div className="p-8 text-[#791F1F] text-[13px]">{error}</div>
 
   return (
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Provider availability</div>
-        <div className="text-[12px] text-[#999] mt-0.5">Upcoming date-specific availability for all providers</div>
+        <div className="text-[12px] text-[#1A1A2E] mt-0.5">Upcoming date-specific availability for all providers</div>
       </div>
 
       <div className="p-6 space-y-4 max-w-5xl">
-        {rows.length === 0 && <p className="text-[13px] text-[#999]">No providers found.</p>}
+        {rows.length === 0 && <p className="text-[13px] text-[#1A1A2E]">No providers found.</p>}
         {rows.map(({ provider: p, overrides }) => {
           const upcoming = overrides.slice(0, 10)
           return (
@@ -70,7 +70,7 @@ export function AdminAvailability() {
                 </div>
                 <div>
                   <div className="font-medium text-[15px] text-[#1A1A2E]">{p.name}</div>
-                  <div className="text-[11px] text-[#999] uppercase tracking-wider">{p.role}</div>
+                  <div className="text-[11px] text-[#1A1A2E] uppercase tracking-wider">{p.role}</div>
                 </div>
               </div>
 

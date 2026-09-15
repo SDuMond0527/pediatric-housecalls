@@ -221,7 +221,7 @@ export function Shifts() {
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">On-call shifts</div>
-        <div className="text-[12px] text-[#999] mt-0.5">
+        <div className="text-[12px] text-[#1A1A2E] mt-0.5">
           CMA and IV fluids coverage days — pick up a shift to be the on-call provider
         </div>
       </div>
@@ -231,12 +231,12 @@ export function Shifts() {
           These are days when CMAs or IV fluids nurses are scheduled to work. When you pick up a shift, the CMA or nurse will reach out to you directly to complete the telemedicine portion of a hybrid visit or to provide a pre-screening visit before administering IV fluids.
         </div>
 
-        {loading && <div className="text-[#999] text-[13px]">Loading...</div>}
+        {loading && <div className="text-[#1A1A2E] text-[13px]">Loading...</div>}
 
         {!loading && dates.length === 0 && (
           <div className="text-center py-16">
             <CheckCircle2 size={24} className="text-[#aeaeb2] mx-auto mb-2" />
-            <p className="text-[14px] text-[#999]">No CMA shifts scheduled in the next 14 days.</p>
+            <p className="text-[14px] text-[#1A1A2E]">No CMA shifts scheduled in the next 14 days.</p>
           </div>
         )}
 
@@ -275,7 +275,7 @@ export function Shifts() {
                             <Badge variant={state === 'NC' ? 'purple' : state === 'SC' ? 'teal' : 'amber'}>
                               {state}
                             </Badge>
-                            <span className="text-[12px] text-[#999]">{STATE_LABELS[state] ?? state}</span>
+                            <span className="text-[12px] text-[#1A1A2E]">{STATE_LABELS[state] ?? state}</span>
                           </div>
                           {fullyCovered && (
                             <Badge variant="teal">Fully covered</Badge>
@@ -284,7 +284,7 @@ export function Shifts() {
                             <Badge variant="teal">You're covering</Badge>
                           )}
                           {!providerStates.includes(state) && (
-                            <span className="text-[11px] text-[#999]">Not licensed in {state}</span>
+                            <span className="text-[11px] text-[#1A1A2E]">Not licensed in {state}</span>
                           )}
                         </div>
 
@@ -298,7 +298,7 @@ export function Shifts() {
                         {/* Coverage table */}
                         <div className="bg-[#FAFAF8] border border-[#F1EFE8] rounded-lg overflow-hidden">
                           {ocs.length === 0 && gaps.length === 0 && (
-                            <div className="px-3 py-2 text-[12px] text-[#999]">
+                            <div className="px-3 py-2 text-[12px] text-[#1A1A2E]">
                               On-call: <span className="text-amber-600 font-medium">Unassigned</span>
                             </div>
                           )}
@@ -334,7 +334,7 @@ export function Shifts() {
                                       start: oc.start_time ?? cmaStart,
                                       end: oc.end_time ?? cmaEnd,
                                     })}
-                                    className="p-1 rounded hover:bg-[#F1EFE8] text-[#999] hover:text-[#7F77DD]"
+                                    className="p-1 rounded hover:bg-[#F1EFE8] text-[#1A1A2E] hover:text-[#7F77DD]"
                                   >
                                     <Pencil size={12} />
                                   </button>
@@ -382,7 +382,7 @@ export function Shifts() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Pick up shift</h2>
               <button onClick={() => setClaiming(null)} disabled={submitting}
-                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
+                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E] disabled:opacity-50">
                 <X size={16} />
               </button>
             </div>
@@ -391,7 +391,7 @@ export function Shifts() {
               <div className="font-medium text-[#1A1A2E]">
                 {formatApiDate(claiming.date, 'EEEE, MMMM d')} · {STATE_LABELS[claiming.state] ?? claiming.state}
               </div>
-              <div className="text-[#999]">
+              <div className="text-[#1A1A2E]">
                 Full coverage window: {fmt12(claiming.cmaStart)}–{fmt12(claiming.cmaEnd)}
               </div>
             </div>
@@ -411,7 +411,7 @@ export function Shifts() {
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="text-[11px] text-[#999] block mb-1">From</label>
+                  <label className="text-[11px] text-[#1A1A2E] block mb-1">From</label>
                   <select
                     value={fmt12(claiming.start)}
                     onChange={e => {
@@ -428,7 +428,7 @@ export function Shifts() {
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="text-[11px] text-[#999] block mb-1">To</label>
+                  <label className="text-[11px] text-[#1A1A2E] block mb-1">To</label>
                   <select
                     value={fmt12(claiming.end)}
                     onChange={e => setClaiming(p => p ? { ...p, end: fmt12to24(e.target.value) } : p)}
@@ -467,7 +467,7 @@ export function Shifts() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit shift hours</h2>
               <button onClick={() => setEditing(null)} disabled={submitting}
-                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
+                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E] disabled:opacity-50">
                 <X size={16} />
               </button>
             </div>
@@ -476,7 +476,7 @@ export function Shifts() {
               <div className="font-medium text-[#1A1A2E]">
                 {formatApiDate(editing.date, 'EEEE, MMMM d')} · {STATE_LABELS[editing.state] ?? editing.state}
               </div>
-              <div className="text-[#999]">
+              <div className="text-[#1A1A2E]">
                 Full coverage window: {fmt12(editing.cmaStart)}–{fmt12(editing.cmaEnd)}
               </div>
             </div>
@@ -488,7 +488,7 @@ export function Shifts() {
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="text-[11px] text-[#999] block mb-1">From</label>
+                  <label className="text-[11px] text-[#1A1A2E] block mb-1">From</label>
                   <select
                     value={fmt12(editing.start)}
                     onChange={e => {
@@ -505,7 +505,7 @@ export function Shifts() {
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="text-[11px] text-[#999] block mb-1">To</label>
+                  <label className="text-[11px] text-[#1A1A2E] block mb-1">To</label>
                   <select
                     value={fmt12(editing.end)}
                     onChange={e => setEditing(p => p ? { ...p, end: fmt12to24(e.target.value) } : p)}

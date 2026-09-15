@@ -162,7 +162,7 @@ export function ChildIntakeForm({
       <div className="flex items-center justify-between">
         <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">{header}</h3>
         {removable && (
-          <button onClick={onRemove} className="text-[#999] hover:text-[#791F1F]" title="Remove">
+          <button onClick={onRemove} className="text-[#1A1A2E] hover:text-[#791F1F]" title="Remove">
             <Trash2 size={14} />
           </button>
         )}

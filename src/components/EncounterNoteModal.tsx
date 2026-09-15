@@ -1055,8 +1055,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   const readOnly = isSigned
 
-  const inputCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans bg-white disabled:bg-[#F8F8F6] disabled:text-[#999] disabled:cursor-not-allowed`
-  const textareaCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans resize-none bg-white disabled:bg-[#F8F8F6] disabled:text-[#999] disabled:cursor-not-allowed`
+  const inputCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans bg-white disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E] disabled:cursor-not-allowed`
+  const textareaCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans resize-none bg-white disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E] disabled:cursor-not-allowed`
   const sectionHeader = `text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3`
 
   return (
@@ -1068,7 +1068,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8E4] bg-white flex-shrink-0">
           <div>
             <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Encounter Note</div>
-            <div className="text-[12px] text-[#999] mt-0.5">
+            <div className="text-[12px] text-[#1A1A2E] mt-0.5">
               {appointment.visit_type} · {formatApiDate(appointment.scheduled_date)}
             </div>
             {(linkedChildName || linkedChildDob) && (
@@ -1132,7 +1132,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               <TestTube size={13} />
               {cmaOpening ? 'Loading…' : 'Order CMA visit'}
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] ml-1">
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E] ml-1">
               <X size={16} />
             </button>
           </div>
@@ -1140,7 +1140,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
         {/* Body */}
         {loading ? (
-          <div className="flex-1 flex items-center justify-center text-[#999] text-[13px]">Loading…</div>
+          <div className="flex-1 flex items-center justify-center text-[#1A1A2E] text-[13px]">Loading…</div>
         ) : (
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
 
@@ -1153,11 +1153,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                     <div className="flex items-center gap-2">
                       <UserRound size={15} className="text-[#1D9E75] flex-shrink-0" />
                       <span className="text-[14px] font-medium text-[#1A1A2E]">{linkedChildName}</span>
-                      <span className="text-[11px] text-[#999]">— note will appear in their chart</span>
+                      <span className="text-[11px] text-[#1A1A2E]">— note will appear in their chart</span>
                     </div>
                     {!readOnly && (
                       <button onClick={() => { setLinkedChildId(null); setLinkedChildName(null) }}
-                        className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-3 flex-shrink-0">
+                        className="text-[11px] text-[#1A1A2E] hover:text-[#1A1A2E] ml-3 flex-shrink-0">
                         × Unlink
                       </button>
                     )}
@@ -1165,17 +1165,17 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 ) : (
                   <div className="relative">
                     <div className="relative">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
                       <input type="text" placeholder="Search patient name to link to chart (optional)…"
                         value={patientQuery}
                         onChange={e => onPatientQueryChange(e.target.value)}
                         disabled={readOnly}
-                        className="w-full pl-8 pr-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans disabled:bg-[#F8F8F6] disabled:text-[#999]" />
+                        className="w-full pl-8 pr-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E]" />
                     </div>
                     {(patientSearching || patientResults.length > 0) && (
                       <div className="absolute z-10 w-full mt-1 border border-[#E8E8E4] rounded-xl bg-white shadow-lg overflow-hidden">
                         {patientSearching && (
-                          <div className="px-3 py-2 text-[12px] text-[#999]">Searching…</div>
+                          <div className="px-3 py-2 text-[12px] text-[#1A1A2E]">Searching…</div>
                         )}
                         {!patientSearching && patientResults.map((child: any) => {
                           const name = [child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label
@@ -1184,7 +1184,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                               className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0 transition-colors">
                               <div className="text-[13px] font-medium text-[#1A1A2E]">{name}</div>
                               {child.family_display_name && (
-                                <div className="text-[11px] text-[#999]">{child.family_display_name}</div>
+                                <div className="text-[11px] text-[#1A1A2E]">{child.family_display_name}</div>
                               )}
                             </button>
                           )
@@ -1192,7 +1192,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       </div>
                     )}
                     {!readOnly && !patientQuery && (
-                      <p className="text-[11px] text-[#999] mt-1">Leave blank to save without linking to a patient chart.</p>
+                      <p className="text-[11px] text-[#1A1A2E] mt-1">Leave blank to save without linking to a patient chart.</p>
                     )}
                   </div>
                 )}
@@ -1206,7 +1206,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 value={noteType}
                 onChange={e => !readOnly && onNoteTypeChange(e.target.value as NoteType)}
                 disabled={readOnly}
-                className={`w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white disabled:bg-[#F8F8F6] disabled:text-[#999] disabled:cursor-not-allowed`}>
+                className={`w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E] disabled:cursor-not-allowed`}>
                 {NOTE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               {showTemplatePrompt && (
@@ -1235,27 +1235,27 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       {showCustomTemplateMenu && (
                         <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-[#E8E8E4] rounded-xl shadow-lg z-50 overflow-hidden">
                           {customTemplates.length === 0 ? (
-                            <div className="px-4 py-3 text-[12px] text-[#999]">No saved templates yet.</div>
+                            <div className="px-4 py-3 text-[12px] text-[#1A1A2E]">No saved templates yet.</div>
                           ) : (
                             <>
                               {customTemplates.filter((t: any) => !t.is_shared).length > 0 && (
-                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#999] uppercase tracking-wider">My Templates</div>
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">My Templates</div>
                               )}
                               {customTemplates.filter((t: any) => !t.is_shared).map((t: any) => (
                                 <div key={t.id} className="flex items-center gap-1 px-3 py-1.5 hover:bg-[#FAFAF8] group">
                                   <button onClick={() => applyCustomTemplate(t)} className="flex-1 text-left text-[13px] text-[#1A1A2E]">{t.name}</button>
-                                  <button onClick={() => openSaveForm(t)} className="text-[#999] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
-                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#999] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
+                                  <button onClick={() => openSaveForm(t)} className="text-[#1A1A2E] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
+                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#1A1A2E] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
                                 </div>
                               ))}
                               {customTemplates.filter((t: any) => t.is_shared).length > 0 && (
-                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#999] uppercase tracking-wider border-t border-[#E8E8E4] mt-1">Practice Templates</div>
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider border-t border-[#E8E8E4] mt-1">Practice Templates</div>
                               )}
                               {customTemplates.filter((t: any) => t.is_shared).map((t: any) => (
                                 <div key={t.id} className="flex items-center gap-1 px-3 py-1.5 hover:bg-[#FAFAF8] group">
                                   <button onClick={() => applyCustomTemplate(t)} className="flex-1 text-left text-[13px] text-[#1A1A2E]">{t.name}</button>
-                                  <button onClick={() => openSaveForm(t)} className="text-[#999] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
-                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#999] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
+                                  <button onClick={() => openSaveForm(t)} className="text-[#1A1A2E] hover:text-[#7F77DD] p-1 opacity-0 group-hover:opacity-100 text-[11px]">Edit</button>
+                                  <button onClick={() => deleteCustomTemplate(t.id)} className="text-[#1A1A2E] hover:text-[#791F1F] p-1 opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
                                 </div>
                               ))}
                             </>
@@ -1415,7 +1415,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   {children}
                 </div>
               )
-              const subHead = 'text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2 mt-1'
+              const subHead = 'text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2 mt-1'
               return (
                 <section>
                   <div className={sectionHeader}>IV Fluids Screening History</div>
@@ -1483,7 +1483,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       <SINGLE field="priorIvFluids" opts={['Yes', 'No']} />
                     </Q>
                   </div>
-                  <p className="text-[11px] text-[#999] mt-1.5">Responses auto-populate the Subjective field below.</p>
+                  <p className="text-[11px] text-[#1A1A2E] mt-1.5">Responses auto-populate the Subjective field below.</p>
                 </section>
               )
             })()}
@@ -1538,7 +1538,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   {children}
                 </div>
               )
-              const subHead = 'text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2 mt-1'
+              const subHead = 'text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2 mt-1'
               return (
                 <section>
                   <div className={sectionHeader}>Pre-Participation History</div>
@@ -1580,7 +1580,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       <YNO field="weightConcern" otherField="weightConcernOther" />
                     </Q>
                   </div>
-                  <p className="text-[11px] text-[#999] mt-1.5">Responses auto-populate the Subjective field below.</p>
+                  <p className="text-[11px] text-[#1A1A2E] mt-1.5">Responses auto-populate the Subjective field below.</p>
                 </section>
               )
             })()}
@@ -1597,7 +1597,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   >
                     <span>{aiDrafting ? '✦ Drafting…' : '✦ Draft with AI'}</span>
                   </button>
-                  <span className="text-[11px] text-[#999]">Fills Subjective, Objective, Assessment & Plan from chief complaint + vitals</span>
+                  <span className="text-[11px] text-[#1A1A2E]">Fills Subjective, Objective, Assessment & Plan from chief complaint + vitals</span>
                 </div>
                 {aiError && <div className="mt-2 text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{aiError}</div>}
               </section>
@@ -1621,7 +1621,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                             <span className="text-[12px] font-semibold text-[#555]">Vaccine {idx + 1}</span>
                             {!readOnly && (
                               <button onClick={() => setVaccineEntries(prev => prev.filter(e => e.id !== entry.id))}
-                                className="text-[#999] hover:text-[#791F1F] transition-colors"><X size={14} /></button>
+                                className="text-[#1A1A2E] hover:text-[#791F1F] transition-colors"><X size={14} /></button>
                             )}
                           </div>
                         )}
@@ -1742,7 +1742,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                           onChange={e => setIVFluidsRN(f => ({ ...f, orderingProvider: e.target.value }))}
                           placeholder="Provider name"
                           className={fieldCls} />
-                        <p className="text-[13px] text-[#999] mt-2">Order received for IV fluids. Informed consent obtained.</p>
+                        <p className="text-[13px] text-[#1A1A2E] mt-2">Order received for IV fluids. Informed consent obtained.</p>
                       </div>
                       <CheckGroup
                         label="Patient's current symptoms (check all that apply)"
@@ -1867,7 +1867,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Medical History</div>
-              <p className="text-[11px] text-[#999] mb-1.5">
+              <p className="text-[11px] text-[#1A1A2E] mb-1.5">
                 {readOnly
                   ? 'Frozen as of when this note was signed.'
                   : 'Auto-populated from the chart. Edits here save back to the chart on sign.'}
@@ -1883,7 +1883,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Subjective</div>
-              <p className="text-[11px] text-[#999] mb-1.5">
+              <p className="text-[11px] text-[#1A1A2E] mb-1.5">
                 {(noteType === 'Sports physical' || noteType === 'IV fluids telemedicine screening') && !readOnly
                   ? 'Auto-filled from history above — edit freely'
                   : 'History of present illness, symptoms reported by parent'}
@@ -1899,11 +1899,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
               <div className={sectionHeader}>Objective</div>
-              <p className="text-[11px] text-[#999] mb-1.5">Physical exam findings, clinical observations</p>
+              <p className="text-[11px] text-[#1A1A2E] mb-1.5">Physical exam findings, clinical observations</p>
               {noteType === 'Sports physical' && !readOnly && (
                 <div className="mb-3 bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
                   <div className="px-3 py-2 border-b border-[#F1EFE8] bg-[#FAFAF8]">
-                    <span className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">Physical Exam — click to document, updates text below</span>
+                    <span className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Physical Exam — click to document, updates text below</span>
                   </div>
                   <div className="divide-y divide-[#F1EFE8]">
                     {EXAM_SYSTEMS.map(sys => {
@@ -1951,7 +1951,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
               {/* Photo upload */}
               <div className="mt-3">
-                <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2">Visit Photos</div>
+                <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Visit Photos</div>
                 {photos.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     {photos.map((photo, i) => (
@@ -1966,10 +1966,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                             value={photo.caption}
                             disabled={readOnly}
                             onChange={e => setPhotos(prev => prev.map((p, j) => j === i ? { ...p, caption: e.target.value } : p))}
-                            className="flex-1 text-[12px] border border-[#E8E8E4] rounded-lg px-2 py-1 outline-none focus:border-[#7F77DD] font-sans disabled:bg-[#F8F8F6] disabled:text-[#999]" />
+                            className="flex-1 text-[12px] border border-[#E8E8E4] rounded-lg px-2 py-1 outline-none focus:border-[#7F77DD] font-sans disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E]" />
                           {!readOnly && (
                             <button onClick={() => setPhotos(prev => prev.filter((_, j) => j !== i))}
-                              className="text-[#999] hover:text-[#cc2200] transition-colors flex-shrink-0">
+                              className="text-[#1A1A2E] hover:text-[#cc2200] transition-colors flex-shrink-0">
                               <Trash2 size={14} />
                             </button>
                           )}
@@ -2017,7 +2017,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       {savingDx ? 'Saving…' : 'Save'}
                     </button>
                     <button onClick={() => { setEditingDx(false); setIcdQuery(''); setIcdResults([]) }}
-                      className="text-[11px] text-[#999] hover:text-[#555]">Cancel</button>
+                      className="text-[11px] text-[#1A1A2E] hover:text-[#555]">Cancel</button>
                   </div>
                 )}
               </div>
@@ -2025,7 +2025,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               {(!readOnly || editingDx) && (
                 <div className="relative mb-3">
                   <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
                     <input type="text" placeholder="Search ICD-10 code or diagnosis name…" value={icdQuery}
                       onChange={e => onIcdQueryChange(e.target.value)}
                       className="w-full pl-8 pr-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans" />
@@ -2033,7 +2033,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   {(icdSearching || icdResults.length > 0) && (
                     <div className="absolute z-10 w-full mt-1 border border-[#E8E8E4] rounded-xl bg-white shadow-lg overflow-hidden">
                       {icdSearching && (
-                        <div className="px-3 py-2 text-[12px] text-[#999]">Searching…</div>
+                        <div className="px-3 py-2 text-[12px] text-[#1A1A2E]">Searching…</div>
                       )}
                       {!icdSearching && icdResults.map(dx => (
                         <button key={dx.code} onClick={() => addDiagnosis(dx)}
@@ -2110,7 +2110,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {!readOnly ? (
                           <div className="flex items-center gap-1">
-                            <label className="text-[10px] text-[#999] whitespace-nowrap">Modifier:</label>
+                            <label className="text-[10px] text-[#1A1A2E] whitespace-nowrap">Modifier:</label>
                             <input
                               value={c.modifier ?? ''}
                               maxLength={3}
@@ -2134,7 +2134,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                               }}
                               className="w-14 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] outline-none focus:border-[#7F77DD]"
                             />
-                            <label className="text-[10px] text-[#999] whitespace-nowrap">units</label>
+                            <label className="text-[10px] text-[#1A1A2E] whitespace-nowrap">units</label>
                           </div>
                         )}
                         {c.code === 'J7613' && readOnly && (c.units ?? 1) > 1 && (
@@ -2143,7 +2143,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                         <span className="text-[13px] font-medium text-[#1A1A2E]">${(c.charge_amount * (c.units ?? 1)).toFixed(2)}</span>
                         {!readOnly && (
                           <button onClick={() => setCptCodes(prev => prev.filter(x => x.code !== c.code))}
-                            className="text-[#999] hover:text-[#791F1F] transition-colors">
+                            className="text-[#1A1A2E] hover:text-[#791F1F] transition-colors">
                             <X size={13} />
                           </button>
                         )}
@@ -2151,7 +2151,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       </div>
                       {c.ndc_code && (
                         <div className="text-[11px] text-[#555] mt-1 pl-1">
-                          <span className="text-[#999]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
+                          <span className="text-[#1A1A2E]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
                         </div>
                       )}
                     </div>
@@ -2192,7 +2192,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                         {(['Procedure', 'Non-Covered Services'] as const).map(tab => (
                           <button key={tab}
                             onClick={() => setCptTab(tab)}
-                            className={`flex-1 py-2 text-[12px] font-medium transition-colors ${cptTab === tab ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#999]'}`}>
+                            className={`flex-1 py-2 text-[12px] font-medium transition-colors ${cptTab === tab ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#1A1A2E]'}`}>
                             {tab === 'Procedure' ? 'Insurance Procedures' : 'Convenience & Self-Pay'}
                           </button>
                         ))}
@@ -2216,7 +2216,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                           ))
                         }
                         {feeSchedule.filter(c => c.category === cptTab).filter(c => !cptSearch || c.code.toLowerCase().includes(cptSearch.toLowerCase()) || c.description.toLowerCase().includes(cptSearch.toLowerCase())).filter(c => !cptCodes.find(x => x.code === c.code)).length === 0 && (
-                          <div className="px-3 py-3 text-[12px] text-[#999]">No codes match your search.</div>
+                          <div className="px-3 py-3 text-[12px] text-[#1A1A2E]">No codes match your search.</div>
                         )}
                       </div>
                     </div>
@@ -2232,7 +2232,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 <div className="flex items-center gap-3 px-4 py-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl">
                   <div>
                     <div className="text-[14px] font-medium text-[#1A1A2E]">Sara DuMond, MD</div>
-                    <div className="text-[12px] text-[#999] mt-0.5">NPI: 1376653576</div>
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">NPI: 1376653576</div>
                   </div>
                 </div>
               </section>
@@ -2244,7 +2244,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               <div className={sectionHeader}>Plan</div>
               {noteType === 'IV fluids telemedicine screening' && !readOnly && (
                 <div className="mb-3">
-                  <p className="text-[11px] text-[#999] mb-2">Select disposition — auto-fills plan below</p>
+                  <p className="text-[11px] text-[#1A1A2E] mb-2">Select disposition — auto-fills plan below</p>
                   <div className="flex gap-2 flex-wrap">
                     {([
                       { key: 'approved', label: '✓ Approved for IV fluids', color: '#085041' },
@@ -2263,7 +2263,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   </div>
                 </div>
               )}
-              <p className="text-[11px] text-[#999] mb-1.5">Treatment, medications, follow-up instructions</p>
+              <p className="text-[11px] text-[#1A1A2E] mb-1.5">Treatment, medications, follow-up instructions</p>
               <textarea rows={4} placeholder="1. Rest and increased fluids…" value={plan}
                 disabled={readOnly}
                 onChange={e => setPlan(e.target.value)}

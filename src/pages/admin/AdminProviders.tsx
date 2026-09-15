@@ -167,7 +167,7 @@ export function AdminProviders() {
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Providers</div>
-        <div className="text-[12px] text-[#999] mt-0.5">
+        <div className="text-[12px] text-[#1A1A2E] mt-0.5">
           Set home addresses so convenience fees calculate correctly for the first appointment of the day.
         </div>
       </div>
@@ -178,7 +178,7 @@ export function AdminProviders() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-[14px] font-medium text-[#1A1A2E]">Reset all provider passwords</div>
-              <div className="text-[12px] text-[#999] mt-0.5">Skips Kiaira Bryson, Cecilia Akana-Paaluhi, and Dr. Sara DuMond. Passwords are set immediately — no challenge required.</div>
+              <div className="text-[12px] text-[#1A1A2E] mt-0.5">Skips Kiaira Bryson, Cecilia Akana-Paaluhi, and Dr. Sara DuMond. Passwords are set immediately — no challenge required.</div>
             </div>
             <Button variant="secondary" size="sm" loading={bulkResetting} onClick={bulkResetPasswords}>
               <KeyRound size={13} /> Reset all
@@ -225,7 +225,7 @@ export function AdminProviders() {
           <div key={role}>
             <div className="flex items-center gap-2 mb-3">
               <Badge variant={ROLE_COLORS[role]}>{role}</Badge>
-              <span className="text-[12px] text-[#999]">{ROLE_LABELS[role] || role} · {providers.length}</span>
+              <span className="text-[12px] text-[#1A1A2E]">{ROLE_LABELS[role] || role} · {providers.length}</span>
             </div>
             <div className="space-y-2">
               {providers.map(p => {
@@ -264,10 +264,10 @@ export function AdminProviders() {
                           </div>
                         </div>
                         {(p.zones ?? []).length > 0 && (
-                          <div className="text-[11px] text-[#999] mt-1 truncate">{(p.zones ?? []).join(' · ')}</div>
+                          <div className="text-[11px] text-[#1A1A2E] mt-1 truncate">{(p.zones ?? []).join(' · ')}</div>
                         )}
                       </div>
-                      {isExpanded ? <ChevronUp size={14} className="text-[#999] flex-shrink-0 mt-1" /> : <ChevronDown size={14} className="text-[#999] flex-shrink-0 mt-1" />}
+                      {isExpanded ? <ChevronUp size={14} className="text-[#1A1A2E] flex-shrink-0 mt-1" /> : <ChevronDown size={14} className="text-[#1A1A2E] flex-shrink-0 mt-1" />}
                     </button>
 
                     {isExpanded && (
@@ -295,7 +295,7 @@ export function AdminProviders() {
                         </div>
 
                         <div className="border-t border-[#E8E8E4] pt-3">
-                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Licensed States</div>
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Licensed States</div>
                           <div className="flex flex-wrap gap-2">
                             {['NC', 'SC', 'VA'].map(state => {
                               const checked = (p.states ?? []).includes(state)
@@ -323,7 +323,7 @@ export function AdminProviders() {
 
                         {practiceZones.length > 0 && (
                           <div className="border-t border-[#E8E8E4] pt-3">
-                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Service Zones</div>
+                            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Service Zones</div>
                             <div className="flex flex-wrap gap-2">
                               {practiceZones.map(zone => {
                                 const checked = (p.zones ?? []).includes(zone)
@@ -350,7 +350,7 @@ export function AdminProviders() {
                         )}
 
                         <div className="border-t border-[#E8E8E4] pt-3">
-                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Login Password</div>
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Login Password</div>
                           {pwState[p.id]?.password ? (
                             <div className="flex items-center gap-2 bg-[#F0F0F8] rounded-lg px-3 py-2">
                               <code className="text-[13px] text-[#3C3489] font-mono flex-1">{pwState[p.id].password}</code>
@@ -387,12 +387,12 @@ export function AdminProviders() {
                             <pre className="text-[10px] text-[#333] mt-2 bg-[#f5f5f5] p-2 rounded overflow-auto max-h-40">{fixState[p.id].diagnostic}</pre>
                           )}
                           {pwState[p.id]?.password && (
-                            <p className="text-[11px] text-[#999] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
+                            <p className="text-[11px] text-[#1A1A2E] mt-1.5">Copy this password and share it with the provider. They can log in immediately.</p>
                           )}
                         </div>
 
                         <div className="border-t border-[#E8E8E4] pt-3">
-                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Account Status</div>
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Account Status</div>
                           {p.is_active ? (
                             <Button size="sm" variant="secondary" loading={deactivating === p.id}
                               onClick={() => toggleActive(p)}
@@ -401,7 +401,7 @@ export function AdminProviders() {
                             </Button>
                           ) : (
                             <div className="flex items-center gap-3">
-                              <span className="text-[12px] text-[#999] italic">Inactive — cannot log in</span>
+                              <span className="text-[12px] text-[#1A1A2E] italic">Inactive — cannot log in</span>
                               <Button size="sm" variant="secondary" loading={deactivating === p.id}
                                 onClick={() => toggleActive(p)}>
                                 <UserCheck size={13} className="mr-1" /> Reactivate

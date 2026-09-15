@@ -36,7 +36,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               tabIndex={-1}
               aria-label={showPass ? 'Hide password' : 'Show password'}
               onClick={() => setShowPass(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#bbb] hover:text-[#555] transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A2E] hover:text-[#555] transition-colors"
             >
               {showPass ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -31,7 +31,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       <div className={`relative bg-white rounded-xl shadow-xl w-full ${widths[size]} max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between p-5 border-b border-[#E8E8E4]">
           <h2 className="font-display text-base font-medium text-[#1A1A2E]">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>

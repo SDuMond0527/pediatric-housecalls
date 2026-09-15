@@ -1443,7 +1443,7 @@ export function BookVisit() {
           <div>{booking.time}</div>
           {booking.visitAddress && <div>{booking.visitAddress}</div>}
         </div>
-        <div className="text-[11px] text-[#999] font-mono mb-6">Reference: {confirmed}</div>
+        <div className="text-[11px] text-[#1A1A2E] font-mono mb-6">Reference: {confirmed}</div>
         {isCpr ? (
           <div className="bg-[#FDEDEC] border border-[#F5B7B1] rounded-lg p-3 max-w-sm mx-auto text-[13px] text-[#922B21] text-left mb-6 space-y-2">
             <div><strong>Next steps:</strong></div>
@@ -1546,12 +1546,12 @@ export function BookVisit() {
 
           {/* Child selection — hidden for CPR */}
           {!isCpr && <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">
-            Which children? <span className="normal-case font-normal text-[#999]">Select all being seen today</span>
+            Which children? <span className="normal-case font-normal text-[#1A1A2E]">Select all being seen today</span>
           </p>}
           {!isCpr && <>
           <div className="space-y-2">
             {children.length === 0 && (
-              <div className="p-4 border border-[#E8E8E4] rounded-xl text-[13px] text-[#999] text-center">
+              <div className="p-4 border border-[#E8E8E4] rounded-xl text-[13px] text-[#1A1A2E] text-center">
                 No children on file. Please update your profile first.
               </div>
             )}
@@ -1568,7 +1568,7 @@ export function BookVisit() {
                   <div className="flex-1">
                     <div className="text-[14px] font-medium text-[#1A1A2E]">{c.display_label}</div>
                     {hasProfile && <div className="text-[11px] text-[#1D9E75]">Profile on file</div>}
-                    {!hasProfile && <div className="text-[11px] text-[#999]">Profile needed at booking</div>}
+                    {!hasProfile && <div className="text-[11px] text-[#1A1A2E]">Profile needed at booking</div>}
                   </div>
                   <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${selected ? 'bg-[#7F77DD] border-[#7F77DD]' : 'border-[#D0D0CC]'}`}>
                     {selected && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -1591,7 +1591,7 @@ export function BookVisit() {
                   onDismissMatch={() => setNewChild(prev => ({ ...prev, matchDismissed: true, matchConfirmed: false }))}
                 />
                 {addingChildError && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addingChildError}</div>}
-                <p className="text-[11px] text-[#999]">Every field is required. Nothing is saved until this child's profile is complete.</p>
+                <p className="text-[11px] text-[#1A1A2E]">Every field is required. Nothing is saved until this child's profile is complete.</p>
                 <div className="flex gap-2">
                   <Button variant="secondary" size="sm" disabled={addingChildSaving}
                     onClick={() => { setAddingChild(false); setNewChild(emptyChild()); setAddingChildError('') }}>
@@ -1602,7 +1602,7 @@ export function BookVisit() {
               </div>
             ) : (
               <button onClick={() => setAddingChild(true)}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-dashed border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#999] hover:text-[#7F77DD]">
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-dashed border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#1A1A2E] hover:text-[#7F77DD]">
                 <div className="w-10 h-10 rounded-full bg-[#F1EFE8] flex items-center justify-center flex-shrink-0">
                   <Plus size={16} />
                 </div>
@@ -1688,7 +1688,7 @@ export function BookVisit() {
             <div className="flex gap-1 mb-5 border-b border-[#E8E8E4]">
               {selectedChildren.map(c => (
                 <button key={c.id} onClick={() => setBooking(b => ({ ...b, activeChildTab: c.id }))}
-                  className={`px-4 py-2 text-[13px] font-medium transition-all border-b-2 -mb-px ${booking.activeChildTab === c.id ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`}>
+                  className={`px-4 py-2 text-[13px] font-medium transition-all border-b-2 -mb-px ${booking.activeChildTab === c.id ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`}>
                   {c.display_label}
                   {booking.childIntakes[c.id]?.chiefComplaint &&
                    (booking.childIntakes[c.id]?.hasProfile || booking.childIntakes[c.id]?.firstName) && (
@@ -2010,7 +2010,7 @@ export function BookVisit() {
                   </button>
                 </div>
               ) : zoneLookaheadLoading ? (
-                <p className="text-[13px] text-[#999]">Checking availability…</p>
+                <p className="text-[13px] text-[#1A1A2E]">Checking availability…</p>
               ) : zoneLookahead.length > 0 && !showDatePicker ? (
                 <div className="flex flex-col gap-2">
                   {zoneLookahead.map(({ date: ld, firstSlot, providerCount }) => {
@@ -2030,7 +2030,7 @@ export function BookVisit() {
                       </button>
                     )
                   })}
-                  <button className="text-[12px] text-[#999] underline text-center mt-1"
+                  <button className="text-[12px] text-[#1A1A2E] underline text-center mt-1"
                     onClick={() => setShowDatePicker(true)}>
                     Need a different date?
                   </button>
@@ -2041,7 +2041,7 @@ export function BookVisit() {
                     onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
                     className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
                   {zoneLookahead.length === 0 && !zoneLookaheadLoading && (
-                    <p className="text-[12px] text-[#999] mt-1.5">No openings in the next 3 days — choose any date below.</p>
+                    <p className="text-[12px] text-[#1A1A2E] mt-1.5">No openings in the next 3 days — choose any date below.</p>
                   )}
                 </div>
               )}
@@ -2106,14 +2106,14 @@ export function BookVisit() {
               {secureTextProviders.length > 0 && (
                 <div className="border border-[#E8E8E4] rounded-xl p-4 bg-[#FAFAF8] mb-4">
                   <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-1">Need to reach a provider directly?</p>
-                  <p className="text-[12px] text-[#999] mb-3">Text your zone's providers using their secure numbers — separate from their personal cell phones.</p>
+                  <p className="text-[12px] text-[#1A1A2E] mb-3">Text your zone's providers using their secure numbers — separate from their personal cell phones.</p>
                   <div className="space-y-2">
                     {secureTextProviders.map((p: any) => (
                       <a key={p.name} href={`sms:${p.secure_text_number}`}
                         className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#EEEDFE] transition-all">
                         <div>
                           <div className="text-[13px] font-medium text-[#1A1A2E]">{p.name}</div>
-                          <div className="text-[11px] text-[#999]">{p.role}</div>
+                          <div className="text-[11px] text-[#1A1A2E]">{p.role}</div>
                         </div>
                         <div className="text-[13px] font-semibold text-[#7F77DD]">{p.secure_text_number}</div>
                       </a>
@@ -2150,23 +2150,23 @@ export function BookVisit() {
                 <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Available times</p>
                 {slotsChecking ? (
                   <div className="text-center py-5 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8]">
-                    <p className="text-[13px] text-[#999]">Checking availability…</p>
+                    <p className="text-[13px] text-[#1A1A2E]">Checking availability…</p>
                   </div>
                 ) : availableSlots.length === 0 ? (
                   <div className="py-5 border border-[#E8E8E4] rounded-lg bg-[#FAFAF8] px-4">
-                    <p className="text-[13px] text-[#999] text-center">
+                    <p className="text-[13px] text-[#1A1A2E] text-center">
                       {allSlotsBooked ? 'No availability on this date.' : 'No more same-day slots available.'}
                     </p>
-                    <p className="text-[12px] text-[#bbb] mt-1 text-center">
+                    <p className="text-[12px] text-[#1A1A2E] mt-1 text-center">
                       {allSlotsBooked ? 'This provider is not available on the selected date.' : 'Please select a future date to continue.'}
                     </p>
                     {allSlotsBooked && (forwardChecking || forwardAvail.length > 0) && (
                       <div className="mt-3 border-t border-[#EEEEE9] pt-3">
                         <p className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-2 text-center">Upcoming availability</p>
                         {forwardChecking ? (
-                          <p className="text-[12px] text-[#bbb] text-center">Checking…</p>
+                          <p className="text-[12px] text-[#1A1A2E] text-center">Checking…</p>
                         ) : forwardAvail.length === 0 ? (
-                          <p className="text-[12px] text-[#bbb] text-center">No openings in the next 3 days.</p>
+                          <p className="text-[12px] text-[#1A1A2E] text-center">No openings in the next 3 days.</p>
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             {forwardAvail.map(({ date: fd, firstSlot }) => {
@@ -2313,9 +2313,9 @@ export function BookVisit() {
               <div className="flex justify-between py-3 text-[14px]">
                 <span className="text-[#555]">Estimated convenience fee</span>
                 <span className="font-medium text-[#1A1A2E]">
-                  {convFeeLoading ? <span className="text-[#999] text-[12px]">Calculating…</span>
+                  {convFeeLoading ? <span className="text-[#1A1A2E] text-[12px]">Calculating…</span>
                     : convFee ? `$${convFee.fee}`
-                    : <span className="text-[#999] text-[12px]">Unavailable</span>}
+                    : <span className="text-[#1A1A2E] text-[12px]">Unavailable</span>}
                 </span>
               </div>
             )}
@@ -2341,7 +2341,7 @@ export function BookVisit() {
                 return (
                   <div key={c.id} className="mb-3 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg">
                     <div className="text-[12px] font-semibold text-[#555] mb-1">{c.display_label}</div>
-                    <div className="text-[13px] text-[#1A1A2E]"><span className="text-[#999]">Complaint: </span>{intake.chiefComplaint}</div>
+                    <div className="text-[13px] text-[#1A1A2E]"><span className="text-[#1A1A2E]">Complaint: </span>{intake.chiefComplaint}</div>
                   </div>
                 )
               })}
@@ -2349,7 +2349,7 @@ export function BookVisit() {
               {!(family as any)?.referral_source && (
                 <div className="mb-4">
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">
-                    How did you hear about us? <span className="text-[#999] normal-case font-normal">(optional)</span>
+                    How did you hear about us? <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
                   </label>
                   <input type="text" value={referralSource} onChange={e => setReferralSource(e.target.value)}
                     placeholder="e.g. Google, friend referral, pediatrician..."
@@ -2362,12 +2362,12 @@ export function BookVisit() {
               {isIvFluids && (
                 <div className="mb-4 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] space-y-1">
                   <div className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">IV Fluids screening</div>
-                  <div><span className="text-[#999]">Symptoms: </span>{booking.ivFluidsIntake.symptoms}</div>
-                  <div><span className="text-[#999]">Onset: </span>{booking.ivFluidsIntake.symptomOnset}</div>
-                  <div><span className="text-[#999]">Fluid intake: </span>{booking.ivFluidsIntake.fluidIntake}</div>
-                  <div><span className="text-[#999]">Vomiting: </span>{booking.ivFluidsIntake.vomiting}</div>
-                  <div><span className="text-[#999]">Last urination: </span>{booking.ivFluidsIntake.lastUrination}</div>
-                  <div><span className="text-[#999]">Available times: </span>{booking.ivFluidsIntake.availableTimes}</div>
+                  <div><span className="text-[#1A1A2E]">Symptoms: </span>{booking.ivFluidsIntake.symptoms}</div>
+                  <div><span className="text-[#1A1A2E]">Onset: </span>{booking.ivFluidsIntake.symptomOnset}</div>
+                  <div><span className="text-[#1A1A2E]">Fluid intake: </span>{booking.ivFluidsIntake.fluidIntake}</div>
+                  <div><span className="text-[#1A1A2E]">Vomiting: </span>{booking.ivFluidsIntake.vomiting}</div>
+                  <div><span className="text-[#1A1A2E]">Last urination: </span>{booking.ivFluidsIntake.lastUrination}</div>
+                  <div><span className="text-[#1A1A2E]">Available times: </span>{booking.ivFluidsIntake.availableTimes}</div>
                 </div>
               )}
             </>
@@ -2494,7 +2494,7 @@ export function BookVisit() {
                 ) : (
                   <>
                     {/* New family — full form */}
-                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Patient information</div>
+                    <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-1">Patient information</div>
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name <span className="text-[#ff3b30]">*</span></label>
                       <input value={waitlistPatient} onChange={e => setWaitlistPatient(e.target.value)}
@@ -2519,7 +2519,7 @@ export function BookVisit() {
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
                     </div>
 
-                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Clinical information</div>
+                    <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-2">Clinical information</div>
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Symptoms / chief complaint <span className="text-[#ff3b30]">*</span></label>
                       <textarea value={waitlistComplaint} onChange={e => setWaitlistComplaint(e.target.value)}
@@ -2548,7 +2548,7 @@ export function BookVisit() {
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#7F77DD] bg-white" />
                     </div>
 
-                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Providers & pharmacy</div>
+                    <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-2">Providers & pharmacy</div>
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Primary care provider</label>
                       <input value={waitlistPCP} onChange={e => setWaitlistPCP(e.target.value)}
@@ -2562,7 +2562,7 @@ export function BookVisit() {
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
                     </div>
 
-                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Insurance</div>
+                    <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-2">Insurance</div>
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Insurance provider</label>
                       <input value={waitlistInsurance} onChange={e => setWaitlistInsurance(e.target.value)}
@@ -2588,7 +2588,7 @@ export function BookVisit() {
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] bg-white" />
                     </div>
 
-                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-2">Scheduling</div>
+                    <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-2">Scheduling</div>
                     <div>
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
                       <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
@@ -2669,7 +2669,7 @@ function PcpAddForm({ name, onNameChange, adding, onAdd, onCancel }: {
           {adding ? 'Adding…' : 'Add practice'}
         </button>
         <button type="button" onClick={onCancel}
-          className="px-4 py-2 text-[13px] text-[#999] hover:text-[#555] border border-[#E8E8E4] rounded-lg">
+          className="px-4 py-2 text-[13px] text-[#1A1A2E] hover:text-[#555] border border-[#E8E8E4] rounded-lg">
           Back
         </button>
       </div>
@@ -2784,7 +2784,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
           <div className="flex items-center gap-2 mb-3">
             <User size={14} className="text-[#7F77DD]" />
             <p className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Child's profile</p>
-            <span className="text-[11px] text-[#999]">— saved for future visits</span>
+            <span className="text-[11px] text-[#1A1A2E]">— saved for future visits</span>
           </div>
 
           {/* Name + DOB */}
@@ -2826,7 +2826,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 <span className={`text-[13px] font-medium block ${intake.selfPay ? 'text-[#085041]' : 'text-[#333]'}`}>
                   We are self-pay
                 </span>
-                <span className="text-[12px] text-[#999]">No insurance — card photos and insurance info are not required</span>
+                <span className="text-[12px] text-[#1A1A2E]">No insurance — card photos and insurance info are not required</span>
               </div>
             </button>
 
@@ -2889,12 +2889,12 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 {intake.pcp_id ? (
                   <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
                     <span className="text-[13px] text-[#085041] font-medium">{pcpSelectedName}</span>
-                    <button type="button" onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#999] hover:text-[#333]"><X size={14} /></button>
+                    <button type="button" onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#1A1A2E] hover:text-[#333]"><X size={14} /></button>
                   </div>
                 ) : intake.pcpNoPcp ? (
                   <div className="flex items-center justify-between px-3 py-2.5 border border-[#E8E8E4] bg-[#FAFAF8] rounded-lg">
-                    <span className="text-[13px] text-[#999] italic">No PCP</span>
-                    <button type="button" onClick={() => onPcpChange(null, false)} className="text-[#999] hover:text-[#333] text-[11px]">Change</button>
+                    <span className="text-[13px] text-[#1A1A2E] italic">No PCP</span>
+                    <button type="button" onClick={() => onPcpChange(null, false)} className="text-[#1A1A2E] hover:text-[#333] text-[11px]">Change</button>
                   </div>
                 ) : pcpAddFormOpen ? (
                   <PcpAddForm name={pcpAddName} onNameChange={setPcpAddName} adding={pcpAdding}
@@ -2928,7 +2928,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                             onClick={() => { onPcpChange(p.id, false); setPcpSelectedName(p.name); setPcpSearch(''); setPcpDropdownOpen(false) }}
                             className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F5F4FF] border-b border-[#F0F0EE] last:border-0">
                             <div className="font-medium text-[#1A1A2E]">{p.name}</div>
-                            {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                            {p.fax_number && <div className="text-[11px] text-[#1A1A2E]">Fax: {p.fax_number}</div>}
                           </button>
                         ))}
                         <button type="button" onMouseDown={e => e.preventDefault()}
@@ -2954,7 +2954,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                         </button>
                         <button type="button" onMouseDown={e => e.preventDefault()}
                           onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
-                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
+                          className="w-full text-left px-3 py-2.5 text-[13px] text-[#1A1A2E] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
                           My child does not currently have a PCP
                         </button>
                       </div>
@@ -3044,7 +3044,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                     onClick={() => { onPcpChange(p.id, false); setPcpSelectedName(p.name); setPcpSearch(''); setPcpDropdownOpen(false) }}
                     className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F5F4FF] border-b border-[#F0F0EE] last:border-0">
                     <div className="font-medium text-[#1A1A2E]">{p.name}</div>
-                    {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                    {p.fax_number && <div className="text-[11px] text-[#1A1A2E]">Fax: {p.fax_number}</div>}
                   </button>
                 ))}
                 <button type="button" onMouseDown={e => e.preventDefault()}
@@ -3070,7 +3070,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                 </button>
                 <button type="button" onMouseDown={e => e.preventDefault()}
                   onClick={() => { onPcpChange(null, true); setPcpDropdownOpen(false) }}
-                  className="w-full text-left px-3 py-2.5 text-[13px] text-[#999] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
+                  className="w-full text-left px-3 py-2.5 text-[13px] text-[#1A1A2E] hover:bg-[#F5F4FF] italic border-t border-[#E8E8E4]">
                   My child does not currently have a PCP
                 </button>
               </div>
@@ -3082,7 +3082,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
       {intake.hasProfile && intake.pcp_id && (
         <div className="flex items-center justify-between px-3 py-2.5 border border-[#1D9E75] bg-[#E1F5EE] rounded-lg">
           <span className="text-[13px] text-[#085041] font-medium">PCP: {pcpSelectedName}</span>
-          <button type="button" onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#999] hover:text-[#333]"><X size={14} /></button>
+          <button type="button" onClick={() => { onPcpChange(null, false); setPcpSelectedName(null); setPcpSearch('') }} className="text-[#1A1A2E] hover:text-[#333]"><X size={14} /></button>
         </div>
       )}
 
@@ -3113,7 +3113,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
           {visitType === 'Text visit' && (
             <div>
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                Photos <span className="normal-case font-normal text-[#999]">optional — up to 2 (e.g. rash, wound)</span>
+                Photos <span className="normal-case font-normal text-[#1A1A2E]">optional — up to 2 (e.g. rash, wound)</span>
               </label>
               <div className="grid grid-cols-2 gap-3">
                 {[0, 1].map(slot => {
@@ -3136,10 +3136,10 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                           disabled={photoUploading === slot}
                           className="w-full aspect-square border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1 hover:border-[#AFA9EC] transition-colors bg-white disabled:opacity-50">
                           {photoUploading === slot
-                            ? <span className="text-[12px] text-[#999]">Uploading…</span>
+                            ? <span className="text-[12px] text-[#1A1A2E]">Uploading…</span>
                             : <>
                                 <Camera size={20} className="text-[#D0D0CC]" />
-                                <span className="text-[11px] text-[#999]">Add photo</span>
+                                <span className="text-[11px] text-[#1A1A2E]">Add photo</span>
                               </>}
                         </button>
                       )}
@@ -3184,7 +3184,7 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
                       </div>
                     ) : (
                       <button onClick={() => ref.current?.click()}
-                        className="w-full aspect-[1.6/1] border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#999] hover:text-[#7F77DD]">
+                        className="w-full aspect-[1.6/1] border-2 border-dashed border-[#E8E8E4] rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#1A1A2E] hover:text-[#7F77DD]">
                         {uploading === side ? (
                           <div className="text-[12px]">Uploading...</div>
                         ) : (
@@ -3276,10 +3276,10 @@ function ProgressBar({ step, steps }: { step: number; steps: string[] }) {
       {steps.map((label, i) => (
         <div key={i} className="flex items-center flex-1 last:flex-none">
           <div className="flex items-center gap-1.5">
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold transition-all ${i < step ? 'bg-[#1D9E75] text-white' : i === step ? 'bg-[#7F77DD] text-white' : 'bg-white border border-[#D0D0CC] text-[#999]'}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold transition-all ${i < step ? 'bg-[#1D9E75] text-white' : i === step ? 'bg-[#7F77DD] text-white' : 'bg-white border border-[#D0D0CC] text-[#1A1A2E]'}`}>
               {i < step ? <Check size={11} strokeWidth={3} /> : i + 1}
             </div>
-            <span className={`text-[11px] hidden sm:block ${i === step ? 'font-medium text-[#1A1A2E]' : i < step ? 'text-[#1D9E75]' : 'text-[#999]'}`}>{label}</span>
+            <span className={`text-[11px] hidden sm:block ${i === step ? 'font-medium text-[#1A1A2E]' : i < step ? 'text-[#1D9E75]' : 'text-[#1A1A2E]'}`}>{label}</span>
           </div>
           {i < steps.length - 1 && <div className={`flex-1 h-px mx-2 ${i < step ? 'bg-[#1D9E75]' : 'bg-[#E8E8E4]'}`} />}
         </div>

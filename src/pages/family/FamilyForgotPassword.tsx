@@ -57,20 +57,20 @@ export function FamilyForgotPassword() {
             ) : (
               <>
                 <h1 className="font-display text-xl font-medium text-[#1A1A2E] mb-1">Forgot password?</h1>
-                <p className="text-[13px] text-[#999] mb-5">Enter your email and we'll send you a reset link.</p>
+                <p className="text-[13px] text-[#1A1A2E] mb-5">Enter your email and we'll send you a reset link.</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <Input label="Email" type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
                   {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
                   <Button type="submit" className="w-full !py-2.5" loading={loading}>Send reset link</Button>
                 </form>
-                <p className="text-center text-[13px] text-[#999] mt-5">
+                <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
                   <Link to="/family/login" className="text-[#7F77DD] font-medium hover:underline">Back to sign in</Link>
                 </p>
               </>
             )}
           </div>
 
-          <p className="text-center text-[12px] text-[#999] mt-4">
+          <p className="text-center text-[12px] text-[#1A1A2E] mt-4">
             Are you a provider?{' '}
             <Link to="/login" className="text-[#555] hover:underline">Provider portal →</Link>
           </p>

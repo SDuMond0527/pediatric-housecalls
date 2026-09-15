@@ -68,7 +68,7 @@ export function AdminPcps() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-display font-semibold text-[#1A1A2E]">PCP Directory</h1>
-          <p className="text-[13px] text-[#999] mt-0.5">
+          <p className="text-[13px] text-[#1A1A2E] mt-0.5">
             {missing.length > 0
               ? <span className="text-[#D97706] font-medium">{missing.length} practice{missing.length !== 1 ? 's' : ''} missing a fax number</span>
               : <span className="text-[#1D9E75]">All active practices have fax numbers</span>}
@@ -87,14 +87,14 @@ export function AdminPcps() {
             <Input label="Fax number" placeholder="704-555-0100" value={newFax} onChange={e => setNewFax(e.target.value)} />
           </div>
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowAdd(false)} className="text-[13px] text-[#999] hover:text-[#555] px-3 py-1.5">Cancel</button>
+            <button onClick={() => setShowAdd(false)} className="text-[13px] text-[#1A1A2E] hover:text-[#555] px-3 py-1.5">Cancel</button>
             <Button size="sm" loading={adding} onClick={handleAdd}>Add</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="text-[13px] text-[#999] text-center py-12">Loading…</div>
+        <div className="text-[13px] text-[#1A1A2E] text-center py-12">Loading…</div>
       ) : (
         <div className="space-y-6">
           {missing.length > 0 && (
@@ -137,7 +137,7 @@ export function AdminPcps() {
 
           {inactive.length > 0 && (
             <section>
-              <h2 className="text-[12px] font-semibold text-[#999] uppercase tracking-wider mb-2">Inactive ({inactive.length})</h2>
+              <h2 className="text-[12px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Inactive ({inactive.length})</h2>
               <div className="border border-[#E8E8E4] rounded-xl overflow-hidden opacity-60">
                 {inactive.map((p, i) => (
                   <PcpRow key={p.id} p={p} editing={editingId === p.id} editFax={editFax} editName={editName}
@@ -173,7 +173,7 @@ function PcpRow({ p, editing, editFax, editName, onEditFax, onEditName, onStart,
               placeholder="e.g. 704-555-0100"
               className="flex-1 px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]" />
             <Button size="sm" loading={saving} onClick={onSave}>Save</Button>
-            <button onClick={onCancel} className="p-2 text-[#999] hover:text-[#555]"><X size={14} /></button>
+            <button onClick={onCancel} className="p-2 text-[#1A1A2E] hover:text-[#555]"><X size={14} /></button>
           </div>
           {saveError && <div className="text-[12px] text-[#991B1B]">{saveError}</div>}
         </div>
@@ -183,17 +183,17 @@ function PcpRow({ p, editing, editFax, editName, onEditFax, onEditName, onStart,
             <div className="text-[13px] font-medium text-[#1A1A2E] truncate">{p.name}</div>
             <div className="flex items-center gap-1.5 mt-0.5">
               {p.fax_number
-                ? <><Phone size={11} className="text-[#999]" /><span className="text-[12px] text-[#777]">{p.fax_number}</span></>
+                ? <><Phone size={11} className="text-[#1A1A2E]" /><span className="text-[12px] text-[#777]">{p.fax_number}</span></>
                 : <span className="text-[12px] text-[#D97706] font-medium">No fax number</span>
               }
               {p.patient_count > 0 && (
-                <span className="text-[11px] text-[#bbb] ml-2">{p.patient_count} patient{p.patient_count !== 1 ? 's' : ''}</span>
+                <span className="text-[11px] text-[#1A1A2E] ml-2">{p.patient_count} patient{p.patient_count !== 1 ? 's' : ''}</span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={onStart} className="text-[12px] text-[#7F77DD] hover:underline">Edit</button>
-            <button onClick={onToggleActive} className="text-[12px] text-[#999] hover:text-[#555]">
+            <button onClick={onToggleActive} className="text-[12px] text-[#1A1A2E] hover:text-[#555]">
               {p.is_active ? 'Deactivate' : 'Reactivate'}
             </button>
           </div>

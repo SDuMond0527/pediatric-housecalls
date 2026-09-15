@@ -105,8 +105,8 @@ function CustomTooltip({ active, payload, label, unit }: any) {
       {patientPct && (
         <div className="text-[#1D9E75] font-medium mb-1">{patientPct}</div>
       )}
-      <div className="text-[#999]">Age {(label as number).toFixed(1)} yr</div>
-      {patientDate && <div className="text-[#999]">{patientDate}</div>}
+      <div className="text-[#1A1A2E]">Age {(label as number).toFixed(1)} yr</div>
+      {patientDate && <div className="text-[#1A1A2E]">{patientDate}</div>}
     </div>
   )
 }
@@ -157,7 +157,7 @@ export function GrowthChart({ gender, vitalPoints }: Props) {
       </div>
 
       {!hasPatientData && (
-        <div className="text-[12px] text-[#bbb] mb-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
+        <div className="text-[12px] text-[#1A1A2E] mb-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
           No {mode} measurements recorded yet. Vitals entered during encounters will appear here.
         </div>
       )}
@@ -214,7 +214,7 @@ export function GrowthChart({ gender, vitalPoints }: Props) {
         {(['3rd', '10th', '25th', '50th', '75th', '90th', '97th'] as const).map((label, i) => {
           const key = P_LABELS[i]
           return (
-            <span key={key} className="flex items-center gap-1 text-[10px] text-[#999]">
+            <span key={key} className="flex items-center gap-1 text-[10px] text-[#1A1A2E]">
               <span style={{ display: 'inline-block', width: 16, height: 2, background: P_COLORS[key] }} />
               {label}
             </span>
@@ -228,7 +228,7 @@ export function GrowthChart({ gender, vitalPoints }: Props) {
         )}
       </div>
 
-      <div className="text-[10px] text-[#ccc] mt-3 text-center">
+      <div className="text-[10px] text-[#1A1A2E] mt-3 text-center">
         Reference: CDC 2000 Growth Charts (NCHS) — Ages 2–20 · For clinical reference only
       </div>
     </div>

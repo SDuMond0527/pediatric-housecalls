@@ -69,11 +69,11 @@ function CardUpload({ label, file, onChange }: { label: string; file: File | nul
               onClick={e => { e.stopPropagation(); onChange(null) }}
               className="absolute top-1 right-1 w-5 h-5 bg-white rounded-full shadow flex items-center justify-center hover:bg-red-50"
             >
-              <X size={11} className="text-[#999]" />
+              <X size={11} className="text-[#1A1A2E]" />
             </button>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-1 text-[#bbb]">
+          <div className="flex flex-col items-center gap-1 text-[#1A1A2E]">
             <Upload size={18} />
             <span className="text-[11px]">Click to upload</span>
           </div>
@@ -294,18 +294,18 @@ export function Patients() {
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Patients</div>
           <div className="flex gap-1">
             <button onClick={() => setTab('active')}
-              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'active' ? 'bg-[#7F77DD] text-white' : 'text-[#999] hover:text-[#555]'}`}>
+              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'active' ? 'bg-[#7F77DD] text-white' : 'text-[#1A1A2E] hover:text-[#555]'}`}>
               Active
             </button>
             <button onClick={() => setTab('archived')}
-              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'archived' ? 'bg-[#7F77DD] text-white' : 'text-[#999] hover:text-[#555]'}`}>
+              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${tab === 'archived' ? 'bg-[#7F77DD] text-white' : 'text-[#1A1A2E] hover:text-[#555]'}`}>
               Archived
             </button>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative w-56">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
             <input
               type="text"
               placeholder="Search by name…"
@@ -324,16 +324,16 @@ export function Patients() {
 
       <div className="p-6 max-w-3xl mx-auto">
         {loading ? (
-          <div className="text-center py-16 text-[#999] text-[14px]">Loading patients…</div>
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">Loading patients…</div>
         ) : searchLoading ? (
-          <div className="text-center py-16 text-[#999] text-[14px]">Searching…</div>
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">Searching…</div>
         ) : searchError ? (
           <div className="text-center py-16">
             <div className="text-[#791F1F] text-[14px]">Search error: {searchError}</div>
           </div>
         ) : displayed.length === 0 ? (
           <div className="text-center py-16">
-            <div className="text-[#999] text-[14px]">
+            <div className="text-[#1A1A2E] text-[14px]">
               {isSearching ? 'No patients found matching your search.' : tab === 'archived' ? 'No archived patients.' : 'No patients on file.'}
             </div>
           </div>
@@ -355,14 +355,14 @@ export function Patients() {
                   <div className="flex-1 min-w-0">
                     <div className="font-display text-[15px] font-medium text-[#1A1A2E] flex items-center gap-2">
                       {childName(child)}
-                      {child.is_archived && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F1EFE8] text-[#999]">Archived</span>}
+                      {child.is_archived && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F1EFE8] text-[#1A1A2E]">Archived</span>}
                     </div>
-                    <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5 flex items-center gap-2 flex-wrap">
                       {dob && <span>{formatDob(dob)}{age ? ` · ${age}` : ''}</span>}
                       {fam && <span className="text-[#555]">{fam}</span>}
                     </div>
                   </div>
-                  <ChevronRight size={14} className="text-[#ccc] group-hover:text-[#7F77DD] transition-colors flex-shrink-0" />
+                  <ChevronRight size={14} className="text-[#1A1A2E] group-hover:text-[#7F77DD] transition-colors flex-shrink-0" />
                 </button>
               )
             })}
@@ -375,7 +375,7 @@ export function Patients() {
 
           {/* Patient */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Patient</div>
+            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Patient</div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Given first name" required placeholder="Jane" {...field('first_name')} />
               <Input label="Last name" required placeholder="Smith" {...field('last_name')} />
@@ -392,7 +392,7 @@ export function Patients() {
 
           {/* Contact */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Contact</div>
+            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Contact</div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Parent / guardian name" placeholder="John Smith" {...field('parent_name')} />
               <Input label="Phone" required type="tel" placeholder="(704) 555-0100" {...field('parent_phone')} />
@@ -412,7 +412,7 @@ export function Patients() {
 
           {/* Medical */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Medical</div>
+            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Medical</div>
             <div className="space-y-3">
               <div>
                 <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
@@ -453,7 +453,7 @@ export function Patients() {
 
           {/* Insurance */}
           <div>
-            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Insurance</div>
+            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</div>
 
             <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg mb-3 cursor-pointer hover:bg-[#FAFAF8]">
               <input type="checkbox" checked={form.self_pay}
@@ -461,7 +461,7 @@ export function Patients() {
                 className="mt-0.5" />
               <div>
                 <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-                <div className="text-[11px] text-[#999]">Check this if the family is not filing insurance for this patient.</div>
+                <div className="text-[11px] text-[#1A1A2E]">Check this if the family is not filing insurance for this patient.</div>
               </div>
             </label>
 

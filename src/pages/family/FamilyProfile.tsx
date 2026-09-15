@@ -385,7 +385,7 @@ export function FamilyProfile() {
             <Plus size={13} /> Add child
           </button>
         </div>
-        <p className="text-[12px] text-[#999] mb-4">Click a child's name to edit their insurance info, card photos, pharmacy, and PCP.</p>
+        <p className="text-[12px] text-[#1A1A2E] mb-4">Click a child's name to edit their insurance info, card photos, pharmacy, and PCP.</p>
 
         <div className="space-y-2">
           {children.map(c => {
@@ -404,11 +404,11 @@ export function FamilyProfile() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[14px] font-medium text-[#1A1A2E]">{c.display_label}</div>
-                    <div className="text-[11px] text-[#999]">{isExpanded ? 'Tap to close' : 'Tap to edit insurance & health info'}</div>
+                    <div className="text-[11px] text-[#1A1A2E]">{isExpanded ? 'Tap to close' : 'Tap to edit insurance & health info'}</div>
                   </div>
-                  {isExpanded ? <ChevronUp size={16} className="text-[#7F77DD] flex-shrink-0" /> : <ChevronDown size={16} className="text-[#999] flex-shrink-0" />}
+                  {isExpanded ? <ChevronUp size={16} className="text-[#7F77DD] flex-shrink-0" /> : <ChevronDown size={16} className="text-[#1A1A2E] flex-shrink-0" />}
                   <div onClick={e => { e.stopPropagation(); removeChild(c.id) }}
-                    className="p-1.5 rounded-lg hover:bg-[#FCEBEB] text-[#999] hover:text-[#791F1F] transition-colors flex-shrink-0">
+                    className="p-1.5 rounded-lg hover:bg-[#FCEBEB] text-[#1A1A2E] hover:text-[#791F1F] transition-colors flex-shrink-0">
                     <Trash2 size={13} />
                   </div>
                 </button>
@@ -475,7 +475,7 @@ export function FamilyProfile() {
                       <div className="border-t border-[#E8E8E4] pt-3">
                         <button
                           onClick={() => setPastInsOpenId(pastInsOpenId === c.id ? null : c.id)}
-                          className="flex items-center gap-1.5 text-[11px] font-medium text-[#999] hover:text-[#555] transition-colors mb-2">
+                          className="flex items-center gap-1.5 text-[11px] font-medium text-[#1A1A2E] hover:text-[#555] transition-colors mb-2">
                           {pastInsOpenId === c.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                           {(c as any).previous_insurance.length} previous polic{(c as any).previous_insurance.length === 1 ? 'y' : 'ies'}
                         </button>
@@ -483,25 +483,25 @@ export function FamilyProfile() {
                           <div className="space-y-3">
                             {[...(c as any).previous_insurance].reverse().map((p: any, i: number) => (
                               <div key={i} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5 text-[13px]">
-                                <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">
+                                <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">
                                   Inactive since {p.deactivated_at ?? 'unknown date'}
                                 </div>
-                                {p.insurance_provider && <div><span className="text-[#999] text-[11px]">Plan: </span>{p.insurance_provider}</div>}
-                                {p.insurance_member_id && <div><span className="text-[#999] text-[11px]">Member ID: </span>{p.insurance_member_id}</div>}
-                                {p.insurance_group_number && <div><span className="text-[#999] text-[11px]">Group #: </span>{p.insurance_group_number}</div>}
-                                {p.insurance_subscriber_name && <div><span className="text-[#999] text-[11px]">Subscriber: </span>{p.insurance_subscriber_name}</div>}
+                                {p.insurance_provider && <div><span className="text-[#1A1A2E] text-[11px]">Plan: </span>{p.insurance_provider}</div>}
+                                {p.insurance_member_id && <div><span className="text-[#1A1A2E] text-[11px]">Member ID: </span>{p.insurance_member_id}</div>}
+                                {p.insurance_group_number && <div><span className="text-[#1A1A2E] text-[11px]">Group #: </span>{p.insurance_group_number}</div>}
+                                {p.insurance_subscriber_name && <div><span className="text-[#1A1A2E] text-[11px]">Subscriber: </span>{p.insurance_subscriber_name}</div>}
                                 {(p.insurance_card_front_url || p.insurance_card_back_url) && (
                                   <div className="grid grid-cols-2 gap-2 pt-1">
                                     {p.insurance_card_front_url && (
                                       <a href={p.insurance_card_front_url} target="_blank" rel="noopener noreferrer">
                                         <img src={p.insurance_card_front_url} alt="Old card front" className="w-full rounded border border-[#E8E8E4] object-cover" />
-                                        <div className="text-[10px] text-center text-[#999] mt-0.5">Front</div>
+                                        <div className="text-[10px] text-center text-[#1A1A2E] mt-0.5">Front</div>
                                       </a>
                                     )}
                                     {p.insurance_card_back_url && (
                                       <a href={p.insurance_card_back_url} target="_blank" rel="noopener noreferrer">
                                         <img src={p.insurance_card_back_url} alt="Old card back" className="w-full rounded border border-[#E8E8E4] object-cover" />
-                                        <div className="text-[10px] text-center text-[#999] mt-0.5">Back</div>
+                                        <div className="text-[10px] text-center text-[#1A1A2E] mt-0.5">Back</div>
                                       </a>
                                     )}
                                   </div>
@@ -571,7 +571,7 @@ export function FamilyProfile() {
               onDismissMatch={() => setNewChild(prev => ({ ...prev, matchDismissed: true, matchConfirmed: false }))}
             />
             {addChildError && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{addChildError}</div>}
-            <p className="text-[11px] text-[#999]">
+            <p className="text-[11px] text-[#1A1A2E]">
               Every field is required. Nothing is saved until this child's profile is complete — same as when you first signed up.
             </p>
             <div className="flex gap-2">

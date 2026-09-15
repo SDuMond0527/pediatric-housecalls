@@ -190,7 +190,7 @@ export function FamilyDashboard() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl font-medium text-[#1A1A2E]">{greeting}</h1>
-            <p className="text-[13px] text-[#999] mt-1">
+            <p className="text-[13px] text-[#1A1A2E] mt-1">
               {children.length} child{children.length !== 1 ? 'ren' : ''} on file
               {family.zip && ` · ${family.zip}`}
             </p>
@@ -280,7 +280,7 @@ export function FamilyDashboard() {
                       </span>
                       {offer.zone && <span>· {offer.zone}</span>}
                     </div>
-                    <p className="text-[11px] text-[#999] mt-1.5">
+                    <p className="text-[11px] text-[#1A1A2E] mt-1.5">
                       This offer expires {safeFormat(offer.expires_at, 'MMM d')} at {safeFormat(offer.expires_at, 'h:mm a')}
                     </p>
                   </div>
@@ -312,7 +312,7 @@ export function FamilyDashboard() {
                   <div className="font-display text-[14px] font-medium text-[#1A1A2E]">
                     {entry.visit_type || 'In-home visit'}
                   </div>
-                  <div className="text-[12px] text-[#999] mt-0.5 flex flex-wrap gap-x-3">
+                  <div className="text-[12px] text-[#1A1A2E] mt-0.5 flex flex-wrap gap-x-3">
                     {entry.zip && <span>Zip {entry.zip}</span>}
                     {entry.preferred_time_window && <span>{entry.preferred_time_window}</span>}
                     <span>Added {safeFormat(entry.created_at, 'MMM d')}</span>
@@ -321,7 +321,7 @@ export function FamilyDashboard() {
                 <button
                   onClick={() => leaveWaitlist(entry.id)}
                   disabled={leavingWaitlist === entry.id}
-                  className="text-[12px] font-medium text-[#999] hover:text-[#991B1B] transition-colors disabled:opacity-50 flex-shrink-0"
+                  className="text-[12px] font-medium text-[#1A1A2E] hover:text-[#991B1B] transition-colors disabled:opacity-50 flex-shrink-0"
                 >
                   {leavingWaitlist === entry.id ? 'Removing…' : 'Leave waitlist'}
                 </button>
@@ -348,7 +348,7 @@ export function FamilyDashboard() {
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center shadow-sm">
           <CalendarPlus size={28} className="text-[#aeaeb2] mx-auto mb-3" />
           <h3 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">No appointments yet</h3>
-          <p className="text-[13px] text-[#999] mb-5">Book your first visit with {PRACTICE_NAME}.</p>
+          <p className="text-[13px] text-[#1A1A2E] mb-5">Book your first visit with {PRACTICE_NAME}.</p>
           <Button onClick={() => navigate('/family/book')}>Book a visit</Button>
         </div>
       )}
@@ -366,7 +366,7 @@ export function FamilyDashboard() {
       {/* Cancelled */}
       {cancelled.length > 0 && (
         <div>
-          <h2 className="text-[13px] font-semibold text-[#999] uppercase tracking-wider mb-3">Cancelled</h2>
+          <h2 className="text-[13px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Cancelled</h2>
           <div className="space-y-2 opacity-50">
             {cancelled.map(b => <BookingCard key={b.id} booking={b} past />)}
           </div>
@@ -380,19 +380,19 @@ export function FamilyDashboard() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Cancel appointment?</h2>
-              <button onClick={() => setCancelTarget(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setCancelTarget(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
-              <div className="flex items-center gap-1.5 text-[#999]">
+              <div className="flex items-center gap-1.5 text-[#1A1A2E]">
                 <Clock size={11} />
                 {safeFormat(cancelTarget.preferred_date ? cancelTarget.preferred_date + 'T12:00:00' : null, 'EEEE, MMMM d')} at {cancelTarget.preferred_time}
               </div>
               {cancelTarget.preferred_provider && (
-                <div className="text-[#999]">{cancelTarget.preferred_provider}</div>
+                <div className="text-[#1A1A2E]">{cancelTarget.preferred_provider}</div>
               )}
             </div>
 
@@ -455,7 +455,7 @@ function BookingCard({ booking, past = false, onCancel }: {
               {statusColor.label}
             </span>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-[12px] text-[#999]">
+          <div className="flex items-center gap-3 mt-1 text-[12px] text-[#1A1A2E]">
             <span className="flex items-center gap-1">
               <Clock size={11} />
               {safeFormat(booking.preferred_date ? booking.preferred_date + 'T12:00:00' : null, 'EEE, MMM d')} at {booking.preferred_time}
@@ -467,7 +467,7 @@ function BookingCard({ booking, past = false, onCancel }: {
 
         {isUpcoming && onCancel && (
           <button onClick={onCancel}
-            className="flex-shrink-0 text-[12px] text-[#999] hover:text-[#791F1F] hover:bg-[#FCEBEB] px-2.5 py-1.5 rounded-lg transition-colors font-medium">
+            className="flex-shrink-0 text-[12px] text-[#1A1A2E] hover:text-[#791F1F] hover:bg-[#FCEBEB] px-2.5 py-1.5 rounded-lg transition-colors font-medium">
             Cancel
           </button>
         )}

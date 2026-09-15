@@ -97,7 +97,7 @@ export function Landing() {
               { label: 'Patient population', value: 'Patients seen in the home by their practice\'s assigned provider' },
             ].map(({ label, value }) => (
               <div key={label} className="border border-[#E8E8E4] rounded-xl p-5">
-                <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">{label}</div>
+                <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5">{label}</div>
                 <div className="text-[14px] text-[#333] leading-relaxed">{value}</div>
               </div>
             ))}
@@ -191,7 +191,7 @@ export function Landing() {
                   }}
                 />
                 <div className="hidden h-48 bg-[#F5F5F3] flex items-center justify-center">
-                  <span className="text-[13px] text-[#999]">{label}</span>
+                  <span className="text-[13px] text-[#1A1A2E]">{label}</span>
                 </div>
                 <div className="px-4 py-2.5 border-t border-[#E8E8E4] text-[12px] text-[#666]">{label}</div>
               </div>
@@ -232,7 +232,7 @@ export function Landing() {
           <h2 className="text-[22px] font-semibold text-[#1A1A2E] mb-6">Contact</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <div className="text-[13px] font-semibold text-[#999] uppercase tracking-wider mb-2">General inquiries</div>
+              <div className="text-[13px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">General inquiries</div>
               <div className="text-[14px] text-[#333] mb-1">GoRoam Health, LLC</div>
               <div className="text-[14px] text-[#333] mb-1">1832 Marthas Vineyard Road</div>
               <div className="text-[14px] text-[#333] mb-3">York, SC 29745</div>
@@ -241,7 +241,7 @@ export function Landing() {
               </a>
             </div>
             <div>
-              <div className="text-[13px] font-semibold text-[#999] uppercase tracking-wider mb-2">Legal &amp; compliance</div>
+              <div className="text-[13px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Legal &amp; compliance</div>
               <div className="text-[14px] text-[#555] leading-relaxed mb-3">
                 For privacy questions, data requests, HIPAA inquiries, or to report a suspected breach, contact us at the address above.
               </div>
@@ -256,7 +256,7 @@ export function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-[#E8E8E4] bg-[#FAFAF8] px-6 py-5 text-center text-[12px] text-[#999]">
+      <footer className="border-t border-[#E8E8E4] bg-[#FAFAF8] px-6 py-5 text-center text-[12px] text-[#1A1A2E]">
         <div className="flex justify-center gap-6 mb-1.5">
           <Link to="/terms" className="hover:text-[#7F77DD] transition-colors">Terms of Service</Link>
           <Link to="/privacy" className="hover:text-[#7F77DD] transition-colors">Privacy Policy</Link>

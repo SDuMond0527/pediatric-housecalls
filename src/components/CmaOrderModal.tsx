@@ -116,13 +116,13 @@ export function CmaOrderModal({ ctx, providerId, providerRole, providerName, onC
             <TestTube size={16} className="text-[#7F77DD]" />
             <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Send CMA for in-home diagnostics</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
         </div>
 
         <div className="px-6 flex-1 overflow-y-auto">
           <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4">
             <div className="font-medium text-[#1A1A2E]">{ctx.patientFirstName} {ctx.patientLastName}</div>
-            {ctx.patientAddress && <div className="text-[#999] mt-0.5">{ctx.patientAddress}</div>}
+            {ctx.patientAddress && <div className="text-[#1A1A2E] mt-0.5">{ctx.patientAddress}</div>}
           </div>
 
           <div className="space-y-4">
@@ -161,7 +161,7 @@ export function CmaOrderModal({ ctx, providerId, providerRole, providerName, onC
                 placeholder="e.g. COVID PCR send-out"
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]"
               />
-              <p className="text-[11px] text-[#999] mt-1">Optional — anything not in the list above.</p>
+              <p className="text-[11px] text-[#1A1A2E] mt-1">Optional — anything not in the list above.</p>
             </div>
 
             <div>
@@ -173,7 +173,7 @@ export function CmaOrderModal({ ctx, providerId, providerRole, providerName, onC
                 placeholder="e.g. Clean catch preferred. Bring specimen back to office same day."
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] resize-none"
               />
-              <p className="text-[11px] text-[#999] mt-1">Optional — anything else the CMA should know.</p>
+              <p className="text-[11px] text-[#1A1A2E] mt-1">Optional — anything else the CMA should know.</p>
             </div>
 
             <div>
@@ -181,7 +181,7 @@ export function CmaOrderModal({ ctx, providerId, providerRole, providerName, onC
               <input type="date" value={date} min={today}
                 onChange={e => setDate(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
-              <p className="text-[11px] text-[#999] mt-1">The claiming CMA picks the exact arrival time when she accepts.</p>
+              <p className="text-[11px] text-[#1A1A2E] mt-1">The claiming CMA picks the exact arrival time when she accepts.</p>
             </div>
 
             <div className="p-3 bg-[#FEF3E8] border border-[#F5943A]/30 rounded-lg text-[12px] text-[#633806]">

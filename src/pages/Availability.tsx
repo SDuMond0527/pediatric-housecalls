@@ -356,7 +356,7 @@ export function Availability() {
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Availability settings</div>
           {isAdmin && allProviders.length > 0 && (
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[12px] text-[#999]">Viewing:</span>
+              <span className="text-[12px] text-[#1A1A2E]">Viewing:</span>
               <select
                 value={selectedProviderId}
                 onChange={e => setSelectedProviderId(e.target.value)}
@@ -403,7 +403,7 @@ export function Availability() {
           </div>
           {isAdmin && visitTypes.some(vt => vt.is_cpr) && (
             <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
-              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">CPR class role restrictions (practice-wide)</div>
+              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">CPR class role restrictions (practice-wide)</div>
               <div className="space-y-1.5">
                 {visitTypes.filter(vt => vt.is_cpr).map(vt => (
                   <div key={vt.id} className="flex items-center justify-between">
@@ -444,7 +444,7 @@ export function Availability() {
                   </span>
                   <span className="text-[12px] text-[#555]">only</span>
                   <span className="text-[13px] font-medium text-[#1A1A2E]">{fmt24to12(v.start_time)} – {fmt24to12(v.end_time)}</span>
-                  <button onClick={() => removeVtRestriction(v.visit_type)} className="ml-auto p-1 rounded hover:bg-[#FCEBEB] text-[#999] hover:text-[#791F1F]"><X size={13} /></button>
+                  <button onClick={() => removeVtRestriction(v.visit_type)} className="ml-auto p-1 rounded hover:bg-[#FCEBEB] text-[#1A1A2E] hover:text-[#791F1F]"><X size={13} /></button>
                 </div>
               )
             })}
@@ -469,7 +469,7 @@ export function Availability() {
                 <span className="bg-[#EEEDFE] text-[#3C3489] text-[11px] font-medium px-2.5 py-1 rounded-full">{z.zone}</span>
                 <span className="text-[12px] text-[#555]">only</span>
                 <span className="text-[13px] font-medium text-[#1A1A2E]">{fmt24to12(z.start_time)} – {fmt24to12(z.end_time)}</span>
-                <button onClick={() => removeZone(z.id)} className="ml-auto p-1 rounded hover:bg-[#FCEBEB] text-[#999] hover:text-[#791F1F]"><X size={13} /></button>
+                <button onClick={() => removeZone(z.id)} className="ml-auto p-1 rounded hover:bg-[#FCEBEB] text-[#1A1A2E] hover:text-[#791F1F]"><X size={13} /></button>
               </div>
             ))}
           </div>
@@ -562,7 +562,7 @@ export function Availability() {
 
               <div className="grid grid-cols-7 mb-1">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div key={d} className="text-center text-[11px] font-semibold text-[#999] uppercase tracking-wider py-1">
+                  <div key={d} className="text-center text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider py-1">
                     {d}
                   </div>
                 ))}
@@ -622,7 +622,7 @@ export function Availability() {
                       {override && (
                         <button
                           onClick={e => { e.stopPropagation(); removeOverride(override.id) }}
-                          className="absolute top-0.5 right-0.5 p-0.5 rounded text-[#999] hover:text-[#555] hover:bg-black/10"
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded text-[#1A1A2E] hover:text-[#555] hover:bg-black/10"
                         >
                           <X size={10} />
                         </button>
@@ -657,7 +657,7 @@ export function Availability() {
           {overrideDateView === 'list' && (
             <div>
               {upcomingOverrides.length === 0 && pastOverrides.length === 0 && (
-                <div className="text-center py-6 text-[#999] text-[13px]">
+                <div className="text-center py-6 text-[#1A1A2E] text-[13px]">
                   No dates set yet. Use "Add date" to build your schedule.
                 </div>
               )}
@@ -698,7 +698,7 @@ export function Availability() {
 
               {pastOverrides.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Past</p>
+                  <p className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Past</p>
                   <div className="space-y-1.5">
                     {pastOverrides.slice(-3).map(o => (
                       <div key={o.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-[#E8E8E4] bg-[#FAFAF8] opacity-60">
@@ -708,7 +708,7 @@ export function Availability() {
                             ? `${fmt24to12(o.start_time)} – ${fmt24to12(o.end_time)}`
                             : 'Off'}
                         </div>
-                        <button onClick={() => removeOverride(o.id)} className="p-1 text-[#999] hover:text-[#555]"><X size={12} /></button>
+                        <button onClick={() => removeOverride(o.id)} className="p-1 text-[#1A1A2E] hover:text-[#555]"><X size={12} /></button>
                       </div>
                     ))}
                   </div>

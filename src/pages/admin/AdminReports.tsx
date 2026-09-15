@@ -217,7 +217,7 @@ function SummaryCard({ label, value, color, bg, sub }: { label: string; value: n
       <div className="w-8 h-8 rounded-lg mb-3" style={{ background: bg }} />
       <div className="font-display text-3xl font-semibold mb-1" style={{ color }}>{value}</div>
       <div className="text-[13px] font-medium text-[#1A1A2E]">{label}</div>
-      {sub && <div className="text-[11px] text-[#999] mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-[#1A1A2E] mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -382,7 +382,7 @@ export function AdminReports() {
   // Only replace the whole page on the FIRST load. On subsequent refetches
   // (e.g., date-range change), keep the previously rendered content on screen
   // so the scroll position doesn't jump back to the top.
-  if (loading && !hasLoadedOnce) return <div className="p-8 text-[#999] text-[13px]">Loading reports…</div>
+  if (loading && !hasLoadedOnce) return <div className="p-8 text-[#1A1A2E] text-[13px]">Loading reports…</div>
 
   // Summary totals
   const total     = appts.length
@@ -456,7 +456,7 @@ export function AdminReports() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10 flex items-center justify-between flex-wrap gap-3">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Reports</div>
-          <div className="text-[12px] text-[#999] mt-0.5">
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">
             Visit and provider activity
             {loading && hasLoadedOnce && <span className="ml-2 text-[#7F77DD]">· refreshing…</span>}
           </div>
@@ -468,7 +468,7 @@ export function AdminReports() {
             onChange={e => setStartDate(e.target.value)}
             className="border border-[#E8E8E4] rounded-lg px-3 py-1.5 text-[13px] text-[#1A1A2E] bg-white focus:outline-none focus:border-[#7F77DD]"
           />
-          <span className="text-[#999] text-[13px]">to</span>
+          <span className="text-[#1A1A2E] text-[13px]">to</span>
           <input
             type="date"
             value={endDate}
@@ -504,16 +504,16 @@ export function AdminReports() {
         {/* Visits by provider */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Visits by provider</h3>
-          <p className="text-[12px] text-[#999] mb-4">{rangeLabel}</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">{rangeLabel}</p>
           {providerStats.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No appointments in this period.</p>
+            <p className="text-[13px] text-[#1A1A2E]">No appointments in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
                     {['Provider', 'Total', 'Completed', 'Upcoming', 'Cancelled'].map(h => (
-                      <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -537,19 +537,19 @@ export function AdminReports() {
         {activeTypes.length > 0 && providerStats.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Visit type breakdown by provider</h3>
-            <p className="text-[12px] text-[#999] mb-4">{rangeLabel} — all statuses</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">{rangeLabel} — all statuses</p>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
-                    <th className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">Provider</th>
+                    <th className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">Provider</th>
                     {activeTypes.map(vt => (
                       <th key={vt} className="text-left text-[11px] font-medium uppercase tracking-wider pb-2.5 pr-5 whitespace-nowrap"
                         style={{ color: VT_COLOR[vt] ?? '#999' }}>
                         {vt}
                       </th>
                     ))}
-                    <th className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 whitespace-nowrap">Total</th>
+                    <th className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 whitespace-nowrap">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F1EFE8]">
@@ -605,7 +605,7 @@ export function AdminReports() {
                   <Download size={13} /> Export as CSV
                 </button>
               </div>
-              <p className="text-[12px] text-[#999] mb-4">Encounter Date {rangeLabel}</p>
+              <p className="text-[12px] text-[#1A1A2E] mb-4">Encounter Date {rangeLabel}</p>
 
               {/* Filters */}
               <div className="bg-[#FAF9F4] border border-[#E8E8E4] rounded-lg p-3 mb-4 space-y-2">
@@ -643,18 +643,18 @@ export function AdminReports() {
                       )
                     })}
                     {filterVisitTypes.length > 0 && (
-                      <button onClick={() => setFilterVisitTypes([])} className="text-[11px] text-[#999] hover:text-[#555] underline">clear</button>
+                      <button onClick={() => setFilterVisitTypes([])} className="text-[11px] text-[#1A1A2E] hover:text-[#555] underline">clear</button>
                     )}
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-2 text-[12px]">
                   <div>
-                    <div className="text-[#999] mb-0.5">Encounter date from</div>
+                    <div className="text-[#1A1A2E] mb-0.5">Encounter date from</div>
                     <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                   <div>
-                    <div className="text-[#999] mb-0.5">Encounter date to</div>
+                    <div className="text-[#1A1A2E] mb-0.5">Encounter date to</div>
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full border border-[#E8E8E4] rounded px-2 py-1 bg-white" />
                   </div>
                 </div>
@@ -668,9 +668,9 @@ export function AdminReports() {
                     <div className="text-[12px]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[#555]">Procedure codes:</span>
-                        <span className="text-[11px] text-[#999]">every code this provider used in the date range — click any to exclude from the report</span>
+                        <span className="text-[11px] text-[#1A1A2E]">every code this provider used in the date range — click any to exclude from the report</span>
                         {excludedCodes.length > 0 && (
-                          <button onClick={() => setExcludedCodes([])} className="ml-auto text-[11px] text-[#999] hover:text-[#555] underline">include all</button>
+                          <button onClick={() => setExcludedCodes([])} className="ml-auto text-[11px] text-[#1A1A2E] hover:text-[#555] underline">include all</button>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -693,17 +693,17 @@ export function AdminReports() {
                 })()}
 
                 <div className="flex justify-end">
-                  <button onClick={resetPayrollFilters} className="text-[11px] text-[#999] hover:text-[#555] underline">Reset filters</button>
+                  <button onClick={resetPayrollFilters} className="text-[11px] text-[#1A1A2E] hover:text-[#555] underline">Reset filters</button>
                 </div>
               </div>
 
               {selectedProviderAllRows.length === 0 ? (
-                <p className="text-[13px] text-[#999]">
+                <p className="text-[13px] text-[#1A1A2E]">
                   No signed encounter notes with procedure codes for {selectedProvider.name} in {rangeLabel}.
                   {' '}Notes must be signed and have CPT codes attached to appear on payroll.
                 </p>
               ) : filteredProviderRows.length === 0 ? (
-                <p className="text-[13px] text-[#999]">
+                <p className="text-[13px] text-[#1A1A2E]">
                   {selectedProviderAllRows.length} record{selectedProviderAllRows.length === 1 ? '' : 's'} exist for this provider,
                   but the current filters exclude all of them. Try clicking <strong>Reset filters</strong> above.
                 </p>
@@ -713,14 +713,14 @@ export function AdminReports() {
                     <thead>
                       <tr className="border-b border-[#E8E8E4]">
                         {['#', 'Chart #', 'Patient', 'Claim #', 'Payer', 'Code', 'Description', 'Encounter', 'Visit Type', 'Claim Date', 'Billed', 'wRVU', '$/RVU', 'RVU Ct', 'Provider $', 'CV Split'].map(h => (
-                          <th key={h} className="text-left text-[10px] font-medium text-[#999] uppercase tracking-wider pb-2 pr-3 whitespace-nowrap">{h}</th>
+                          <th key={h} className="text-left text-[10px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2 pr-3 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F1EFE8]">
                       {filteredProviderRows.map((r, i) => (
                         <tr key={r.key}>
-                          <td className="py-2 pr-3 text-[#999] tabular-nums">{i + 1}</td>
+                          <td className="py-2 pr-3 text-[#1A1A2E] tabular-nums">{i + 1}</td>
                           <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.chartNumber || '—'}</td>
                           <td className="py-2 pr-3 text-[#1A1A2E] whitespace-nowrap">{r.patientName || '—'}</td>
                           <td className="py-2 pr-3 font-mono text-[10px] text-[#555] whitespace-nowrap">{r.claimNumber || '—'}</td>
@@ -767,17 +767,17 @@ export function AdminReports() {
                   Exclude cancelled appointments
                 </label>
               </div>
-              <p className="text-[12px] text-[#999] mb-4">Encounter Date {rangeLabel} — click a provider to see procedure detail and export CSV</p>
+              <p className="text-[12px] text-[#1A1A2E] mb-4">Encounter Date {rangeLabel} — click a provider to see procedure detail and export CSV</p>
 
               {payrollProviderTotals.length === 0 ? (
-                <p className="text-[13px] text-[#999]">No procedure codes recorded in this period.</p>
+                <p className="text-[13px] text-[#1A1A2E]">No procedure codes recorded in this period.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className="border-b border-[#E8E8E4]">
                         {['Provider Name', 'Encounters', 'RVU Count', '$ RVU Pay', '$ CV Share', 'Total Pay'].map(h => (
-                          <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
+                          <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -814,7 +814,7 @@ export function AdminReports() {
             <Trophy size={15} color="#EF9F27" />
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">Bonus leaderboard</h3>
           </div>
-          <p className="text-[12px] text-[#999] mb-4">Waitlist & broadcast pickups — {rangeLabel}</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">Waitlist & broadcast pickups — {rangeLabel}</p>
 
           {pickupLeaders.length > 0 && (
             <div className="mb-4 p-4 rounded-xl border border-[#EF9F27]/30 bg-[#FFFBF5] flex items-center gap-3">
@@ -831,14 +831,14 @@ export function AdminReports() {
           )}
 
           {pickupsSorted.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No pickups recorded in this period.</p>
+            <p className="text-[13px] text-[#1A1A2E]">No pickups recorded in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
                     {['Provider', 'Broadcast pickups', 'Waitlist pickups', 'Total pickups', ''].map(h => (
-                      <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>

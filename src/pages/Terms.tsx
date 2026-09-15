@@ -5,12 +5,12 @@ export function Terms() {
     <div className="min-h-screen bg-[#FAFAF8]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-5 text-center">
         <div className="text-xl font-semibold text-[#1A1A2E] mb-1">GoRoam Health</div>
-        <div className="text-[13px] text-[#999]">Provider Portal · <Link to="/login" className="text-[#7F77DD] hover:underline">Back to login</Link></div>
+        <div className="text-[13px] text-[#1A1A2E]">Provider Portal · <Link to="/login" className="text-[#7F77DD] hover:underline">Back to login</Link></div>
       </div>
 
       <div className="max-w-3xl mx-auto px-6 py-12 pb-20">
         <h1 className="text-3xl font-semibold text-[#1A1A2E] mb-2">Terms of Service</h1>
-        <p className="text-[13px] text-[#999] mb-10">Effective Date: July 1, 2026 · Last Updated: June 30, 2026</p>
+        <p className="text-[13px] text-[#1A1A2E] mb-10">Effective Date: July 1, 2026 · Last Updated: June 30, 2026</p>
 
         <Section title="1. Agreement to Terms">
           <p>These Terms of Service ("Terms") govern your access to and use of the GoRoam Health provider platform ("Platform"), operated by GoRoam Health, LLC ("GoRoam Health," "we," "us," or "our"). By accessing or using the Platform, you ("Provider," "Practice," or "User") agree to be bound by these Terms.</p>

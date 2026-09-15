@@ -287,7 +287,7 @@ export function AdminWaitlist() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Waitlist</div>
-          <div className="text-[12px] text-[#999] mt-0.5">Families waiting for an available appointment</div>
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">Families waiting for an available appointment</div>
         </div>
         <div className="flex items-center gap-2">
           {waitingCount > 0 && <Badge variant="amber">{waitingCount} waiting</Badge>}
@@ -299,7 +299,7 @@ export function AdminWaitlist() {
 
       <div className="p-6 space-y-3 max-w-3xl">
         {!loading && entries.length === 0 && (
-          <div className="text-center py-16 text-[#999] text-[14px]">No waitlist entries.</div>
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">No waitlist entries.</div>
         )}
 
         {entries.map(e => (
@@ -314,7 +314,7 @@ export function AdminWaitlist() {
                   {e.visit_type && <Badge variant="gray">{e.visit_type}</Badge>}
                 </div>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#999] mb-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#1A1A2E] mb-2">
                   <span>Zip {e.zip}{e.state && ` · ${e.state}`}</span>
                   {e.family_phone && (
                     <a href={`tel:${e.family_phone}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
@@ -350,25 +350,25 @@ export function AdminWaitlist() {
                     <div className="mt-2 space-y-1">
                       {complaint && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Chief complaint: </span>
+                          <span className="text-[#1A1A2E]">Chief complaint: </span>
                           <span className="text-[#1A1A2E] font-medium">{complaint}</span>
                         </div>
                       )}
                       {address && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Address: </span>
+                          <span className="text-[#1A1A2E]">Address: </span>
                           <span className="text-[#1A1A2E] font-medium">{address}</span>
                         </div>
                       )}
                       {noteMap.Patient && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Patient: </span>
+                          <span className="text-[#1A1A2E]">Patient: </span>
                           <span className="text-[#1A1A2E] font-medium">{noteMap.Patient}</span>
                         </div>
                       )}
                       {noteEntries.map(([k, v]) => (
                         <div key={k} className="text-[12px]">
-                          <span className="text-[#999]">{NOTE_LABELS[k] || k}: </span>
+                          <span className="text-[#1A1A2E]">{NOTE_LABELS[k] || k}: </span>
                           <span className="text-[#555]">{v}</span>
                         </div>
                       ))}
@@ -404,9 +404,9 @@ export function AdminWaitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Why is this patient leaving?</h2>
-              <button onClick={() => setLossEntryId(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setLossEntryId(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
-            <p className="text-[12px] text-[#999] mb-4">Select a reason. The entry will be silently removed — no notifications sent.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Select a reason. The entry will be silently removed — no notifications sent.</p>
             <div className="space-y-2">
               {[
                 'Parents took patient to PCP / urgent care',
@@ -440,7 +440,7 @@ export function AdminWaitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit contact info</h2>
-              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
             <div className="space-y-3">
               <Input label="Patient name" value={editName} onChange={e => setEditName(e.target.value)} />
@@ -462,11 +462,11 @@ export function AdminWaitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add patient to waitlist</h2>
-              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
 
             <div className="space-y-3">
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest">Patient info</div>
+              <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest">Patient info</div>
 
               {/* Patient name search */}
               <div className="relative">
@@ -474,7 +474,7 @@ export function AdminWaitlist() {
                 {selectedChild ? (
                   <div className="flex items-center gap-2 px-3 py-2.5 border border-[#AFA9EC] rounded-lg bg-[#F5F4FE]">
                     <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
-                    <button type="button" onClick={() => { setSelectedChild(null); setNameQuery(''); setAddForm(EMPTY_ADD) }} className="text-[#999] hover:text-[#555]"><X size={14} /></button>
+                    <button type="button" onClick={() => { setSelectedChild(null); setNameQuery(''); setAddForm(EMPTY_ADD) }} className="text-[#1A1A2E] hover:text-[#555]"><X size={14} /></button>
                   </div>
                 ) : (
                   <>
@@ -493,14 +493,14 @@ export function AdminWaitlist() {
                             <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
                               className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
                               <div className="text-[14px] font-medium text-[#1A1A2E]">{cn}</div>
-                              {dob && <div className="text-[12px] text-[#999]">DOB: {dob}</div>}
+                              {dob && <div className="text-[12px] text-[#1A1A2E]">DOB: {dob}</div>}
                             </button>
                           )
                         })}
                       </div>
                     )}
                     {searchOpen && nameQuery.trim().length > 1 && searchResults.length === 0 && (
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#999]">
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#1A1A2E]">
                         No patients found — fill in manually below
                       </div>
                     )}
@@ -570,14 +570,14 @@ export function AdminWaitlist() {
                 </div>
               </div>
 
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Clinical info</div>
+              <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-1">Clinical info</div>
               <Input label="Allergies" placeholder="e.g. Penicillin — or NKDA" value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
               <Input label="Current medications" placeholder="None, or list medications" value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
               <Input label="PMH" placeholder="Significant past medical history" value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
               <Input label="PCP" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
               <Input label="Pharmacy" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
 
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Insurance</div>
+              <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-1">Insurance</div>
               <Input label="Insurance" placeholder="e.g. BCBS" value={addForm.insurance} onChange={e => setField('insurance', e.target.value)} />
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Member ID" value={addForm.memberId} onChange={e => setField('memberId', e.target.value)} />

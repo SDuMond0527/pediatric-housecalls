@@ -145,7 +145,7 @@ export function FamilySetup() {
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
             <PracticeLogo />
           </div>
-          <p className="text-[13px] text-[#999] mt-1">Let's set up your family profile</p>
+          <p className="text-[13px] text-[#1A1A2E] mt-1">Let's set up your family profile</p>
         </div>
 
         <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7 space-y-5">
@@ -184,7 +184,7 @@ export function FamilySetup() {
                 <Plus size={13} /> Add another
               </button>
             </div>
-            <p className="text-[12px] text-[#999] mb-4">
+            <p className="text-[12px] text-[#1A1A2E] mb-4">
               We need a complete profile for each child — allergies, medications, insurance, and everything on the intake form.
               This lets us prescribe medications, order labs, and file insurance claims from your very first visit.
             </p>
@@ -209,7 +209,7 @@ export function FamilySetup() {
           {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
 
           <Button className="w-full !py-2.5" loading={saving} onClick={save}>Save and continue</Button>
-          <p className="text-[11px] text-[#999] text-center">
+          <p className="text-[11px] text-[#1A1A2E] text-center">
             Nothing is saved until every field is complete. If any field is missing we'll tell you which one — we never create a half-empty chart.
           </p>
         </div>

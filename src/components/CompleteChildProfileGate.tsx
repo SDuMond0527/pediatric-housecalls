@@ -117,7 +117,7 @@ export function CompleteChildProfileGate({ children, family, onAllComplete }: Pr
         </div>
 
         <div className="px-6 py-4 flex-1 overflow-y-auto">
-          <p className="text-[12px] text-[#999] uppercase tracking-wider mb-2 font-semibold">Missing information for {childName}</p>
+          <p className="text-[12px] text-[#1A1A2E] uppercase tracking-wider mb-2 font-semibold">Missing information for {childName}</p>
           <div className="space-y-3">
             {current.missing.map(f => (
               <ProfileFieldInput key={f.key} field={f} value={currentValues[f.key] ?? ''} onChange={v => setV(f.key, v)}
@@ -171,7 +171,7 @@ function ProfileFieldInput({ field, value, onChange, familySub }: { field: Requi
         ) : (
           <div>
             <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} className="text-[12px]" />
-            {uploading && <div className="text-[11px] text-[#999] mt-1">Uploading…</div>}
+            {uploading && <div className="text-[11px] text-[#1A1A2E] mt-1">Uploading…</div>}
             {err && <div className="text-[11px] text-[#DC2626] mt-1">{err}</div>}
           </div>
         )}

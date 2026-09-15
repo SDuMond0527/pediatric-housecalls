@@ -235,7 +235,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
         <div className="flex items-start justify-between px-6 py-4 border-b border-[#E8E8E4] flex-shrink-0">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1A1A2E]">Patient Statement</h2>
-            <p className="text-[12px] text-[#999] mt-0.5">
+            <p className="text-[12px] text-[#1A1A2E] mt-0.5">
               {patientName} &bull; DOS: {fmtDate(claim.service_date)}
             </p>
           </div>
@@ -245,7 +245,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 Sent {statement.sent_at ? fmtDate(statement.sent_at) : ''}
               </span>
             )}
-            <button onClick={onClose} className="text-[#999] hover:text-[#555] transition-colors">
+            <button onClick={onClose} className="text-[#1A1A2E] hover:text-[#555] transition-colors">
               <X size={18} />
             </button>
           </div>
@@ -254,12 +254,12 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
           {loading ? (
-            <div className="py-12 text-center text-[13px] text-[#999]">Loading…</div>
+            <div className="py-12 text-center text-[13px] text-[#1A1A2E]">Loading…</div>
           ) : (
             <>
               {/* Section 1: Patient Contact */}
               <div>
-                <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Patient Contact</div>
+                <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Patient Contact</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>
@@ -301,7 +301,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
               {/* Section 2: Encounter Details */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Encounter Details</div>
+                  <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Encounter Details</div>
                   {claim.stedi_claim_id && (
                     <button
                       onClick={handlePullEra}
@@ -320,21 +320,21 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 <div className="bg-[#FAFAF8] rounded-xl border border-[#E8E8E4] p-4 space-y-2">
                   <div className="grid grid-cols-3 gap-4 text-[13px]">
                     <div>
-                      <span className="text-[#999] text-[11px] block mb-0.5">Patient</span>
+                      <span className="text-[#1A1A2E] text-[11px] block mb-0.5">Patient</span>
                       <span className="text-[#1A1A2E] font-medium">{patientName}</span>
                     </div>
                     <div>
-                      <span className="text-[#999] text-[11px] block mb-0.5">DOB</span>
+                      <span className="text-[#1A1A2E] text-[11px] block mb-0.5">DOB</span>
                       <span className="text-[#1A1A2E]">{fmtDate(claim.patient_dob)}</span>
                     </div>
                     <div>
-                      <span className="text-[#999] text-[11px] block mb-0.5">Date of Service</span>
+                      <span className="text-[#1A1A2E] text-[11px] block mb-0.5">Date of Service</span>
                       <span className="text-[#1A1A2E]">{fmtDate(claim.service_date)}</span>
                     </div>
                   </div>
                   {(claim.cpt_codes ?? []).length > 0 && (
                     <div className="pt-2 border-t border-[#E8E8E4]">
-                      <span className="text-[#999] text-[11px] block mb-1.5">CPT Codes</span>
+                      <span className="text-[#1A1A2E] text-[11px] block mb-1.5">CPT Codes</span>
                       <div className="space-y-1">
                         {(claim.cpt_codes ?? []).map((c: any) => (
                           <div key={c.code} className="flex items-center gap-2 text-[12px]">
@@ -353,7 +353,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
 
               {/* Section 3: Financial Summary */}
               <div>
-                <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Financial Summary</div>
+                <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Financial Summary</div>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   {[
                     { label: 'Amount Billed', value: amountBilled, set: setAmountBilled, prefix: true },
@@ -371,7 +371,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                       <label className={`${labelCls} ${bold ? 'font-semibold text-[#1A1A2E]' : ''}`}>{label}</label>
                       <div className="relative">
                         {prefix && (
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999] text-[13px] pointer-events-none">$</span>
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1A1A2E] text-[13px] pointer-events-none">$</span>
                         )}
                         <input
                           type="text"

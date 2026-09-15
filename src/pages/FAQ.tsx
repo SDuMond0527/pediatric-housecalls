@@ -61,7 +61,7 @@ export function FAQ() {
 
       <div className="max-w-3xl mx-auto px-6 py-12 pb-20">
         <h1 className="text-3xl font-semibold text-[#1A1A2E] mb-2">Frequently Asked Questions</h1>
-        <p className="text-[14px] text-[#999] mb-10">About GoRoam Health and our e-prescribing platform</p>
+        <p className="text-[14px] text-[#1A1A2E] mb-10">About GoRoam Health and our e-prescribing platform</p>
 
         <div className="space-y-6">
           {FAQS.map(({ q, a }) => (
@@ -73,7 +73,7 @@ export function FAQ() {
         </div>
       </div>
 
-      <footer className="border-t border-[#E8E8E4] bg-white px-6 py-6 text-center text-[12px] text-[#999]">
+      <footer className="border-t border-[#E8E8E4] bg-white px-6 py-6 text-center text-[12px] text-[#1A1A2E]">
         <div className="flex justify-center gap-6 mb-2">
           <Link to="/terms" className="hover:text-[#7F77DD] transition-colors">Terms of Service</Link>
           <Link to="/privacy" className="hover:text-[#7F77DD] transition-colors">Privacy Policy</Link>

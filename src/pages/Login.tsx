@@ -52,12 +52,12 @@ export function Login() {
             <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
               <PracticeLogo />
             </div>
-            <div className="text-[13px] text-[#999]">Provider portal</div>
+            <div className="text-[13px] text-[#1A1A2E]">Provider portal</div>
           </div>
 
           {DEMO_MODE && !needsNewPassword && (
             <div className="mb-5">
-              <p className="text-[11px] text-[#999] uppercase tracking-wider mb-2.5">Try a demo role</p>
+              <p className="text-[11px] text-[#1A1A2E] uppercase tracking-wider mb-2.5">Try a demo role</p>
               <div className="space-y-2">
                 {([
                   { role: 'Admin / Provider', desc: 'Full access: scheduling, patient notes, analytics, provider management', bg: '#FAEEDA', tc: '#633806', creds: DEMO_CREDS.admin },
@@ -107,13 +107,13 @@ export function Login() {
             )}
           </div>
 
-          <p className="text-center text-[12px] text-[#999] mt-4">
+          <p className="text-center text-[12px] text-[#1A1A2E] mt-4">
             {DEMO_MODE
               ? <>Try the <Link to="/family/login" className="text-[#7F77DD] hover:underline">family portal →</Link></>
               : 'Contact your administrator if you need access.'
             }
           </p>
-          <p className="text-center text-[11px] text-[#bbb] mt-3">
+          <p className="text-center text-[11px] text-[#1A1A2E] mt-3">
             <Link to="/terms" className="hover:text-[#7F77DD]">Terms of Service</Link>
             {' · '}
             <Link to="/privacy" className="hover:text-[#7F77DD]">Privacy Policy</Link>

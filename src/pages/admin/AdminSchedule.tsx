@@ -19,7 +19,7 @@ function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: 
       </button>
     )
   }
-  if (state.loading) return <p className="text-[12px] text-[#999]">Checking eligibility…</p>
+  if (state.loading) return <p className="text-[12px] text-[#1A1A2E]">Checking eligibility…</p>
   if (state.error) {
     return (
       <div className="flex items-start gap-2 p-3 bg-[#FEF3E8] border border-[#FAC775] rounded-lg">
@@ -56,55 +56,55 @@ function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: 
       <div className="bg-white px-3 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5">
         {d.planName && (
           <div className="col-span-2">
-            <span className="text-[10px] text-[#999] block">Plan</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Plan</span>
             <span className="text-[12px] text-[#1A1A2E]">{d.planName}</span>
           </div>
         )}
         {d.memberId && (
           <div>
-            <span className="text-[10px] text-[#999] block">Member ID</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Member ID</span>
             <span className="text-[12px] text-[#1A1A2E]">{d.memberId}</span>
           </div>
         )}
         {d.groupNumber && (
           <div>
-            <span className="text-[10px] text-[#999] block">Group #</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Group #</span>
             <span className="text-[12px] text-[#1A1A2E]">{d.groupNumber}</span>
           </div>
         )}
         {d.deductible?.individual?.total != null && (
           <div>
-            <span className="text-[10px] text-[#999] block">Individual deductible</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Individual deductible</span>
             <span className="text-[12px] text-[#1A1A2E]">{fmt$(d.deductible.individual.remaining)} remaining of {fmt$(d.deductible.individual.total)}</span>
           </div>
         )}
         {d.deductible?.family?.total != null && (
           <div>
-            <span className="text-[10px] text-[#999] block">Family deductible</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Family deductible</span>
             <span className="text-[12px] text-[#1A1A2E]">{fmt$(d.deductible.family.remaining)} remaining of {fmt$(d.deductible.family.total)}</span>
           </div>
         )}
         {d.outOfPocket?.individual?.total != null && (
           <div>
-            <span className="text-[10px] text-[#999] block">OOP max (individual)</span>
+            <span className="text-[10px] text-[#1A1A2E] block">OOP max (individual)</span>
             <span className="text-[12px] text-[#1A1A2E]">{fmt$(d.outOfPocket.individual.remaining)} remaining of {fmt$(d.outOfPocket.individual.total)}</span>
           </div>
         )}
         {d.copay != null && (
           <div>
-            <span className="text-[10px] text-[#999] block">Copay</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Copay</span>
             <span className="text-[12px] text-[#1A1A2E]">{fmt$(d.copay)}</span>
           </div>
         )}
         {d.coinsurance != null && (
           <div>
-            <span className="text-[10px] text-[#999] block">Coinsurance</span>
+            <span className="text-[10px] text-[#1A1A2E] block">Coinsurance</span>
             <span className="text-[12px] text-[#1A1A2E]">{d.coinsurance}%</span>
           </div>
         )}
       </div>
       <div className="px-3 py-1.5 border-t border-[#F1EFE8] bg-[#FAFAF8]">
-        <button onClick={onCheck} className="text-[11px] text-[#999] hover:text-[#7F77DD] transition-colors">Re-check</button>
+        <button onClick={onCheck} className="text-[11px] text-[#1A1A2E] hover:text-[#7F77DD] transition-colors">Re-check</button>
       </div>
     </div>
   )
@@ -632,7 +632,7 @@ export function AdminSchedule() {
         <div className="flex items-center gap-2">
           <Phone size={14} className="text-[#7F77DD]" />
           <span className="text-[13px] font-semibold text-[#1A1A2E]">On-call telemedicine schedule</span>
-          <span className="text-[11px] text-[#999]">— covers CMA + telemedicine and IV fluids telemedicine screening</span>
+          <span className="text-[11px] text-[#1A1A2E]">— covers CMA + telemedicine and IV fluids telemedicine screening</span>
         </div>
         {(['NC', 'SC'] as const).map(state => {
           const stateProviders = state === 'NC' ? ncProviders : scProviders
@@ -649,7 +649,7 @@ export function AdminSchedule() {
                   const noCma = dayCmas.length === 0
                   return (
                     <div key={date} className={`border rounded-lg p-2.5 ${noCma ? 'bg-[#FAFAF8] border-[#E8E8E4]' : 'bg-white border-[#E8E8E4]'}`}>
-                      <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1.5">{label}</div>
+                      <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5">{label}</div>
                       {/* CMA working hours */}
                       {noCma ? (
                         <div className="text-[10px] text-[#CCC] italic mb-1.5">No CMA scheduled</div>
@@ -679,7 +679,7 @@ export function AdminSchedule() {
                 })}
               </div>
               {stateProviders.length === 0 && (
-                <p className="text-[12px] text-[#999] mt-1">No providers with {state} license on file.</p>
+                <p className="text-[12px] text-[#1A1A2E] mt-1">No providers with {state} license on file.</p>
               )}
             </div>
           )
@@ -688,7 +688,7 @@ export function AdminSchedule() {
 
       <div className="p-6 space-y-6">
         {!loading && grouped.length === 0 && (
-          <div className="text-center py-16 text-[#999] text-[14px]">No appointments for this date.</div>
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">No appointments for this date.</div>
         )}
         {grouped.map(({ provider, appts }) => (
           <div key={provider.id}>
@@ -764,7 +764,7 @@ export function AdminSchedule() {
                       <span className="text-[12px] text-[#555] hidden sm:block">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</span>
                       <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
-                      <ChevronDown size={13} className={`text-[#999] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={13} className={`text-[#1A1A2E] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                     {isExpanded && (
                       <div className="px-4 pb-4 border-t border-[#E8E8E4] pt-3" onClick={e => e.stopPropagation()}>
@@ -805,7 +805,7 @@ export function AdminSchedule() {
                           const cardBack = noteMap.CARDBACK || ''
 
                           const F = ({ label, value }: { label: string; value: string }) => value ? (
-                            <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+                            <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">{label}</span>{value}</div>
                           ) : null
 
                           const hasAnyData = name || dob || phone || email || cc || allergies || insurance
@@ -815,13 +815,13 @@ export function AdminSchedule() {
                               {(name || familyName || dob || sex || phone || email || address) && (
                                 <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                   <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
-                                  {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+                                  {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
                                   <F label="Family" value={familyName} />
                                   <F label="Date of birth" value={dob} />
                                   <F label="Sex" value={sex} />
                                   {phone && (
                                     <div className="text-[13px]">
-                                      <span className="text-[#999] text-[11px] block">Phone</span>
+                                      <span className="text-[#1A1A2E] text-[11px] block">Phone</span>
                                       <div className="flex items-center justify-between gap-2">
                                         <span>{phone}</span>
                                         <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
@@ -925,7 +925,7 @@ export function AdminSchedule() {
                             </div>
                           </div>
                           {!(appt.id in notes) ? (
-                            <div className="px-3 py-2 text-[12px] text-[#999]">Loading…</div>
+                            <div className="px-3 py-2 text-[12px] text-[#1A1A2E]">Loading…</div>
                           ) : !notes[appt.id] ? (
                             <button
                               onClick={() => { setNoteModalChildId(appt.child_id ?? null); setNoteModalAppt(appt) }}
@@ -953,25 +953,25 @@ export function AdminSchedule() {
                                 )}
                                 {n.chief_complaint && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Chief Complaint</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-0.5">Chief Complaint</div>
                                     <div className="text-[#1A1A2E]">{n.chief_complaint}</div>
                                   </div>
                                 )}
                                 {vitalItems.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-1">Vitals</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-1">Vitals</div>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[#555]">{vitalItems.map((s, i) => <span key={i}>{s as string}</span>)}</div>
                                   </div>
                                 )}
                                 {n.subjective && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Subjective (HPI)</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-0.5">Subjective (HPI)</div>
                                     <div className="text-[#555] whitespace-pre-wrap">{n.subjective}</div>
                                   </div>
                                 )}
                                 {n.objective && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Objective / Physical Exam</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-0.5">Objective / Physical Exam</div>
                                     <div className="text-[#555] whitespace-pre-wrap">{n.objective}</div>
                                   </div>
                                 )}
@@ -985,7 +985,7 @@ export function AdminSchedule() {
                                           <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-20 flex-shrink-0">{d.code}</span>
                                           <span className="text-[#555] text-[12px] flex-1">{d.name}</span>
                                           <button onClick={() => setEditDx(prev => prev.filter((_, j) => j !== i))}
-                                            className="text-[#999] hover:text-[#c00] transition-colors flex-shrink-0">
+                                            className="text-[#1A1A2E] hover:text-[#c00] transition-colors flex-shrink-0">
                                             <X size={13} />
                                           </button>
                                         </div>
@@ -993,11 +993,11 @@ export function AdminSchedule() {
                                     </div>
                                     <div className="relative">
                                       <div className="flex items-center gap-1.5 border border-[#E8E8E4] rounded-lg px-2.5 py-1.5 bg-white">
-                                        <Search size={12} className="text-[#999] flex-shrink-0" />
+                                        <Search size={12} className="text-[#1A1A2E] flex-shrink-0" />
                                         <input autoFocus value={icdQuery} onChange={e => searchIcd(e.target.value)}
                                           placeholder="Search ICD-10 code or diagnosis name…"
-                                          className="flex-1 text-[12px] outline-none bg-transparent placeholder:text-[#ccc]" />
-                                        {icdLoading && <span className="text-[10px] text-[#999]">…</span>}
+                                          className="flex-1 text-[12px] outline-none bg-transparent placeholder:text-[#1A1A2E]" />
+                                        {icdLoading && <span className="text-[10px] text-[#1A1A2E]">…</span>}
                                       </div>
                                       {icdResults.length > 0 && (
                                         <div className="absolute top-full left-0 right-0 z-20 bg-white border border-[#E8E8E4] rounded-lg shadow-lg mt-1 overflow-hidden">
@@ -1024,14 +1024,14 @@ export function AdminSchedule() {
                                 ) : (
                                   <div>
                                     <div className="flex items-center justify-between mb-1">
-                                      <div className="text-[10px] text-[#999] uppercase tracking-wider">Diagnoses</div>
+                                      <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider">Diagnoses</div>
                                       <button onClick={() => startEditDx(appt.id)}
                                         className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:text-[#534AB7] transition-colors">
                                         <Pencil size={10} /> Edit
                                       </button>
                                     </div>
                                     {(n.diagnoses ?? []).length === 0 ? (
-                                      <div className="text-[#999] italic text-[12px]">No diagnoses recorded.</div>
+                                      <div className="text-[#1A1A2E] italic text-[12px]">No diagnoses recorded.</div>
                                     ) : (
                                       <div className="space-y-1">
                                         {n.diagnoses.map((d: any, i: number) => (
@@ -1046,13 +1046,13 @@ export function AdminSchedule() {
                                 )}
                                 {n.assessment && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Assessment</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-0.5">Assessment</div>
                                     <div className="text-[#555] whitespace-pre-wrap">{n.assessment}</div>
                                   </div>
                                 )}
                                 {n.plan && (
                                   <div>
-                                    <div className="text-[10px] text-[#999] uppercase tracking-wider mb-0.5">Plan</div>
+                                    <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider mb-0.5">Plan</div>
                                     <div className="text-[#555] whitespace-pre-wrap">{n.plan}</div>
                                   </div>
                                 )}
@@ -1067,20 +1067,20 @@ export function AdminSchedule() {
                                           <span className="font-mono text-[#7F77DD] font-medium text-[12px] w-16 flex-shrink-0">{c.code}</span>
                                           <span className="text-[#555] text-[12px] flex-1 truncate min-w-0">{c.description}</span>
                                           <div className="flex items-center gap-1 flex-shrink-0">
-                                            <label className="text-[10px] text-[#999]">Mod:</label>
+                                            <label className="text-[10px] text-[#1A1A2E]">Mod:</label>
                                             <input value={c.modifier ?? ''} maxLength={4}
                                               onChange={e => setEditCpt(prev => prev.map((x, j) => j === i ? { ...x, modifier: e.target.value.toUpperCase() } : x))}
                                               placeholder="25"
                                               className="w-12 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] font-mono uppercase outline-none focus:border-[#7F77DD]" />
                                           </div>
                                           <button onClick={() => setEditCpt(prev => prev.filter((_, j) => j !== i))}
-                                            className="text-[#999] hover:text-[#c00] transition-colors flex-shrink-0">
+                                            className="text-[#1A1A2E] hover:text-[#c00] transition-colors flex-shrink-0">
                                             <X size={13} />
                                           </button>
                                         </div>
                                         {c.ndc_code && (
                                           <div className="text-[10px] text-[#555] pl-[68px] mt-0.5">
-                                            <span className="text-[#999]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
+                                            <span className="text-[#1A1A2E]">NDC:</span> <span className="font-mono">{c.ndc_code}</span>
                                           </div>
                                         )}
                                         </div>
@@ -1104,7 +1104,7 @@ export function AdminSchedule() {
                                           <div className="flex border-b border-[#F1EFE8]">
                                             {(['Procedure', 'Non-Covered Services'] as const).map(tab => (
                                               <button key={tab} onClick={() => setCptPickerTab(tab)}
-                                                className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${cptPickerTab === tab ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#999]'}`}>
+                                                className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${cptPickerTab === tab ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#1A1A2E]'}`}>
                                                 {tab === 'Procedure' ? 'Insurance Procedures' : 'Convenience & Self-Pay'}
                                               </button>
                                             ))}
@@ -1126,13 +1126,13 @@ export function AdminSchedule() {
                                                 </button>
                                               ))}
                                             {feeSchedule.filter(c => c.category === cptPickerTab).filter(c => !cptPickerSearch || c.code.toLowerCase().includes(cptPickerSearch.toLowerCase()) || c.description.toLowerCase().includes(cptPickerSearch.toLowerCase())).filter(c => !editCpt.find((x: any) => x.code === c.code)).length === 0 && (
-                                              <div className="px-3 py-2 text-[12px] text-[#999]">No codes match.</div>
+                                              <div className="px-3 py-2 text-[12px] text-[#1A1A2E]">No codes match.</div>
                                             )}
                                           </div>
                                         </div>
                                       )}
                                     </div>
-                                    <p className="text-[10px] text-[#999]">Enter 2-digit modifier codes (e.g. 25, 59, 26) without the dash.</p>
+                                    <p className="text-[10px] text-[#1A1A2E]">Enter 2-digit modifier codes (e.g. 25, 59, 26) without the dash.</p>
                                     {noteError && editNote?.apptId === appt.id && editNote.section === 'cpt' && (
                                       <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{noteError}</div>
                                     )}
@@ -1144,7 +1144,7 @@ export function AdminSchedule() {
                                 ) : (
                                   <div>
                                     <div className="flex items-center justify-between mb-1">
-                                      <div className="text-[10px] text-[#999] uppercase tracking-wider">CPT Codes & Charges</div>
+                                      <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wider">CPT Codes & Charges</div>
                                       <button onClick={() => startEditCpt(appt.id)}
                                         className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:text-[#534AB7] transition-colors">
                                         <Pencil size={10} /> Edit
@@ -1160,12 +1160,12 @@ export function AdminSchedule() {
                                               <span className="font-mono text-[#7F77DD] font-medium flex-shrink-0">{c.code}</span>
                                               <span className="text-[#555] truncate">{c.description}</span>
                                               {c.category === 'Non-Covered Services' && (
-                                                <span className="text-[10px] text-[#999] italic flex-shrink-0">non-covered</span>
+                                                <span className="text-[10px] text-[#1A1A2E] italic flex-shrink-0">non-covered</span>
                                               )}
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
                                               <div className="flex items-center gap-1">
-                                                <label className="text-[10px] text-[#999] whitespace-nowrap">Mod:</label>
+                                                <label className="text-[10px] text-[#1A1A2E] whitespace-nowrap">Mod:</label>
                                                 <input
                                                   value={c.modifier ?? ''}
                                                   maxLength={3}
@@ -1218,7 +1218,7 @@ export function AdminSchedule() {
                                                     }}
                                                     className="w-14 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[12px] outline-none focus:border-[#7F77DD]"
                                                   />
-                                                  <label className="text-[10px] text-[#999] whitespace-nowrap">units</label>
+                                                  <label className="text-[10px] text-[#1A1A2E] whitespace-nowrap">units</label>
                                                 </div>
                                               )}
                                               <span className="text-[#1A1A2E] font-medium">${(parseFloat(c.charge_amount ?? 0) * (parseInt(c.units, 10) || 1)).toFixed(2)}</span>
@@ -1290,18 +1290,18 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{doneTarget.visit_type}</div>
-              <div className="text-[#999]">{doneTarget.zone}</div>
+              <div className="text-[#1A1A2E]">{doneTarget.zone}</div>
             </div>
             <div className="mb-4">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">
-                After-visit instructions <span className="text-[#999] normal-case font-normal">(optional)</span>
+                After-visit instructions <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
               </label>
               <textarea rows={4}
                 placeholder="e.g. Rest and fluids for 48 hours. Recheck temperature in the morning. Call if fever returns above 102°F."
                 value={doneInstructions}
                 onChange={e => setDoneInstructions(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none" />
-              <p className="text-[11px] text-[#999] mt-1">If provided, the family will see this in their app under past visits.</p>
+              <p className="text-[11px] text-[#1A1A2E] mt-1">If provided, the family will see this in their app under past visits.</p>
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setDoneTarget(null)} disabled={doneSubmitting}>Cancel</Button>
@@ -1326,8 +1326,8 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{cancelApptTarget.visit_type}</div>
-              <div className="text-[#999]">{safeFormatDate(cancelApptTarget.scheduled_date, 'EEEE, MMMM d')} at {cancelApptTarget.scheduled_time ? to12h(cancelApptTarget.scheduled_time) : 'Unknown time'}</div>
-              {cancelApptTarget.zone && <div className="text-[#999]">{cancelApptTarget.zone}</div>}
+              <div className="text-[#1A1A2E]">{safeFormatDate(cancelApptTarget.scheduled_date, 'EEEE, MMMM d')} at {cancelApptTarget.scheduled_time ? to12h(cancelApptTarget.scheduled_time) : 'Unknown time'}</div>
+              {cancelApptTarget.zone && <div className="text-[#1A1A2E]">{cancelApptTarget.zone}</div>}
             </div>
             <p className="text-[13px] text-[#555] mb-4">The provider and family will be notified. Waitlist families in the same zone will be offered this slot.</p>
             <div className="flex gap-2">
@@ -1351,7 +1351,7 @@ export function AdminSchedule() {
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
-              <div className="text-[#999]">Currently: {safeFormatDate(rescheduleTarget.scheduled_date, 'EEEE, MMMM d')} at {rescheduleTarget.scheduled_time ? to12h(rescheduleTarget.scheduled_time) : 'Unknown time'}</div>
+              <div className="text-[#1A1A2E]">Currently: {safeFormatDate(rescheduleTarget.scheduled_date, 'EEEE, MMMM d')} at {rescheduleTarget.scheduled_time ? to12h(rescheduleTarget.scheduled_time) : 'Unknown time'}</div>
             </div>
             <div className="space-y-3 mb-5">
               <div>
@@ -1384,7 +1384,7 @@ export function AdminSchedule() {
                 </select>
               </div>
             </div>
-            <p className="text-[12px] text-[#999] mb-4">The provider and family will be notified of the changes.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">The provider and family will be notified of the changes.</p>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setRescheduleTarget(null)} disabled={rescheduleBusy}>Cancel</Button>
               <Button variant="teal" className="flex-1" loading={rescheduleBusy} onClick={confirmReschedule}
@@ -1407,12 +1407,12 @@ export function AdminSchedule() {
               </div>
               <div>
                 <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Move to waitlist</h2>
-                <p className="text-[12px] text-[#999]">Appointment will be cancelled and patient added to waitlist</p>
+                <p className="text-[12px] text-[#1A1A2E]">Appointment will be cancelled and patient added to waitlist</p>
               </div>
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{waitlistTarget.visit_type}</div>
-              <div className="text-[#999]">{safeFormatDate(waitlistTarget.scheduled_date, 'EEEE, MMMM d')} at {waitlistTarget.scheduled_time ? to12h(waitlistTarget.scheduled_time) : 'Unknown time'}</div>
+              <div className="text-[#1A1A2E]">{safeFormatDate(waitlistTarget.scheduled_date, 'EEEE, MMMM d')} at {waitlistTarget.scheduled_time ? to12h(waitlistTarget.scheduled_time) : 'Unknown time'}</div>
               {(() => {
                 const nm = waitlistTarget.notes?.split('|').find(p => p.startsWith('PATIENT:'))?.replace('PATIENT:', '').trim()
                 return nm ? <div className="text-[#555]">Patient: <strong>{nm}</strong></div> : null
@@ -1427,7 +1427,7 @@ export function AdminSchedule() {
                 <option value="VA">Virginia</option>
               </select>
             </div>
-            <p className="text-[12px] text-[#999] mb-4">All providers licensed in {waitlistState} and all admins will be notified immediately.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">All providers licensed in {waitlistState} and all admins will be notified immediately.</p>
             {waitlistError && (
               <div className="text-[12px] text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] rounded-lg px-3 py-2 mb-3">{waitlistError}</div>
             )}
@@ -1472,11 +1472,11 @@ export function AdminSchedule() {
                     {[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}
                   </div>
                   {selectedPatient.family_display_name && (
-                    <div className="text-[11px] text-[#999]">{selectedPatient.family_display_name}</div>
+                    <div className="text-[11px] text-[#1A1A2E]">{selectedPatient.family_display_name}</div>
                   )}
                 </div>
                 <button onClick={() => { setSelectedPatient(null); setForm(f => ({ ...f, patientName: '', dob: '', gender: '', phone: '', email: '', address: '', zip: '', zone: '' })) }}
-                  className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-2">× Clear</button>
+                  className="text-[11px] text-[#1A1A2E] hover:text-[#1A1A2E] ml-2">× Clear</button>
               </div>
             ) : (
               <>
@@ -1485,10 +1485,10 @@ export function AdminSchedule() {
                   onBlur={() => setTimeout(() => setPatientResults([]), 150)}
                   className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD]" />
                 {patientSearching && (
-                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#999]">Searching…</div>
+                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#1A1A2E]">Searching…</div>
                 )}
                 {!patientSearching && patientSearch.trim() && patientResults.length === 0 && (
-                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#999]">No patients found</div>
+                  <div className="mt-1 px-3 py-1.5 text-[12px] text-[#1A1A2E]">No patients found</div>
                 )}
                 {!patientSearching && patientResults.length > 0 && (
                   <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-xl shadow-lg max-h-48 overflow-y-auto">
@@ -1498,7 +1498,7 @@ export function AdminSchedule() {
                         <div className="text-[13px] font-medium text-[#1A1A2E]">
                           {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
                         </div>
-                        <div className="text-[11px] text-[#999]">
+                        <div className="text-[11px] text-[#1A1A2E]">
                           {child.family_display_name || child.family_email || ''}
                           {child.date_of_birth ? ` · DOB ${String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0]}` : ''}
                         </div>
@@ -1585,7 +1585,7 @@ export function AdminSchedule() {
                   onChange={e => setForm(f => ({ ...f, selfPay: e.target.checked }))} className="mt-0.5" />
                 <div>
                   <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-                  <div className="text-[11px] text-[#999]">Check if not filing insurance.</div>
+                  <div className="text-[11px] text-[#1A1A2E]">Check if not filing insurance.</div>
                 </div>
               </label>
               {!form.selfPay && (

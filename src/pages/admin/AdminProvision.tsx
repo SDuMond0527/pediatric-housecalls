@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Building2, Plus, CheckCircle2, AlertCircle, UserPlus, ChevronDown, ChevronUp, Map, Trash2, ListChecks } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getPractices, createPractice, createProviderForPractice, getPracticeZones, upsertPracticeZone, updatePracticeZone, deletePracticeZone, getPracticeVisitTypes, upsertPracticeVisitType, deletePracticeVisitType } from '../../lib/api'
@@ -108,6 +108,7 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
     getPracticeZones(practiceId)
@@ -125,6 +126,11 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
       is_waitlist_only: zone.is_waitlist_only || false,
     })
     setError(null)
+    // Scroll the edit form into view — otherwise it lives at the bottom of a
+    // long zones list and Edit looks like it did nothing.
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }
 
   function cancelEdit() {
@@ -186,27 +192,27 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
         Service zones — {practiceName}
       </div>
       {loading ? (
-        <div className="text-[12px] text-[#999]">Loading zones…</div>
+        <div className="text-[12px] text-[#1A1A2E]">Loading zones…</div>
       ) : zones.length === 0 ? (
-        <div className="text-[12px] text-[#999] mb-3">No zones defined yet.</div>
+        <div className="text-[12px] text-[#1A1A2E] mb-3">No zones defined yet.</div>
       ) : (
         <div className="space-y-1.5 mb-3">
           {zones.map(z => (
             <div key={z.id} className={`flex items-center gap-2 text-[13px] text-[#555] border rounded-lg px-3 py-2 ${editingId === z.id ? 'bg-[#F7F6FF] border-[#7F77DD]' : 'bg-[#FAFAF8] border-[#E8E8E4]'}`}>
               <div className="flex-1 min-w-0">
                 <span className="font-medium text-[#1A1A2E]">{z.zone_name}</span>
-                {z.state && <span className="text-[#999] ml-1.5">· {z.state}</span>}
-                <span className="text-[#bbb] ml-1.5">· {(z.zips || []).length} ZIP{(z.zips || []).length !== 1 ? 's' : ''}</span>
+                {z.state && <span className="text-[#1A1A2E] ml-1.5">· {z.state}</span>}
+                <span className="text-[#1A1A2E] ml-1.5">· {(z.zips || []).length} ZIP{(z.zips || []).length !== 1 ? 's' : ''}</span>
                 {z.is_waitlist_only && (
                   <span className="ml-1.5 text-[10px] font-medium bg-[#FAEEDA] text-[#633806] px-1.5 py-0.5 rounded-full">waitlist</span>
                 )}
               </div>
               <button onClick={() => editingId === z.id ? cancelEdit() : startEdit(z)}
-                className="p-1 text-[#999] hover:text-[#7F77DD] hover:bg-[#F0EFFE] rounded transition-colors flex-shrink-0 text-[11px] font-medium px-2">
+                className="p-1 text-[#1A1A2E] hover:text-[#7F77DD] hover:bg-[#F0EFFE] rounded transition-colors flex-shrink-0 text-[11px] font-medium px-2">
                 {editingId === z.id ? 'Cancel' : 'Edit'}
               </button>
               <button onClick={() => handleDelete(z.id)}
-                className="p-1 text-[#999] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
+                className="p-1 text-[#1A1A2E] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
                 <Trash2 size={13} />
               </button>
             </div>
@@ -214,7 +220,7 @@ function ZonePanel({ practiceId, practiceName }: { practiceId: string; practiceN
         </div>
       )}
 
-      <form onSubmit={handleSave} className="bg-[#F7F6FF] border border-[#AFA9EC] rounded-lg p-3 space-y-2">
+      <form onSubmit={handleSave} ref={formRef} className="bg-[#F7F6FF] border border-[#AFA9EC] rounded-lg p-3 space-y-2">
         <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider">{editingId ? 'Edit zone' : 'Add zone'}</div>
         <div className="grid grid-cols-2 gap-2">
           <Input label="Zone name" value={form.zone_name}
@@ -320,9 +326,9 @@ function VisitTypePanel({ practiceId, practiceName }: { practiceId: string; prac
         Visit types — {practiceName}
       </div>
       {loading ? (
-        <div className="text-[12px] text-[#999]">Loading…</div>
+        <div className="text-[12px] text-[#1A1A2E]">Loading…</div>
       ) : visitTypes.length === 0 ? (
-        <div className="text-[12px] text-[#999] mb-3">No visit types defined yet.</div>
+        <div className="text-[12px] text-[#1A1A2E] mb-3">No visit types defined yet.</div>
       ) : (
         <div className="space-y-1.5 mb-3">
           {visitTypes.map(v => (
@@ -335,12 +341,12 @@ function VisitTypePanel({ practiceId, practiceName }: { practiceId: string; prac
                   {v.badge_label || v.visit_type}
                 </span>
                 <span className="font-medium text-[#1A1A2E]">{v.visit_type}</span>
-                {v.base_price && <span className="text-[#999] ml-1.5">· ${v.base_price}</span>}
-                <span className="text-[#bbb] ml-1.5">· {v.duration_minutes}min</span>
-                {!v.is_active && <span className="ml-1.5 text-[10px] font-medium bg-[#F5F5F3] text-[#999] px-1.5 py-0.5 rounded-full">inactive</span>}
+                {v.base_price && <span className="text-[#1A1A2E] ml-1.5">· ${v.base_price}</span>}
+                <span className="text-[#1A1A2E] ml-1.5">· {v.duration_minutes}min</span>
+                {!v.is_active && <span className="ml-1.5 text-[10px] font-medium bg-[#F5F5F3] text-[#1A1A2E] px-1.5 py-0.5 rounded-full">inactive</span>}
               </div>
               <button onClick={() => handleDelete(v.id)}
-                className="p-1 text-[#999] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
+                className="p-1 text-[#1A1A2E] hover:text-[#791F1F] hover:bg-[#FCEBEB] rounded transition-colors flex-shrink-0">
                 <Trash2 size={13} />
               </button>
             </div>
@@ -492,7 +498,7 @@ export function AdminProvision() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-semibold text-[#1A1A2E]">Practices</h1>
-          <p className="text-[13px] text-[#999] mt-0.5">Manage all practices on this platform</p>
+          <p className="text-[13px] text-[#1A1A2E] mt-0.5">Manage all practices on this platform</p>
         </div>
         <Button onClick={() => { setShowForm(v => !v); setError(null) }} size="sm">
           <Plus size={14} /> {showForm ? 'Cancel' : 'New practice'}
@@ -572,9 +578,9 @@ export function AdminProvision() {
       )}
 
       {loading ? (
-        <div className="text-[13px] text-[#999]">Loading practices…</div>
+        <div className="text-[13px] text-[#1A1A2E]">Loading practices…</div>
       ) : practices.length === 0 ? (
-        <div className="text-[13px] text-[#999]">No practices yet.</div>
+        <div className="text-[13px] text-[#1A1A2E]">No practices yet.</div>
       ) : (
         <div className="space-y-3">
           {practices.map(p => (
@@ -591,7 +597,7 @@ export function AdminProvision() {
                       <span className="text-[11px] font-medium bg-[#F1EFE8] text-[#888] px-2 py-0.5 rounded-full">inactive</span>
                     )}
                   </div>
-                  <div className="text-[12px] text-[#999] mt-0.5">
+                  <div className="text-[12px] text-[#1A1A2E] mt-0.5">
                     slug: <span className="font-mono">{p.slug}</span>
                     {(p.city || p.state) && ` · ${[p.city, p.state].filter(Boolean).join(', ')}`}
                     {p.email && ` · ${p.email}`}
@@ -602,7 +608,7 @@ export function AdminProvision() {
                     <span className="text-[11px] font-medium bg-[#7F77DD]/10 text-[#7F77DD] px-2.5 py-1 rounded-full">
                       {p.subscription_tier}
                     </span>
-                    <div className="text-[11px] text-[#bbb] mt-1">
+                    <div className="text-[11px] text-[#1A1A2E] mt-1">
                       {new Date(p.created_at).toLocaleDateString()}
                     </div>
                   </div>
@@ -640,8 +646,8 @@ export function AdminProvision() {
                       <div className="flex items-center gap-2 text-[13px]">
                         <CheckCircle2 size={13} className="text-[#1D9E75] flex-shrink-0" />
                         <span className="font-medium text-[#1A1A2E]">{prov.name}</span>
-                        <span className="text-[#bbb]">·</span>
-                        <span className="text-[#999]">{prov.role}</span>
+                        <span className="text-[#1A1A2E]">·</span>
+                        <span className="text-[#1A1A2E]">{prov.role}</span>
                       </div>
                       {prov.password && (
                         <div className="mt-1.5 flex items-center gap-2">
@@ -653,7 +659,7 @@ export function AdminProvision() {
                           >Copy</button>
                         </div>
                       )}
-                      <p className="text-[11px] text-[#999] mt-1">Share this password directly — no email was sent.</p>
+                      <p className="text-[11px] text-[#1A1A2E] mt-1">Share this password directly — no email was sent.</p>
                     </div>
                   ))}
                 </div>

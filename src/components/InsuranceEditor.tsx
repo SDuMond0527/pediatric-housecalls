@@ -119,7 +119,7 @@ export function InsuranceEditor({
           className="mt-0.5" />
         <div>
           <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-          <div className="text-[11px] text-[#999]">Check this if the family isn't filing insurance.</div>
+          <div className="text-[11px] text-[#1A1A2E]">Check this if the family isn't filing insurance.</div>
         </div>
       </label>
 

@@ -65,7 +65,7 @@ export function AdminAuditLog() {
         </div>
         <div>
           <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">PHI Audit Log</h1>
-          <p className="text-[12px] text-[#999] mt-0.5">HIPAA access log — all patient data views recorded here</p>
+          <p className="text-[12px] text-[#1A1A2E] mt-0.5">HIPAA access log — all patient data views recorded here</p>
         </div>
       </div>
 
@@ -88,7 +88,7 @@ export function AdminAuditLog() {
         </div>
 
         <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999]" />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -109,7 +109,7 @@ export function AdminAuditLog() {
 
       {/* Summary bar */}
       {!loading && !error && (
-        <div className="text-[12px] text-[#999] mb-3">
+        <div className="text-[12px] text-[#1A1A2E] mb-3">
           {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
           {search ? ` matching "${search}"` : ''} — {DAYS_OPTIONS.find(o => o.value === days)?.label.toLowerCase()}
         </div>
@@ -118,31 +118,31 @@ export function AdminAuditLog() {
       {/* Table */}
       <div className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden shadow-sm">
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#999]">Loading…</div>
+          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">Loading…</div>
         ) : error ? (
           <div className="flex items-center justify-center h-48 text-[13px] text-red-500">{error}</div>
         ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#999]">No audit entries found</div>
+          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">No audit entries found</div>
         ) : (
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Timestamp</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Provider</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Action</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Resource</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">ID</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Timestamp</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Provider</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Action</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Resource</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1EFE8]">
               {filtered.map(row => (
                 <tr key={row.id} className="hover:bg-[#FAFAF8] transition-colors">
-                  <td className="px-4 py-3 text-[#999] tabular-nums whitespace-nowrap">
+                  <td className="px-4 py-3 text-[#1A1A2E] tabular-nums whitespace-nowrap">
                     {format(new Date(row.created_at), 'MMM d, yyyy h:mm a')}
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-[#1A1A2E]">{row.provider_name}</span>
-                    <span className="ml-1.5 text-[11px] text-[#999]">{row.provider_role}</span>
+                    <span className="ml-1.5 text-[11px] text-[#1A1A2E]">{row.provider_role}</span>
                   </td>
                   <td className="px-4 py-3 text-[#444]">
                     {ACTION_LABELS[row.action] ?? row.action}
@@ -152,7 +152,7 @@ export function AdminAuditLog() {
                       {row.resource_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[#999] font-mono text-[11px] truncate max-w-[160px]">
+                  <td className="px-4 py-3 text-[#1A1A2E] font-mono text-[11px] truncate max-w-[160px]">
                     {row.resource_id ?? '—'}
                   </td>
                 </tr>

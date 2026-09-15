@@ -28,7 +28,7 @@ function StatCard({ label, value, sub, color, bg }: { label: string; value: numb
       <div className="w-8 h-8 rounded-lg mb-3 flex-shrink-0" style={{ background: bg }} />
       <div className="font-display text-3xl font-semibold mb-1" style={{ color }}>{value}</div>
       <div className="text-[13px] font-medium text-[#1A1A2E]">{label}</div>
-      <div className="text-[11px] text-[#999] mt-0.5">{sub}</div>
+      <div className="text-[11px] text-[#1A1A2E] mt-0.5">{sub}</div>
     </div>
   )
 }
@@ -38,7 +38,7 @@ function HBar({ label, count, max, color }: { label: string; count: number; max:
     <div>
       <div className="flex items-center justify-between text-[13px] mb-1.5">
         <span className="text-[#1A1A2E]">{label}</span>
-        <span className="text-[#999] font-medium tabular-nums">{count}</span>
+        <span className="text-[#1A1A2E] font-medium tabular-nums">{count}</span>
       </div>
       <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-500"
@@ -77,7 +77,7 @@ export function AdminAnalytics() {
   }, [])
 
   if (loading) return (
-    <div className="p-8 text-[#999] text-[13px]">Loading analytics…</div>
+    <div className="p-8 text-[#1A1A2E] text-[13px]">Loading analytics…</div>
   )
 
   // ── Derived values ──────────────────────────────────────────────────────────
@@ -232,9 +232,9 @@ export function AdminAnalytics() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10 flex items-center justify-between">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Analytics</div>
-          <div className="text-[12px] text-[#999] mt-0.5">Practice-wide · All time</div>
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">Practice-wide · All time</div>
         </div>
-        <div className="text-[12px] text-[#999]">Updated {format(new Date(), 'MMM d, h:mm a')}</div>
+        <div className="text-[12px] text-[#1A1A2E]">Updated {format(new Date(), 'MMM d, h:mm a')}</div>
       </div>
 
       <div className="p-6 max-w-5xl space-y-6">
@@ -259,7 +259,7 @@ export function AdminAnalytics() {
                   <HBar key={type} label={type} count={count} max={maxVt} color={VT_COLOR[type] ?? '#AFA9EC'} />
                 ))}
               </div>
-            ) : <p className="text-[13px] text-[#999]">No appointments recorded yet.</p>}
+            ) : <p className="text-[13px] text-[#1A1A2E]">No appointments recorded yet.</p>}
           </div>
 
           {/* Status distribution */}
@@ -282,7 +282,7 @@ export function AdminAnalytics() {
                         <div className="flex-1 h-2 bg-[#F1EFE8] rounded-full overflow-hidden">
                           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
                         </div>
-                        <span className="text-[12px] text-[#999] w-16 text-right flex-shrink-0 tabular-nums">{count} · {pct}%</span>
+                        <span className="text-[12px] text-[#1A1A2E] w-16 text-right flex-shrink-0 tabular-nums">{count} · {pct}%</span>
                       </div>
                     )
                   })}
@@ -292,14 +292,14 @@ export function AdminAnalytics() {
                   <span className="font-semibold text-[#1D9E75]">{completionRate}%</span>
                 </div>
               </>
-            ) : <p className="text-[13px] text-[#999]">No appointments recorded yet.</p>}
+            ) : <p className="text-[13px] text-[#1A1A2E]">No appointments recorded yet.</p>}
           </div>
         </div>
 
         {/* Bookings trend */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Booking trend</h3>
-          <p className="text-[12px] text-[#999] mb-5">New family booking requests — last 8 weeks</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-5">New family booking requests — last 8 weeks</p>
           <div className="flex items-end gap-2 h-36">
             {weekCounts.map(w => (
               <div key={w.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
@@ -309,7 +309,7 @@ export function AdminAnalytics() {
                     height: `${Math.max((w.count / maxWeek) * 96, w.count > 0 ? 6 : 2)}px`,
                     background: w.count > 0 ? '#7F77DD' : '#E8E8E4',
                   }} />
-                <div className="text-[10px] text-[#999] text-center leading-tight">{w.label}</div>
+                <div className="text-[10px] text-[#1A1A2E] text-center leading-tight">{w.label}</div>
               </div>
             ))}
           </div>
@@ -319,14 +319,14 @@ export function AdminAnalytics() {
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-4">Provider breakdown</h3>
           {providerRows.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No provider activity recorded yet.</p>
+            <p className="text-[13px] text-[#1A1A2E]">No provider activity recorded yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
                     {['Provider', 'Completed', 'Upcoming', 'Cancelled', 'Total', 'Completion rate'].map(h => (
-                      <th key={h} className="text-left text-[11px] font-medium text-[#999] uppercase tracking-wider pb-2.5 pr-5 whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-5 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -367,7 +367,7 @@ export function AdminAnalytics() {
               ].map(s => (
                 <div key={s.label} className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
                   <div className="font-display text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
-                  <div className="text-[11px] text-[#999] leading-tight">{s.label}</div>
+                  <div className="text-[11px] text-[#1A1A2E] leading-tight">{s.label}</div>
                 </div>
               ))}
             </div>
@@ -383,9 +383,9 @@ export function AdminAnalytics() {
               </>
             )}
             <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
-              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">Waitlist pickups by provider</div>
+              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Waitlist pickups by provider</div>
               {pickupsSorted.length === 0 ? (
-                <p className="text-[13px] text-[#999]">No waitlist pickups recorded yet.</p>
+                <p className="text-[13px] text-[#1A1A2E]">No waitlist pickups recorded yet.</p>
               ) : (
                 <div className="space-y-2.5">
                   {pickupsSorted.map(([name, count]) => (
@@ -408,7 +408,7 @@ export function AdminAnalytics() {
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-4">Waitlist by state</h3>
             {Object.keys(wByState).length === 0 ? (
-              <p className="text-[13px] text-[#999]">No waitlist entries yet.</p>
+              <p className="text-[13px] text-[#1A1A2E]">No waitlist entries yet.</p>
             ) : (
               <div className="space-y-3">
                 {Object.entries(wByState)
@@ -444,14 +444,14 @@ export function AdminAnalytics() {
         <div className="grid lg:grid-cols-2 gap-5">
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
-            <p className="text-[12px] text-[#999] mb-4">Patients removed by admin without a provider pickup</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Patients removed by admin without a provider pickup</p>
             {lostEntries.length === 0 ? (
-              <p className="text-[13px] text-[#999]">No waitlist losses recorded yet.</p>
+              <p className="text-[13px] text-[#1A1A2E]">No waitlist losses recorded yet.</p>
             ) : (
               <div className="space-y-4">
                 <div className="text-center p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg">
                   <div className="font-display text-3xl font-semibold text-[#C0392B] mb-0.5">{lostEntries.length}</div>
-                  <div className="text-[11px] text-[#999]">Total losses</div>
+                  <div className="text-[11px] text-[#1A1A2E]">Total losses</div>
                 </div>
                 <div className="space-y-3">
                   {Object.entries(lossByReason).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
@@ -473,9 +473,9 @@ export function AdminAnalytics() {
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Losses by state</h3>
-            <p className="text-[12px] text-[#999] mb-4">Where are we losing waitlisted patients?</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Where are we losing waitlisted patients?</p>
             {lostEntries.length === 0 ? (
-              <p className="text-[13px] text-[#999]">No waitlist losses recorded yet.</p>
+              <p className="text-[13px] text-[#1A1A2E]">No waitlist losses recorded yet.</p>
             ) : (
               <div className="space-y-3">
                 {Object.entries(lossByState).sort((a, b) => b[1] - a[1]).map(([state, count]) => (
@@ -491,19 +491,19 @@ export function AdminAnalytics() {
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">New vs. returning families</h3>
-            <p className="text-[12px] text-[#999] mb-4">Based on confirmed bookings</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Based on confirmed bookings</p>
             {confirmedBookings.length === 0 ? (
-              <p className="text-[13px] text-[#999]">No confirmed bookings yet.</p>
+              <p className="text-[13px] text-[#1A1A2E]">No confirmed bookings yet.</p>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
                     <div className="font-display text-2xl font-semibold text-[#378ADD] mb-0.5">{newFamilies}</div>
-                    <div className="text-[11px] text-[#999]">First-time visits</div>
+                    <div className="text-[11px] text-[#1A1A2E]">First-time visits</div>
                   </div>
                   <div className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
                     <div className="font-display text-2xl font-semibold text-[#1D9E75] mb-0.5">{returningVisits}</div>
-                    <div className="text-[11px] text-[#999]">Return visits</div>
+                    <div className="text-[11px] text-[#1A1A2E]">Return visits</div>
                   </div>
                 </div>
                 <div className="h-2 bg-[#F1EFE8] rounded-full overflow-hidden mb-2 flex">
@@ -520,9 +520,9 @@ export function AdminAnalytics() {
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Broadcast pickup rate</h3>
-            <p className="text-[12px] text-[#999] mb-4">How often urgent/open requests get claimed</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">How often urgent/open requests get claimed</p>
             {totalBroadcasts === 0 ? (
-              <p className="text-[13px] text-[#999]">No broadcasts sent yet.</p>
+              <p className="text-[13px] text-[#1A1A2E]">No broadcasts sent yet.</p>
             ) : (
               <>
                 <div className="grid grid-cols-3 gap-3 mb-4">
@@ -533,7 +533,7 @@ export function AdminAnalytics() {
                   ].map(s => (
                     <div key={s.label} className="text-center p-3 bg-[#FAFAF8] rounded-lg border border-[#E8E8E4]">
                       <div className="font-display text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
-                      <div className="text-[11px] text-[#999] leading-tight">{s.label}</div>
+                      <div className="text-[11px] text-[#1A1A2E] leading-tight">{s.label}</div>
                     </div>
                   ))}
                 </div>
@@ -558,7 +558,7 @@ export function AdminAnalytics() {
         {zoneSorted.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by zone</h3>
-            <p className="text-[12px] text-[#999] mb-4">Geographic distribution of all completed appointments</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Geographic distribution of all completed appointments</p>
             <div className="space-y-3">
               {zoneSorted.map(([zone, count]) => (
                 <HBar key={zone} label={zone} count={count} max={maxZone} color="#7F77DD" />
@@ -570,7 +570,7 @@ export function AdminAnalytics() {
         {/* On-call shifts */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">On-call hours</h3>
-          <p className="text-[12px] text-[#999] mb-5">MD/NP on-call coverage — last 8 weeks</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-5">MD/NP on-call coverage — last 8 weeks</p>
           <div className="flex items-end gap-2 h-36 mb-6">
             {onCallWeekCounts.map(w => (
               <div key={w.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
@@ -580,12 +580,12 @@ export function AdminAnalytics() {
                     height: `${Math.max((w.count / maxOnCallWeek) * 96, w.count > 0 ? 6 : 2)}px`,
                     background: w.count > 0 ? '#1D9E75' : '#E8E8E4',
                   }} />
-                <div className="text-[10px] text-[#999] text-center leading-tight">{w.label}</div>
+                <div className="text-[10px] text-[#1A1A2E] text-center leading-tight">{w.label}</div>
               </div>
             ))}
           </div>
           {onCallSorted.length === 0 ? (
-            <p className="text-[13px] text-[#999]">No on-call shifts recorded yet.</p>
+            <p className="text-[13px] text-[#1A1A2E]">No on-call shifts recorded yet.</p>
           ) : (
             <div className="space-y-2.5">
               {onCallSorted.map(([name, count]) => {
@@ -616,16 +616,16 @@ export function AdminAnalytics() {
                         <table className="w-full text-[12px]">
                           <thead>
                             <tr className="bg-[#FAFAF8] border-b border-[#E8E8E4]">
-                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Date</th>
-                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">State</th>
-                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Hours</th>
-                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#999] uppercase tracking-wider">Window</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#1A1A2E] uppercase tracking-wider">Date</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#1A1A2E] uppercase tracking-wider">State</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#1A1A2E] uppercase tracking-wider">Hours</th>
+                              <th className="text-left px-3 py-2 text-[10px] font-medium text-[#1A1A2E] uppercase tracking-wider">Window</th>
                             </tr>
                           </thead>
                           <tbody>
                             {providerShifts.length === 0 && (
                               <tr>
-                                <td colSpan={4} className="px-3 py-3 text-center text-[#999] text-[12px]">No shifts recorded</td>
+                                <td colSpan={4} className="px-3 py-3 text-center text-[#1A1A2E] text-[12px]">No shifts recorded</td>
                               </tr>
                             )}
                             {providerShifts.map((s, i) => {
@@ -660,7 +660,7 @@ export function AdminAnalytics() {
         {bVtSorted.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Booking request mix</h3>
-            <p className="text-[12px] text-[#999] mb-4">What families are requesting — all booking requests</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">What families are requesting — all booking requests</p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               {bVtSorted.map(([type, count]) => {
                 const pct = Math.round((count / bookings.length) * 100)
@@ -671,7 +671,7 @@ export function AdminAnalytics() {
                       <span className="text-[12px] font-medium text-[#1A1A2E] leading-tight">{type}</span>
                     </div>
                     <div className="font-display text-xl font-semibold text-[#1A1A2E]">{count}</div>
-                    <div className="text-[11px] text-[#999]">{pct}% of requests</div>
+                    <div className="text-[11px] text-[#1A1A2E]">{pct}% of requests</div>
                   </div>
                 )
               })}

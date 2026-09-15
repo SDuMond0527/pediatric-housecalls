@@ -356,14 +356,14 @@ export function AdminClaims() {
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
 
   const tabCls = (t: Tab) =>
-    `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#999] hover:text-[#555]'}`
+    `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`
 
   return (
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-display text-[22px] font-medium text-[#1A1A2E]">Claims</h1>
-          <p className="text-[13px] text-[#999] mt-0.5">Generate and submit insurance claims from signed encounter notes</p>
+          <p className="text-[13px] text-[#1A1A2E] mt-0.5">Generate and submit insurance claims from signed encounter notes</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -389,7 +389,7 @@ export function AdminClaims() {
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
             <Zap size={12} /> {eraTestRunning ? 'Testing…' : 'Test Stedi ERA sync'}
           </button>
-          <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#999] hover:text-[#555] transition-colors">
+          <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
@@ -475,14 +475,14 @@ export function AdminClaims() {
       </div>
 
       {loading ? (
-        <div className="text-[#999] text-[13px] py-12 text-center">Loading…</div>
+        <div className="text-[#1A1A2E] text-[13px] py-12 text-center">Loading…</div>
       ) : (
         <>
           {/* PENDING REVIEW TAB */}
           {tab === 'review' && (
             <div className="space-y-3">
               {reviewClaims.length === 0 && (
-                <div className="text-center py-12 text-[#999] text-[13px]">No claims pending review.</div>
+                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">No claims pending review.</div>
               )}
               {reviewClaims.map(c => {
                 const isOpen = expanded === c.id
@@ -507,7 +507,7 @@ export function AdminClaims() {
                         <div>
                           <div className="text-[14px] font-medium text-[#1A1A2E]">
                             {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
-                            <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
+                            <span className="ml-2 text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (
@@ -542,7 +542,7 @@ export function AdminClaims() {
                             Ready for biller
                           </span>
                         )}
-                        {isOpen ? <ChevronUp size={15} className="text-[#999] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#999] flex-shrink-0" />}
+                        {isOpen ? <ChevronUp size={15} className="text-[#1A1A2E] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#1A1A2E] flex-shrink-0" />}
                       </div>
                     </button>
 
@@ -556,7 +556,7 @@ export function AdminClaims() {
                         {/* Claim detail grid */}
                         {editPatient[c.id] ? (
                           <div className="space-y-3">
-                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Patient info</div>
+                            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Patient info</div>
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="text-[11px] text-[#555] block mb-1">First name</label>
@@ -613,7 +613,7 @@ export function AdminClaims() {
                                     onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], patient_zip: e.target.value } }))} />
                                 </div>
                               </div>
-                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider pt-1">Insurance</div>
+                            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider pt-1">Insurance</div>
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="text-[11px] text-[#555] block mb-1">Member ID</label>
@@ -660,16 +660,16 @@ export function AdminClaims() {
                         ) : (
                           <div>
                             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-                              <div><span className="text-[#999]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
-                              <div><span className="text-[#999]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
-                              <div><span className="text-[#999]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
-                              <div><span className="text-[#999]">Subscriber DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.subscriber_dob)}</span></div>
-                              <div><span className="text-[#999]">Member ID: </span><span className="text-[#1A1A2E]">{c.member_id || '—'}</span></div>
-                              <div><span className="text-[#999]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
-                              <div><span className="text-[#999]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
-                              <div><span className="text-[#999]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
+                              <div><span className="text-[#1A1A2E]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
+                              <div><span className="text-[#1A1A2E]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
+                              <div><span className="text-[#1A1A2E]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
+                              <div><span className="text-[#1A1A2E]">Subscriber DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.subscriber_dob)}</span></div>
+                              <div><span className="text-[#1A1A2E]">Member ID: </span><span className="text-[#1A1A2E]">{c.member_id || '—'}</span></div>
+                              <div><span className="text-[#1A1A2E]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
+                              <div><span className="text-[#1A1A2E]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
+                              <div><span className="text-[#1A1A2E]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
                               {(c.effective_child_id ?? c.child_id) && (
-                                <div><span className="text-[#999]">Encounter note: </span>
+                                <div><span className="text-[#1A1A2E]">Encounter note: </span>
                                   <Link to={`/admin/chart/${c.effective_child_id ?? c.child_id}`} className="text-[#7F77DD] hover:underline inline-flex items-center gap-1 text-[13px]">
                                     <FileText size={12} /> View in patient chart
                                   </Link>
@@ -700,7 +700,7 @@ export function AdminClaims() {
 
                         {/* Payer */}
                         <div>
-                          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Payer</div>
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Payer</div>
                           {ep ? (
                             <div className="flex gap-2 items-end flex-wrap">
                               <div>
@@ -741,7 +741,7 @@ export function AdminClaims() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
-                              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Diagnoses</div>
+                              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Diagnoses</div>
                               {!editDx[c.id] && (
                                 <button onClick={() => setEditDx(prev => ({ ...prev, [c.id]: JSON.parse(JSON.stringify(c.diagnoses ?? [])) }))}
                                   className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
@@ -755,7 +755,7 @@ export function AdminClaims() {
                                     {saving === c.id ? 'Saving…' : 'Save'}
                                   </button>
                                   <button onClick={() => { setEditDx(prev => { const n={...prev}; delete n[c.id]; return n }); setDxQuery(prev => { const n={...prev}; delete n[c.id]; return n }); setDxResults(prev => { const n={...prev}; delete n[c.id]; return n }) }}
-                                    className="text-[11px] text-[#999] hover:text-[#555]">Cancel</button>
+                                    className="text-[11px] text-[#1A1A2E] hover:text-[#555]">Cancel</button>
                                 </div>
                               )}
                             </div>
@@ -782,13 +782,13 @@ export function AdminClaims() {
                                   ))}
                                 </div>
                                 <div className="relative">
-                                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#999]" />
+                                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
                                   <input type="text" placeholder="Search ICD-10…" value={dxQuery[c.id] ?? ''}
                                     onChange={e => onDxQueryChange(c.id, e.target.value)}
                                     className="w-full pl-6 pr-2 py-1.5 border border-[#E8E8E4] rounded-lg text-[12px] outline-none focus:border-[#7F77DD]" />
                                   {(dxSearching[c.id] || (dxResults[c.id] ?? []).length > 0) && (
                                     <div className="absolute z-20 w-full mt-1 border border-[#E8E8E4] rounded-xl bg-white shadow-lg overflow-hidden">
-                                      {dxSearching[c.id] && <div className="px-3 py-2 text-[11px] text-[#999]">Searching…</div>}
+                                      {dxSearching[c.id] && <div className="px-3 py-2 text-[11px] text-[#1A1A2E]">Searching…</div>}
                                       {!dxSearching[c.id] && (dxResults[c.id] ?? []).map((dx: any) => (
                                         <button key={dx.code} onClick={() => {
                                           if (!editDx[c.id].find((x: any) => x.code === dx.code))
@@ -808,7 +808,7 @@ export function AdminClaims() {
                               <div className="space-y-1">
                                 {(c.diagnoses ?? []).map((d: any, i: number) => (
                                   <div key={d.code} className="text-[12px] text-[#1A1A2E]">
-                                    <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#999] mr-1">{i + 1}</span>
+                                    <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#1A1A2E] mr-1">{i + 1}</span>
                                     <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
                                   </div>
                                 ))}
@@ -817,7 +817,7 @@ export function AdminClaims() {
                           </div>
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
-                              <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Procedures &amp; Fees</div>
+                              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Procedures &amp; Fees</div>
                               {!editCpt[c.id] && (
                                 <button onClick={() => setEditCpt(prev => ({ ...prev, [c.id]: JSON.parse(JSON.stringify(c.cpt_codes ?? [])) }))}
                                   className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
@@ -841,7 +841,7 @@ export function AdminClaims() {
                                     </div>
                                     <span className="text-[11px] font-semibold text-[#7F77DD] w-14 flex-shrink-0">{cp.code}</span>
                                     <span className="text-[11px] text-[#1A1A2E] flex-1 truncate">{cp.description}</span>
-                                    <label className="text-[10px] text-[#999] whitespace-nowrap">Mod:</label>
+                                    <label className="text-[10px] text-[#1A1A2E] whitespace-nowrap">Mod:</label>
                                     <input
                                       value={cp.modifier ?? ''}
                                       maxLength={3}
@@ -852,7 +852,7 @@ export function AdminClaims() {
                                         return { ...prev, [c.id]: next }
                                       })}
                                       className="w-10 border border-[#E8E8E4] rounded px-1.5 py-0.5 text-[11px] font-mono uppercase outline-none focus:border-[#7F77DD]" />
-                                    <span className="text-[11px] text-[#999]">$</span>
+                                    <span className="text-[11px] text-[#1A1A2E]">$</span>
                                     <input type="number" step="0.01" min="0"
                                       value={cp.charge_amount ?? ''}
                                       onChange={e => setEditCpt(prev => {
@@ -888,7 +888,7 @@ export function AdminClaims() {
                                         {(['Procedure', 'Non-Covered Services'] as const).map(t => (
                                           <button key={t}
                                             onClick={() => setCptTab(prev => ({ ...prev, [c.id]: t }))}
-                                            className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${(cptTab[c.id] ?? 'Procedure') === t ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#999]'}`}>
+                                            className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${(cptTab[c.id] ?? 'Procedure') === t ? 'text-[#7F77DD] border-b-2 border-[#7F77DD]' : 'text-[#1A1A2E]'}`}>
                                             {t === 'Procedure' ? 'Insurance Procedures' : 'Convenience & Self-Pay'}
                                           </button>
                                         ))}
@@ -922,7 +922,7 @@ export function AdminClaims() {
                                           .filter(fs => { const q = (cptSearch[c.id] ?? '').toLowerCase(); return !q || fs.code.toLowerCase().includes(q) || fs.description.toLowerCase().includes(q) })
                                           .filter(fs => !editCpt[c.id].find((x: any) => x.code === fs.code))
                                           .length === 0 && (
-                                          <div className="px-3 py-3 text-[11px] text-[#999]">No codes match your search.</div>
+                                          <div className="px-3 py-3 text-[11px] text-[#1A1A2E]">No codes match your search.</div>
                                         )}
                                       </div>
                                     </div>
@@ -972,7 +972,7 @@ export function AdminClaims() {
                                       />
                                       {cp.ndc_code && (
                                         <div className="text-[10px] text-[#555] mt-0.5">
-                                          <span className="text-[#999]">NDC:</span> <span className="font-mono">{cp.ndc_code}</span>
+                                          <span className="text-[#1A1A2E]">NDC:</span> <span className="font-mono">{cp.ndc_code}</span>
                                         </div>
                                       )}
                                     </div>
@@ -1086,7 +1086,7 @@ export function AdminClaims() {
           {tab === 'submitted' && (
             <div className="space-y-2">
               {submittedClaims.length === 0 && (
-                <div className="text-center py-12 text-[#999] text-[13px]">No submitted claims yet.</div>
+                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">No submitted claims yet.</div>
               )}
               {submittedClaims.map(c => {
                 const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.submitted
@@ -1103,7 +1103,7 @@ export function AdminClaims() {
                         <div>
                           <div className="text-[14px] font-medium text-[#1A1A2E]">
                             {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
-                            <span className="ml-2 text-[12px] font-normal text-[#999]">{fmtDate(c.service_date)}</span>
+                            <span className="ml-2 text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                             {c.era_received_at && !c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA
@@ -1115,7 +1115,7 @@ export function AdminClaims() {
                               </span>
                             )}
                           </div>
-                          <div className="text-[12px] text-[#999] mt-0.5">
+                          <div className="text-[12px] text-[#1A1A2E] mt-0.5">
                             {c.payer_name} · {fmtMoney(c.total_charge)}
                             {c.stedi_claim_id && ` · Ref: ${c.stedi_claim_id}`}
                           </div>
@@ -1125,7 +1125,7 @@ export function AdminClaims() {
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
                           <Icon size={11} /> {badge.label}
                         </span>
-                        {isOpen ? <ChevronUp size={14} className="text-[#999]" /> : <ChevronDown size={14} className="text-[#999]" />}
+                        {isOpen ? <ChevronUp size={14} className="text-[#1A1A2E]" /> : <ChevronDown size={14} className="text-[#1A1A2E]" />}
                       </div>
                     </button>
 
@@ -1153,7 +1153,7 @@ export function AdminClaims() {
                               {c.contractual_adjustment_era != null && (
                                 <div className="flex justify-between text-[12px]">
                                   <span className="text-[#444]">Contractual adjustment</span>
-                                  <span className="font-medium text-[#999]">({fmtMoney(c.contractual_adjustment_era)})</span>
+                                  <span className="font-medium text-[#1A1A2E]">({fmtMoney(c.contractual_adjustment_era)})</span>
                                 </div>
                               )}
                               {c.patient_deductible_era != null && (
@@ -1389,11 +1389,11 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
             <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2 flex-shrink-0">
               Link diagnoses to this CPT line
             </div>
-            <div className="text-[11px] text-[#999] mb-2 flex-shrink-0">
+            <div className="text-[11px] text-[#1A1A2E] mb-2 flex-shrink-0">
               First checked = primary. Max 4. Empty = all diagnoses apply.
             </div>
             {diagnoses.length === 0 ? (
-              <div className="text-[12px] text-[#999] italic py-2">No diagnoses on this claim yet.</div>
+              <div className="text-[12px] text-[#1A1A2E] italic py-2">No diagnoses on this claim yet.</div>
             ) : (
               <div className="space-y-1 flex-1 min-h-0 overflow-auto">
                 {diagnoses.map((d: any, i: number) => {
@@ -1408,7 +1408,7 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
                         checked={checked}
                         disabled={disabled}
                         onChange={() => toggle(dxNumber)} />
-                      <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#999]">{dxNumber}</span>
+                      <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#1A1A2E]">{dxNumber}</span>
                       <span className="flex-1 min-w-0 truncate">
                         <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
                       </span>

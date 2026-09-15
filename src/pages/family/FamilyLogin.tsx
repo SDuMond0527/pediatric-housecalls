@@ -32,7 +32,7 @@ export function FamilyLogin() {
             <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
               <PracticeLogo />
             </div>
-            {PRACTICE_TAGLINE && <div className="text-[13px] text-[#999]">{PRACTICE_TAGLINE}</div>}
+            {PRACTICE_TAGLINE && <div className="text-[13px] text-[#1A1A2E]">{PRACTICE_TAGLINE}</div>}
             <div className="flex justify-center gap-1.5 mt-3 flex-wrap">
               {[['#EEEDFE','#3C3489','In-home visits'],['#E1F5EE','#085041','Telemedicine'],['#FAEEDA','#633806','Sports physicals']].map(([bg,tc,label]) => (
                 <span key={label} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: bg, color: tc }}>{label}</span>
@@ -42,7 +42,7 @@ export function FamilyLogin() {
 
           {DEMO_MODE && (
             <div className="mb-5">
-              <p className="text-[11px] text-[#999] uppercase tracking-wider mb-2.5">Try a demo role</p>
+              <p className="text-[11px] text-[#1A1A2E] uppercase tracking-wider mb-2.5">Try a demo role</p>
               <button type="button"
                 onClick={() => { setEmail(DEMO_CREDS.family.email); setPassword(DEMO_CREDS.family.password); setError('') }}
                 className="w-full text-left p-3 rounded-xl border border-[#E8E8E4] hover:border-[#7F77DD] hover:shadow-sm transition-all bg-white group">
@@ -58,7 +58,7 @@ export function FamilyLogin() {
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7">
             <h1 className="font-display text-xl font-medium text-[#1A1A2E] mb-1">Welcome back</h1>
-            <p className="text-[13px] text-[#999] mb-5">Sign in to book and manage appointments</p>
+            <p className="text-[13px] text-[#1A1A2E] mb-5">Sign in to book and manage appointments</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input label="Email" type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -73,14 +73,14 @@ export function FamilyLogin() {
             </form>
 
             {!DEMO_MODE && (
-              <p className="text-center text-[13px] text-[#999] mt-5">
+              <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
                 New to {PRACTICE_NAME}?{' '}
                 <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">Create account</Link>
               </p>
             )}
           </div>
 
-          <p className="text-center text-[12px] text-[#999] mt-4">
+          <p className="text-center text-[12px] text-[#1A1A2E] mt-4">
             Are you a provider?{' '}
             <Link to="/login" className="text-[#555] hover:underline">Provider portal →</Link>
           </p>

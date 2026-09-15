@@ -45,18 +45,18 @@ export function FamilyVisitHistory() {
     <div>
       <div className="mb-6">
         <h1 className="font-display text-[22px] font-semibold text-[#1A1A2E]">Visit history</h1>
-        <p className="text-[13px] text-[#999] mt-1">Notes from completed and signed visits</p>
+        <p className="text-[13px] text-[#1A1A2E] mt-1">Notes from completed and signed visits</p>
       </div>
 
       {loading && (
-        <div className="text-center py-16 text-[#999] text-[14px]">Loading visit notes…</div>
+        <div className="text-center py-16 text-[#1A1A2E] text-[14px]">Loading visit notes…</div>
       )}
 
       {!loading && notes.length === 0 && (
         <div className="text-center py-16">
           <Stethoscope size={32} className="text-[#E8E8E4] mx-auto mb-3" />
-          <div className="text-[14px] text-[#999]">No completed visit notes yet.</div>
-          <div className="text-[13px] text-[#bbb] mt-1">Notes will appear here after a provider signs off on a visit.</div>
+          <div className="text-[14px] text-[#1A1A2E]">No completed visit notes yet.</div>
+          <div className="text-[13px] text-[#1A1A2E] mt-1">Notes will appear here after a provider signs off on a visit.</div>
         </div>
       )}
 
@@ -83,7 +83,7 @@ export function FamilyVisitHistory() {
                       </span>
                     )}
                   </div>
-                  <div className="text-[12px] text-[#999] flex flex-wrap gap-x-3 gap-y-0.5">
+                  <div className="text-[12px] text-[#1A1A2E] flex flex-wrap gap-x-3 gap-y-0.5">
                     {note.provider_name && <span>{note.provider_name}</span>}
                     {multiChild && note.child_name && (
                       <span className="text-[#7F77DD]">{note.child_name}</span>
@@ -99,7 +99,7 @@ export function FamilyVisitHistory() {
                 {hasContent && (
                   <ChevronDown
                     size={14}
-                    className={`text-[#999] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    className={`text-[#1A1A2E] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                   />
                 )}
               </button>
@@ -157,7 +157,7 @@ export function FamilyVisitHistory() {
                     </div>
                   )}
 
-                  <div className="text-[11px] text-[#bbb] pt-1 border-t border-[#F1EFE8]">
+                  <div className="text-[11px] text-[#1A1A2E] pt-1 border-t border-[#F1EFE8]">
                     Note signed {note.signed_at ? format(new Date(note.signed_at), 'MMM d, yyyy') : ''}
                     {note.provider_name ? ` by ${note.provider_name}` : ''}
                   </div>

@@ -42,12 +42,12 @@ export function FamilySignup() {
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
             Pediatric<span style={{ color: '#7F77DD' }}>Housecalls</span>
           </div>
-          <div className="text-[13px] text-[#999]">Create your family account</div>
+          <div className="text-[13px] text-[#1A1A2E]">Create your family account</div>
         </div>
 
         <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7">
           <h1 className="font-display text-xl font-medium text-[#1A1A2E] mb-1">Create account</h1>
-          <p className="text-[13px] text-[#999] mb-5">Your information is kept private and secure.</p>
+          <p className="text-[13px] text-[#1A1A2E] mb-5">Your information is kept private and secure.</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} required />
@@ -58,7 +58,7 @@ export function FamilySignup() {
             <Button type="submit" className="w-full !py-2.5" loading={loading}>Create account</Button>
           </form>
 
-          <p className="text-center text-[13px] text-[#999] mt-5">
+          <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
             Already have an account?{' '}
             <Link to="/family/login" className="text-[#7F77DD] font-medium hover:underline">Sign in</Link>
           </p>

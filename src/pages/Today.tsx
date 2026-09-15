@@ -788,7 +788,7 @@ export function Today() {
                             const dayCmas = (cmaSchedule[e.date.slice(0, 10)] ?? []).filter((c: any) => (c.states ?? []).includes(state))
                             return (
                             <div key={e.date + e.state} className="bg-white rounded-lg px-3 py-2 border border-[#DDDAF8]">
-                              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-1">
+                              <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1">
                                 {format(new Date(e.date.slice(0, 10) + 'T12:00:00'), 'EEE M/d')}
                               </div>
                               <div className="flex items-center gap-1.5 mb-1">
@@ -799,7 +799,7 @@ export function Today() {
                                 <span className="text-[11px] font-medium text-[#1A1A2E] truncate">{e.provider_name.split(' ').slice(-1)[0]}</span>
                               </div>
                               {dayCmas.length > 0 && (
-                                <div className="text-[10px] text-[#999]">
+                                <div className="text-[10px] text-[#1A1A2E]">
                                   {dayCmas.map((c: any) => `${c.name.split(' ')[0]} ${t(c.start_time)}–${t(c.end_time)}`).join(', ')}
                                 </div>
                               )}
@@ -879,7 +879,7 @@ export function Today() {
 
         {/* ── Appointments list ── */}
         {!loading && appts.length === 0 ? (
-          <div className="text-center py-16 text-[#999] text-[14px]">
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">
             No appointments scheduled for today.
           </div>
         ) : (
@@ -947,7 +947,7 @@ export function Today() {
                     <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
-                    <ChevronDown size={14} className={`text-[#999] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={14} className={`text-[#1A1A2E] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
 
                   {isExpanded && (
@@ -1052,12 +1052,12 @@ export function Today() {
                         const cardBack = noteMap.CARDBACK || ''
 
                         const F = ({ label, value }: { label: string; value: string }) => value ? (
-                          <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+                          <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">{label}</span>{value}</div>
                         ) : null
 
                         const hasAnyData = name || dob || phone || email || cc || allergies || insurance
                         if (!hasAnyData && !cd && !child) {
-                          return <div className="p-2 text-[11px] text-[#999] italic mb-3">Loading patient info…</div>
+                          return <div className="p-2 text-[11px] text-[#1A1A2E] italic mb-3">Loading patient info…</div>
                         }
 
                         const partner = (appt.notes || '').split('|').find((p: string) => p.startsWith('PARTNER:'))?.replace('PARTNER:', '').trim() ?? ''
@@ -1073,13 +1073,13 @@ export function Today() {
                             {(name || familyName || dob || sex || phone || email || address) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
-                                {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+                                {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
                                 <F label="Family" value={familyName} />
                                 <F label="Date of birth" value={dob} />
                                 <F label="Sex" value={sex} />
                                 {phone && (
                                   <div className="text-[13px]">
-                                    <span className="text-[#999] text-[11px] block">Phone</span>
+                                    <span className="text-[#1A1A2E] text-[11px] block">Phone</span>
                                     <div className="flex items-center justify-between gap-2">
                                       <span>{phone}</span>
                                       <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
@@ -1187,7 +1187,7 @@ export function Today() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Block schedule</h2>
-              <button onClick={() => setBlocking(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setBlocking(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>
@@ -1262,7 +1262,7 @@ export function Today() {
               {/* Reason */}
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                  Reason <span className="text-[#999] normal-case font-normal">(optional)</span>
+                  Reason <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
                 </label>
                 <input type="text" value={blockForm.reason}
                   placeholder="e.g. Personal time off, School event, Family obligation"
@@ -1292,7 +1292,7 @@ export function Today() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Reschedule appointment</h2>
               <button onClick={() => setEditTarget(null)} disabled={editSubmitting}
-                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999] disabled:opacity-50">
+                className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E] disabled:opacity-50">
                 <X size={16} />
               </button>
             </div>
@@ -1329,7 +1329,7 @@ export function Today() {
               {editDate && (
                 <div>
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                    Time {editLoadingSlots && <span className="text-[#999] font-normal normal-case">(loading…)</span>}
+                    Time {editLoadingSlots && <span className="text-[#1A1A2E] font-normal normal-case">(loading…)</span>}
                   </label>
                   <select value={editTime} onChange={e => setEditTime(e.target.value)}
                     className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] bg-white outline-none focus:border-[#7F77DD]">
@@ -1341,7 +1341,7 @@ export function Today() {
                     ))}
                   </select>
                   {editTakenTimes.length > 0 && (
-                    <p className="text-[11px] text-[#999] mt-1.5">Times marked "booked" are already taken for this provider.</p>
+                    <p className="text-[11px] text-[#1A1A2E] mt-1.5">Times marked "booked" are already taken for this provider.</p>
                   )}
                 </div>
               )}
@@ -1371,19 +1371,19 @@ export function Today() {
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{doneTarget.visit_type}</div>
-              <div className="text-[#999]">{doneTarget.zone}</div>
+              <div className="text-[#1A1A2E]">{doneTarget.zone}</div>
             </div>
 
             <div className="mb-4">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">
-                After-visit instructions <span className="text-[#999] normal-case font-normal">(optional)</span>
+                After-visit instructions <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
               </label>
               <textarea rows={4}
                 placeholder="e.g. Rest and fluids for 48 hours. Recheck temperature in the morning. Call if fever returns above 102°F."
                 value={doneInstructions}
                 onChange={e => setDoneInstructions(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none" />
-              <p className="text-[11px] text-[#999] mt-1">If provided, the family will see this in their app under past visits.</p>
+              <p className="text-[11px] text-[#1A1A2E] mt-1">If provided, the family will see this in their app under past visits.</p>
             </div>
 
             <div className="flex gap-2">
@@ -1402,13 +1402,13 @@ export function Today() {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => !noteSending && setNoteTarget(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h2 className="font-display text-lg font-medium text-[#1A1A2E] mb-1">Send a note to parent</h2>
-            <p className="text-[12px] text-[#999] mb-4">{noteTarget.visit_type} · {safeFormatDate(noteTarget.scheduled_date, 'MMM d')} at {noteTarget.scheduled_time ? to12h(noteTarget.scheduled_time) : ''}</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">{noteTarget.visit_type} · {safeFormatDate(noteTarget.scheduled_date, 'MMM d')} at {noteTarget.scheduled_time ? to12h(noteTarget.scheduled_time) : ''}</p>
             {noteSent ? (
               <div className="text-center py-4 text-[#1D9E75] font-medium">Note sent!</div>
             ) : (
               <>
                 <textarea
-                  className="w-full border border-[#E8E8E4] rounded-lg p-3 text-[13px] text-[#1A1A2E] placeholder:text-[#bbb] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/30 focus:border-[#1D9E75]"
+                  className="w-full border border-[#E8E8E4] rounded-lg p-3 text-[13px] text-[#1A1A2E] placeholder:text-[#1A1A2E] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/30 focus:border-[#1D9E75]"
                   rows={5}
                   placeholder="Type your message to the parent here..."
                   value={noteText}
@@ -1439,10 +1439,10 @@ export function Today() {
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-3 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
-              <div className="text-[#999]">
+              <div className="text-[#1A1A2E]">
                 {safeFormatDate(cancelTarget.scheduled_date, 'EEEE, MMMM d')} at {cancelTarget.scheduled_time ? to12h(cancelTarget.scheduled_time) : 'Unknown time'}
               </div>
-              <div className="text-[#999]">{cancelTarget.zone}</div>
+              <div className="text-[#1A1A2E]">{cancelTarget.zone}</div>
             </div>
 
             <div className="p-3 bg-[#E1F5EE] border border-[#9FDECA] rounded-lg text-[12px] text-[#085041] mb-5 leading-relaxed">
@@ -1465,7 +1465,7 @@ export function Today() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add appointment</h2>
-              <button onClick={() => setAdding(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setAdding(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>
@@ -1494,11 +1494,11 @@ export function Today() {
                         {[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}
                       </div>
                       {selectedPatient.family_display_name && (
-                        <div className="text-[11px] text-[#999]">{selectedPatient.family_display_name}</div>
+                        <div className="text-[11px] text-[#1A1A2E]">{selectedPatient.family_display_name}</div>
                       )}
                     </div>
                     <button onClick={() => { setSelectedPatient(null); setAddForm(f => ({ ...f, patientName: '', dob: '', gender: '', phone: '', email: '', address: '', zip: '', zone: '' })) }}
-                      className="text-[11px] text-[#999] hover:text-[#1A1A2E] ml-2">× Clear</button>
+                      className="text-[11px] text-[#1A1A2E] hover:text-[#1A1A2E] ml-2">× Clear</button>
                   </div>
                 ) : (
                   <>
@@ -1506,10 +1506,10 @@ export function Today() {
                       onChange={e => onPatientSearchChange(e.target.value)}
                       className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD]" />
                     {patientSearching && (
-                      <div className="mt-1 px-3 py-2 text-[12px] text-[#999]">Searching…</div>
+                      <div className="mt-1 px-3 py-2 text-[12px] text-[#1A1A2E]">Searching…</div>
                     )}
                     {!patientSearching && patientSearch.trim() && patientResults.length === 0 && (
-                      <div className="mt-1 px-3 py-2 text-[12px] text-[#999]">No patients found</div>
+                      <div className="mt-1 px-3 py-2 text-[12px] text-[#1A1A2E]">No patients found</div>
                     )}
                     {!patientSearching && patientResults.length > 0 && (
                       <div className="mt-1 border border-[#E8E8E4] rounded-xl overflow-hidden">
@@ -1519,7 +1519,7 @@ export function Today() {
                             <div className="text-[13px] font-medium text-[#1A1A2E]">
                               {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
                             </div>
-                            <div className="text-[11px] text-[#999]">
+                            <div className="text-[11px] text-[#1A1A2E]">
                               {child.family_display_name || child.family_email || ''}
                               {child.date_of_birth ? ` · DOB ${String(child.date_of_birth instanceof Date ? child.date_of_birth.toISOString() : child.date_of_birth).split('T')[0]}` : ''}
                             </div>
@@ -1611,7 +1611,7 @@ export function Today() {
                   onChange={e => setAddForm(f => ({ ...f, selfPay: e.target.checked }))} className="mt-0.5" />
                 <div>
                   <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-                  <div className="text-[11px] text-[#999]">Check this if the family isn't filing insurance.</div>
+                  <div className="text-[11px] text-[#1A1A2E]">Check this if the family isn't filing insurance.</div>
                 </div>
               </label>
 
@@ -1762,7 +1762,7 @@ export function Today() {
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Notes <span className="text-[#999] normal-case font-normal">(optional)</span></label>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Notes <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span></label>
                 <textarea rows={2} placeholder="e.g. Parent texted directly, 2 children" value={addForm.notes}
                   onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] resize-none" />
@@ -1802,13 +1802,13 @@ export function Today() {
 
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] mb-4 space-y-0.5">
               <div className="font-medium text-[#1A1A2E]">{chargeTarget.visit_type}</div>
-              <div className="text-[#999]">{chargeTarget.zone}</div>
+              <div className="text-[#1A1A2E]">{chargeTarget.zone}</div>
             </div>
 
             {chargeSuccess ? (
               <div className="text-center py-4">
                 <div className="text-[#1D9E75] font-medium text-[15px]">Payment successful!</div>
-                <div className="text-[13px] text-[#999] mt-1">
+                <div className="text-[13px] text-[#1A1A2E] mt-1">
                   ${(chargeSuccess.amount / 100).toFixed(2)} charged{chargeSuccess.last4 ? ` to card ending in ${chargeSuccess.last4}` : ''}
                 </div>
               </div>

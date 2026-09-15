@@ -78,7 +78,7 @@ export function AdminStatements() {
           </div>
           <div>
             <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">Patient Statements</h1>
-            <p className="text-[12px] text-[#999] mt-0.5">Track sent statements and payments</p>
+            <p className="text-[12px] text-[#1A1A2E] mt-0.5">Track sent statements and payments</p>
           </div>
         </div>
         <button onClick={load} disabled={loading}
@@ -90,19 +90,19 @@ export function AdminStatements() {
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
-          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Outstanding</div>
+          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-1">Outstanding</div>
           <div className="font-display text-2xl font-semibold text-[#EF9F27]">${totalOutstanding.toFixed(2)}</div>
-          <div className="text-[11px] text-[#999] mt-0.5">{statements.filter(s => s.status === 'sent').length} statement{statements.filter(s => s.status === 'sent').length !== 1 ? 's' : ''} sent</div>
+          <div className="text-[11px] text-[#1A1A2E] mt-0.5">{statements.filter(s => s.status === 'sent').length} statement{statements.filter(s => s.status === 'sent').length !== 1 ? 's' : ''} sent</div>
         </div>
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
-          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Collected</div>
+          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-1">Collected</div>
           <div className="font-display text-2xl font-semibold text-[#1D9E75]">${totalPaid.toFixed(2)}</div>
-          <div className="text-[11px] text-[#999] mt-0.5">{statements.filter(s => s.status === 'paid').length} payment{statements.filter(s => s.status === 'paid').length !== 1 ? 's' : ''} received</div>
+          <div className="text-[11px] text-[#1A1A2E] mt-0.5">{statements.filter(s => s.status === 'paid').length} payment{statements.filter(s => s.status === 'paid').length !== 1 ? 's' : ''} received</div>
         </div>
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
-          <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Drafts</div>
+          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-1">Drafts</div>
           <div className="font-display text-2xl font-semibold text-[#1A1A2E]">{statements.filter(s => s.status === 'draft').length}</div>
-          <div className="text-[11px] text-[#999] mt-0.5">Not yet sent</div>
+          <div className="text-[11px] text-[#1A1A2E] mt-0.5">Not yet sent</div>
         </div>
       </div>
 
@@ -119,22 +119,22 @@ export function AdminStatements() {
       {/* Table */}
       <div className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden shadow-sm">
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#999]">Loading…</div>
+          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">Loading…</div>
         ) : error ? (
           <div className="flex items-center justify-center h-48 text-[13px] text-red-500">{error}</div>
         ) : statements.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#999]">No statements found</div>
+          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">No statements found</div>
         ) : (
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Patient</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">DOS</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Payer</th>
-                <th className="text-right px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Amount Due</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Sent</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#999] uppercase tracking-wide">Paid</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Patient</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">DOS</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Payer</th>
+                <th className="text-right px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Amount Due</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Status</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Sent</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Paid</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -146,7 +146,7 @@ export function AdminStatements() {
                   <tr key={stmt.id} className="hover:bg-[#FAFAF8] transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium text-[#1A1A2E]">{stmt.patient_name || '—'}</div>
-                      {stmt.family_email && <div className="text-[11px] text-[#999] mt-0.5">{stmt.family_email}</div>}
+                      {stmt.family_email && <div className="text-[11px] text-[#1A1A2E] mt-0.5">{stmt.family_email}</div>}
                     </td>
                     <td className="px-4 py-3 text-[#555] tabular-nums">{fmtDate(stmt.date_of_service)}</td>
                     <td className="px-4 py-3 text-[#555]">{stmt.payer_name ?? '—'}</td>
@@ -159,13 +159,13 @@ export function AdminStatements() {
                         {badge.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#999] text-[12px]">{fmtDateTime(stmt.sent_at)}</td>
+                    <td className="px-4 py-3 text-[#1A1A2E] text-[12px]">{fmtDateTime(stmt.sent_at)}</td>
                     <td className="px-4 py-3 text-[12px]">
                       {stmt.paid_at ? (
                         <div>
                           <div className="text-[#1D9E75] font-medium">{fmtDateTime(stmt.paid_at)}</div>
                           {stmt.paid_amount_cents && (
-                            <div className="text-[11px] text-[#999]">${(stmt.paid_amount_cents / 100).toFixed(2)}</div>
+                            <div className="text-[11px] text-[#1A1A2E]">${(stmt.paid_amount_cents / 100).toFixed(2)}</div>
                           )}
                         </div>
                       ) : '—'}

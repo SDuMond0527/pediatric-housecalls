@@ -63,7 +63,7 @@ export function Week() {
               ))}
               {HOUR_VALS.map((hour, hi) => (
                 <>
-                  <div key={`h${hour}`} className="border-b border-r border-[#E8E8E4] bg-[#FAFAF8] py-1.5 px-2 text-right text-[11px] text-[#999]">
+                  <div key={`h${hour}`} className="border-b border-r border-[#E8E8E4] bg-[#FAFAF8] py-1.5 px-2 text-right text-[11px] text-[#1A1A2E]">
                     {HOURS[hi]}
                   </div>
                   {days.map(day => {

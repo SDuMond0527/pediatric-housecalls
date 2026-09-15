@@ -128,11 +128,11 @@ function LabStatusBadge({ status }: { status: string }) {
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <div className="text-[11px] text-[#999]">{label}</div>
+      <div className="text-[11px] text-[#1A1A2E]">{label}</div>
       {value ? (
         <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
       ) : (
-        <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
+        <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not on file</div>
       )}
     </div>
   )
@@ -586,13 +586,13 @@ export function PatientChart() {
           <div className="flex-1 min-w-0">
             <div className="font-display text-[18px] font-medium text-[#1A1A2E] flex items-center gap-2">
               {name}
-              {child?.nickname && <span className="text-[13px] font-normal text-[#999]">"{child.nickname}"</span>}
+              {child?.nickname && <span className="text-[13px] font-normal text-[#1A1A2E]">"{child.nickname}"</span>}
               {child?.is_archived && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#999]">Archived</span>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#1A1A2E]">Archived</span>
               )}
             </div>
             {child && (
-              <div className="text-[12px] text-[#999] mt-0.5 flex items-center gap-2 flex-wrap">
+              <div className="text-[12px] text-[#1A1A2E] mt-0.5 flex items-center gap-2 flex-wrap">
                 {dob && <span>DOB {formatDob(dob)} ({calcAge(dob)})</span>}
                 {child.allergies && (
                   <span className="text-[#991B1B] font-medium bg-[#FDEDED] px-1.5 py-0.5 rounded">
@@ -644,7 +644,7 @@ export function PatientChart() {
       <div className="p-6 max-w-3xl mx-auto">
         {!loading && child && <IncompleteChartBanner child={child} onUpdated={setChild} />}
         {loading ? (
-          <div className="text-center py-16 text-[#999] text-[14px]">Loading chart…</div>
+          <div className="text-center py-16 text-[#1A1A2E] text-[14px]">Loading chart…</div>
         ) : (
           <>
             {activeTab === 'overview' && (
@@ -666,32 +666,32 @@ export function PatientChart() {
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Given first name</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Given first name</label>
                           <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.first_name} onChange={e => setContactEdit(p => ({ ...p, first_name: e.target.value }))}
                             placeholder="Legal first name" />
                         </div>
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Last name</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Last name</label>
                           <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.last_name} onChange={e => setContactEdit(p => ({ ...p, last_name: e.target.value }))}
                             placeholder="Last" />
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Nickname (optional)</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Nickname (optional)</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={contactEdit.nickname} onChange={e => setContactEdit(p => ({ ...p, nickname: e.target.value }))}
                           placeholder="What they go by" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Date of birth</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Date of birth</label>
                           <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.date_of_birth} onChange={e => setContactEdit(p => ({ ...p, date_of_birth: e.target.value }))} />
                         </div>
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Patient sex</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Patient sex</label>
                           <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
                             value={contactEdit.gender} onChange={e => setContactEdit(p => ({ ...p, gender: e.target.value }))}>
                             <option value="">—</option>
@@ -701,40 +701,40 @@ export function PatientChart() {
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Parent / guardian name</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Parent / guardian name</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={contactEdit.parent_name} onChange={e => setContactEdit(p => ({ ...p, parent_name: e.target.value }))}
                           placeholder="e.g. Jane Smith" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Phone</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Phone</label>
                           <input type="tel" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.parent_phone} onChange={e => setContactEdit(p => ({ ...p, parent_phone: e.target.value }))}
                             placeholder="(704) 555-0100" />
                         </div>
                         <div>
-                          <label className="text-[11px] text-[#999] block mb-1">Email</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Email</label>
                           <input type="email" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.parent_email} onChange={e => setContactEdit(p => ({ ...p, parent_email: e.target.value }))}
                             placeholder="parent@email.com" />
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Street address</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Street address</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={contactEdit.parent_address} onChange={e => setContactEdit(p => ({ ...p, parent_address: e.target.value }))}
                           placeholder="123 Main St" />
                       </div>
                       <div className="grid grid-cols-5 gap-2">
                         <div className="col-span-2">
-                          <label className="text-[11px] text-[#999] block mb-1">City</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">City</label>
                           <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.parent_city} onChange={e => setContactEdit(p => ({ ...p, parent_city: e.target.value }))}
                             placeholder="Charlotte" />
                         </div>
                         <div className="col-span-1">
-                          <label className="text-[11px] text-[#999] block mb-1">State</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">State</label>
                           <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
                             value={contactEdit.parent_state} onChange={e => setContactEdit(p => ({ ...p, parent_state: e.target.value }))}>
                             <option value="">—</option>
@@ -744,7 +744,7 @@ export function PatientChart() {
                           </select>
                         </div>
                         <div className="col-span-2">
-                          <label className="text-[11px] text-[#999] block mb-1">Zip</label>
+                          <label className="text-[11px] text-[#1A1A2E] block mb-1">Zip</label>
                           <input maxLength={5} className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                             value={contactEdit.parent_zip} onChange={e => setContactEdit(p => ({ ...p, parent_zip: e.target.value }))}
                             placeholder="28277" />
@@ -768,7 +768,7 @@ export function PatientChart() {
                       <Field label="Phone" value={child?.family_phone || child?.parent_phone} />
                       <Field label="Email" value={child?.family_email || child?.parent_email} />
                       <div>
-                        <div className="text-[11px] text-[#999] flex items-center gap-1">
+                        <div className="text-[11px] text-[#1A1A2E] flex items-center gap-1">
                           <MapPin size={11} />
                           Address
                         </div>
@@ -778,7 +778,7 @@ export function PatientChart() {
                           const state = child?.family_state || child?.parent_state
                           const zip   = child?.family_zip   || child?.parent_zip
                           if (!line1 && !city && !state && !zip) {
-                            return <div className="text-[13px] text-[#bbb] mt-0.5">Not on file</div>
+                            return <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not on file</div>
                           }
                           const cityStateZip = [city, state, zip].filter(Boolean).join(' ')
                           const full = [line1, cityStateZip].filter(Boolean).join(', ')
@@ -805,32 +805,32 @@ export function PatientChart() {
                   {editingSection === 'medical' ? (
                     <div className="space-y-3">
                       <div>
-                        <label className="text-[11px] text-[#999] flex items-center gap-1 mb-1"><Pill size={11} /> Drug &amp; food allergies</label>
+                        <label className="text-[11px] text-[#1A1A2E] flex items-center gap-1 mb-1"><Pill size={11} /> Drug &amp; food allergies</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={medEdit.allergies} onChange={e => setMedEdit(p => ({ ...p, allergies: e.target.value }))}
                           placeholder="e.g. Penicillin, peanuts — or NKDA" />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Current medications</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Current medications</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={medEdit.current_medications} onChange={e => setMedEdit(p => ({ ...p, current_medications: e.target.value }))}
                           placeholder="e.g. Zyrtec 5mg daily — or None" />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Medical history</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Medical history</label>
                         <textarea rows={2} className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none resize-none"
                           value={medEdit.medical_history} onChange={e => setMedEdit(p => ({ ...p, medical_history: e.target.value }))}
                           placeholder="e.g. Asthma, ADHD, prior surgeries..." />
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Primary care practice</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Primary care practice</label>
                         {selectedPcp ? (
                           <div className="flex items-center gap-2 px-3 py-2 border border-[#7F77DD] rounded-lg bg-[#EEEDFE]">
                             <div className="flex-1 min-w-0">
                               <div className="text-[13px] font-medium text-[#1A1A2E] truncate">{selectedPcp.name}</div>
-                              {selectedPcp.fax_number && <div className="text-[11px] text-[#999]">Fax: {selectedPcp.fax_number}</div>}
+                              {selectedPcp.fax_number && <div className="text-[11px] text-[#1A1A2E]">Fax: {selectedPcp.fax_number}</div>}
                             </div>
-                            <button onClick={() => { setSelectedPcp(null); setPcpSearch('') }} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
+                            <button onClick={() => { setSelectedPcp(null); setPcpSearch('') }} className="text-[#1A1A2E] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
                           </div>
                         ) : addingNewPcp ? (
                           <div className="space-y-2 border border-[#E8E8E4] rounded-lg p-3">
@@ -881,7 +881,7 @@ export function PatientChart() {
                                     <button key={p.id} onMouseDown={() => { setSelectedPcp(p); setPcpDropdownOpen(false); setPcpSearch('') }}
                                       className="w-full text-left px-3 py-2.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
                                       <div className="text-[13px] text-[#1A1A2E]">{p.name}</div>
-                                      {p.fax_number && <div className="text-[11px] text-[#999]">Fax: {p.fax_number}</div>}
+                                      {p.fax_number && <div className="text-[11px] text-[#1A1A2E]">Fax: {p.fax_number}</div>}
                                     </button>
                                   ))
                                 }
@@ -895,7 +895,7 @@ export function PatientChart() {
                         )}
                       </div>
                       <div>
-                        <label className="text-[11px] text-[#999] block mb-1">Preferred pharmacy</label>
+                        <label className="text-[11px] text-[#1A1A2E] block mb-1">Preferred pharmacy</label>
                         <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                           value={medEdit.preferred_pharmacy} onChange={e => setMedEdit(p => ({ ...p, preferred_pharmacy: e.target.value }))}
                           placeholder="e.g. CVS on Providence Rd" />
@@ -915,7 +915,7 @@ export function PatientChart() {
                   ) : (
                     <div className="space-y-4">
                       <div>
-                        <div className="text-[11px] text-[#999] flex items-center gap-1">
+                        <div className="text-[11px] text-[#1A1A2E] flex items-center gap-1">
                           <Pill size={11} />
                           Drug &amp; food allergies
                         </div>
@@ -924,7 +924,7 @@ export function PatientChart() {
                             {child.allergies}
                           </div>
                         ) : (
-                          <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                          <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not recorded</div>
                         )}
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -935,25 +935,25 @@ export function PatientChart() {
                           { label: 'Preferred pharmacy', value: child?.preferred_pharmacy },
                         ].map(({ label, value }) => (
                           <div key={label}>
-                            <div className="text-[11px] text-[#999]">{label}</div>
+                            <div className="text-[11px] text-[#1A1A2E]">{label}</div>
                             {value ? (
                               <div className="text-[13px] text-[#1A1A2E] mt-0.5">{value}</div>
                             ) : (
-                              <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                              <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not recorded</div>
                             )}
                           </div>
                         ))}
                         <div>
-                          <div className="text-[11px] text-[#999]">Primary care practice</div>
+                          <div className="text-[11px] text-[#1A1A2E]">Primary care practice</div>
                           {selectedPcp ? (
                             <div className="mt-0.5">
                               <div className="text-[13px] text-[#1A1A2E]">{selectedPcp.name}</div>
-                              {selectedPcp.fax_number && <div className="text-[11px] text-[#999]">Fax: {selectedPcp.fax_number}</div>}
+                              {selectedPcp.fax_number && <div className="text-[11px] text-[#1A1A2E]">Fax: {selectedPcp.fax_number}</div>}
                             </div>
                           ) : child?.pcp ? (
                             <div className="text-[13px] text-[#1A1A2E] mt-0.5">{child.pcp}</div>
                           ) : (
-                            <div className="text-[13px] text-[#bbb] mt-0.5">Not recorded</div>
+                            <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not recorded</div>
                           )}
                         </div>
                       </div>
@@ -1045,18 +1045,18 @@ export function PatientChart() {
                           </div>
                           {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
                             <div>
-                              <div className="text-[11px] text-[#999] mb-2">Insurance card</div>
+                              <div className="text-[11px] text-[#1A1A2E] mb-2">Insurance card</div>
                               <div className="grid grid-cols-2 gap-3">
                                 {child?.insurance_card_front_url && (
                                   <div>
-                                    <div className="text-[11px] text-[#999] mb-1">Front</div>
+                                    <div className="text-[11px] text-[#1A1A2E] mb-1">Front</div>
                                     <img src={child.insurance_card_front_url} alt="Insurance card front"
                                       className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
                                   </div>
                                 )}
                                 {child?.insurance_card_back_url && (
                                   <div>
-                                    <div className="text-[11px] text-[#999] mb-1">Back</div>
+                                    <div className="text-[11px] text-[#1A1A2E] mb-1">Back</div>
                                     <img src={child.insurance_card_back_url} alt="Insurance card back"
                                       className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
                                   </div>
@@ -1066,7 +1066,7 @@ export function PatientChart() {
                           )}
                         </div>
                       ) : (
-                        <div className="text-[13px] text-[#bbb] text-center py-4">No active insurance on file</div>
+                        <div className="text-[13px] text-[#1A1A2E] text-center py-4">No active insurance on file</div>
                       )}
 
                       {/* Eligibility result */}
@@ -1084,40 +1084,40 @@ export function PatientChart() {
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {eligResult.deductible?.individual?.total != null && (
                               <div>
-                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Ind. deductible</div>
+                                <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wide">Ind. deductible</div>
                                 <div className="text-[13px] font-medium">${eligResult.deductible.individual.total.toFixed(2)}</div>
                                 {eligResult.deductible.individual.remaining != null && (
-                                  <div className="text-[10px] text-[#999]">${eligResult.deductible.individual.remaining.toFixed(2)} remaining</div>
+                                  <div className="text-[10px] text-[#1A1A2E]">${eligResult.deductible.individual.remaining.toFixed(2)} remaining</div>
                                 )}
                               </div>
                             )}
                             {eligResult.deductible?.family?.total != null && (
                               <div>
-                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Fam. deductible</div>
+                                <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wide">Fam. deductible</div>
                                 <div className="text-[13px] font-medium">${eligResult.deductible.family.total.toFixed(2)}</div>
                                 {eligResult.deductible.family.remaining != null && (
-                                  <div className="text-[10px] text-[#999]">${eligResult.deductible.family.remaining.toFixed(2)} remaining</div>
+                                  <div className="text-[10px] text-[#1A1A2E]">${eligResult.deductible.family.remaining.toFixed(2)} remaining</div>
                                 )}
                               </div>
                             )}
                             {eligResult.outOfPocket?.individual?.total != null && (
                               <div>
-                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Ind. OOP max</div>
+                                <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wide">Ind. OOP max</div>
                                 <div className="text-[13px] font-medium">${eligResult.outOfPocket.individual.total.toFixed(2)}</div>
                                 {eligResult.outOfPocket.individual.remaining != null && (
-                                  <div className="text-[10px] text-[#999]">${eligResult.outOfPocket.individual.remaining.toFixed(2)} remaining</div>
+                                  <div className="text-[10px] text-[#1A1A2E]">${eligResult.outOfPocket.individual.remaining.toFixed(2)} remaining</div>
                                 )}
                               </div>
                             )}
                             {eligResult.copay != null && (
                               <div>
-                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Copay</div>
+                                <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wide">Copay</div>
                                 <div className="text-[13px] font-medium">${eligResult.copay.toFixed(2)}</div>
                               </div>
                             )}
                             {eligResult.coinsurance != null && (
                               <div>
-                                <div className="text-[10px] text-[#999] uppercase tracking-wide">Coinsurance</div>
+                                <div className="text-[10px] text-[#1A1A2E] uppercase tracking-wide">Coinsurance</div>
                                 <div className="text-[13px] font-medium">{eligResult.coinsurance}%</div>
                               </div>
                             )}
@@ -1130,7 +1130,7 @@ export function PatientChart() {
                         <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
                           <button
                             onClick={() => setPastInsOpen(o => !o)}
-                            className="flex items-center gap-1.5 text-[11px] font-medium text-[#999] hover:text-[#555] transition-colors">
+                            className="flex items-center gap-1.5 text-[11px] font-medium text-[#1A1A2E] hover:text-[#555] transition-colors">
                             <ChevronDown size={12} className={`transition-transform ${pastInsOpen ? 'rotate-180' : ''}`} />
                             {child.previous_insurance.length} previous polic{child.previous_insurance.length === 1 ? 'y' : 'ies'}
                           </button>
@@ -1138,7 +1138,7 @@ export function PatientChart() {
                             <div className="mt-3 space-y-4">
                               {[...child.previous_insurance].reverse().map((p: any, i: number) => (
                                 <div key={i} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-2">
-                                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">
+                                  <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">
                                     Inactive since {p.deactivated_at ?? 'unknown date'}
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
@@ -1153,7 +1153,7 @@ export function PatientChart() {
                                     <div className="grid grid-cols-2 gap-2 mt-2">
                                       {p.insurance_card_front_url && (
                                         <div>
-                                          <div className="text-[10px] text-[#999] mb-1">Card front</div>
+                                          <div className="text-[10px] text-[#1A1A2E] mb-1">Card front</div>
                                           <a href={p.insurance_card_front_url} target="_blank" rel="noopener noreferrer">
                                             <img src={p.insurance_card_front_url} alt="Old card front"
                                               className="w-full rounded border border-[#E8E8E4] object-cover" />
@@ -1162,7 +1162,7 @@ export function PatientChart() {
                                       )}
                                       {p.insurance_card_back_url && (
                                         <div>
-                                          <div className="text-[10px] text-[#999] mb-1">Card back</div>
+                                          <div className="text-[10px] text-[#1A1A2E] mb-1">Card back</div>
                                           <a href={p.insurance_card_back_url} target="_blank" rel="noopener noreferrer">
                                             <img src={p.insurance_card_back_url} alt="Old card back"
                                               className="w-full rounded border border-[#E8E8E4] object-cover" />
@@ -1188,7 +1188,7 @@ export function PatientChart() {
 
                 {/* Patient management */}
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5">
-                  <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-4">Patient management</div>
+                  <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-4">Patient management</div>
                   <div className="flex flex-wrap gap-3">
                     <button
                       disabled={archivingPatient}
@@ -1205,7 +1205,7 @@ export function PatientChart() {
                       Permanently delete patient
                     </button>
                   </div>
-                  <p className="text-[11px] text-[#bbb] mt-3">
+                  <p className="text-[11px] text-[#1A1A2E] mt-3">
                     Archiving hides the patient from the active list without deleting any data. Deletion is permanent and cannot be undone.
                   </p>
                 </div>
@@ -1217,7 +1217,7 @@ export function PatientChart() {
                 <div>
                   <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">Upcoming</div>
                   {upcomingRequests.length === 0 ? (
-                    <div className="text-[13px] text-[#bbb] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
+                    <div className="text-[13px] text-[#1A1A2E] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
                       No upcoming appointments
                     </div>
                   ) : (
@@ -1232,7 +1232,7 @@ export function PatientChart() {
                                 </span>
                                 {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
                               </div>
-                              <div className="text-[12px] text-[#999] mb-1">
+                              <div className="text-[12px] text-[#1A1A2E] mb-1">
                                 {br.zone && <span>{br.zone}</span>}
                                 {br.provider_name && <span> · {br.provider_name}</span>}
                               </div>
@@ -1278,7 +1278,7 @@ export function PatientChart() {
                 <div>
                   <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">Past</div>
                   {pastRequests.length === 0 ? (
-                    <div className="text-[13px] text-[#bbb] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
+                    <div className="text-[13px] text-[#1A1A2E] text-center py-6 bg-white border border-[#E8E8E4] rounded-xl">
                       No past appointments
                     </div>
                   ) : (
@@ -1293,7 +1293,7 @@ export function PatientChart() {
                                 </span>
                                 {br.visit_type && <Badge variant="purple">{br.visit_type}</Badge>}
                               </div>
-                              <div className="text-[12px] text-[#999] mb-1">
+                              <div className="text-[12px] text-[#1A1A2E] mb-1">
                                 {br.zone && <span>{br.zone}</span>}
                                 {br.provider_name && <span> · {br.provider_name}</span>}
                               </div>
@@ -1338,7 +1338,7 @@ export function PatientChart() {
               <div>
                 {notes.length === 0 ? (
                   <div className="text-center py-16">
-                    <div className="text-[#999] text-[14px]">No encounter notes on file for this patient.</div>
+                    <div className="text-[#1A1A2E] text-[14px]">No encounter notes on file for this patient.</div>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1366,7 +1366,7 @@ export function PatientChart() {
                                 <Badge variant="purple">{note.visit_type}</Badge>
                                 {note.is_signed && <Badge variant="teal">Signed</Badge>}
                               </div>
-                              <div className="text-[12px] text-[#999] mb-1.5">
+                              <div className="text-[12px] text-[#1A1A2E] mb-1.5">
                                 {note.provider_name && <span>{note.provider_name} · </span>}
                                 {note.zone}
                               </div>
@@ -1377,7 +1377,7 @@ export function PatientChart() {
                               )}
                               {note.chief_complaint && (
                                 <div className="text-[13px] text-[#1A1A2E]">
-                                  <span className="text-[#999] text-[11px]">CC: </span>{note.chief_complaint}
+                                  <span className="text-[#1A1A2E] text-[11px]">CC: </span>{note.chief_complaint}
                                 </div>
                               )}
                               {note.diagnoses?.length > 0 && (
@@ -1391,29 +1391,29 @@ export function PatientChart() {
                               )}
                               {note.plan && (
                                 <div className="text-[12px] text-[#555] mt-1.5 line-clamp-2">
-                                  <span className="text-[#999]">Plan: </span>
+                                  <span className="text-[#1A1A2E]">Plan: </span>
                                   {note.plan.length > 120 ? note.plan.slice(0, 120) + '…' : note.plan}
                                 </div>
                               )}
                               {(note.vaccine_administrations?.length ?? 0) > 0 && (
                                 <div className="text-[12px] text-[#555] mt-1.5">
-                                  <span className="text-[#999]">Vaccines: </span>
+                                  <span className="text-[#1A1A2E]">Vaccines: </span>
                                   {note.vaccine_administrations!.map(v => v.vaccine_name).join(', ')}
                                 </div>
                               )}
                               {(note.cpt_codes?.length ?? 0) > 0 && (
                                 <div className="text-[12px] text-[#555] mt-1.5">
-                                  <span className="text-[#999]">Codes: </span>
+                                  <span className="text-[#1A1A2E]">Codes: </span>
                                   {note.cpt_codes!.map(c => c.code).join(', ')}
                                 </div>
                               )}
                               {!note.chief_complaint && !note.plan && note.diagnoses?.length === 0 && (note.vaccine_administrations?.length ?? 0) === 0 && (note.cpt_codes?.length ?? 0) === 0 && (
-                                <div className="text-[12px] text-[#bbb] italic mt-1">No encounter note content</div>
+                                <div className="text-[12px] text-[#1A1A2E] italic mt-1">No encounter note content</div>
                               )}
                             </div>
                             <ChevronDown
                               size={14}
-                              className={`text-[#999] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                              className={`text-[#1A1A2E] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                             />
                           </button>
 
@@ -1433,7 +1433,7 @@ export function PatientChart() {
                                       { label: 'BP', value: vitals.systolic_bp != null && vitals.diastolic_bp != null ? `${vitals.systolic_bp}/${vitals.diastolic_bp}` : null },
                                     ].filter(d => d.value).map(d => (
                                       <div key={d.label} className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-3 py-2">
-                                        <div className="text-[10px] text-[#999] font-medium uppercase tracking-wider">{d.label}</div>
+                                        <div className="text-[10px] text-[#1A1A2E] font-medium uppercase tracking-wider">{d.label}</div>
                                         <div className="text-[13px] font-medium text-[#1A1A2E] mt-0.5">{d.value}</div>
                                       </div>
                                     ))}
@@ -1509,13 +1509,13 @@ export function PatientChart() {
                                     <table className="w-full text-[12px]">
                                       <thead>
                                         <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Vaccine</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Lot #</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Exp</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Dose</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Route</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Site</th>
-                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#999] font-medium">Given by</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Vaccine</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Lot #</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Exp</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Dose</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Route</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Site</th>
+                                          <th className="text-left px-3 py-1.5 text-[10px] text-[#1A1A2E] font-medium">Given by</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -1523,7 +1523,7 @@ export function PatientChart() {
                                           <tr key={i} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
                                             <td className="px-3 py-2 font-medium text-[#1A1A2E]">
                                               {v.vaccine_name}
-                                              {v.manufacturer && <div className="text-[10px] text-[#999] font-normal">{v.manufacturer}</div>}
+                                              {v.manufacturer && <div className="text-[10px] text-[#1A1A2E] font-normal">{v.manufacturer}</div>}
                                             </td>
                                             <td className="px-3 py-2 text-[#555]">{v.lot_number || '—'}</td>
                                             <td className="px-3 py-2 text-[#555]">{v.expiration_date || '—'}</td>
@@ -1540,7 +1540,7 @@ export function PatientChart() {
                               )}
 
                               {note.is_signed && note.signed_at && (
-                                <div className="text-[11px] text-[#999] pt-2 border-t border-[#F1EFE8] space-y-0.5">
+                                <div className="text-[11px] text-[#1A1A2E] pt-2 border-t border-[#F1EFE8] space-y-0.5">
                                   <div>
                                     Signed {format(new Date(note.signed_at), 'MMM d, yyyy h:mm a')}
                                     {note.provider_name && ` by ${note.provider_name}`}
@@ -1552,7 +1552,7 @@ export function PatientChart() {
                                   ) : note.is_signed && note.pcp_fax_name ? (
                                     <div className="text-[#b08020]">Fax to {note.pcp_fax_name} pending</div>
                                   ) : note.is_signed && (
-                                    <div className="text-[#bbb]">No PCP on file</div>
+                                    <div className="text-[#1A1A2E]">No PCP on file</div>
                                   )}
                                 </div>
                               )}
@@ -1590,7 +1590,7 @@ export function PatientChart() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">Lab Orders</div>
-                    <div className="text-[12px] text-[#999] mt-0.5">Labcorp integration — orders placed here are tracked in your Labcorp account</div>
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">Labcorp integration — orders placed here are tracked in your Labcorp account</div>
                   </div>
                   <button
                     onClick={() => { setOrderFormOpen(true); setOrderError(null) }}
@@ -1605,12 +1605,12 @@ export function PatientChart() {
                   <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <div className="font-medium text-[14px] text-[#1A1A2E]">New Lab Order</div>
-                      <button onClick={() => setOrderFormOpen(false)} className="text-[#999] hover:text-[#555]"><X size={16} /></button>
+                      <button onClick={() => setOrderFormOpen(false)} className="text-[#1A1A2E] hover:text-[#555]"><X size={16} /></button>
                     </div>
 
                     {/* Test search */}
                     <div className="mb-4">
-                      <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Select Tests</div>
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Select Tests</div>
                       <input
                         value={testSearch}
                         onChange={e => setTestSearch(e.target.value)}
@@ -1631,7 +1631,7 @@ export function PatientChart() {
                               className={`w-full flex items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${selected ? 'bg-[#7F77DD]/8 text-[#5B54B5]' : 'hover:bg-[#FAFAF8] text-[#1A1A2E]'}`}
                             >
                               <span>{t.name}</span>
-                              <span className="text-[11px] text-[#999] font-mono ml-3 flex-shrink-0">{t.code}{selected && ' ✓'}</span>
+                              <span className="text-[11px] text-[#1A1A2E] font-mono ml-3 flex-shrink-0">{t.code}{selected && ' ✓'}</span>
                             </button>
                           )
                         })}
@@ -1650,19 +1650,19 @@ export function PatientChart() {
 
                     {/* Diagnoses */}
                     <div className="mb-4">
-                      <label className="text-[11px] font-semibold text-[#999] uppercase tracking-wide block mb-1">Diagnosis Codes (ICD-10)</label>
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Diagnosis Codes (ICD-10)</label>
                       <input
                         value={orderDiagnoses}
                         onChange={e => setOrderDiagnoses(e.target.value)}
                         placeholder="e.g. Z00.129, J06.9"
                         className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
                       />
-                      <div className="text-[11px] text-[#999] mt-1">Comma-separated</div>
+                      <div className="text-[11px] text-[#1A1A2E] mt-1">Comma-separated</div>
                     </div>
 
                     {/* Priority */}
                     <div className="mb-4">
-                      <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Priority</div>
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Priority</div>
                       <div className="flex gap-2">
                         {(['routine', 'stat'] as const).map(p => (
                           <button
@@ -1678,7 +1678,7 @@ export function PatientChart() {
 
                     {/* Notes */}
                     <div className="mb-4">
-                      <label className="text-[11px] font-semibold text-[#999] uppercase tracking-wide block mb-1">Notes (optional)</label>
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Notes (optional)</label>
                       <textarea
                         value={orderNotes}
                         onChange={e => setOrderNotes(e.target.value)}
@@ -1709,12 +1709,12 @@ export function PatientChart() {
 
                 {/* Order list */}
                 {labsLoading ? (
-                  <div className="text-center py-8 text-[13px] text-[#999]">Loading…</div>
+                  <div className="text-center py-8 text-[13px] text-[#1A1A2E]">Loading…</div>
                 ) : labsError ? (
                   <div className="text-[13px] text-red-500 bg-red-50 px-4 py-3 rounded-xl">{labsError}</div>
                 ) : labOrders.length === 0 ? (
                   <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 shadow-sm text-center">
-                    <div className="text-[13px] text-[#999]">No lab orders yet for this patient.</div>
+                    <div className="text-[13px] text-[#1A1A2E]">No lab orders yet for this patient.</div>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1730,18 +1730,18 @@ export function PatientChart() {
                                 <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[11px] rounded-full font-semibold">STAT</span>
                               )}
                             </div>
-                            <div className="text-[11px] text-[#999] mt-1">
+                            <div className="text-[11px] text-[#1A1A2E] mt-1">
                               Ordered by {order.provider_name} · {order.created_at ? format(new Date(order.created_at), 'MMM d, yyyy') : ''}
                             </div>
                             {order.diagnoses?.length > 0 && (
-                              <div className="text-[11px] text-[#999] mt-0.5">Dx: {order.diagnoses.join(', ')}</div>
+                              <div className="text-[11px] text-[#1A1A2E] mt-0.5">Dx: {order.diagnoses.join(', ')}</div>
                             )}
                           </div>
                           <LabStatusBadge status={order.status} />
                         </div>
 
                         {order.labcorp_order_id && (
-                          <div className="text-[11px] text-[#999] mt-1">Labcorp ID: <span className="font-mono">{order.labcorp_order_id}</span></div>
+                          <div className="text-[11px] text-[#1A1A2E] mt-1">Labcorp ID: <span className="font-mono">{order.labcorp_order_id}</span></div>
                         )}
 
                         {order.status === 'pending' && (
@@ -1765,10 +1765,10 @@ export function PatientChart() {
 
                         {order.results?.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-[#F1EFE8]">
-                            <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-2">Results</div>
+                            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Results</div>
                             {order.results.map((r: any) => (
                               <div key={r.id} className="text-[12px] text-[#1A1A2E] bg-[#FAFAF8] rounded-lg p-3">
-                                {r.report_date && <div className="text-[11px] text-[#999] mb-1">Reported {format(new Date(r.report_date), 'MMM d, yyyy')}</div>}
+                                {r.report_date && <div className="text-[11px] text-[#1A1A2E] mb-1">Reported {format(new Date(r.report_date), 'MMM d, yyyy')}</div>}
                                 <pre className="whitespace-pre-wrap font-sans text-[12px]">{typeof r.result_data === 'string' ? r.result_data : JSON.stringify(r.result_data, null, 2)}</pre>
                               </div>
                             ))}
@@ -1863,7 +1863,7 @@ export function PatientChart() {
                       </div>
                       <button
                         onClick={() => { setDsUrl(null); setDsError(null) }}
-                        className="text-[11px] text-[#999] hover:text-[#555] transition-colors"
+                        className="text-[11px] text-[#1A1A2E] hover:text-[#555] transition-colors"
                       >
                         Close
                       </button>
@@ -1883,12 +1883,12 @@ export function PatientChart() {
             {activeTab === 'vaccines' && (
               <div>
                 {vaccineNotes.length === 0 ? (
-                  <div className="text-center py-16 text-[#999] text-[14px]">No vaccine administrations on file.</div>
+                  <div className="text-center py-16 text-[#1A1A2E] text-[14px]">No vaccine administrations on file.</div>
                 ) : (
                   <div className="space-y-6">
                     {vaccineNotes.map(note => (
                       <div key={note.id}>
-                        <div className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">
+                        <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">
                           {formatApiDate(note.scheduled_date, 'MMMM d, yyyy')}
                           {note.provider_name && <span className="ml-2 font-normal normal-case">· {note.provider_name}</span>}
                         </div>
@@ -1896,13 +1896,13 @@ export function PatientChart() {
                           <table className="w-full text-[13px]">
                             <thead>
                               <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Vaccine</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Lot #</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Exp</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Dose</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Route</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Site</th>
-                                <th className="text-left px-4 py-2 text-[11px] text-[#999] font-medium">Given by</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Vaccine</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Lot #</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Exp</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Dose</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Route</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Site</th>
+                                <th className="text-left px-4 py-2 text-[11px] text-[#1A1A2E] font-medium">Given by</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1910,7 +1910,7 @@ export function PatientChart() {
                                 <tr key={i} className={i > 0 ? 'border-t border-[#F0F0EC]' : ''}>
                                   <td className="px-4 py-3 font-medium text-[#1A1A2E]">
                                     {v.vaccine_name}
-                                    {v.manufacturer && <div className="text-[11px] text-[#999] font-normal">{v.manufacturer}</div>}
+                                    {v.manufacturer && <div className="text-[11px] text-[#1A1A2E] font-normal">{v.manufacturer}</div>}
                                   </td>
                                   <td className="px-4 py-3 text-[#555]">{v.lot_number || '—'}</td>
                                   <td className="px-4 py-3 text-[#555]">{v.expiration_date || '—'}</td>
@@ -1989,11 +1989,11 @@ export function PatientChart() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Reschedule appointment</h2>
-              <button onClick={() => setRescheduleTarget(null)} disabled={rescheduleSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setRescheduleTarget(null)} disabled={rescheduleSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{rescheduleTarget.visit_type}</div>
-              <div className="text-[#999]">Currently {formatApiDate(rescheduleTarget.preferred_date || rescheduleTarget.scheduled_date)} at {rescheduleTarget.scheduled_time || 'unknown'}</div>
+              <div className="text-[#1A1A2E]">Currently {formatApiDate(rescheduleTarget.preferred_date || rescheduleTarget.scheduled_date)} at {rescheduleTarget.scheduled_time || 'unknown'}</div>
             </div>
             <div className="space-y-3 mb-4">
               <div>
@@ -2065,11 +2065,11 @@ export function PatientChart() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Cancel this appointment?</h2>
-              <button onClick={() => setCancelTarget(null)} disabled={cancelSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setCancelTarget(null)} disabled={cancelSaving} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
             <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
               <div className="font-medium text-[#1A1A2E]">{cancelTarget.visit_type}</div>
-              <div className="text-[#999]">{formatApiDate(cancelTarget.preferred_date || cancelTarget.scheduled_date)} at {cancelTarget.scheduled_time || 'unknown'}</div>
+              <div className="text-[#1A1A2E]">{formatApiDate(cancelTarget.preferred_date || cancelTarget.scheduled_date)} at {cancelTarget.scheduled_time || 'unknown'}</div>
             </div>
             <p className="text-[13px] text-[#555] mb-4">
               The parent and admins will be notified of the cancellation.
@@ -2154,7 +2154,7 @@ export function PatientChart() {
                 <UserPlus size={16} className="text-[#7F77DD]" />
                 <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Add sibling of {name}</h2>
               </div>
-              <button onClick={() => setSiblingOpen(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setSiblingOpen(false)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
 
             <div className="p-6 space-y-5">
@@ -2163,22 +2163,22 @@ export function PatientChart() {
                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-3">New child — required</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">First name <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">First name <span className="text-[#991B1B]">*</span></label>
                     <input autoFocus className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                       value={sibling.first_name} onChange={e => setSibling(s => ({ ...s, first_name: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Last name <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Last name <span className="text-[#991B1B]">*</span></label>
                     <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                       value={sibling.last_name} onChange={e => setSibling(s => ({ ...s, last_name: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Date of birth <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Date of birth <span className="text-[#991B1B]">*</span></label>
                     <input type="date" className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
                       value={sibling.date_of_birth} onChange={e => setSibling(s => ({ ...s, date_of_birth: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Sex <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Sex <span className="text-[#991B1B]">*</span></label>
                     <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
                       value={sibling.gender} onChange={e => setSibling(s => ({ ...s, gender: e.target.value }))}>
                       <option value="">Select…</option>
@@ -2192,25 +2192,25 @@ export function PatientChart() {
                 {/* Per-child clinical fields — can't inherit from a sibling */}
                 <div className="mt-3 space-y-3">
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Drug &amp; food allergies <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Drug &amp; food allergies <span className="text-[#991B1B]">*</span></label>
                     <textarea rows={2} placeholder='Type "NKDA" if none'
                       className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
                       value={sibling.allergies} onChange={e => setSibling(s => ({ ...s, allergies: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Current medications <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Current medications <span className="text-[#991B1B]">*</span></label>
                     <textarea rows={2} placeholder='Type "None" if none'
                       className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
                       value={sibling.current_medications} onChange={e => setSibling(s => ({ ...s, current_medications: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Medical history <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Medical history <span className="text-[#991B1B]">*</span></label>
                     <textarea rows={2} placeholder='Type "None" if no significant history'
                       className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] resize-none focus:border-[#7F77DD] outline-none"
                       value={sibling.medical_history} onChange={e => setSibling(s => ({ ...s, medical_history: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] text-[#999] block mb-1">Vaccination status <span className="text-[#991B1B]">*</span></label>
+                    <label className="text-[11px] text-[#1A1A2E] block mb-1">Vaccination status <span className="text-[#991B1B]">*</span></label>
                     <select className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white focus:border-[#7F77DD] outline-none"
                       value={sibling.vaccination_status} onChange={e => setSibling(s => ({ ...s, vaccination_status: e.target.value }))}>
                       <option value="">Select…</option>
@@ -2240,12 +2240,12 @@ export function PatientChart() {
                     { label: 'Sub. sex', value: child.insurance_subscriber_gender === 'M' ? 'Male' : child.insurance_subscriber_gender === 'F' ? 'Female' : child.insurance_subscriber_gender },
                   ].map(({ label, value }) => value ? (
                     <div key={label}>
-                      <div className="text-[10px] text-[#999]">{label}</div>
+                      <div className="text-[10px] text-[#1A1A2E]">{label}</div>
                       <div className="text-[#1A1A2E] truncate">{value}</div>
                     </div>
                   ) : null)}
                 </div>
-                <p className="text-[10px] text-[#999] mt-1">These fields are copied automatically. You can edit them from the new patient's chart after saving.</p>
+                <p className="text-[10px] text-[#1A1A2E] mt-1">These fields are copied automatically. You can edit them from the new patient's chart after saving.</p>
               </div>
 
               {siblingError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{siblingError}</div>}
@@ -2312,7 +2312,7 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
         <div className="p-5 border-b border-[#F1EFE8] flex items-center justify-between">
           <div>
             <h3 className="text-[15px] font-semibold text-[#1A1A2E]">Medical History</h3>
-            <p className="text-[12px] text-[#999] mt-0.5">Auto-populated into every new encounter note. Any provider or admin can edit.</p>
+            <p className="text-[12px] text-[#1A1A2E] mt-0.5">Auto-populated into every new encounter note. Any provider or admin can edit.</p>
           </div>
           {!editing && (
             <button
@@ -2346,7 +2346,7 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
           ) : (
             current
               ? <div className="text-[14px] text-[#1A1A2E] whitespace-pre-wrap leading-relaxed">{current}</div>
-              : <div className="text-[13px] text-[#999] italic">No medical history recorded yet. Click Edit to add.</div>
+              : <div className="text-[13px] text-[#1A1A2E] italic">No medical history recorded yet. Click Edit to add.</div>
           )}
         </div>
       </div>

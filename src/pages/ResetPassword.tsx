@@ -60,7 +60,7 @@ export function ResetPassword() {
             <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
               <PracticeLogo />
             </div>
-            <div className="text-[13px] text-[#999]">Provider portal</div>
+            <div className="text-[13px] text-[#1A1A2E]">Provider portal</div>
           </div>
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7">
@@ -77,14 +77,14 @@ export function ResetPassword() {
             ) : (
               <>
                 <h1 className="font-display text-xl font-medium text-[#1A1A2E] mb-1">Set new password</h1>
-                <p className="text-[13px] text-[#999] mb-5">Choose a password that's at least 8 characters.</p>
+                <p className="text-[13px] text-[#1A1A2E] mb-5">Choose a password that's at least 8 characters.</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <Input label="New password" type="password" placeholder="••••••••" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
                   <Input label="Confirm new password" type="password" placeholder="••••••••" value={confirm} onChange={e => setConfirm(e.target.value)} required />
                   {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
                   <Button type="submit" className="w-full !py-2.5" loading={loading}>Set new password</Button>
                 </form>
-                <p className="text-center text-[13px] text-[#999] mt-5">
+                <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
                   <Link to="/login" className="text-[#7F77DD] font-medium hover:underline">Back to sign in</Link>
                 </p>
               </>

@@ -122,7 +122,7 @@ export function Settings() {
             <Phone size={16} className="text-[#7F77DD]" />
             <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">SMS notifications</h2>
           </div>
-          <p className="text-[12px] text-[#999] mb-4">Add your mobile number to receive a text message when a new appointment is added to your schedule. Include the country code — e.g. <strong>+17045551234</strong></p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">Add your mobile number to receive a text message when a new appointment is added to your schedule. Include the country code — e.g. <strong>+17045551234</strong></p>
           <div className="space-y-3">
             <Input label="Mobile number" type="tel" placeholder="(704) 000-0000"
               value={phone} onChange={e => setPhone(e.target.value)} />
@@ -138,9 +138,9 @@ export function Settings() {
             <MapPin size={16} className="text-[#7F77DD]" />
             <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Service areas</h2>
           </div>
-          <p className="text-[12px] text-[#999] mb-4">Zones you cover. Families in these zones will be able to book with you.</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">Zones you cover. Families in these zones will be able to book with you.</p>
           {availableZones.length === 0 ? (
-            <p className="text-[12px] text-[#999]">No zones configured for this practice yet.</p>
+            <p className="text-[12px] text-[#1A1A2E]">No zones configured for this practice yet.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {availableZones.map(zone => {
@@ -164,7 +164,7 @@ export function Settings() {
             <Phone size={16} className="text-[#1D9E75]" />
             <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Secure texting number</h2>
           </div>
-          <p className="text-[12px] text-[#999] mb-4">Your secure texting number is shared with families who are outside our current service zones so they can reach you directly. Include the country code — e.g. <strong>+17045551234</strong></p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">Your secure texting number is shared with families who are outside our current service zones so they can reach you directly. Include the country code — e.g. <strong>+17045551234</strong></p>
           <div className="space-y-3">
             <Input label="Secure text number" type="tel" placeholder="(704) 000-0000"
               value={secureText} onChange={e => setSecureText(e.target.value)} />

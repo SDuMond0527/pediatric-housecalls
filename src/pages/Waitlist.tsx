@@ -112,7 +112,7 @@ function WaitlistPatientDetails({ entry, child }: { entry: WaitlistEntry; child:
   const cardBack = child?.insurance_card_back_url || ''
 
   const F = ({ label, value }: { label: string; value: string }) => value ? (
-    <div className="text-[13px]"><span className="text-[#999] text-[11px] block">{label}</span>{value}</div>
+    <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">{label}</span>{value}</div>
   ) : null
 
   const patientHas = name || familyName || dob || sex || phone || email || address
@@ -125,13 +125,13 @@ function WaitlistPatientDetails({ entry, child }: { entry: WaitlistEntry; child:
       {patientHas && (
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Patient</div>
-          {name && <div className="text-[13px]"><span className="text-[#999] text-[11px] block">Name</span><strong>{name}</strong></div>}
+          {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
           <F label="Family" value={familyName} />
           <F label="Date of birth" value={dob} />
           <F label="Sex" value={sex} />
           {phone && (
             <div className="text-[13px]">
-              <span className="text-[#999] text-[11px] block">Phone</span>
+              <span className="text-[#1A1A2E] text-[11px] block">Phone</span>
               <div className="flex items-center justify-between gap-2">
                 <span>{phone}</span>
                 <a href={`tel:${phone}`} onClick={e => e.stopPropagation()}
@@ -744,7 +744,7 @@ export function Waitlist() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div>
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Waitlist</div>
-          <div className="text-[12px] text-[#999] mt-0.5">
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">
             Families waiting for an available appointment
           </div>
         </div>
@@ -757,12 +757,12 @@ export function Waitlist() {
       </div>
 
       <div className="p-6 space-y-3 max-w-3xl">
-        {loading && <div className="text-[#999] text-[13px]">Loading...</div>}
+        {loading && <div className="text-[#1A1A2E] text-[13px]">Loading...</div>}
 
         {!loading && entries.length === 0 && (
           <div className="text-center py-16">
             <CheckCircle2 size={24} className="text-[#aeaeb2] mx-auto mb-2" />
-            <p className="text-[14px] text-[#999]">No open waitlist entries right now.</p>
+            <p className="text-[14px] text-[#1A1A2E]">No open waitlist entries right now.</p>
           </div>
         )}
 
@@ -788,7 +788,7 @@ export function Waitlist() {
                   {entry.visit_type && <Badge variant="gray">{entry.visit_type}</Badge>}
                 </div>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#999] mb-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#1A1A2E] mb-2">
                   <span className="flex items-center gap-1"><MapPin size={11} /> Zip {entry.zip}{entry.state && ` · ${stateLabel(entry.state)}`}</span>
                   {displayPhone && (
                     <a href={`tel:${displayPhone}`} className="flex items-center gap-1 hover:text-[#1A1A2E]">
@@ -813,25 +813,25 @@ export function Waitlist() {
                     <div className="mt-1 space-y-1">
                       {complaint && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Chief complaint: </span>
+                          <span className="text-[#1A1A2E]">Chief complaint: </span>
                           <span className="text-[#1A1A2E] font-medium">{complaint}</span>
                         </div>
                       )}
                       {address && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Address: </span>
+                          <span className="text-[#1A1A2E]">Address: </span>
                           <span className="text-[#1A1A2E] font-medium">{address}</span>
                         </div>
                       )}
                       {noteMap.Patient && (
                         <div className="text-[12px]">
-                          <span className="text-[#999]">Patient: </span>
+                          <span className="text-[#1A1A2E]">Patient: </span>
                           <span className="text-[#1A1A2E] font-medium">{noteMap.Patient}</span>
                         </div>
                       )}
                       {noteEntries.map(([k, v]) => (
                         <div key={k} className="text-[12px]">
-                          <span className="text-[#999]">{k}: </span>
+                          <span className="text-[#1A1A2E]">{k}: </span>
                           <span className="text-[#555]">{v}</span>
                         </div>
                       ))}
@@ -872,7 +872,7 @@ export function Waitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Edit contact info</h2>
-              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={() => setEditEntry(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
             <div className="space-y-3">
               <Input label="Patient name" value={editName} onChange={e => setEditName(e.target.value)} />
@@ -894,18 +894,18 @@ export function Waitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Add patient to waitlist</h2>
-              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+              <button onClick={closeAddModal} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
             </div>
 
             <div className="space-y-3">
-              <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest">Patient info</div>
+              <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest">Patient info</div>
 
               <div className="relative">
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Patient name *</label>
                 {selectedChild ? (
                   <div className="flex items-center gap-2 px-3 py-2.5 border border-[#AFA9EC] rounded-lg bg-[#F5F4FE]">
                     <span className="flex-1 text-[14px] font-medium text-[#1A1A2E]">{addForm.name}</span>
-                    <button type="button" onClick={clearSelectedChild} className="text-[#999] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
+                    <button type="button" onClick={clearSelectedChild} className="text-[#1A1A2E] hover:text-[#555] flex-shrink-0"><X size={14} /></button>
                   </div>
                 ) : (
                   <>
@@ -926,14 +926,14 @@ export function Waitlist() {
                             <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
                               className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
                               <div className="text-[14px] font-medium text-[#1A1A2E]">{cn}</div>
-                              {dob && <div className="text-[12px] text-[#999]">DOB: {dob}</div>}
+                              {dob && <div className="text-[12px] text-[#1A1A2E]">DOB: {dob}</div>}
                             </button>
                           )
                         })}
                       </div>
                     )}
                     {searchOpen && nameQuery.trim().length > 1 && searchResults.length === 0 && (
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#999]">
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E4] rounded-lg shadow-sm px-3 py-2.5 text-[13px] text-[#1A1A2E]">
                         No patients found — fill in manually below
                       </div>
                     )}
@@ -1015,7 +1015,7 @@ export function Waitlist() {
 
               {!selectedChild && (
                 <>
-                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Clinical info</div>
+                  <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-1">Clinical info</div>
                   <Input label="Allergies *" placeholder='e.g. Penicillin — or "NKDA"' value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
                   <Input label="Current medications *" placeholder='None, or list medications' value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
                   <Input label="PMH *" placeholder='Significant past medical history — or "None"' value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
@@ -1034,14 +1034,14 @@ export function Waitlist() {
                     </select>
                   </div>
 
-                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-widest pt-1">Insurance</div>
+                  <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-1">Insurance</div>
                   <label className="flex items-start gap-2 p-3 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
                     <input type="checkbox" checked={addForm.selfPay}
                       onChange={e => setField('selfPay', e.target.checked)}
                       className="mt-0.5" />
                     <div>
                       <div className="text-[13px] font-medium text-[#1A1A2E]">Self-pay (no insurance)</div>
-                      <div className="text-[11px] text-[#999]">Check this if the family is not filing insurance.</div>
+                      <div className="text-[11px] text-[#1A1A2E]">Check this if the family is not filing insurance.</div>
                     </div>
                   </label>
 
@@ -1079,7 +1079,7 @@ export function Waitlist() {
                       </select>
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#999]">Insurance card photos can be uploaded when the family logs in — those aren't required during phone triage.</p>
+                  <p className="text-[11px] text-[#1A1A2E]">Insurance card photos can be uploaded when the family logs in — those aren't required during phone triage.</p>
                   </>
                   )}
                 </>
@@ -1103,7 +1103,7 @@ export function Waitlist() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 pt-6 pb-4">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Accept waitlist patient</h2>
-              <button onClick={() => setAccepting(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]">
+              <button onClick={() => setAccepting(null)} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]">
                 <X size={16} />
               </button>
             </div>
@@ -1111,11 +1111,11 @@ export function Waitlist() {
             <div className="px-6 flex-1 overflow-y-auto">
               <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#555] mb-4 space-y-1">
                 <div className="font-medium text-[#1A1A2E]">{accepting.family_name}</div>
-                <div className="flex items-center gap-1 text-[#999]">
+                <div className="flex items-center gap-1 text-[#1A1A2E]">
                   <MapPin size={11} /> Zip {accepting.zip} · {stateLabel(accepting.state)}
                 </div>
                 {accepting.preferred_time_window && (
-                  <div className="flex items-center gap-1 text-[#999]">
+                  <div className="flex items-center gap-1 text-[#1A1A2E]">
                     <Clock size={11} /> Preferred: {accepting.preferred_time_window}
                   </div>
                 )}

@@ -130,7 +130,7 @@ export function FamilyAddCard() {
           <div className="font-display text-2xl font-medium text-[#1A1A2E] mb-1">
             Pediatric<span style={{ color: '#7F77DD' }}>Housecalls</span>
           </div>
-          <p className="text-[13px] text-[#999] mt-1">A card on file is required to book appointments</p>
+          <p className="text-[13px] text-[#1A1A2E] mt-1">A card on file is required to book appointments</p>
         </div>
 
         <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7 space-y-5">
@@ -151,13 +151,13 @@ export function FamilyAddCard() {
             <div id="square-card-container"
               className="min-h-[90px] border border-[#E8E8E4] rounded-lg p-3 bg-white focus-within:border-[#7F77DD] transition-colors" />
             {!cardReady && !cardError && (
-              <p className="text-[12px] text-[#999] text-center py-1">Loading secure payment form…</p>
+              <p className="text-[12px] text-[#1A1A2E] text-center py-1">Loading secure payment form…</p>
             )}
           </div>
 
           <div className="flex items-center gap-2 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg">
-            <Lock size={13} className="text-[#999] flex-shrink-0" />
-            <p className="text-[11px] text-[#999] leading-snug">
+            <Lock size={13} className="text-[#1A1A2E] flex-shrink-0" />
+            <p className="text-[11px] text-[#1A1A2E] leading-snug">
               Your card is encrypted and stored securely by Square. {PRACTICE_NAME} never sees your full card number.
             </p>
           </div>

@@ -145,7 +145,7 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 pt-6 pb-3 border-b border-[#E8E8E4]">
           <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Complete this chart</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#999]"><X size={16} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E]"><X size={16} /></button>
         </div>
         <div className="px-6 py-4 flex-1 overflow-y-auto space-y-3">
           {missing.map(f => (
@@ -242,7 +242,7 @@ function CardUploadInput({ field, value, onChange }: { field: RequiredField; val
         <div>
           <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && pick(e.target.files[0])}
                  className="block text-[12px] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#E8E8E4] file:bg-white file:text-[#1A1A2E] file:cursor-pointer" />
-          {uploading && <div className="text-[11px] text-[#999] mt-1">Uploading…</div>}
+          {uploading && <div className="text-[11px] text-[#1A1A2E] mt-1">Uploading…</div>}
           {err && <div className="text-[11px] text-[#DC2626] mt-1">{err}</div>}
         </div>
       )}
