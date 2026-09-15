@@ -609,6 +609,22 @@ export const testStediEraSync = () =>
     timelineStatusCodes?: string[]
   }>('/api/admin/test-stedi-era-sync', { method: 'POST' })
 
+// Admin-only: backfill CAS breakdown from historical 835s.
+export const backfillStediCas = (days = 60) =>
+  apiFetch<{
+    ok: boolean
+    days: number
+    startDateTime: string
+    transactionsSeen: number
+    transactionsProcessed: number
+    skippedNotEra: number
+    skippedAlreadyProcessed: number
+    claimsUpdated: number
+    pagesFetched: number
+    errors: string[]
+    sampleTimeline?: string
+  }>(`/api/admin/backfill-stedi-cas?days=${days}`, { method: 'POST' })
+
 // ── AI ───────────────────────────────────────────────────────
 export const draftEncounterNote = (body: {
   chief_complaint?: string

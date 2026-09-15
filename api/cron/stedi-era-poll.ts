@@ -338,9 +338,13 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
       contractual_adjustment_era = ${cas.contractual_adjustment},
       updated_at                 = NOW()
     WHERE id = ${claimId}::uuid`
+  const patientRespSubtotal = +(cas.patient_deductible + cas.patient_coinsurance + cas.patient_copay + cas.patient_non_covered).toFixed(2)
   const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
   if (stmt) {
-    // COALESCE preserves any biller-entered category values.
+    // COALESCE preserves biller category edits. total_amount_due /
+    // remaining_balance get repaired only when they were stuck at 0
+    // from the old code path (before CAS support) — biller-set
+    // non-zero values win.
     await sql`
       UPDATE patient_statements SET
         patient_deductible     = COALESCE(patient_deductible,     ${cas.patient_deductible}),
@@ -348,6 +352,9 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
         patient_copay          = COALESCE(patient_copay,          ${cas.patient_copay}),
         patient_non_covered    = COALESCE(patient_non_covered,    ${cas.patient_non_covered}),
         contractual_adjustment = COALESCE(contractual_adjustment, ${cas.contractual_adjustment}),
+        total_amount_due       = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${patientRespSubtotal} ELSE total_amount_due END,
+        total_amount_due_text  = CASE WHEN COALESCE(total_amount_due, 0) = 0 THEN ${String(patientRespSubtotal)} ELSE total_amount_due_text END,
+        remaining_balance      = CASE WHEN COALESCE(remaining_balance, 0) = 0 THEN COALESCE(amount_billed, 0) - COALESCE(insurance_payment, 0) - COALESCE(contractual_adjustment, ${cas.contractual_adjustment}, 0) ELSE remaining_balance END,
         updated_at             = NOW()
       WHERE id = ${stmt.id}`
   }

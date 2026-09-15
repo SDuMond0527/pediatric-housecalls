@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -78,6 +78,8 @@ export function AdminClaims() {
   const [expanded, setExpandedRaw] = useState<string | null>(null)
   const [eraTestRunning, setEraTestRunning] = useState(false)
   const [eraTestResult, setEraTestResult] = useState<Awaited<ReturnType<typeof testStediEraSync>> | null>(null)
+  const [backfillRunning, setBackfillRunning] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<Awaited<ReturnType<typeof backfillStediCas>> | null>(null)
 
   // Auto-mark ERA as seen when the biller expands a claim card that has
   // era_received_at but no era_seen_at yet. Optimistic — updates local
@@ -389,6 +391,25 @@ export function AdminClaims() {
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
             <Zap size={12} /> {eraTestRunning ? 'Testing…' : 'Test Stedi ERA sync'}
           </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Backfill CAS breakdown for the last 60 days? Runs against all ERAs Stedi received in that window. Biller manual edits are preserved.')) return
+              setBackfillRunning(true)
+              setBackfillResult(null)
+              try {
+                const r = await backfillStediCas(60)
+                setBackfillResult(r)
+                await load()
+              } catch (e: any) {
+                setBackfillResult({ ok: false, days: 60, startDateTime: '', transactionsSeen: 0, transactionsProcessed: 0, skippedNotEra: 0, skippedAlreadyProcessed: 0, claimsUpdated: 0, pagesFetched: 0, errors: [e?.message ?? String(e)] } as any)
+              } finally {
+                setBackfillRunning(false)
+              }
+            }}
+            disabled={backfillRunning}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
+            <Zap size={12} /> {backfillRunning ? 'Backfilling…' : 'Backfill Stedi CAS (60d)'}
+          </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
           </button>
@@ -427,6 +448,28 @@ export function AdminClaims() {
               <summary className="cursor-pointer opacity-80">Raw sample of Stedi claim timeline response (click to expand)</summary>
               <pre className="text-[10px] font-mono mt-1 p-2 bg-white/50 rounded whitespace-pre-wrap break-all">{eraTestResult.sampleTimelineResponse}</pre>
             </details>
+          )}
+        </div>
+      )}
+
+      {backfillResult && (
+        <div className={`mb-4 border rounded-xl px-4 py-3 ${backfillResult.ok ? 'bg-[#F5F4FE] border-[#AFA9EC] text-[#3C3489]' : 'bg-[#FCEBEB] border-[#F4B4B4] text-[#791F1F]'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-[13px] font-medium">
+              CAS backfill ({backfillResult.days}d) — {backfillResult.claimsUpdated} claim{backfillResult.claimsUpdated === 1 ? '' : 's'} updated from {backfillResult.transactionsProcessed} ERA{backfillResult.transactionsProcessed === 1 ? '' : 's'}.
+            </div>
+            <button onClick={() => setBackfillResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
+          </div>
+          <div className="text-[11px] mt-2 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1 opacity-90">
+            <div><span className="opacity-70">Transactions seen:</span> {backfillResult.transactionsSeen}</div>
+            <div><span className="opacity-70">Processed:</span> {backfillResult.transactionsProcessed}</div>
+            <div><span className="opacity-70">Claims updated:</span> {backfillResult.claimsUpdated}</div>
+            <div><span className="opacity-70">Already processed:</span> {backfillResult.skippedAlreadyProcessed}</div>
+            <div><span className="opacity-70">Non-835 skipped:</span> {backfillResult.skippedNotEra}</div>
+            <div><span className="opacity-70">Errors:</span> {backfillResult.errors.length}</div>
+          </div>
+          {backfillResult.errors.length > 0 && (
+            <div className="text-[11px] mt-1 opacity-80">Errors: {backfillResult.errors.slice(0, 3).join(' · ')}</div>
           )}
         </div>
       )}
