@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { X, CalendarPlus } from 'lucide-react'
 import { Button } from './ui/Button'
 import { createAppointmentWithOverlapRetry, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
-import { TIME_SLOTS, ZIP_TO_ZONE } from '../lib/zipData'
+import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { usePracticeZones } from '../hooks/usePracticeZones'
 import { DUAL_VISIT_TYPES, isCmaTelePair } from '../lib/dualVisitTypes'
 
 const DUAL_PROVIDER_TYPES = DUAL_VISIT_TYPES
@@ -16,11 +17,12 @@ interface Props {
 
 export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
   const { visitTypes, loading: vtLoading } = usePracticeVisitTypes()
+  const { zipToZone } = usePracticeZones()
   const [providers, setProviders] = useState<any[]>([])
   const [zones, setZones] = useState<string[]>([])
 
   const childZip = child?.family_zip || child?.parent_zip || ''
-  const autoZone = ZIP_TO_ZONE[childZip] ?? ''
+  const autoZone = zipToZone[childZip] ?? ''
 
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState({
