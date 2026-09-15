@@ -604,10 +604,9 @@ export const testStediEraSync = () =>
     statementsUpdated: number
     unmatched: number
     errors: string[]
-    sampleUnmatchedPCNs: string[]
-    remittanceIds: string[]
-    sampleClaimPaymentResponse?: string
-    detailStatusCodes?: string[]
+    sampleUnmatchedStediIds: string[]
+    sampleTimelineResponse?: string
+    timelineStatusCodes?: string[]
   }>('/api/admin/test-stedi-era-sync', { method: 'POST' })
 
 // ── AI ───────────────────────────────────────────────────────
