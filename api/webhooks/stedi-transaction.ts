@@ -200,17 +200,24 @@ function verifyStediSignature(headers: Record<string, string | string[] | undefi
   }
 }
 
-function extractTransactionId(body: any): string | null {
-  if (!body) return null
-  return (
-    body.transactionId
-    ?? body.transaction_id
+// Stedi's transaction.processed webhook wraps the payload in `v1Event`.
+// The transaction UUID lives at v1Event.resource.id when resource.type
+// is "transaction". Related X12 type (835, 277, 999, ...) is on
+// v1Event.relatedResources[].type as e.g. "transaction.x12.835".
+function extractTransactionInfo(body: any): { transactionId: string | null; x12Type: string | null; eventType: string | null } {
+  if (!body) return { transactionId: null, x12Type: null, eventType: null }
+  const v1 = body.v1Event ?? body
+  const transactionId = v1?.resource?.id
+    ?? v1?.transactionId
+    ?? body.transactionId
     ?? body.data?.transactionId
-    ?? body.data?.transaction?.id
-    ?? body.detail?.transactionId
-    ?? body.payload?.transactionId
     ?? null
-  )
+  const relatedTypes = Array.isArray(v1?.relatedResources)
+    ? v1.relatedResources.map((r: any) => String(r?.type ?? ''))
+    : []
+  const x12Type = relatedTypes.find(t => t.startsWith('transaction.x12.')) ?? null
+  const eventType = v1?.type ?? body?.type ?? null
+  return { transactionId, x12Type, eventType }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -265,9 +272,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Body was not valid JSON' })
   }
 
-  const transactionId = extractTransactionId(payload)
+  const { transactionId, x12Type, eventType } = extractTransactionInfo(payload)
   if (!transactionId) {
-    return res.status(400).json({ error: 'Could not find transactionId on webhook payload' })
+    return res.status(400).json({ error: 'Could not find transactionId on webhook payload', eventType, x12Type })
+  }
+
+  // Only process 835 ERAs. Ack 200 on other X12 types (277 claim
+  // status acks, 999 functional acks, etc.) so Stedi stops retrying
+  // events we don't care about — a non-2xx would keep it retrying
+  // forever and eventually disable the destination.
+  if (x12Type && !x12Type.endsWith('.835')) {
+    return res.status(200).json({ ok: true, skipped: 'not_835', x12Type, transactionId })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
