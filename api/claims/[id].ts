@@ -156,12 +156,22 @@ function buildStediPayload(claim: any, testMode = false): object {
     const units = parseInt(c.units, 10) || 1
     const lineCharge = (parseFloat(c.charge_amount ?? 0) * units).toFixed(2)
     const normalizedNdc = normalizeNdc(c.ndc_code)
+    // Line-level modifiers: whatever the CPT carries (either auto-set
+    // via AUTO_MODIFIERS above — e.g. QW on 87880 rapid strep — or
+    // manually entered by the biller) PLUS 95 for telehealth. The
+    // modifier field is a single string up to 4 chars; split every 2
+    // chars so a biller who types "QWSA" gets ["QW","SA"] not "QWSA".
+    // Previously only the telehealth 95 was included, which silently
+    // stripped every CLIA-waived QW modifier — UHC rejected those
+    // strep tests with SmartEdit pattern 53845.
+    const rawMods = c.modifier ? String(c.modifier).toUpperCase().match(/.{1,2}/g) ?? [] : []
+    const procedureModifiers = [...rawMods, ...(isTelehealth ? ['95'] : [])]
     return {
     serviceDate: fmtDate8(claim.service_date),
     professionalService: {
       procedureIdentifier: 'HC',
       procedureCode: c.code,
-      ...(isTelehealth ? { procedureModifiers: ['95'] } : {}),
+      ...(procedureModifiers.length > 0 ? { procedureModifiers } : {}),
       lineItemChargeAmount: lineCharge,
       measurementUnit: 'UN',
       serviceUnitCount: String(units),
