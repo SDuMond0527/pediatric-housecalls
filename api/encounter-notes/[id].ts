@@ -40,7 +40,7 @@ const PAYER_IDS_INLINE: Record<string, string> = {
   'umr': '39026', 'humana': '61101',
   'phcs': '52133', 'multiplan': '52133',
   'coventry': '38217', 'select health': '53589',
-  'medcost': '56196', 'healthgram': '56162',
+  'medcost': '56162', 'healthgram': '56162',
   'bright health': '98798', 'bright healthcare': '98798',
 }
 function resolvePayer(name: string | null): string | null {
