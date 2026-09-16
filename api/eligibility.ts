@@ -152,6 +152,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { first: subscriberFirst, last: subscriberLast } = parseSubName(child.insurance_subscriber_name ?? '')
 
+  // BCBS NC requires the 14-position member ID (12-char base +
+  // 2-digit dependent suffix concatenated). Same rule as claim
+  // submission in api/claims/[id].ts — dep code is stored separately
+  // on the child record for clarity, joined here at eligibility-check
+  // time. Other payers get the base ID untouched.
+  const depCode = String(child.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+  const transmittedMemberId = (payerId === 'UPICO' && depCode)
+    ? String(child.insurance_member_id) + depCode
+    : String(child.insurance_member_id)
+
   const payload = {
     controlNumber: Date.now().toString().slice(-9),
     tradingPartnerServiceId: payerId,
@@ -160,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       npi: process.env.PRACTICE_NPI || '1093250904',
     },
     subscriber: {
-      memberId:    child.insurance_member_id,
+      memberId:    transmittedMemberId,
       ...(subscriberFirst ? { firstName: subscriberFirst } : {}),
       lastName:    subscriberLast || subscriberFirst,
       dateOfBirth: fmtDate8(child.insurance_subscriber_dob),
@@ -199,7 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.json({
     patientName: `${child.first_name ?? ''} ${child.last_name ?? ''}`.trim(),
     insuranceProvider: payerName,
-    memberId: child.insurance_member_id,
+    memberId: transmittedMemberId,
     ...parseEligibility(stediData),
   })
   } catch (err: any) {
