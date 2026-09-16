@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientStatementsForChild } from '../lib/api'
+import { PatientBillingList } from '../components/PatientBillingList'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
@@ -143,7 +144,14 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines' | 'medical_history'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines' | 'medical_history' | 'billing'>('overview')
+  // Billing tab: sent + paid patient statements for this child.
+  // Loaded lazily on first tab visit to avoid a round-trip on every
+  // chart open — same pattern as `labsLoaded` below.
+  const [billingStatements, setBillingStatements] = useState<any[]>([])
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError] = useState<string | null>(null)
+  const [billingLoaded, setBillingLoaded] = useState(false)
   const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -382,8 +390,24 @@ export function PatientChart() {
     { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
+    { key: 'billing' as const,  label: 'Billing',   count: billingStatements.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
   ]
+
+  async function loadBilling() {
+    if (!childId) return
+    setBillingLoading(true)
+    setBillingError(null)
+    try {
+      const rows = await getPatientStatementsForChild(childId)
+      setBillingStatements(rows ?? [])
+      setBillingLoaded(true)
+    } catch (e: any) {
+      setBillingError(e?.message ?? 'Failed to load statements')
+    } finally {
+      setBillingLoading(false)
+    }
+  }
 
   async function launchDoseSpot() {
     if (!childId) return
@@ -643,7 +667,11 @@ export function PatientChart() {
           {tabs.map(tab => (
             <button
               key={tab.key}
-              onClick={() => { setActiveTab(tab.key); if (tab.key === 'labs' && !labsLoaded) loadLabs() }}
+              onClick={() => {
+                setActiveTab(tab.key)
+                if (tab.key === 'labs' && !labsLoaded) loadLabs()
+                if (tab.key === 'billing' && !billingLoaded) loadBilling()
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'bg-[#7F77DD] text-white'
@@ -1976,6 +2004,32 @@ export function PatientChart() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'billing' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display text-[16px] font-semibold text-[#1A1A2E]">Billing</h2>
+                    <p className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
+                      Patient statements sent to the family for this child. Drafts and voids
+                      live on the Statements page in the admin sidebar.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadBilling}
+                    disabled={billingLoading}
+                    className="text-[11px] text-[#666] border border-[#E8E8E4] px-2.5 py-1 rounded-lg hover:bg-[#F1EFE8] transition-colors disabled:opacity-50">
+                    Refresh
+                  </button>
+                </div>
+                <PatientBillingList
+                  statements={billingStatements}
+                  loading={billingLoading}
+                  error={billingError}
+                  emptyLabel="No statements sent for this patient yet."
+                />
               </div>
             )}
 

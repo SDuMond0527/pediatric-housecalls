@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarPlus, Clock, X, AlertTriangle, Sparkles, ShieldAlert, CreditCard } from 'lucide-react'
 import { format, isBefore, addHours } from 'date-fns'
-import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications, familyUpdateWaitlistEntry } from '../../lib/api'
+import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, familyGetBookingRequests, familyUpdateBookingRequest, familyInvokeNotifications, familyUpdateWaitlistEntry, familyGetPatientStatements } from '../../lib/api'
+import { PatientBillingList, type BillingStatement } from '../../components/PatientBillingList'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
@@ -47,6 +48,9 @@ export function FamilyDashboard() {
   const [leavingWaitlist, setLeavingWaitlist] = useState<string | null>(null)
   const [insuranceBannerDismissed, setInsuranceBannerDismissed] = useState(false)
   const [cardBannerDismissed, setCardBannerDismissed] = useState(false)
+  const [statements, setStatements] = useState<BillingStatement[]>([])
+  const [statementsLoading, setStatementsLoading] = useState(true)
+  const [statementsError, setStatementsError] = useState<string | null>(null)
 
   async function fetchOffers() {
     if (!family) return
@@ -78,7 +82,21 @@ export function FamilyDashboard() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchBookings(); fetchOffers() }, [family])
+  async function fetchStatements() {
+    if (!family) return
+    setStatementsLoading(true)
+    setStatementsError(null)
+    try {
+      const data = await familyGetPatientStatements()
+      setStatements((data ?? []) as BillingStatement[])
+    } catch (e: any) {
+      setStatementsError(e?.message ?? 'Failed to load billing')
+    } finally {
+      setStatementsLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchBookings(); fetchOffers(); fetchStatements() }, [family])
 
   async function acceptOffer(offer: SlotOffer) {
     setAcceptingOffer(offer.id)
@@ -360,6 +378,20 @@ export function FamilyDashboard() {
           <div className="space-y-2">
             {past.slice(0, 3).map(b => <BookingCard key={b.id} booking={b} past />)}
           </div>
+        </div>
+      )}
+
+      {/* Billing — sent & paid statements across all children on this family. */}
+      {(statementsLoading || statements.length > 0 || statementsError) && (
+        <div>
+          <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Billing</h2>
+          <PatientBillingList
+            statements={statements}
+            loading={statementsLoading}
+            error={statementsError}
+            showPatientName={children.length > 1}
+            emptyLabel="No statements yet."
+          />
         </div>
       )}
 

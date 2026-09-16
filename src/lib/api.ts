@@ -397,6 +397,9 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+export const familyGetPatientStatements = () =>
+  familyApiFetch<any[]>('/api/family/patient-statements')
+
 export const familyUpdateWaitlistEntry = (id: string, body: Record<string, unknown>) =>
   familyApiFetch<any>(`/api/waitlist-entries/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
@@ -578,6 +581,9 @@ export const getPatientStatement = (claimId: string) =>
 
 export const getAllPatientStatements = (status?: string) =>
   apiFetch<any[]>(`/api/patient-statements/all${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+
+export const getPatientStatementsForChild = (childId: string) =>
+  apiFetch<any[]>(`/api/patient-statements/for-child?child_id=${encodeURIComponent(childId)}`)
 
 export const createPatientStatement = (data: any) =>
   apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
