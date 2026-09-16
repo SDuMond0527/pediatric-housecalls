@@ -1191,6 +1191,26 @@ export function PatientChart() {
                               </div>
                             )}
                           </div>
+                          {/* Diagnostic strip — always shown alongside the eligibility
+                              verdict so we can immediately confirm what got transmitted
+                              to Stedi. Especially load-bearing for BCBS NC where a
+                              missing dep code silently returns 'not active'. */}
+                          {eligResult.debug && (
+                            <div className="mt-3 pt-3 border-t border-[#E8E8E4] text-[10px] text-[#555] space-y-0.5">
+                              <div className="font-semibold text-[#1A1A2E] uppercase tracking-wide mb-1">Diagnostic — what we sent Stedi</div>
+                              <div>Member ID transmitted: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.transmittedMemberId}</span> ({eligResult.debug.memberIdLength} chars)</div>
+                              <div>Base member ID on file: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.baseMemberId || '(empty)'}</span></div>
+                              <div>Dependent code used: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.dependentCodeUsed || '(none)'}</span></div>
+                              <div>Payer resolved to: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.payerId}</span> ({eligResult.debug.payerName})</div>
+                              <div>Subscriber name: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.subscriberName || '(empty)'}</span></div>
+                              <div>Subscriber DOB: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.subscriberDob || '(empty)'}</span></div>
+                              <div>Patient DOB: <span className="font-mono text-[#1A1A2E]">{eligResult.debug.childDob || '(empty)'}</span></div>
+                              <div>Stedi benefit codes returned: <span className="font-mono text-[#1A1A2E]">{(eligResult.debug.stediBenefitCodes ?? []).join(', ') || '(none)'}</span></div>
+                              {eligResult.debug.stediMessage && (
+                                <div>Stedi message: <span className="font-mono text-[#991B1B]">{eligResult.debug.stediMessage}</span></div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 

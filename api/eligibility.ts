@@ -210,11 +210,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Could not reach eligibility service.' })
   }
 
+  // Diagnostic block — surfaced in the UI so we can see exactly what
+  // the eligibility endpoint transmitted without needing browser
+  // devtools. Especially load-bearing for BCBS NC where the 14-char
+  // member-ID rule is subtle and a wrong dep code silently returns
+  // 'not active' with no error.
+  const debug = {
+    transmittedMemberId,
+    memberIdLength: transmittedMemberId.length,
+    payerId,
+    payerName,
+    dependentCodeUsed: depCode || null,
+    baseMemberId: String(child.insurance_member_id ?? ''),
+    subscriberName: `${subscriberFirst} ${subscriberLast}`.trim(),
+    subscriberDob: fmtDate8(child.insurance_subscriber_dob),
+    childDob: fmtDate8(child.date_of_birth),
+    stediBenefitCodes: (stediData?.benefitsInformation ?? []).map((b: any) => b.code).slice(0, 8),
+    stediMessage: stediData?.errors?.[0]?.description || stediData?.message || null,
+  }
+
   return res.json({
     patientName: `${child.first_name ?? ''} ${child.last_name ?? ''}`.trim(),
     insuranceProvider: payerName,
     memberId: transmittedMemberId,
     ...parseEligibility(stediData),
+    debug,
   })
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Eligibility check error.' })
