@@ -585,6 +585,20 @@ export const getAllPatientStatements = (status?: string) =>
 export const getPatientStatementsForChild = (childId: string) =>
   apiFetch<any[]>(`/api/patient-statements/for-child?child_id=${encodeURIComponent(childId)}`)
 
+// Admin "View as parent" — returns everything the family portal renders
+// (dashboard, visits, vaccines, profile, billing) for a given family, in
+// one round-trip. Admin-only on the server.
+export const getFamilyPortalView = (familyId: string) =>
+  apiFetch<{
+    family: any
+    children: any[]
+    bookings: any[]
+    waitlist: any[]
+    offers: any[]
+    encounter_notes: any[]
+    statements: any[]
+  }>(`/api/admin/family-portal-view?family_id=${encodeURIComponent(familyId)}`)
+
 export const createPatientStatement = (data: any) =>
   apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
 

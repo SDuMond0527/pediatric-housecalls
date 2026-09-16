@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientStatementsForChild } from '../lib/api'
@@ -649,7 +649,7 @@ export function PatientChart() {
             )}
           </div>
           {child && !child.is_archived && (
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-2 flex-shrink-0 flex-wrap">
               <button
                 onClick={() => setBookOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
@@ -660,6 +660,17 @@ export function PatientChart() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
                 <UserPlus size={13} /> Add sibling
               </button>
+              {/* Admin-only "View as parent" — opens a read-only mirror of
+                  this family's parent portal (dashboard, visits, vaccines,
+                  profile, billing). Hidden for non-admin providers and for
+                  patients without a linked family. */}
+              {currentProvider?.is_admin && child.family_id && (
+                <button
+                  onClick={() => navigate(`/admin/view-as-parent/${child.family_id}`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[#7F77DD] border border-[#7F77DD] text-[12px] font-medium rounded-lg hover:bg-[#EEEDFE] transition-colors">
+                  <Eye size={13} /> View as parent
+                </button>
+              )}
             </div>
           )}
         </div>
