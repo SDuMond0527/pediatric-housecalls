@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientStatementsForChild } from '../lib/api'
-import { PatientBillingList } from '../components/PatientBillingList'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog } from '../lib/api'
+import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
+import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
@@ -145,13 +146,14 @@ export function PatientChart() {
 
   const { provider: currentProvider } = useAuth()
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines' | 'medical_history' | 'billing'>('overview')
-  // Billing tab: sent + paid patient statements for this child.
+  // Billing tab: log-book of every claim + statement for this child.
   // Loaded lazily on first tab visit to avoid a round-trip on every
   // chart open — same pattern as `labsLoaded` below.
-  const [billingStatements, setBillingStatements] = useState<any[]>([])
+  const [billingEntries, setBillingEntries] = useState<BillingLogEntry[]>([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [billingLoaded, setBillingLoaded] = useState(false)
+  const [billingModalClaim, setBillingModalClaim] = useState<any>(null)
   const [editNote, setEditNote] = useState<NoteWithVisit | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -390,7 +392,7 @@ export function PatientChart() {
     { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
-    { key: 'billing' as const,  label: 'Billing',   count: billingStatements.length || null },
+    { key: 'billing' as const,  label: 'Billing',   count: billingEntries.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
   ]
 
@@ -399,14 +401,40 @@ export function PatientChart() {
     setBillingLoading(true)
     setBillingError(null)
     try {
-      const rows = await getPatientStatementsForChild(childId)
-      setBillingStatements(rows ?? [])
+      const rows = await getPatientBillingLog(childId)
+      setBillingEntries((rows ?? []) as BillingLogEntry[])
       setBillingLoaded(true)
     } catch (e: any) {
-      setBillingError(e?.message ?? 'Failed to load statements')
+      setBillingError(e?.message ?? 'Failed to load billing log')
     } finally {
       setBillingLoading(false)
     }
+  }
+
+  // When the biller clicks a row, open the same PatientStatementModal
+  // the AdminStatements page uses. Shape the entry into the claim
+  // object PatientStatementModal expects.
+  function openBillingClaim(entry: BillingLogEntry) {
+    setBillingModalClaim({
+      id: entry.claim_id,
+      payer_name: entry.payer_name,
+      patient_first_name: entry.patient_first_name || child?.first_name || '',
+      patient_last_name:  entry.patient_last_name  || child?.last_name  || '',
+      patient_dob:        entry.patient_dob        || child?.date_of_birth || null,
+      service_date:       entry.service_date,
+      family_email:       child?.parent_email      || null,
+      family_phone:       child?.parent_phone      || null,
+      cpt_codes:          entry.cpt_codes ?? [],
+      stedi_claim_id:     entry.stedi_claim_id,
+      era_received_at:    entry.era_received_at,
+      amount_billed_era:  entry.amount_billed_era,
+      insurance_payment_era: entry.insurance_payment_era,
+      contractual_adjustment_era: entry.contractual_adjustment_era,
+      patient_copay_era:  entry.patient_copay_era,
+      patient_deductible_era: entry.patient_deductible_era,
+      patient_coinsurance_era: entry.patient_coinsurance_era,
+      patient_non_covered_era: entry.patient_non_covered_era,
+    })
   }
 
   async function launchDoseSpot() {
@@ -2042,10 +2070,11 @@ export function PatientChart() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="font-display text-[16px] font-semibold text-[#1A1A2E]">Billing</h2>
+                    <h2 className="font-display text-[16px] font-semibold text-[#1A1A2E]">Billing log</h2>
                     <p className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
-                      Patient statements sent to the family for this child. Drafts and voids
-                      live on the Statements page in the admin sidebar.
+                      Every encounter's claim + statement in one timeline. Click a row to
+                      see the ERA breakdown and statement, or open it in the full statement
+                      editor to send or record a payment.
                     </p>
                   </div>
                   <button
@@ -2055,12 +2084,11 @@ export function PatientChart() {
                     Refresh
                   </button>
                 </div>
-                <PatientBillingList
-                  statements={billingStatements}
+                <PatientBillingLog
+                  entries={billingEntries}
                   loading={billingLoading}
                   error={billingError}
-                  showPayButton={false}
-                  emptyLabel="No statements sent for this patient yet."
+                  onOpenClaim={openBillingClaim}
                 />
               </div>
             )}
@@ -2099,6 +2127,15 @@ export function PatientChart() {
           </>
         )}
       </div>
+
+      {/* Statement / claim modal — opened from the Billing log tab */}
+      {billingModalClaim && (
+        <PatientStatementModal
+          claim={billingModalClaim}
+          onClose={() => setBillingModalClaim(null)}
+          onSent={() => { setBillingModalClaim(null); loadBilling() }}
+        />
+      )}
 
       {/* Book appointment modal */}
       {bookOpen && child && (

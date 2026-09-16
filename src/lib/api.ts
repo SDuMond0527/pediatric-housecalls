@@ -585,6 +585,12 @@ export const getAllPatientStatements = (status?: string) =>
 export const getPatientStatementsForChild = (childId: string) =>
   apiFetch<any[]>(`/api/patient-statements/for-child?child_id=${encodeURIComponent(childId)}`)
 
+// Staff-side per-patient billing "log book" — one row per claim with
+// linked statement + ERA breakdown. Used by the Billing tab on the
+// patient chart. Not for parents.
+export const getPatientBillingLog = (childId: string) =>
+  apiFetch<any[]>(`/api/patient-billing-log?child_id=${encodeURIComponent(childId)}`)
+
 // Admin "View as parent" — returns everything the family portal renders
 // (dashboard, visits, vaccines, profile, billing) for a given family, in
 // one round-trip. Admin-only on the server.
