@@ -1850,20 +1850,24 @@ export function PatientChart() {
                 )}
 
                 {dsUrl && (
-                  <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm overflow-hidden">
+                  // Mobile: full-screen overlay so DoseSpot gets the whole
+                  // viewport instead of being squeezed inside the chart
+                  // container (which caused the swipe-left/right + twitchy
+                  // scroll behavior). Desktop: keeps the in-page card.
+                  <div className="fixed inset-0 z-50 bg-white flex flex-col md:relative md:z-auto md:inset-auto md:border md:border-[#E8E8E4] md:rounded-xl md:shadow-sm md:overflow-hidden">
                     {dsError && (
-                      <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 text-left">
+                      <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 text-left flex-shrink-0">
                         {dsError}
                       </div>
                     )}
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E8E8E4]">
-                      <div className="flex items-center gap-2 text-[12px] text-[#555]">
-                        <FlaskConical size={13} className="text-[#7F77DD]" />
-                        <span>DoseSpot — {child ? [child.first_name, child.last_name].filter(Boolean).join(' ') : 'Patient'}</span>
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E8E8E4] flex-shrink-0">
+                      <div className="flex items-center gap-2 text-[12px] text-[#555] min-w-0">
+                        <FlaskConical size={13} className="text-[#7F77DD] flex-shrink-0" />
+                        <span className="truncate">DoseSpot — {child ? [child.first_name, child.last_name].filter(Boolean).join(' ') : 'Patient'}</span>
                       </div>
                       <button
                         onClick={() => { setDsUrl(null); setDsError(null) }}
-                        className="text-[11px] text-[#1A1A2E] hover:text-[#555] transition-colors"
+                        className="text-[13px] font-medium px-3 py-1.5 -my-1 rounded-lg bg-[#F1EFE8] text-[#1A1A2E] hover:bg-[#E8E5DE] transition-colors md:text-[11px] md:font-normal md:bg-transparent md:hover:bg-transparent md:hover:text-[#555] md:px-0 md:py-0 md:my-0 md:rounded-none"
                       >
                         Close
                       </button>
@@ -1871,8 +1875,7 @@ export function PatientChart() {
                     <iframe
                       src={dsUrl}
                       title="DoseSpot e-Prescribing"
-                      className="w-full"
-                      style={{ height: 'calc(100vh - 220px)', minHeight: 600, border: 'none' }}
+                      className="w-full border-0 flex-1 md:flex-none md:h-[calc(100vh-220px)] md:min-h-[600px]"
                       allow="clipboard-write"
                     />
                   </div>
