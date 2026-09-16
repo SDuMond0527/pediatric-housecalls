@@ -120,11 +120,21 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
       // field in one shot (parents are filling their own child's profile,
       // not chasing missing info piecemeal like staff).
       const patch: Record<string, any> = {}
-      for (const f of missing) {
-        const raw = values[f.key]
-        if (raw != null && String(raw).trim() !== '') {
-          patch[f.key] = raw
+      const missingKeys = new Set(missing.map(f => f.key))
+      // Address is stored as four columns on the child (parent_address =
+      // street, parent_city, parent_state, parent_zip). The modal renders
+      // four sub-inputs when parent_address is missing — save whichever
+      // sub-fields the user actually typed into.
+      if (missingKeys.has('parent_address')) {
+        for (const k of ['parent_address', 'parent_city', 'parent_state', 'parent_zip'] as const) {
+          const raw = values[k]
+          if (raw != null && String(raw).trim() !== '') patch[k] = raw
         }
+        missingKeys.delete('parent_address')
+      }
+      for (const key of missingKeys) {
+        const raw = values[key]
+        if (raw != null && String(raw).trim() !== '') patch[key] = raw
       }
       if (Object.keys(patch).length === 0) {
         setError('Nothing to save — fill in at least one field before saving.')
@@ -149,7 +159,9 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
         </div>
         <div className="px-6 py-4 flex-1 overflow-y-auto space-y-3">
           {missing.map(f => (
-            <FieldInput key={f.key} field={f} value={values[f.key] ?? ''} onChange={v => setValues(prev => ({ ...prev, [f.key]: v }))} />
+            f.key === 'parent_address'
+              ? <AddressInput key={f.key} values={values} onChange={(k, v) => setValues(prev => ({ ...prev, [k]: v }))} />
+              : <FieldInput key={f.key} field={f} value={values[f.key] ?? ''} onChange={v => setValues(prev => ({ ...prev, [f.key]: v }))} />
           ))}
         </div>
         <div className="px-6 py-4 border-t border-[#E8E8E4]">
@@ -158,6 +170,28 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
             <Button variant="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
             <Button variant="teal" className="flex-1" loading={submitting} onClick={save}>Save</Button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddressInput({ values, onChange }: { values: Record<string, string>; onChange: (key: string, value: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block">Home address *</label>
+      <Input label="Street address" value={values.parent_address ?? ''}
+        onChange={e => onChange('parent_address', e.target.value)} placeholder="123 Main St" />
+      <div className="grid grid-cols-2 gap-2">
+        <Input label="City" value={values.parent_city ?? ''}
+          onChange={e => onChange('parent_city', e.target.value)} placeholder="Charlotte" />
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="State" value={values.parent_state ?? ''}
+            onChange={e => onChange('parent_state', e.target.value.toUpperCase().slice(0, 2))}
+            placeholder="NC" maxLength={2} />
+          <Input label="ZIP" value={values.parent_zip ?? ''}
+            onChange={e => onChange('parent_zip', e.target.value.replace(/\D/g, '').slice(0, 5))}
+            placeholder="28104" />
         </div>
       </div>
     </div>
