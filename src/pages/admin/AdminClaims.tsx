@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
 import { Ban } from 'lucide-react'
 
 const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
@@ -568,6 +568,25 @@ export function AdminClaims() {
             disabled={backfillRunning}
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50">
             <Zap size={12} /> {backfillRunning ? 'Backfilling…' : 'Backfill Stedi CAS (60d)'}
+          </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('FORCE re-run backfill for all ERAs Stedi received in the last 60 days? Bypasses the idempotency guard so already-processed transactions get re-fetched and re-applied. Use this to fix CAS breakdowns that landed as zero.')) return
+              setBackfillRunning(true)
+              setBackfillResult(null)
+              try {
+                const r = await backfillStediCasForce(60)
+                setBackfillResult(r)
+                await load()
+              } catch (e: any) {
+                setBackfillResult({ ok: false, days: 60, startDateTime: '', transactionsSeen: 0, transactionsProcessed: 0, skippedNotEra: 0, skippedAlreadyProcessed: 0, claimsUpdated: 0, pagesFetched: 0, errors: [e?.message ?? String(e)] } as any)
+              } finally {
+                setBackfillRunning(false)
+              }
+            }}
+            disabled={backfillRunning}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#B45309] text-[#B45309] hover:bg-[#FFF7ED] transition-colors disabled:opacity-50">
+            <Zap size={12} /> {backfillRunning ? 'Backfilling…' : 'FORCE re-backfill (60d)'}
           </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh

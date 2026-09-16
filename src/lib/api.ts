@@ -718,6 +718,21 @@ export const sendBillerQuestion = (body: { claimId: string; providerId: string; 
     { method: 'POST', body: JSON.stringify({ type: 'biller_question_to_provider', ...body }) })
 
 // Admin-only: backfill CAS breakdown from historical 835s.
+export const backfillStediCasForce = (days = 60) =>
+  apiFetch<{
+    ok: boolean
+    days: number
+    startDateTime: string
+    transactionsSeen: number
+    transactionsProcessed: number
+    skippedNotEra: number
+    skippedAlreadyProcessed: number
+    claimsUpdated: number
+    pagesFetched: number
+    errors: string[]
+    sampleTimeline?: string
+  }>(`/api/admin/backfill-stedi-cas?days=${days}&force=1`, { method: 'POST' })
+
 export const backfillStediCas = (days = 60) =>
   apiFetch<{
     ok: boolean
