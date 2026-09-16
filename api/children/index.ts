@@ -69,6 +69,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       try {
         const b = req.body ?? {}
+        // Normalize gender fields to the canonical M/F used everywhere
+        // else (chart dropdowns, claim submission X12, growth-chart
+        // isMale check). Older versions of the intake form and
+        // InsuranceEditor stored "Male"/"Female" as whole words, which
+        // caused the chart's dropdown (value="M"/"F") to render blank
+        // even though the DB had a value. Normalizing on write closes
+        // this for good, regardless of what the client sends.
+        const normalizeGender = (v: any): string | null => {
+          if (v == null) return null
+          const s = String(v).trim().toLowerCase()
+          if (s === '') return null
+          if (s === 'm' || s === 'male')   return 'M'
+          if (s === 'f' || s === 'female') return 'F'
+          return null
+        }
+        if (b.gender !== undefined) b.gender = normalizeGender(b.gender)
+        if (b.insurance_subscriber_gender !== undefined) b.insurance_subscriber_gender = normalizeGender(b.insurance_subscriber_gender)
         const { display_label, first_name, last_name, date_of_birth } = b
         const familyId = rows[0].id as string
 
@@ -347,19 +364,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
+    // Same gender-normalization as the family path — coerce any incoming
+    // Male/Female/male/female/M/F variant to the canonical M/F so every
+    // downstream read (chart dropdown, X12 claim, growth chart) matches.
+    const normalizeGender = (v: any): string | null => {
+      if (v == null) return null
+      const s = String(v).trim().toLowerCase()
+      if (s === '') return null
+      if (s === 'm' || s === 'male')   return 'M'
+      if (s === 'f' || s === 'female') return 'F'
+      return null
+    }
     const {
-      first_name, last_name, date_of_birth, gender,
+      first_name, last_name, date_of_birth,
       family_id,
       parent_name, parent_phone, parent_email,
       parent_address, parent_city, parent_state, parent_zip,
       pcp, preferred_pharmacy,
       insurance_provider, insurance_member_id, insurance_group_number,
-      insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
+      insurance_subscriber_name, insurance_subscriber_dob,
       insurance_subscriber_relationship,
       insurance_card_front_url, insurance_card_back_url,
       nickname,
       allergies, current_medications, medical_history, vaccination_status,
     } = req.body
+    const gender = normalizeGender((req.body as any)?.gender)
+    const insurance_subscriber_gender = normalizeGender((req.body as any)?.insurance_subscriber_gender)
     // Provider-path dedup — same three rules as the family-portal path:
     //   (1) Reject if first_name is missing. No more empty rows.
     //   (2) Race guard — if the same practice created ANY child row for

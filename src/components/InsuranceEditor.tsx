@@ -177,8 +177,8 @@ export function InsuranceEditor({
                     onChange={e => onChange({ insurance_subscriber_gender: e.target.value })}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white">
                     <option value="">Select</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
                   </select>
                 </div>
                 <div>

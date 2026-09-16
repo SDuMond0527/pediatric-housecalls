@@ -57,6 +57,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const b = req.body
 
+      // Normalize gender fields on every PATCH so any legacy "Male"/"Female"
+      // words coming from an older client, or an admin edit, get stored as
+      // the canonical M/F. Same helper as api/children/index.ts.
+      const normalizeGender = (v: any): string | null => {
+        if (v == null) return null
+        const s = String(v).trim().toLowerCase()
+        if (s === '') return null
+        if (s === 'm' || s === 'male')   return 'M'
+        if (s === 'f' || s === 'female') return 'F'
+        return null
+      }
+      if (b && b.gender !== undefined) b.gender = normalizeGender(b.gender)
+      if (b && b.insurance_subscriber_gender !== undefined) b.insurance_subscriber_gender = normalizeGender(b.insurance_subscriber_gender)
+
       // Subscriber name must include both first + last if provided.
       // Empty is fine (self-pay / not-yet-collected). Single-word is
       // rejected downstream by Blue Cross — catch it here so bad data
