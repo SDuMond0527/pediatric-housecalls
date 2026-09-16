@@ -2059,6 +2059,7 @@ export function PatientChart() {
                   statements={billingStatements}
                   loading={billingLoading}
                   error={billingError}
+                  showPayButton={false}
                   emptyLabel="No statements sent for this patient yet."
                 />
               </div>

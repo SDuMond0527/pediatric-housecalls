@@ -54,12 +54,18 @@ export function PatientBillingList({
   loading,
   error,
   showPatientName = false,
+  showPayButton = true,
   emptyLabel = 'No statements yet.',
 }: {
   statements: BillingStatement[]
   loading: boolean
   error: string | null
   showPatientName?: boolean
+  /** Whether to render the "Pay now" Square link on unpaid statements.
+   *  Staff-facing surfaces (patient chart Billing tab) pass false —
+   *  staff never pay on behalf of the parent. Family + view-as-parent
+   *  surfaces keep the default true. */
+  showPayButton?: boolean
   emptyLabel?: string
 }) {
   if (loading) {
@@ -80,13 +86,13 @@ export function PatientBillingList({
   return (
     <div className="space-y-3">
       {statements.map(stmt => (
-        <StatementCard key={stmt.id} stmt={stmt} showPatientName={showPatientName} />
+        <StatementCard key={stmt.id} stmt={stmt} showPatientName={showPatientName} showPayButton={showPayButton} />
       ))}
     </div>
   )
 }
 
-function StatementCard({ stmt, showPatientName }: { stmt: BillingStatement; showPatientName: boolean }) {
+function StatementCard({ stmt, showPatientName, showPayButton }: { stmt: BillingStatement; showPatientName: boolean; showPayButton: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const badge = STATUS_BADGE[stmt.status] ?? STATUS_BADGE.sent
   const Icon = badge.icon
@@ -147,7 +153,7 @@ function StatementCard({ stmt, showPatientName }: { stmt: BillingStatement; show
             <div className="font-display text-lg font-semibold text-[#1A1A2E] tabular-nums">
               {fmtMoney(stmt.total_amount_due)}
             </div>
-            {isUnpaid && stmt.square_payment_url && (
+            {showPayButton && isUnpaid && stmt.square_payment_url && (
               <a
                 href={stmt.square_payment_url}
                 target="_blank"
@@ -238,7 +244,7 @@ function StatementCard({ stmt, showPatientName }: { stmt: BillingStatement; show
             </div>
           </div>
 
-          {isUnpaid && stmt.square_payment_url && (
+          {showPayButton && isUnpaid && stmt.square_payment_url && (
             <div className="flex justify-end">
               <a
                 href={stmt.square_payment_url}
