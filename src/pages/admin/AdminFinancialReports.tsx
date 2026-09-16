@@ -287,26 +287,78 @@ function ChargesVsCollectionsSection({ data }: { data: ReportsData }) {
 
 // ─── Adjustments & write-offs ─────────────────────────────────────────────
 
+const REASON_LABEL: Record<string, string> = {
+  bad_debt:       'Bad debt',
+  small_balance:  'Small balance',
+  hardship:       'Courtesy / hardship',
+  billing_error:  'Billing error',
+  timely_filing:  'Timely filing exceeded',
+  other:          'Other',
+}
+
 function AdjustmentsSection({ data }: { data: ReportsData }) {
   const adj = parseFloat(String(data.adjustments.contractual_adjustments ?? 0))
-  const woff = parseFloat(String(data.adjustments.write_offs ?? 0))
+  const woffStatement = parseFloat(String(data.adjustments.write_offs ?? 0))
+  const claimWoffTotal = (data.write_offs_claim_by_reason ?? []).reduce((s, r: any) => s + parseFloat(String(r.amount ?? 0)), 0)
+  const totalWoff = woffStatement + claimWoffTotal
   return (
     <ReportShell
       title="Adjustments & write-offs"
       icon={TrendingUp}
-      plainEnglish="What insurance discounted from your bills (contractual adjustment — normal, that's your negotiated rate) and what you had to write off entirely (bad debt from voided statements). If contractual adjustments are 30-50% of your charges you're seeing typical payer discounting. If write-offs are climbing, that's a collections process problem."
+      plainEnglish="What insurance discounted from your bills (contractual adjustment — normal, that's your negotiated rate) and what you had to write off entirely, split by REASON. If &quot;Bad debt&quot; or &quot;Timely filing&quot; is climbing, that's a collections / workflow problem to fix. Small balances and hardship write-offs are usually healthy business decisions."
       onExport={() => {
-        const csv = toCsv(data.adjustments_by_payer, [
-          { key: 'payer_name', label: 'Payer' },
-          { key: 'contractual_adjustment', label: 'Contractual adjustment' },
-          { key: 'claim_count', label: 'Claim count' },
+        const rows = [
+          ...(data.write_offs_statement_by_reason ?? []).map((r: any) => ({ side: 'Patient statement', ...r })),
+          ...(data.write_offs_claim_by_reason ?? []).map((r: any) => ({ side: 'Insurance claim', ...r })),
+        ]
+        const csv = toCsv(rows, [
+          { key: 'side',   label: 'Side' },
+          { key: 'reason', label: 'Reason' },
+          { key: 'count',  label: 'Count' },
+          { key: 'amount', label: 'Amount' },
         ])
-        downloadCsv('adjustments-by-payer.csv', csv)
+        downloadCsv('write-offs-by-reason.csv', csv)
       }}>
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <MoneyCard label="Contractual adjustments" value={fmtMoney(adj)} color="#B45309" />
-        <MoneyCard label={`Write-offs (${data.adjustments.write_off_count} statements)`} value={fmtMoney(woff)} color="#991B1B" />
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <MoneyCard label="Contractual adjustments (normal payer discounts)" value={fmtMoney(adj)} color="#B45309" />
+        <MoneyCard label={`Statement write-offs (${data.adjustments.write_off_count})`} value={fmtMoney(woffStatement)} color="#991B1B" />
+        <MoneyCard label="Claim write-offs" value={fmtMoney(claimWoffTotal)} color="#991B1B" />
       </div>
+
+      {totalWoff > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Write-offs by reason</div>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+                <th className="text-left px-3 py-2">Side</th>
+                <th className="text-left px-3 py-2">Reason</th>
+                <th className="text-right px-3 py-2">Count</th>
+                <th className="text-right px-3 py-2">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1EFE8]">
+              {(data.write_offs_statement_by_reason ?? []).map((r: any, i: number) => (
+                <tr key={`stmt-${i}`} className="hover:bg-[#FAFAF8]">
+                  <td className="px-3 py-2 text-[#555]">Patient statement</td>
+                  <td className="px-3 py-2 text-[#1A1A2E]">{REASON_LABEL[r.reason] ?? r.reason}</td>
+                  <td className="px-3 py-2 text-right text-[#1A1A2E]/60 tabular-nums">{r.count}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-[#991B1B] tabular-nums">{fmtMoney(r.amount)}</td>
+                </tr>
+              ))}
+              {(data.write_offs_claim_by_reason ?? []).map((r: any, i: number) => (
+                <tr key={`claim-${i}`} className="hover:bg-[#FAFAF8]">
+                  <td className="px-3 py-2 text-[#555]">Insurance claim</td>
+                  <td className="px-3 py-2 text-[#1A1A2E]">{REASON_LABEL[r.reason] ?? r.reason}</td>
+                  <td className="px-3 py-2 text-right text-[#1A1A2E]/60 tabular-nums">{r.count}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-[#991B1B] tabular-nums">{fmtMoney(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {data.adjustments_by_payer.length > 0 && (
         <>
           <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Contractual adjustments by payer</div>

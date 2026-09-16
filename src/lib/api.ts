@@ -637,6 +637,8 @@ export const getFinancialReports = (start: string, end: string) =>
     charges_vs_collections: { charges: number; insurance_collected: number; patient_collected: number }
     adjustments: { contractual_adjustments: number; write_offs: number; write_off_count: number }
     adjustments_by_payer: any[]
+    write_offs_statement_by_reason: any[]
+    write_offs_claim_by_reason: any[]
     refunds: any[]
     payer_mix: any[]
     reimbursement_by_payer: any[]
@@ -662,6 +664,15 @@ export const markPatientStatementPaid = (id: string, body: {
   payment_note?: string
 }) =>
   apiFetch<any>(`/api/patient-statements/${id}/mark-paid`, { method: 'POST', body: JSON.stringify(body) })
+
+// Write-off (with reason) — the categorized replacement for "void" so
+// financial reports can distinguish bad debt / small balance / hardship /
+// billing error / timely filing / other.
+export type WriteOffReason = 'bad_debt' | 'small_balance' | 'hardship' | 'billing_error' | 'timely_filing' | 'other'
+export const writeOffPatientStatement = (id: string, body: { reason: WriteOffReason; note?: string }) =>
+  apiFetch<any>(`/api/patient-statements/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
+export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?: string }) =>
+  apiFetch<any>(`/api/claims/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
 
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)

@@ -9,7 +9,18 @@ import {
   sendPatientStatement,
   pullStediEra,
   markPatientStatementPaid,
+  writeOffPatientStatement,
+  type WriteOffReason,
 } from '../../lib/api'
+
+const WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
+  bad_debt:       'Bad debt (family will not pay)',
+  small_balance:  'Small balance (not worth collecting)',
+  hardship:       'Courtesy / hardship (patient can\'t pay)',
+  billing_error:  'Billing error (our mistake)',
+  timely_filing:  'Timely filing exceeded',
+  other:          'Other',
+}
 
 interface Props {
   claim: any
@@ -64,6 +75,31 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [paidDate, setPaidDate] = useState('')
   const [paidMethod, setPaidMethod] = useState('Card on file (Square)')
   const [paidNote, setPaidNote] = useState('')
+
+  // Write-off flow — same "small inline form" pattern as record-payment.
+  // Reason is required; note optional. Never shown on paid statements.
+  const [writingOff, setWritingOff]     = useState(false)
+  const [writeOffReason, setWriteOffReason] = useState<WriteOffReason>('bad_debt')
+  const [writeOffNote, setWriteOffNote] = useState('')
+  const [savingWriteOff, setSavingWriteOff] = useState(false)
+
+  async function submitWriteOff() {
+    if (!statement) return
+    setSavingWriteOff(true)
+    setError(null)
+    try {
+      const saved = await writeOffPatientStatement(statement.id, { reason: writeOffReason, note: writeOffNote })
+      setStatement(saved)
+      populateFromStatement(saved)
+      setWritingOff(false)
+      setWriteOffNote('')
+      onSent()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to write off statement')
+    } finally {
+      setSavingWriteOff(false)
+    }
+  }
 
 
   useEffect(() => {
@@ -475,6 +511,57 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 </div>
               )}
 
+              {/* Write-off inline form — same pattern as record-payment */}
+              {writingOff && (
+                <div className="border border-[#991B1B] rounded-xl p-4 bg-[#FCEBEB]">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[13px] font-semibold text-[#991B1B] uppercase tracking-wider">
+                      Write off this statement
+                    </div>
+                    <button
+                      onClick={() => { setWritingOff(false); setError(null) }}
+                      className="text-[#991B1B] hover:text-[#7A1414]">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <p className="text-[12px] text-[#7A1414] mb-3">
+                    This clears the balance from AR and marks it as revenue leakage. Categorized by reason so
+                    financial reports can distinguish bad debt from small balances / courtesy / billing errors.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={labelCls}>Reason</label>
+                      <select
+                        className={inputCls}
+                        value={writeOffReason}
+                        onChange={e => setWriteOffReason(e.target.value as WriteOffReason)}>
+                        {(Object.entries(WRITE_OFF_LABELS) as [WriteOffReason, string][]).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Note (optional — audit trail)</label>
+                      <input
+                        type="text"
+                        className={inputCls}
+                        value={writeOffNote}
+                        onChange={e => setWriteOffNote(e.target.value)}
+                        placeholder="e.g. Called 3x, family unresponsive"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="secondary" size="sm" onClick={() => { setWritingOff(false); setError(null) }}>
+                      Cancel
+                    </Button>
+                    <Button variant="danger" size="sm" loading={savingWriteOff} onClick={submitWriteOff}>
+                      Write off
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Section 3: Financial Summary */}
               <div>
                 <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Financial Summary</div>
@@ -559,9 +646,16 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
             {/* Biller manual "Record payment" — shown for sent (unpaid)
                 statements. Hidden while the record-payment inline form
                 is open (its own Save/Cancel controls take over). */}
-            {isSent && !editing && !recordingPayment && (
+            {isSent && !editing && !recordingPayment && !writingOff && (
               <Button variant="teal" size="sm" onClick={openRecordPayment}>
                 Record payment
+              </Button>
+            )}
+
+            {/* Write off — only on sent (unpaid) statements. */}
+            {isSent && !editing && !recordingPayment && !writingOff && (
+              <Button variant="secondary" size="sm" onClick={() => { setWritingOff(true); setError(null) }}>
+                Write off
               </Button>
             )}
 

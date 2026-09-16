@@ -184,8 +184,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `
 
     // ── 5. Adjustments & write-offs ────────────────────────────────────────
-    // ERA contractual adjustments (payer discounts) + statements voided
-    // with an outstanding balance (bad debt). Both are revenue leakage.
+    // ERA contractual adjustments (payer discounts) + categorized
+    // write-offs (statement-side + claim-side) — grouped by reason so
+    // the biller can see WHY revenue was lost, not just how much.
+    // Idempotent column bootstrap so this endpoint keeps working on
+    // fresh DBs.
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS voided_at timestamptz` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_reason text` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS written_off_at timestamptz` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_reason text` } catch {}
+
     const adjustments = await sql`
       SELECT
         (
@@ -200,15 +208,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           FROM patient_statements
           WHERE practice_id = ${practiceId}::uuid
             AND status = 'void'
-            AND updated_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+            AND voided_at IS NOT NULL
+            AND voided_at::date BETWEEN ${startStr}::date AND ${endStr}::date
         ) AS write_offs,
         (
           SELECT COUNT(*)::int
           FROM patient_statements
           WHERE practice_id = ${practiceId}::uuid
             AND status = 'void'
-            AND updated_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+            AND voided_at IS NOT NULL
+            AND voided_at::date BETWEEN ${startStr}::date AND ${endStr}::date
         ) AS write_off_count
+    `
+
+    // Statement-side write-offs grouped by reason. Uses voided_at (not
+    // updated_at) so bumps from unrelated edits don't leak in.
+    const writeOffsStatementByReason = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(void_reason), ''), 'other') AS reason,
+        COUNT(*)::int                                    AS count,
+        SUM(COALESCE(total_amount_due, 0))::numeric(12,2) AS amount
+      FROM patient_statements
+      WHERE practice_id = ${practiceId}::uuid
+        AND status = 'void'
+        AND voided_at IS NOT NULL
+        AND voided_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+      GROUP BY reason
+      ORDER BY amount DESC
+    `
+
+    // Claim-side write-offs — stuck claims (submitted/error) that the
+    // biller gave up on. These also count as revenue leakage.
+    const writeOffsClaimByReason = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(write_off_reason), ''), 'other') AS reason,
+        COUNT(*)::int                                          AS count,
+        SUM(COALESCE(total_charge, 0))::numeric(12,2)          AS amount
+      FROM claims
+      WHERE practice_id = ${practiceId}::uuid
+        AND status = 'written_off'
+        AND written_off_at IS NOT NULL
+        AND written_off_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+      GROUP BY reason
+      ORDER BY amount DESC
     `
 
     // Contractual adjustments broken down by payer — the biller uses this
@@ -333,6 +375,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       charges_vs_collections: chargesVsColl[0] ?? { charges: 0, insurance_collected: 0, patient_collected: 0 },
       adjustments: adjustments[0] ?? { contractual_adjustments: 0, write_offs: 0, write_off_count: 0 },
       adjustments_by_payer: adjByPayer,
+      write_offs_statement_by_reason: writeOffsStatementByReason,
+      write_offs_claim_by_reason:     writeOffsClaimByReason,
       refunds,
       payer_mix: payerMix,
       reimbursement_by_payer: reimbByPayer,
