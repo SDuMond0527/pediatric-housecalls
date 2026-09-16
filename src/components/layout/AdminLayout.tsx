@@ -12,7 +12,7 @@ const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
   { to: '/admin/reports',    icon: FileBarChart,  label: 'Reports' },
   { to: '/admin/financial-reports', icon: DollarSign, label: 'Financial' },
-  { to: '/admin/reports-schedule',  icon: FileBarChart, label: 'Schedule' },
+  { to: '/admin/reports-schedule',  icon: FileBarChart, label: 'Reports to-do' },
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
