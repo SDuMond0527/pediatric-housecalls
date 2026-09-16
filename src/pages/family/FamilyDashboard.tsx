@@ -381,19 +381,19 @@ export function FamilyDashboard() {
         </div>
       )}
 
-      {/* Billing — sent & paid statements across all children on this family. */}
-      {(statementsLoading || statements.length > 0 || statementsError) && (
-        <div>
-          <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Billing</h2>
-          <PatientBillingList
-            statements={statements}
-            loading={statementsLoading}
-            error={statementsError}
-            showPatientName={children.length > 1}
-            emptyLabel="No statements yet."
-          />
-        </div>
-      )}
+      {/* Billing — sent & paid statements across all children on this family.
+          Always visible so parents can see the section (with an empty-state
+          card) even before any statements have been sent to them. */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Billing</h2>
+        <PatientBillingList
+          statements={statements}
+          loading={statementsLoading}
+          error={statementsError}
+          showPatientName={children.length > 1}
+          emptyLabel="No statements from Pediatric Housecalls yet. Any bills you owe will appear here."
+        />
+      </div>
 
       {/* Cancelled */}
       {cancelled.length > 0 && (
