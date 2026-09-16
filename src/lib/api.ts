@@ -627,6 +627,19 @@ export const getFamilyPortalView = (familyId: string) =>
     statements: any[]
   }>(`/api/admin/family-portal-view?family_id=${encodeURIComponent(familyId)}`)
 
+export const getFinancialReports = (start: string, end: string) =>
+  apiFetch<{
+    window: { start: string; end: string }
+    ar_insurance: any[]
+    ar_patient: any[]
+    cash_by_day: any[]
+    cash_totals: { insurance_total: number; patient_total: number }
+    charges_vs_collections: { charges: number; insurance_collected: number; patient_collected: number }
+    adjustments: { contractual_adjustments: number; write_offs: number; write_off_count: number }
+    adjustments_by_payer: any[]
+    refunds: any[]
+  }>(`/api/admin/financial-reports?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+
 export const createPatientStatement = (data: any) =>
   apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
 
