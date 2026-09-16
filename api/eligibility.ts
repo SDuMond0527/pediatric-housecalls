@@ -143,13 +143,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return s.split('T')[0].replace(/-/g, '')
   }
 
+  // Common generational suffixes. When present at the end of a name
+  // (Edward J Wood IV → first: Edward J, last: Wood, dropping IV),
+  // strip them from the parsed last name so BCBS's subscriber lookup
+  // matches. Without this, "Wood IV" as a subscriber surname causes
+  // Stedi to fail with a subscriber-not-found or invalid-name error.
+  const SUFFIXES = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI'])
   const parseSubName = (name: string) => {
     if (!name?.trim()) return { first: '', last: '' }
     if (name.includes(', ')) {
       const [last, first] = name.split(', ')
       return { first: first ?? '', last: last ?? '' }
     }
-    const parts = name.trim().split(/\s+/)
+    let parts = name.trim().split(/\s+/)
+    if (parts.length > 1 && SUFFIXES.has(parts[parts.length - 1].toUpperCase())) {
+      parts = parts.slice(0, -1)
+    }
     if (parts.length === 1) return { first: '', last: parts[0] }
     return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
   }

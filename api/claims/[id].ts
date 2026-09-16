@@ -60,14 +60,21 @@ function buildStediPayload(claim: any, testMode = false): object {
     return s.split('T')[0].replace(/-/g, '')
   }
 
-  // Parse "Last, First" or "First Last" subscriber name formats
+  // Parse "Last, First" or "First Last" subscriber name formats.
+  // Strips trailing generational suffixes (Jr, Sr, II-VI) so that
+  // "Edward J Wood IV" splits into first="Edward J", last="Wood",
+  // not last="IV". Payer subscriber lookups do not include suffixes.
+  const SUFFIXES = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI'])
   const parseSubName = (name: string) => {
     if (!name?.trim()) return { first: '', last: '' }
     if (name.includes(', ')) {
       const [last, first] = name.split(', ')
       return { first: first ?? '', last: last ?? '' }
     }
-    const parts = name.trim().split(/\s+/)
+    let parts = name.trim().split(/\s+/)
+    if (parts.length > 1 && SUFFIXES.has(parts[parts.length - 1].toUpperCase())) {
+      parts = parts.slice(0, -1)
+    }
     if (parts.length === 1) return { first: '', last: parts[0] }
     return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
   }
