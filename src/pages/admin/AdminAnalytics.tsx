@@ -128,21 +128,31 @@ export function AdminAnalytics() {
   const vtSorted = Object.entries(vtMap).sort((a, b) => b[1] - a[1])
   const maxVt = vtSorted[0]?.[1] ?? 1
 
-  // Provider breakdown
-  type PStats = { done: number; upcoming: number; cancelled: number }
+  // Provider breakdown — apply the same today-cutoff rule as the top
+  // "Appointment status" chart so a provider's "Upcoming" only counts
+  // visits still in the future. Rows whose scheduled_date has already
+  // passed but were never flipped done/cancelled land in past_due
+  // instead of inflating the provider's upcoming column. Completion
+  // rate uses done vs. non-upcoming (excludes past_due too, since
+  // those aren't legitimately "closed" — they're just stale).
+  type PStats = { done: number; upcoming: number; past_due: number; cancelled: number }
   const pMap: Record<string, PStats> = {}
   appts.forEach(a => {
-    if (!pMap[a.provider_id]) pMap[a.provider_id] = { done: 0, upcoming: 0, cancelled: 0 }
+    if (!pMap[a.provider_id]) pMap[a.provider_id] = { done: 0, upcoming: 0, past_due: 0, cancelled: 0 }
     if (a.status === 'done') pMap[a.provider_id].done++
-    else if (a.status === 'upcoming' || a.status === 'in-progress') pMap[a.provider_id].upcoming++
+    else if (a.status === 'upcoming' || a.status === 'in-progress') {
+      if (a.scheduled_date && a.scheduled_date < todayStr) pMap[a.provider_id].past_due++
+      else pMap[a.provider_id].upcoming++
+    }
     else if (a.status === 'cancelled') pMap[a.provider_id].cancelled++
   })
   const providerRows = providers
     .filter(p => p.role !== 'admin')
     .map(p => {
-      const s = pMap[p.id] ?? { done: 0, upcoming: 0, cancelled: 0 }
-      const total = s.done + s.upcoming + s.cancelled
-      const rate  = (s.done + s.upcoming) > 0 ? Math.round((s.done / (s.done + s.upcoming)) * 100) : 0
+      const s = pMap[p.id] ?? { done: 0, upcoming: 0, past_due: 0, cancelled: 0 }
+      const total = s.done + s.upcoming + s.past_due + s.cancelled
+      const closed = s.done + s.cancelled
+      const rate  = closed > 0 ? Math.round((s.done / closed) * 100) : 0
       return { ...p, ...s, total, rate }
     })
     .filter(p => p.total > 0)
@@ -400,7 +410,7 @@ export function AdminAnalytics() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
-                    {['Provider', 'Completed', 'Upcoming', 'Cancelled', 'Total', 'Completion rate'].map(h => (
+                    {['Provider', 'Completed', 'Upcoming', 'Past due', 'Cancelled', 'Total', 'Completion rate'].map(h => (
                       <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-5 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -411,6 +421,7 @@ export function AdminAnalytics() {
                       <td className="py-2.5 pr-5 font-medium text-[#1A1A2E] whitespace-nowrap">{p.name}</td>
                       <td className="py-2.5 pr-5 font-medium tabular-nums" style={{ color: '#1D9E75' }}>{p.done}</td>
                       <td className="py-2.5 pr-5 tabular-nums" style={{ color: '#7F77DD' }}>{p.upcoming}</td>
+                      <td className="py-2.5 pr-5 tabular-nums" style={{ color: '#EF9F27' }}>{p.past_due}</td>
                       <td className="py-2.5 pr-5 tabular-nums" style={{ color: '#C0392B' }}>{p.cancelled}</td>
                       <td className="py-2.5 pr-5 font-medium text-[#1A1A2E] tabular-nums">{p.total}</td>
                       <td className="py-2.5">
