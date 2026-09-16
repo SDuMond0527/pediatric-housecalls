@@ -140,11 +140,33 @@ async function syncPreferredPharmacy(
   sql: any,
 ): Promise<{ pharmacyId: number | null; matched?: string; error?: string }> {
   const preferredText = String(child.preferred_pharmacy ?? '').trim()
+  const savedId = child.dosespot_pharmacy_id as number | null | undefined
+
+  // Best case: intake-time autocomplete already saved a concrete
+  // pharmacy_id. Skip search entirely and assign it. This is why the
+  // new PharmacyAutocomplete matters — 100% match rate, no parsing.
+  if (savedId) {
+    const headers = {
+      'Content-Type':              'application/json',
+      Authorization:               `Bearer ${token}`,
+      'Subscription-Key':          DS_SUB_KEY,
+      'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
+    }
+    const assignRes = await fetch(`${DS_BASE}/webapi/v2/api/patients/${patientId}/pharmacies`, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({ PharmacyId: savedId, IsPrimary: true }),
+    })
+    if (assignRes.ok) return { pharmacyId: savedId, matched: `direct id ${savedId}` }
+    // If DoseSpot rejects the assign (e.g. ID no longer valid), fall
+    // through to the free-text fuzzy match so the launch still works.
+  }
+
   if (!preferredText) return { pharmacyId: null }
 
-  // Skip search when we already synced the same source text.
-  if (child.dosespot_pharmacy_id && child.dosespot_pharmacy_source_text === preferredText) {
-    return { pharmacyId: child.dosespot_pharmacy_id as number, matched: 'cached' }
+  // Skip search when we already synced the same source text via fuzzy match.
+  if (savedId && child.dosespot_pharmacy_source_text === preferredText) {
+    return { pharmacyId: savedId, matched: 'cached' }
   }
 
   const headers = {

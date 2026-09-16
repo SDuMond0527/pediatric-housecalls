@@ -18,6 +18,7 @@ import {
   familyAddPcp,
   getFamilyPharmacies,
   familyUploadInsuranceCard,
+  familySearchPharmacies,
 } from '../../lib/api'
 import {
   ChildIntakeForm,
@@ -588,7 +589,7 @@ export function BookVisit() {
     }
   }
 
-  function updateNewChildField(field: keyof ChildEntry, value: string | boolean) {
+  function updateNewChildField(field: keyof ChildEntry, value: string | boolean | number | null) {
     setNewChild(prev => ({ ...prev, [field]: value } as ChildEntry))
   }
 
@@ -1584,6 +1585,9 @@ export function BookVisit() {
                   child={newChild}
                   removable={false}
                   uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
+                  searchPharmacies={familySearchPharmacies}
+                  defaultZip={family?.zip ?? ''}
+                  defaultState={family?.state ?? ''}
                   headerLabel="New child"
                   onField={updateNewChildField}
                   onRemove={() => {}}

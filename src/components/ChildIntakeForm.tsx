@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { InsuranceEditor, type InsuranceValue } from './InsuranceEditor'
+import { PharmacyAutocomplete } from './PharmacyAutocomplete'
 
 // Shared per-child intake form used at family signup (FamilySetup) and
 // when adding a sibling from FamilyProfile. Same shape everywhere so we
@@ -25,6 +26,10 @@ export type ChildEntry = {
   current_medications: string
   medical_history: string
   preferred_pharmacy: string
+  /** Concrete DoseSpot pharmacy_id from the intake-time autocomplete —
+   *  when present, the DoseSpot SSO endpoint uses it directly and skips
+   *  fuzzy-matching. Optional so legacy free-text entries still work. */
+  dosespot_pharmacy_id: number | null
   pcp: string
   vaccination_status: string
   self_pay: boolean
@@ -47,7 +52,7 @@ export function emptyChild(): ChildEntry {
   return {
     first_name: '', last_name: '', date_of_birth: '',
     gender: '', allergies: '', current_medications: '', medical_history: '',
-    preferred_pharmacy: '', pcp: '', vaccination_status: '',
+    preferred_pharmacy: '', dosespot_pharmacy_id: null, pcp: '', vaccination_status: '',
     self_pay: false,
     insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '',
     insurance_subscriber_name: '', insurance_subscriber_dob: '',
@@ -103,6 +108,7 @@ export function buildChildCreatePayload(
     current_medications:                child.current_medications.trim(),
     medical_history:                    child.medical_history.trim(),
     preferred_pharmacy:                 child.preferred_pharmacy.trim(),
+    dosespot_pharmacy_id:               child.dosespot_pharmacy_id ?? null,
     pcp:                                child.pcp.trim(),
     vaccination_status:                 child.vaccination_status,
     insurance_provider:                 child.self_pay ? 'Self-pay' : child.insurance_provider.trim(),
@@ -119,7 +125,7 @@ export function buildChildCreatePayload(
 }
 
 export function ChildIntakeForm({
-  index, child, removable, uploadCard, headerLabel,
+  index, child, removable, uploadCard, searchPharmacies, defaultZip, defaultState, headerLabel,
   onField, onRemove, onConfirmMatch, onDismissMatch,
 }: {
   index?: number
@@ -129,8 +135,15 @@ export function ChildIntakeForm({
    * upload, provider surfaces pass a provider-auth upload. This keeps
    * the intake form usable from every ingest path. */
   uploadCard: (file: File, side: 'front' | 'back') => Promise<string>
+  /** Pharmacy directory search — family surfaces pass familySearchPharmacies,
+   *  provider surfaces pass searchPharmacies. Same DoseSpot endpoint, just
+   *  different token. */
+  searchPharmacies: (q: string, zip: string, state: string) => Promise<{ items: import('../lib/api').PharmacyMatch[] }>
+  /** Family address defaults for the pharmacy search's zip / state fields. */
+  defaultZip?: string
+  defaultState?: string
   headerLabel?: string
-  onField: (k: keyof ChildEntry, v: string | boolean) => void
+  onField: (k: keyof ChildEntry, v: string | boolean | number | null) => void
   onRemove: () => void
   onConfirmMatch: () => void
   onDismissMatch: () => void
@@ -233,9 +246,29 @@ export function ChildIntakeForm({
             value={child.medical_history} onChange={e => onField('medical_history', e.target.value)}
             className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] resize-none" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Input label="Preferred pharmacy *" placeholder="CVS on Main St"
-            value={child.preferred_pharmacy} onChange={e => onField('preferred_pharmacy', e.target.value)} />
+        <div>
+          <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy *</label>
+          <PharmacyAutocomplete
+            value={child.preferred_pharmacy}
+            pharmacyId={child.dosespot_pharmacy_id}
+            defaultZip={defaultZip ?? ''}
+            defaultState={defaultState ?? ''}
+            search={searchPharmacies}
+            onSelect={m => {
+              onField('preferred_pharmacy', m.label)
+              onField('dosespot_pharmacy_id', m.dosespot_pharmacy_id)
+            }}
+            onClear={() => {
+              onField('preferred_pharmacy', '')
+              onField('dosespot_pharmacy_id', null)
+            }}
+          />
+          <p className="text-[11px] text-[#1A1A2E]/60 mt-1">
+            Search by pharmacy name and zip. Picking a specific store guarantees your child's
+            e-prescriptions go to the exact right pharmacy.
+          </p>
+        </div>
+        <div>
           <Input label="Primary care provider *" placeholder="Dr. Jane Smith"
             value={child.pcp} onChange={e => onField('pcp', e.target.value)} />
         </div>

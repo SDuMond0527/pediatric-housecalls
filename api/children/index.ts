@@ -86,6 +86,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (b.gender !== undefined) b.gender = normalizeGender(b.gender)
         if (b.insurance_subscriber_gender !== undefined) b.insurance_subscriber_gender = normalizeGender(b.insurance_subscriber_gender)
+        // Idempotent bootstrap for the DoseSpot pharmacy autocomplete —
+        // when the intake form saves a concrete pharmacy_id, we store it
+        // so SSO can skip its fuzzy match and go direct.
+        try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
+        try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
         const { display_label, first_name, last_name, date_of_birth } = b
         const familyId = rows[0].id as string
 
@@ -233,7 +238,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             insurance_provider, insurance_member_id, insurance_group_number,
             insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
             insurance_card_front_url, insurance_card_back_url,
-            preferred_pharmacy, pcp, pcp_id
+            preferred_pharmacy, dosespot_pharmacy_id, pcp, pcp_id
           )
           VALUES (
             ${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null},
@@ -245,7 +250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${pick('insurance_subscriber_name')}, ${pick('insurance_subscriber_dob') || null}::date,
             ${pick('insurance_subscriber_gender')}, ${pick('insurance_subscriber_relationship')},
             ${pick('insurance_card_front_url')}, ${pick('insurance_card_back_url')},
-            ${pick('preferred_pharmacy')}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid
+            ${pick('preferred_pharmacy')}, ${b.dosespot_pharmacy_id ?? null}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid
           )
           RETURNING *`
         return res.json(row)
@@ -482,7 +487,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         family_id,
         parent_name, parent_phone, parent_email,
         parent_address, parent_city, parent_state, parent_zip,
-        pcp, preferred_pharmacy,
+        pcp, preferred_pharmacy, dosespot_pharmacy_id,
         insurance_provider, insurance_member_id, insurance_group_number,
         insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender,
         insurance_subscriber_relationship,
@@ -507,6 +512,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${parent_zip || null},
         ${pcp || null},
         ${preferred_pharmacy || null},
+        ${(req.body as any)?.dosespot_pharmacy_id ?? null},
         ${insurance_provider || null},
         ${insurance_member_id || null},
         ${insurance_group_number || null},

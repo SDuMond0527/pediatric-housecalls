@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react'
-import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard, computeClears } from '../../lib/api'
+import { updateMyFamily, createChild, updateChild, deleteChild, familyChangePassword, familyArchiveChildInsurance, lookupChild, familyUploadInsuranceCard, familySearchPharmacies, computeClears } from '../../lib/api'
 import { useFamilyAuth, getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -261,7 +261,7 @@ export function FamilyProfile() {
     setTimeout(() => setSavedChildId(null), 2500)
   }
 
-  function updateNewChildField(field: keyof ChildEntry, value: string | boolean) {
+  function updateNewChildField(field: keyof ChildEntry, value: string | boolean | number | null) {
     setNewChild(prev => ({ ...prev, [field]: value } as ChildEntry))
 
     if (field === 'first_name' || field === 'last_name' || field === 'date_of_birth') {
@@ -569,6 +569,9 @@ export function FamilyProfile() {
               child={newChild}
               removable={false}
               uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
+              searchPharmacies={familySearchPharmacies}
+              defaultZip={family?.zip ?? ''}
+              defaultState={family?.state ?? ''}
               headerLabel="New child"
               onField={updateNewChildField}
               onRemove={() => {}}

@@ -39,6 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Idempotent bootstrap so a PATCH that includes insurance_dependent_code
   // can never fail with "column does not exist" on a fresh deploy.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
 
   let practiceId: string
   if (auth.isFamily) {
@@ -225,6 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           current_medications  = COALESCE(${b.current_medications  || null}, current_medications),
           medical_history      = COALESCE(${b.medical_history      || null}, medical_history),
           preferred_pharmacy   = COALESCE(${b.preferred_pharmacy   || null}, preferred_pharmacy),
+          dosespot_pharmacy_id = COALESCE(${b.dosespot_pharmacy_id ?? null}, dosespot_pharmacy_id),
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
           pcp_id               = COALESCE(${b.pcp_id               || null}::uuid, pcp_id),
           phi_sharing_consent  = COALESCE(${b.phi_sharing_consent  ?? null}, phi_sharing_consent),

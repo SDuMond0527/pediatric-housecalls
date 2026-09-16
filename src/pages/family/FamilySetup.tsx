@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard } from '../../lib/api'
+import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard, familySearchPharmacies } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -46,7 +46,7 @@ export function FamilySetup() {
 
   const lookupTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
 
-  function updateChildField(i: number, field: keyof ChildEntry, value: string | boolean) {
+  function updateChildField(i: number, field: keyof ChildEntry, value: string | boolean | number | null) {
     setChildren(prev => prev.map((c, idx) => idx !== i ? c : { ...c, [field]: value } as ChildEntry))
 
     if (field === 'first_name' || field === 'last_name' || field === 'date_of_birth') {
@@ -197,6 +197,9 @@ export function FamilySetup() {
                   child={child}
                   removable={children.length > 1}
                   uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
+                  searchPharmacies={familySearchPharmacies}
+                  defaultZip={zip}
+                  defaultState={state}
                   onField={(k, v) => updateChildField(i, k, v)}
                   onRemove={() => setChildren(prev => prev.filter((_, idx) => idx !== i))}
                   onConfirmMatch={() => confirmMatch(i)}

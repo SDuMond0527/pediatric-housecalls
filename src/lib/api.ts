@@ -591,6 +591,28 @@ export const getPatientStatementsForChild = (childId: string) =>
 export const getPatientBillingLog = (childId: string) =>
   apiFetch<any[]>(`/api/patient-billing-log?child_id=${encodeURIComponent(childId)}`)
 
+// DoseSpot pharmacy autocomplete — used at intake so we store a
+// concrete DoseSpot pharmacy_id instead of relying on a fuzzy-match
+// at SSO launch time. Family auth version + provider auth version
+// point at the same endpoint (which accepts either token).
+export type PharmacyMatch = {
+  id: number
+  name: string
+  address: string
+  city: string
+  state: string
+  zip: string
+  phone: string
+}
+export const searchPharmacies = (q: string, zip: string, state: string) =>
+  apiFetch<{ items: PharmacyMatch[] }>(
+    `/api/dosespot/pharmacy-search?q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip)}&state=${encodeURIComponent(state)}`
+  )
+export const familySearchPharmacies = (q: string, zip: string, state: string) =>
+  familyApiFetch<{ items: PharmacyMatch[] }>(
+    `/api/dosespot/pharmacy-search?q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip)}&state=${encodeURIComponent(state)}`
+  )
+
 // Admin "View as parent" — returns everything the family portal renders
 // (dashboard, visits, vaccines, profile, billing) for a given family, in
 // one round-trip. Admin-only on the server.
