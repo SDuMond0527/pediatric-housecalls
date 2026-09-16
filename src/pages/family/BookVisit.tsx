@@ -23,6 +23,7 @@ import {
 import {
   ChildIntakeForm,
   emptyChild,
+  emptyChildInheritingFrom,
   childIsComplete,
   buildChildCreatePayload,
   type ChildEntry,
@@ -1605,7 +1606,13 @@ export function BookVisit() {
                 </div>
               </div>
             ) : (
-              <button onClick={() => setAddingChild(true)}
+              <button
+                onClick={() => {
+                  const sibling = children[0]
+                  setNewChild(sibling ? emptyChildInheritingFrom(sibling) : emptyChild())
+                  setAddingChildError('')
+                  setAddingChild(true)
+                }}
                 className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-dashed border-[#E8E8E4] hover:border-[#7F77DD] hover:bg-[#FAFAF8] transition-all text-[#1A1A2E] hover:text-[#7F77DD]">
                 <div className="w-10 h-10 rounded-full bg-[#F1EFE8] flex items-center justify-center flex-shrink-0">
                   <Plus size={16} />

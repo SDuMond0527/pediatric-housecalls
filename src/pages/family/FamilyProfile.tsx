@@ -8,6 +8,7 @@ import type { Child } from '../../types/family'
 import {
   ChildIntakeForm,
   emptyChild,
+  emptyChildInheritingFrom,
   childIsComplete,
   buildChildCreatePayload,
   type ChildEntry,
@@ -384,7 +385,16 @@ export function FamilyProfile() {
       <div className="bg-white border border-[#E8E8E4] rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-1">
           <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Children & Insurance</h2>
-          <button onClick={() => setAddingChild(true)}
+          <button
+            onClick={() => {
+              // Pre-fill the family-wide fields (pharmacy, PCP, insurance,
+              // subscriber, cards, last name) from an existing sibling so
+              // the parent doesn't retype what's already on file.
+              const sibling = children[0]
+              setNewChild(sibling ? emptyChildInheritingFrom(sibling) : emptyChild())
+              setAddChildError('')
+              setAddingChild(true)
+            }}
             className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium hover:underline">
             <Plus size={13} /> Add child
           </button>

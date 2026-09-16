@@ -62,6 +62,50 @@ export function emptyChild(): ChildEntry {
   }
 }
 
+/**
+ * Build an empty ChildEntry that pre-fills the FAMILY-WIDE fields
+ * (pharmacy, PCP, insurance, subscriber, cards, last name) from a
+ * sibling — so a parent adding a second, third, fourth kid doesn't
+ * have to retype the same pharmacy / PCP / insurance info they've
+ * already given us. Child-specific fields (first name, DOB, gender,
+ * allergies, meds, history, vaccination status) stay blank because
+ * they never inherit.
+ *
+ * Pass ANY existing sibling record (children[0] is fine — every
+ * sibling shares the same family plan / pharmacy / PCP by design).
+ * If no sibling exists, use emptyChild() instead.
+ */
+export function emptyChildInheritingFrom(sibling: any): ChildEntry {
+  const s = sibling ?? {}
+  const isSelfPay = String(s.insurance_provider ?? '').toLowerCase() === 'self-pay'
+  const subDob = s.insurance_subscriber_dob ? String(s.insurance_subscriber_dob).split('T')[0] : ''
+  return {
+    first_name:  '',
+    last_name:   String(s.last_name ?? ''),
+    date_of_birth: '',
+    gender:      '',
+    allergies:   '',
+    current_medications: '',
+    medical_history:     '',
+    preferred_pharmacy:  String(s.preferred_pharmacy ?? ''),
+    dosespot_pharmacy_id: (s.dosespot_pharmacy_id as number | null | undefined) ?? null,
+    pcp:                 String(s.pcp ?? ''),
+    vaccination_status:  '',
+    self_pay:            isSelfPay,
+    insurance_provider:      isSelfPay ? '' : String(s.insurance_provider      ?? ''),
+    insurance_member_id:     isSelfPay ? '' : String(s.insurance_member_id     ?? ''),
+    insurance_group_number:  isSelfPay ? '' : String(s.insurance_group_number  ?? ''),
+    insurance_dependent_code:'',  // dep code is child-specific for BCBS NC — never inherit
+    insurance_subscriber_name:     isSelfPay ? '' : String(s.insurance_subscriber_name     ?? ''),
+    insurance_subscriber_dob:      isSelfPay ? '' : subDob,
+    insurance_subscriber_gender:   isSelfPay ? '' : String(s.insurance_subscriber_gender   ?? ''),
+    insurance_subscriber_relationship: isSelfPay ? 'child' : String(s.insurance_subscriber_relationship ?? 'child'),
+    insurance_card_front_url:      isSelfPay ? '' : String(s.insurance_card_front_url ?? ''),
+    insurance_card_back_url:       isSelfPay ? '' : String(s.insurance_card_back_url  ?? ''),
+    match: null, matchDismissed: false, matchConfirmed: false,
+  }
+}
+
 /** Return the label of the first missing required field, or null if complete. */
 export function childIsComplete(c: ChildEntry): string | null {
   if (!c.first_name.trim()) return 'First name'

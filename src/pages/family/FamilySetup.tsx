@@ -9,6 +9,7 @@ import { PracticeLogo } from '../../lib/practice'
 import {
   ChildIntakeForm,
   emptyChild,
+  emptyChildInheritingFrom,
   childIsComplete,
   buildChildCreatePayload,
   type ChildEntry,
@@ -179,7 +180,13 @@ export function FamilySetup() {
           <div className="border-t border-[#E8E8E4] pt-5">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-display text-lg font-medium text-[#1A1A2E]">Children</h2>
-              <button onClick={() => setChildren(prev => [...prev, emptyChild()])}
+              <button onClick={() => setChildren(prev => [
+                // Inherit family-wide fields (pharmacy, PCP, insurance) from
+                // the previous sibling in this same signup session so the
+                // parent doesn't retype what they just entered above.
+                ...prev,
+                prev.length > 0 ? emptyChildInheritingFrom(prev[prev.length - 1]) : emptyChild(),
+              ])}
                 className="flex items-center gap-1.5 text-[12px] text-[#7F77DD] font-medium hover:underline">
                 <Plus size={13} /> Add another
               </button>
