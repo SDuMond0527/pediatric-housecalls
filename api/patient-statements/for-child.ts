@@ -39,6 +39,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         COALESCE(NULLIF(ps.total_amount_due_text, ''), ps.total_amount_due::text) AS total_amount_due,
         ps.amount_billed,
         ps.insurance_payment,
+        ps.contractual_adjustment,
+        ps.patient_copay,
+        ps.patient_deductible,
+        ps.patient_coinsurance,
+        ps.patient_non_covered,
+        ps.remaining_balance,
+        ps.prior_balance,
         ps.square_payment_link_url AS square_payment_url,
         ps.sent_at,
         ps.paid_at,
@@ -48,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.payer_name,
         COALESCE(ps.patient_first_name, c.patient_first_name) AS patient_first_name,
         COALESCE(ps.patient_last_name,  c.patient_last_name)  AS patient_last_name,
+        COALESCE(ps.patient_dob::text,  c.patient_dob::text)  AS patient_dob,
         COALESCE(ps.date_of_service::text, c.service_date::text) AS service_date
       FROM patient_statements ps
       LEFT JOIN claims c ON c.id = ps.claim_id
