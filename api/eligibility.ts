@@ -91,6 +91,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
   const sql = neon(process.env.DATABASE_URL!)
+  // Idempotent bootstrap — belt-and-suspenders so eligibility never
+  // reads null on a missing column and skips the BCBS NC dep-code
+  // concat. Same ALTER lives on api/claims/[id].ts and children/[id].ts.
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
   const { appointment_id, child_id } = req.body ?? {}
   if (!appointment_id && !child_id) return res.status(400).json({ error: 'appointment_id or child_id required' })
 

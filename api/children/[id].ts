@@ -36,6 +36,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sql = neon(process.env.DATABASE_URL!)
+  // Idempotent bootstrap so a PATCH that includes insurance_dependent_code
+  // can never fail with "column does not exist" on a fresh deploy.
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
 
   let practiceId: string
   if (auth.isFamily) {
