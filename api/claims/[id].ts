@@ -230,7 +230,18 @@ function buildStediPayload(claim: any, testMode = false): object {
     },
     receiver: { organizationName: claim.payer_name ?? '' },
     subscriber: {
-      memberId: claim.member_id ?? '',
+      // BCBS NC requires 14-position member IDs — the 12-char base (3
+      // alpha + 9 digits) on the card plus a 2-digit dependent suffix
+      // that identifies which family member the claim is for. We store
+      // the base ID as member_id and the suffix as insurance_dependent_code
+      // separately so the biller/parent enters the ID they see on the
+      // card, and we concatenate at submit time. Other payers ignore
+      // the suffix — safe to only apply for UPICO.
+      memberId: (() => {
+        const base = String(claim.member_id ?? '')
+        const dep  = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+        return claim.payer_id === 'UPICO' && dep ? base + dep : base
+      })(),
       paymentResponsibilityLevelCode: 'P',
       ...(subFirstName ? { firstName: subFirstName } : {}),
       lastName: subLastName,
@@ -315,6 +326,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
   const sql = neon(process.env.DATABASE_URL!)
+  // Idempotent bootstraps for insurance_dependent_code — BCBS NC needs
+  // a 2-digit dependent suffix on the member ID; other payers ignore it.
+  try { await sql`ALTER TABLE claims   ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
@@ -598,7 +613,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                      'patient_address', 'patient_city', 'patient_state', 'patient_zip',
                      'rendering_provider_npi', 'rendering_provider_taxonomy',
                      'place_of_service', 'service_date', 'status', 'cpt_codes', 'diagnoses',
-                     'era_seen_at']
+                     'era_seen_at', 'insurance_dependent_code']
     const updates: Record<string, any> = {}
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key]
@@ -655,6 +670,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
         total_charge               = COALESCE(${newTotal}, total_charge),
         era_seen_at                = COALESCE(${updates.era_seen_at ?? null}::timestamptz, era_seen_at),
+        insurance_dependent_code   = COALESCE(${updates.insurance_dependent_code ?? null}, insurance_dependent_code),
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
     return res.json(updated)

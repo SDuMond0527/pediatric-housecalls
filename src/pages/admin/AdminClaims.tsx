@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion, providerUpdateChild } from '../../lib/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { PatientStatementModal } from './PatientStatementModal'
 
@@ -169,8 +169,9 @@ export function AdminClaims() {
   const [editPatient, setEditPatient] = useState<Record<string, {
     patient_first_name: string; patient_last_name: string; patient_dob: string; patient_gender: string;
     patient_address: string; patient_city: string; patient_state: string; patient_zip: string;
-    member_id: string; group_number: string;
+    member_id: string; group_number: string; insurance_dependent_code: string;
     subscriber_name: string; subscriber_dob: string; subscriber_gender: string;
+    child_id?: string | null;
   }>>({})
   const [rejectionModal, setRejectionModal] = useState<{
     message: string
@@ -375,7 +376,14 @@ export function AdminClaims() {
     setSaving(claimId + '_patient')
     setSaveError(null)
     try {
-      await updateClaim(claimId, p)
+      const { child_id, ...claimFields } = p
+      await updateClaim(claimId, claimFields)
+      // Propagate the BCBS NC dependent code onto the child too so every
+      // future claim for this kid inherits it automatically — otherwise
+      // biller re-enters it every visit.
+      if (child_id && p.insurance_dependent_code) {
+        await providerUpdateChild(child_id, { insurance_dependent_code: p.insurance_dependent_code }).catch(() => {})
+      }
       setEditPatient(prev => { const n = { ...prev }; delete n[claimId]; return n })
       await load()
     } catch (e: any) {
@@ -793,6 +801,16 @@ export function AdminClaims() {
                                   value={editPatient[c.id].group_number}
                                   onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], group_number: e.target.value } }))} />
                               </div>
+                              {c.payer_id === 'UPICO' && (
+                                <div>
+                                  <label className="text-[11px] text-[#555] block mb-1">Dependent code (BCBS NC) — 2 digits</label>
+                                  <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                                    maxLength={2} placeholder="e.g. 03"
+                                    value={editPatient[c.id].insurance_dependent_code}
+                                    onChange={e => setEditPatient(p => ({ ...p, [c.id]: { ...p[c.id], insurance_dependent_code: e.target.value.replace(/\D/g, '').slice(0, 2) } }))} />
+                                  <p className="text-[10px] text-[#1A1A2E] mt-1">BCBS NC requires a 2-digit suffix identifying which dependent. Common: 01=subscriber, 02=spouse, 03+=kids by DOB.</p>
+                                </div>
+                              )}
                               <div>
                                 <label className="text-[11px] text-[#555] block mb-1">Subscriber full name (first AND last)</label>
                                 <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
@@ -854,9 +872,11 @@ export function AdminClaims() {
                                 patient_zip: c.patient_zip ?? '',
                                 member_id: c.member_id ?? '',
                                 group_number: c.group_number ?? '',
+                                insurance_dependent_code: c.insurance_dependent_code ?? '',
                                 subscriber_name: c.subscriber_name ?? '',
                                 subscriber_dob: c.subscriber_dob ? String(c.subscriber_dob).split('T')[0] : '',
                                 subscriber_gender: c.subscriber_gender ?? '',
+                                child_id: c.child_id ?? c.effective_child_id ?? null,
                               }}))}
                               className="mt-2 text-[11px] text-[#7F77DD] hover:underline">
                               Edit patient &amp; insurance info

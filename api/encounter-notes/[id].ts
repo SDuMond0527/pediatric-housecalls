@@ -140,7 +140,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
       INSERT INTO claims (
         practice_id, encounter_note_id, appointment_id, child_id, provider_id,
         payer_name, payer_id,
-        subscriber_name, subscriber_dob, subscriber_gender, member_id, group_number,
+        subscriber_name, subscriber_dob, subscriber_gender, member_id, group_number, insurance_dependent_code,
         service_date, place_of_service,
         diagnoses, cpt_codes, total_charge,
         rendering_provider_name, rendering_provider_npi, rendering_provider_taxonomy,
@@ -153,6 +153,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         ${child?.insurance_subscriber_name ?? null}, ${child?.insurance_subscriber_dob ?? null},
         ${child?.insurance_subscriber_gender ?? null}, ${child?.insurance_member_id ?? null},
         ${child?.insurance_group_number ?? null},
+        ${child?.insurance_dependent_code ?? null},
         ${appt?.scheduled_date ?? null}, ${pos},
         ${JSON.stringify(note.diagnoses ?? [])}::jsonb, ${JSON.stringify(cptCodes)}::jsonb, ${total},
         ${renderingProvider?.name ?? null}, ${renderingProvider?.npi ?? null}, ${renderingProvider?.taxonomy_code ?? null},
