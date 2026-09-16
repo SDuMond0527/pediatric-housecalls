@@ -684,6 +684,12 @@ export const reviewPatientStatementWriteOff = (id: string, body: { approved: boo
 export const reviewClaimWriteOff = (id: string, body: { approved: boolean; review_note?: string }) =>
   apiFetch<any>(`/api/claims/${id}/review-write-off`, { method: 'POST', body: JSON.stringify(body) })
 
+// Reports schedule (checklist of monthly + quarterly reports)
+export const getReportsSchedule = () =>
+  apiFetch<{ reviews: { report_key: string; reviewed_at: string; reviewed_by_name: string | null }[] }>('/api/admin/reports-schedule')
+export const markReportReviewed = (report_key: string) =>
+  apiFetch<{ id: string; reviewed_at: string }>('/api/admin/reports-schedule', { method: 'POST', body: JSON.stringify({ report_key }) })
+
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
 
