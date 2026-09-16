@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears } from '../lib/api'
@@ -158,6 +158,23 @@ export function PatientChart() {
   const [dsLoading, setDsLoading] = useState(false)
   const [dsUrl, setDsUrl]         = useState<string | null>(null)
   const [dsError, setDsError]     = useState<string | null>(null)
+  // Insurance card lightbox + download. Null when no image is being
+  // viewed fullscreen. Download uses a blob fetch so cross-origin
+  // Vercel Blob URLs still trigger a real download prompt.
+  const [cardZoomUrl, setCardZoomUrl] = useState<string | null>(null)
+  async function downloadCard(url: string, filename: string) {
+    try {
+      const r = await fetch(url)
+      const blob = await r.blob()
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl; a.download = filename; a.click()
+      URL.revokeObjectURL(objUrl)
+    } catch {
+      // Fallback: open in a new tab if the fetch/CORS fails.
+      window.open(url, '_blank')
+    }
+  }
   const [dsPharmNote, setDsPharmNote] = useState<string | null>(null)
   const [dsNotifCount, setDsNotifCount] = useState(0)
   const [dsNotifBreakdown, setDsNotifBreakdown] = useState<{ renewals: number; rxChanges: number; errors: number }>({ renewals: 0, rxChanges: 0, errors: 0 })
@@ -1056,20 +1073,35 @@ export function PatientChart() {
                             <div>
                               <div className="text-[11px] text-[#1A1A2E] mb-2">Insurance card</div>
                               <div className="grid grid-cols-2 gap-3">
-                                {child?.insurance_card_front_url && (
-                                  <div>
-                                    <div className="text-[11px] text-[#1A1A2E] mb-1">Front</div>
-                                    <img src={child.insurance_card_front_url} alt="Insurance card front"
-                                      className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
-                                  </div>
-                                )}
-                                {child?.insurance_card_back_url && (
-                                  <div>
-                                    <div className="text-[11px] text-[#1A1A2E] mb-1">Back</div>
-                                    <img src={child.insurance_card_back_url} alt="Insurance card back"
-                                      className="w-full rounded-lg border border-[#E8E8E4] object-cover" />
-                                  </div>
-                                )}
+                                {(['front', 'back'] as const).map(side => {
+                                  const url = side === 'front' ? child?.insurance_card_front_url : child?.insurance_card_back_url
+                                  if (!url) return null
+                                  const patient = [child?.first_name, child?.last_name].filter(Boolean).join('_') || 'patient'
+                                  const filename = `${patient}_insurance_${side}.jpg`
+                                  return (
+                                    <div key={side}>
+                                      <div className="text-[11px] text-[#1A1A2E] mb-1">{side === 'front' ? 'Front' : 'Back'}</div>
+                                      <div className="relative group">
+                                        <img src={url} alt={`Insurance card ${side}`}
+                                          className="w-full rounded-lg border border-[#E8E8E4] object-cover cursor-zoom-in"
+                                          onClick={() => setCardZoomUrl(url)} />
+                                        <button
+                                          type="button"
+                                          onClick={() => setCardZoomUrl(url)}
+                                          title="Click to enlarge"
+                                          className="absolute top-2 right-2 bg-white/90 hover:bg-white text-[#1A1A2E] p-1.5 rounded-lg shadow-sm border border-[#E8E8E4] transition-all opacity-70 group-hover:opacity-100">
+                                          <ZoomIn size={16} />
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => downloadCard(url, filename)}
+                                        className="mt-2 w-full flex items-center justify-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors">
+                                        <Download size={12} /> Download
+                                      </button>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}
@@ -2367,6 +2399,25 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
           )}
         </div>
       </div>
+
+      {/* Insurance card lightbox */}
+      {cardZoomUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setCardZoomUrl(null)}>
+          <img
+            src={cardZoomUrl}
+            alt="Insurance card enlarged"
+            onClick={e => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg cursor-default" />
+          <button
+            type="button"
+            onClick={() => setCardZoomUrl(null)}
+            className="absolute top-4 right-4 bg-white/90 hover:bg-white text-[#1A1A2E] p-2 rounded-lg shadow-sm">
+            <X size={20} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
