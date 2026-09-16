@@ -80,12 +80,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: "Child's first name is required." })
         }
 
-        // Server-side guard: if the caller is providing intake fields
-        // (extended signup / provider "Add sibling"), require the full
-        // required set so we NEVER create a skeleton chart from an ingest
-        // that promised to collect all data. Callers that don't pass any
-        // intake fields still work (dedup / lookup paths above). See
-        // memory: feedback_all_patient_info_required_and_displayed.md
+        // Server-side guard: EVERY family-created child must arrive with the
+        // full intake or we reject the insert. Previously this block was
+        // gated on `providingIntake` (only ran when the caller sent at least
+        // one intake field), which meant a client that omitted `gender`
+        // entirely bypassed validation and produced a null-gender chart.
+        // The dedup / lookup paths above already return before we get here,
+        // so making this unconditional does NOT break any legitimate flow.
+        // See memory: feedback_all_patient_info_required_and_displayed.md
         const REQUIRED_ALWAYS = [
           'last_name', 'date_of_birth', 'gender',
           'parent_phone', 'parent_email', 'parent_address',
@@ -98,9 +100,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'insurance_subscriber_gender',
           'insurance_card_front_url', 'insurance_card_back_url',
         ] as const
-        const providingIntake = b.gender != null || b.allergies != null || b.preferred_pharmacy != null || b.insurance_provider != null
         const nonEmpty = (v: any) => v != null && String(v).trim() !== ''
-        if (providingIntake) {
+        {
           const missing: string[] = []
           for (const k of REQUIRED_ALWAYS) if (!nonEmpty(b[k])) missing.push(k)
           const pcpOk = nonEmpty(b.pcp) || nonEmpty(b.pcp_id)
@@ -424,6 +425,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           AND date_of_birth = ${date_of_birth}::date
         LIMIT 1`
       if (prevMatch) return res.json(prevMatch)
+    }
+
+    // Provider-side identity guard. Every fresh insert must have the
+    // three identity fields — last name, date of birth, gender. Provider
+    // flows (Add sibling on chart, Today quick-add, AdminSchedule add)
+    // sometimes create a shell record and let the biller / provider
+    // fill in the rest via the chart later, so we do NOT enforce the
+    // full intake set here — only the minimum needed for a valid
+    // patient identity. IncompleteChartBanner catches the rest.
+    {
+      const nonEmpty = (v: any) => v != null && String(v).trim() !== ''
+      const missing: string[] = []
+      if (!nonEmpty(ln)) missing.push('last_name')
+      if (!nonEmpty(date_of_birth)) missing.push('date_of_birth')
+      if (!nonEmpty(gender)) missing.push('gender')
+      if (missing.length) {
+        return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
+      }
     }
 
     const label = [fn, ln].filter(Boolean).join(' ')
