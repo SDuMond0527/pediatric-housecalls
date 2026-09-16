@@ -158,6 +158,7 @@ export function PatientChart() {
   const [dsLoading, setDsLoading] = useState(false)
   const [dsUrl, setDsUrl]         = useState<string | null>(null)
   const [dsError, setDsError]     = useState<string | null>(null)
+  const [dsPharmNote, setDsPharmNote] = useState<string | null>(null)
   const [dsNotifCount, setDsNotifCount] = useState(0)
   const [dsNotifBreakdown, setDsNotifBreakdown] = useState<{ renewals: number; rxChanges: number; errors: number }>({ renewals: 0, rxChanges: 0, errors: 0 })
   const [child, setChild] = useState<any | null>(null)
@@ -371,11 +372,13 @@ export function PatientChart() {
     if (!childId) return
     setDsLoading(true)
     setDsError(null)
+    setDsPharmNote(null)
     setDsUrl(null)
     try {
-      const { ssoUrl, syncError } = await getDoseSpotSSO(childId)
+      const { ssoUrl, syncError, pharmacySyncNote } = await getDoseSpotSSO(childId)
       setDsUrl(ssoUrl)
       if (syncError) setDsError(`Warning: patient sync failed — ${syncError}. DoseSpot opened without patient context.`)
+      if (pharmacySyncNote) setDsPharmNote(pharmacySyncNote)
     } catch (e: any) {
       setDsError(e.message ?? 'Could not launch DoseSpot')
     } finally {
@@ -1858,6 +1861,11 @@ export function PatientChart() {
                     {dsError && (
                       <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 text-left flex-shrink-0">
                         {dsError}
+                      </div>
+                    )}
+                    {dsPharmNote && (
+                      <div className={`text-[12px] px-3 py-2 text-left flex-shrink-0 ${dsPharmNote.startsWith('Preferred pharmacy:') ? 'text-[#085041] bg-[#E1F5EE]' : 'text-[#633806] bg-[#FAEEDA]'}`}>
+                        {dsPharmNote}
                       </div>
                     )}
                     <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E8E8E4] flex-shrink-0">

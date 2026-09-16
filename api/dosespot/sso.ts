@@ -154,34 +154,55 @@ async function syncPreferredPharmacy(
     'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
   }
 
+  // Parse the free-text pharmacy string into DoseSpot-friendly components.
+  // Sara's typical entries look like "Publix #1518 Cotswold 4425 Randolph Rd."
+  //   Name    = pharmacy chain (first word — CVS, Publix, Walgreens, etc.)
+  //   Address = the street portion (matches "<digits> <words> Rd/St/Ave/…")
+  //   State   = from family_profiles (NC / SC / VA)
+  // DoseSpot's search wants each piece in its own param. Passing the
+  // full string as Name matches nothing.
+  const chainMatch = preferredText.match(/^(CVS|Publix|Walgreens|Rite Aid|Walmart|Target|Costco|Kroger|Harris Teeter|Sam's Club|Kaiser|Amazon Pharmacy|PillPack|Kinney|Winn-Dixie|Food Lion)/i)
+  const name = chainMatch ? chainMatch[1] : preferredText.split(/[\s#,]/)[0]
+  const addrMatch = preferredText.match(/\d+\s+[A-Za-z][A-Za-z\s'.]*?\s+(Rd|Road|St|Street|Ave|Avenue|Blvd|Boulevard|Way|Dr|Drive|Ln|Lane|Ct|Court|Pkwy|Parkway|Hwy|Highway|Cir|Circle|Pl|Place|Ter|Terrace)\b\.?/i)
+  const streetAddress = addrMatch ? addrMatch[0].replace(/\.$/, '') : null
+
   try {
-    // Search DoseSpot's national pharmacy directory. Narrow by state
-    // when we have one — filters out the "CVS" in every other state
-    // and picks a local match. Falls back to name-only when the state
-    // filter returns nothing.
-    const buildSearch = (withState: boolean) => {
+    // Build a series of increasingly loose search attempts. Take the
+    // first non-empty result set. Order: chain + address + state →
+    // chain + state → chain + address → chain alone.
+    const attempts: Array<{ label: string; params: URLSearchParams }> = []
+    const push = (label: string, entries: Record<string, string | null>) => {
       const p = new URLSearchParams()
-      p.set('Name', preferredText)
-      if (withState && family.state) p.set('State', String(family.state))
-      return p
+      for (const [k, v] of Object.entries(entries)) if (v) p.set(k, v)
+      attempts.push({ label, params: p })
+    }
+    push('name+addr+state', { Name: name, Address: streetAddress, State: family.state ?? null })
+    push('name+state',      { Name: name, State: family.state ?? null })
+    if (streetAddress) push('name+addr', { Name: name, Address: streetAddress })
+    push('name only',       { Name: name })
+
+    let first: { PharmacyId: number; StoreName?: string; Address1?: string; City?: string; State?: string } | undefined
+    let usedLabel = ''
+    let lastStatus = 0
+    for (const { label, params } of attempts) {
+      const res = await fetch(`${DS_BASE}/webapi/v2/api/pharmacies/search?${params}`, { headers })
+      lastStatus = res.status
+      if (!res.ok) continue
+      const body = await res.json() as { Items?: any[] }
+      const items = Array.isArray(body?.Items) ? body.Items : []
+      if (items.length > 0) {
+        first = items[0]
+        usedLabel = label
+        break
+      }
     }
 
-    let searchRes = await fetch(`${DS_BASE}/webapi/v2/api/pharmacies/search?${buildSearch(true)}`, { headers })
-    if (!searchRes.ok) return { pharmacyId: null, error: `pharmacy search HTTP ${searchRes.status}` }
-    let data = await searchRes.json() as { Items?: Array<{ PharmacyId: number; StoreName?: string; Address1?: string; City?: string; State?: string }> }
-    let first = data.Items?.[0]
-
-    if (!first && family.state) {
-      // Retry without state filter — some pharmacies get filed under a
-      // different state than the family's mailing address (mail order,
-      // border towns, etc).
-      searchRes = await fetch(`${DS_BASE}/webapi/v2/api/pharmacies/search?${buildSearch(false)}`, { headers })
-      if (!searchRes.ok) return { pharmacyId: null, error: `pharmacy search retry HTTP ${searchRes.status}` }
-      data = await searchRes.json()
-      first = data.Items?.[0]
+    if (!first?.PharmacyId) {
+      return {
+        pharmacyId: null,
+        error: `no match for "${preferredText}" (parsed name="${name}"${streetAddress ? `, addr="${streetAddress}"` : ''}, state=${family.state ?? 'null'}${lastStatus ? `, last HTTP ${lastStatus}` : ''})`,
+      }
     }
-
-    if (!first?.PharmacyId) return { pharmacyId: null, error: 'no pharmacy match' }
 
     // Assign as the patient's primary pharmacy in DoseSpot.
     const assignRes = await fetch(`${DS_BASE}/webapi/v2/api/patients/${patientId}/pharmacies`, {
@@ -201,8 +222,8 @@ async function syncPreferredPharmacy(
         dosespot_pharmacy_source_text  = ${preferredText}
       WHERE id = ${child.id}::uuid`
 
-    const label = [first.StoreName, first.City, first.State].filter(Boolean).join(' · ')
-    return { pharmacyId: first.PharmacyId, matched: label || String(first.PharmacyId) }
+    const label = [first.StoreName, first.Address1, first.City, first.State].filter(Boolean).join(' · ')
+    return { pharmacyId: first.PharmacyId, matched: `${label || String(first.PharmacyId)} (via ${usedLabel})` }
   } catch (e: any) {
     return { pharmacyId: null, error: e?.message ?? String(e) }
   }

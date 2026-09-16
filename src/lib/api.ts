@@ -645,7 +645,7 @@ export const draftEncounterNote = (body: {
 
 // ── DoseSpot e-Prescribing ────────────────────────────────────
 export const getDoseSpotSSO = (childId: string) =>
-  apiFetch<{ ssoUrl: string; syncError?: string; dsPatientId?: number }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
+  apiFetch<{ ssoUrl: string; syncError?: string; dsPatientId?: number; pharmacySyncNote?: string }>('/api/dosespot/sso', { method: 'POST', body: JSON.stringify({ child_id: childId }) })
 
 export const getDoseSpotNotifications = () =>
   apiFetch<{ count: number; breakdown: { renewals: number; rxChanges: number; errors: number } }>('/api/dosespot/notifications')
