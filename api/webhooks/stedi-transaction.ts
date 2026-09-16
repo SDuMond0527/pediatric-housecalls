@@ -383,6 +383,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!claim) continue
       const cas = parseCasAdjustments(cp.scoped)
       await applyCasToClaim(sql, claim.id, cas, cp.payerClaimControlNumber)
+      // ── ADDITIVE: preserve the raw 835 payload so parser bugs
+      //             are debuggable without re-fetching from Stedi.
+      try {
+        await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS era_raw_835 jsonb`
+        await sql`UPDATE claims SET era_raw_835 = COALESCE(era_raw_835, ${JSON.stringify(cp.scoped)}::jsonb) WHERE id = ${claim.id}::uuid`
+      } catch (rawErr: any) {
+        console.error('[webhooks/stedi-transaction] era_raw_835 store failed (non-fatal):', rawErr?.message)
+      }
       // ── ADDITIVE denial-code capture ─────────────────────────────
       // Fully wrapped — never blocks the webhook. Worst case
       // denial_codes stays null on this claim.

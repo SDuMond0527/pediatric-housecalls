@@ -319,8 +319,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         summary.transactionsSeen += 1
 
+        // Force-reprocess mode: ?force=1 skips the idempotency guard so we
+        // can re-fetch and re-parse transactions the webhook already
+        // processed. Needed because the transaction webhook stores nothing
+        // useful for downstream debug — it applies CAS then throws the
+        // raw 835 away. Force lets us re-run against the actual payload.
+        const forceReprocess = req.query.force === '1'
         const [prior] = await sql`SELECT 1 FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
-        if (prior) { summary.skippedAlreadyProcessed += 1; continue }
+        if (prior && !forceReprocess) { summary.skippedAlreadyProcessed += 1; continue }
 
         const reportRes = await fetch(STEDI_835_REPORT_URL(transactionId), {
           headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -339,6 +345,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (!claim) continue
             const cas = parseCasAdjustments(cp.scoped)
             await applyCasToClaim(sql, claim.id, cas, cp.payerClaimControlNumber)
+            // ── ADDITIVE: preserve the raw 835 on the claim so parser bugs
+            //             are debuggable without re-hitting Stedi. Only
+            //             writes if not already set OR force=1. Never
+            //             touches other era_* fields.
+            try {
+              await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS era_raw_835 jsonb`
+              if (forceReprocess) {
+                await sql`UPDATE claims SET era_raw_835 = ${JSON.stringify(cp.scoped)}::jsonb WHERE id = ${claim.id}::uuid`
+              } else {
+                await sql`UPDATE claims SET era_raw_835 = COALESCE(era_raw_835, ${JSON.stringify(cp.scoped)}::jsonb) WHERE id = ${claim.id}::uuid`
+              }
+            } catch (rawErr: any) {
+              console.error('[backfill-stedi-cas] era_raw_835 store failed (non-fatal):', rawErr?.message)
+            }
             // ── ADDITIVE denial-code capture ─────────────────────────
             // Wrapped in try/catch; never blocks the backfill.
             try {
