@@ -63,15 +63,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration } = req.body
+    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs } = req.body
     if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
+
+    // Idempotent bootstrap so we can add labs without a migration step.
+    try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS labs jsonb` } catch {}
 
     const diagnosesVal = diagnoses ?? []
     const cptCodesVal  = cpt_codes  ?? []
     const photosVal    = photos     ?? []
 
     const [row] = await sql`
-      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration)
+      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs)
       VALUES (
         ${practiceId}::uuid,
         ${appointment_id}::uuid,
@@ -87,7 +90,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${JSON.stringify(cptCodesVal)}::jsonb,
         ${JSON.stringify(photosVal)}::jsonb,
         ${vaccine_administrations ? JSON.stringify(vaccine_administrations) : null}::jsonb,
-        ${iv_administration ? JSON.stringify(iv_administration) : null}::jsonb
+        ${iv_administration ? JSON.stringify(iv_administration) : null}::jsonb,
+        ${labs ? JSON.stringify(labs) : null}::jsonb
       )
       RETURNING *`
     if (child_id) {

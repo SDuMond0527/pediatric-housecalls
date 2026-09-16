@@ -168,6 +168,42 @@ function emptyVaccine(): VaccineEntry {
   }
 }
 
+// ── Labs state ─────────────────────────────────────────────────────────────
+// The five point-of-care tests the practice actually runs. Each entry is a
+// simple checkbox — when checked, the relevant result inputs render below.
+// Stored on encounter_notes.labs as JSONB so we can add / remove tests
+// without a schema migration each time.
+type LabsState = {
+  rapid_strep:         { checked: boolean; result: string }
+  rapid_flu_covid:     { checked: boolean; result: string }
+  rapid_flu_rsv_covid: { checked: boolean; result: string }
+  urine_dipstick: {
+    checked: boolean
+    ph: string
+    leukocyte_esterase: string
+    nitrite: string
+    ketones: string
+    specific_gravity: string
+    blood: string
+    glucose: string
+  }
+  fingerstick_glucose: { checked: boolean; value: string }
+}
+
+function emptyLabs(): LabsState {
+  return {
+    rapid_strep:         { checked: false, result: '' },
+    rapid_flu_covid:     { checked: false, result: '' },
+    rapid_flu_rsv_covid: { checked: false, result: '' },
+    urine_dipstick: {
+      checked: false,
+      ph: '', leukocyte_esterase: '', nitrite: '', ketones: '',
+      specific_gravity: '', blood: '', glucose: '',
+    },
+    fingerstick_glucose: { checked: false, value: '' },
+  }
+}
+
 interface IVFluidsRNForm {
   orderingProvider: string
   symptoms: string[]
@@ -670,6 +706,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     if (type === 'In-home vaccine administration') {
       setSubjective(''); setObjective(''); setAssessment(''); setPlan('')
       setVaccineEntries([emptyVaccine()])
+      setLabs(emptyLabs())
       setShowTemplatePrompt(false)
       return
     }
@@ -695,6 +732,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
   // Note fields
   const [vaccineEntries, setVaccineEntries] = useState<VaccineEntry[]>([emptyVaccine()])
+  const [labs, setLabs] = useState<LabsState>(emptyLabs())
   const [ivFluidsRN, setIVFluidsRN] = useState<IVFluidsRNForm>(emptyIVFluidsRN())
 
   const [chiefComplaint, setChiefComplaint] = useState('')
@@ -843,6 +881,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
           setVaccineEntries(note.vaccine_administrations)
         if (note.iv_administration) setIVFluidsRN(note.iv_administration)
+        if (note.labs && typeof note.labs === 'object') setLabs({ ...emptyLabs(), ...note.labs })
         if (note.note_type && NOTE_TYPES.includes(note.note_type)) setNoteType(note.note_type as NoteType)
         if (note.child_id && !childId) {
           resolvedChildId = note.child_id
@@ -957,6 +996,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       plan: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : (plan || null),
       vaccine_administrations: noteType === 'In-home vaccine administration' ? vaccineEntries : null,
       iv_administration: noteType === 'RN IV fluids' ? ivFluidsRN : null,
+      // Labs are only meaningful on physical / sick / IV screening visits.
+      // Send null on vaccine + RN IV fluids notes where the section is
+      // hidden entirely so the server doesn't persist stale state.
+      labs: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : labs,
       diagnoses,
       cpt_codes: cptCodes,
       photos,
@@ -1996,6 +2039,129 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                     </button>
                   </>
                 )}
+              </div>
+            </section>
+            )}
+
+            {/* Labs — point-of-care tests. Provider checks the tests they
+                ran; result fields appear below each checked test. Hidden
+                on vaccine + RN IV fluids notes (same rule as SOAP). */}
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
+            <section>
+              <div className={sectionHeader}>Labs</div>
+              <p className="text-[11px] text-[#1A1A2E] mb-2">Point-of-care tests. Check any that were run and enter the result.</p>
+              <div className="bg-white border border-[#E8E8E4] rounded-xl divide-y divide-[#F1EFE8]">
+                {/* Rapid Strep */}
+                <div className="px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={labs.rapid_strep.checked} disabled={readOnly}
+                      onChange={e => setLabs(l => ({ ...l, rapid_strep: { ...l.rapid_strep, checked: e.target.checked, result: e.target.checked ? l.rapid_strep.result : '' } }))} />
+                    <span className="text-[13px] font-medium text-[#1A1A2E]">Rapid Strep</span>
+                  </label>
+                  {labs.rapid_strep.checked && (
+                    <div className="mt-1.5 pl-6">
+                      <select className={inputCls} disabled={readOnly}
+                        value={labs.rapid_strep.result}
+                        onChange={e => setLabs(l => ({ ...l, rapid_strep: { ...l.rapid_strep, result: e.target.value } }))}>
+                        <option value="">Select result</option>
+                        <option value="Positive">Positive</option>
+                        <option value="Negative">Negative</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Rapid Flu / COVID */}
+                <div className="px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={labs.rapid_flu_covid.checked} disabled={readOnly}
+                      onChange={e => setLabs(l => ({ ...l, rapid_flu_covid: { ...l.rapid_flu_covid, checked: e.target.checked, result: e.target.checked ? l.rapid_flu_covid.result : '' } }))} />
+                    <span className="text-[13px] font-medium text-[#1A1A2E]">Rapid Flu / COVID</span>
+                  </label>
+                  {labs.rapid_flu_covid.checked && (
+                    <div className="mt-1.5 pl-6">
+                      <select className={inputCls} disabled={readOnly}
+                        value={labs.rapid_flu_covid.result}
+                        onChange={e => setLabs(l => ({ ...l, rapid_flu_covid: { ...l.rapid_flu_covid, result: e.target.value } }))}>
+                        <option value="">Select result</option>
+                        <option value="Negative">Negative</option>
+                        <option value="Positive Flu A">Positive Flu A</option>
+                        <option value="Positive Flu B">Positive Flu B</option>
+                        <option value="Positive COVID">Positive COVID</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Rapid Flu / RSV / COVID */}
+                <div className="px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={labs.rapid_flu_rsv_covid.checked} disabled={readOnly}
+                      onChange={e => setLabs(l => ({ ...l, rapid_flu_rsv_covid: { ...l.rapid_flu_rsv_covid, checked: e.target.checked, result: e.target.checked ? l.rapid_flu_rsv_covid.result : '' } }))} />
+                    <span className="text-[13px] font-medium text-[#1A1A2E]">Rapid Flu / RSV / COVID</span>
+                  </label>
+                  {labs.rapid_flu_rsv_covid.checked && (
+                    <div className="mt-1.5 pl-6">
+                      <select className={inputCls} disabled={readOnly}
+                        value={labs.rapid_flu_rsv_covid.result}
+                        onChange={e => setLabs(l => ({ ...l, rapid_flu_rsv_covid: { ...l.rapid_flu_rsv_covid, result: e.target.value } }))}>
+                        <option value="">Select result</option>
+                        <option value="Negative">Negative</option>
+                        <option value="Positive Flu A">Positive Flu A</option>
+                        <option value="Positive Flu B">Positive Flu B</option>
+                        <option value="Positive RSV">Positive RSV</option>
+                        <option value="Positive COVID">Positive COVID</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Urine dipstick — 7 parameters, provider types each */}
+                <div className="px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={labs.urine_dipstick.checked} disabled={readOnly}
+                      onChange={e => setLabs(l => ({ ...l, urine_dipstick: { ...l.urine_dipstick, checked: e.target.checked } }))} />
+                    <span className="text-[13px] font-medium text-[#1A1A2E]">Urine dipstick</span>
+                  </label>
+                  {labs.urine_dipstick.checked && (
+                    <div className="mt-2 pl-6 grid grid-cols-2 gap-2">
+                      {([
+                        ['pH', 'ph'],
+                        ['Leukocyte esterase', 'leukocyte_esterase'],
+                        ['Nitrite', 'nitrite'],
+                        ['Ketones', 'ketones'],
+                        ['Specific gravity', 'specific_gravity'],
+                        ['Blood', 'blood'],
+                        ['Glucose', 'glucose'],
+                      ] as [string, keyof LabsState['urine_dipstick']][]).map(([label, key]) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-[12px] text-[#555] w-32 flex-shrink-0">{label}</span>
+                          <input type="text" className={inputCls} disabled={readOnly}
+                            value={String(labs.urine_dipstick[key] ?? '')}
+                            onChange={e => setLabs(l => ({ ...l, urine_dipstick: { ...l.urine_dipstick, [key]: e.target.value } }))} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fingerstick glucose — single value with mg/dL */}
+                <div className="px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={labs.fingerstick_glucose.checked} disabled={readOnly}
+                      onChange={e => setLabs(l => ({ ...l, fingerstick_glucose: { ...l.fingerstick_glucose, checked: e.target.checked, value: e.target.checked ? l.fingerstick_glucose.value : '' } }))} />
+                    <span className="text-[13px] font-medium text-[#1A1A2E]">Fingerstick glucose</span>
+                  </label>
+                  {labs.fingerstick_glucose.checked && (
+                    <div className="mt-1.5 pl-6 flex items-center gap-2">
+                      <input type="text" inputMode="numeric"
+                        className={inputCls + ' max-w-[8rem]'} disabled={readOnly}
+                        value={labs.fingerstick_glucose.value}
+                        onChange={e => setLabs(l => ({ ...l, fingerstick_glucose: { ...l.fingerstick_glucose, value: e.target.value } }))} />
+                      <span className="text-[12px] text-[#555]">mg/dL</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
             )}

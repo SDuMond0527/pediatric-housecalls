@@ -5,7 +5,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 // comment in api/appointments/[id].ts explaining why.
 const ENCOUNTER_NOTES_CLEARABLE = new Set<string>([
   'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-  'vaccine_administrations', 'iv_administration',
+  'vaccine_administrations', 'iv_administration', 'labs',
 ])
 async function applyEncounterNoteClears(
   sql: any,
@@ -25,6 +25,7 @@ async function applyEncounterNoteClears(
       case 'plan':                     await sql`UPDATE encounter_notes SET plan                     = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
       case 'vaccine_administrations':  await sql`UPDATE encounter_notes SET vaccine_administrations  = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
       case 'iv_administration':        await sql`UPDATE encounter_notes SET iv_administration        = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'labs':                     await sql`UPDATE encounter_notes SET labs                     = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
     }
   }
 }
@@ -216,6 +217,29 @@ function buildNoteHtml(note: any, child: any, pcp: any, provider: any, appt: any
 ${note.chief_complaint ? `<h3>Chief Complaint</h3><div class="section">${note.chief_complaint}</div>` : ''}
 ${note.subjective     ? `<h3>Subjective (History)</h3><div class="section">${note.subjective}</div>` : ''}
 ${note.objective      ? `<h3>Objective (Exam)</h3><div class="section">${note.objective}</div>` : ''}
+${(() => {
+  const l = note.labs as any
+  if (!l || typeof l !== 'object') return ''
+  const lines: string[] = []
+  if (l.rapid_strep?.checked)         lines.push(`Rapid Strep: ${l.rapid_strep.result || '—'}`)
+  if (l.rapid_flu_covid?.checked)     lines.push(`Rapid Flu/COVID: ${l.rapid_flu_covid.result || '—'}`)
+  if (l.rapid_flu_rsv_covid?.checked) lines.push(`Rapid Flu/RSV/COVID: ${l.rapid_flu_rsv_covid.result || '—'}`)
+  if (l.urine_dipstick?.checked) {
+    const u = l.urine_dipstick
+    const parts = [
+      u.ph && `pH ${u.ph}`,
+      u.leukocyte_esterase && `Leukocyte esterase ${u.leukocyte_esterase}`,
+      u.nitrite && `Nitrite ${u.nitrite}`,
+      u.ketones && `Ketones ${u.ketones}`,
+      u.specific_gravity && `Specific gravity ${u.specific_gravity}`,
+      u.blood && `Blood ${u.blood}`,
+      u.glucose && `Glucose ${u.glucose}`,
+    ].filter(Boolean).join(', ') || '—'
+    lines.push(`Urine dipstick: ${parts}`)
+  }
+  if (l.fingerstick_glucose?.checked) lines.push(`Fingerstick glucose: ${l.fingerstick_glucose.value || '—'} mg/dL`)
+  return lines.length ? `<h3>Labs</h3><div class="section">${lines.join('<br>')}</div>` : ''
+})()}
 ${note.assessment     ? `<h3>Assessment</h3><div class="section">${note.assessment}</div>` : ''}
 ${note.plan           ? `<h3>Plan</h3><div class="section">${note.plan}</div>` : ''}
 
@@ -386,7 +410,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!existing) return res.status(404).json({ error: 'Note not found' })
 
-      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot } = req.body
+      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot, labs } = req.body
+
+      // Idempotent bootstrap — every PUT after this deploy ensures the
+      // labs column exists so a save can never silently drop the field.
+      try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS labs jsonb` } catch {}
 
       const unlocking = is_signed === false
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
@@ -424,6 +452,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             photos          = COALESCE(${photos != null ? JSON.stringify(photos) : null}::jsonb, photos),
             vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
             iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
+            labs              = COALESCE(${labs != null ? JSON.stringify(labs) : null}::jsonb, labs),
             medical_history_snapshot = COALESCE(${medical_history_snapshot ?? null}, medical_history_snapshot),
             child_id        = COALESCE(${child_id ?? null}::uuid, child_id),
             is_signed       = ${signing},
