@@ -126,6 +126,88 @@ function cleanPhone(phone: string | null): string | null {
   return digits
 }
 
+// Look up DoseSpot's numeric PharmacyId for the child's free-text
+// preferred pharmacy and assign it as the patient's primary pharmacy.
+// Best-effort: any failure logs and returns null — DoseSpot must still
+// open even if we can't match the pharmacy. The matched ID + the source
+// text are cached on the child row so we only search DoseSpot's directory
+// on first sync or after Sara edits the pharmacy text.
+async function syncPreferredPharmacy(
+  child: Record<string, any>,
+  family: Record<string, any>,
+  patientId: number,
+  token: string,
+  sql: any,
+): Promise<{ pharmacyId: number | null; matched?: string; error?: string }> {
+  const preferredText = String(child.preferred_pharmacy ?? '').trim()
+  if (!preferredText) return { pharmacyId: null }
+
+  // Skip search when we already synced the same source text.
+  if (child.dosespot_pharmacy_id && child.dosespot_pharmacy_source_text === preferredText) {
+    return { pharmacyId: child.dosespot_pharmacy_id as number, matched: 'cached' }
+  }
+
+  const headers = {
+    'Content-Type':     'application/json',
+    Authorization:      `Bearer ${token}`,
+    'Subscription-Key': DS_SUB_KEY,
+    'Ocp-Apim-Subscription-Key': DS_SUB_KEY,
+  }
+
+  try {
+    // Search DoseSpot's national pharmacy directory. Narrow by state
+    // when we have one — filters out the "CVS" in every other state
+    // and picks a local match. Falls back to name-only when the state
+    // filter returns nothing.
+    const buildSearch = (withState: boolean) => {
+      const p = new URLSearchParams()
+      p.set('Name', preferredText)
+      if (withState && family.state) p.set('State', String(family.state))
+      return p
+    }
+
+    let searchRes = await fetch(`${DS_BASE}/webapi/v2/api/pharmacies/search?${buildSearch(true)}`, { headers })
+    if (!searchRes.ok) return { pharmacyId: null, error: `pharmacy search HTTP ${searchRes.status}` }
+    let data = await searchRes.json() as { Items?: Array<{ PharmacyId: number; StoreName?: string; Address1?: string; City?: string; State?: string }> }
+    let first = data.Items?.[0]
+
+    if (!first && family.state) {
+      // Retry without state filter — some pharmacies get filed under a
+      // different state than the family's mailing address (mail order,
+      // border towns, etc).
+      searchRes = await fetch(`${DS_BASE}/webapi/v2/api/pharmacies/search?${buildSearch(false)}`, { headers })
+      if (!searchRes.ok) return { pharmacyId: null, error: `pharmacy search retry HTTP ${searchRes.status}` }
+      data = await searchRes.json()
+      first = data.Items?.[0]
+    }
+
+    if (!first?.PharmacyId) return { pharmacyId: null, error: 'no pharmacy match' }
+
+    // Assign as the patient's primary pharmacy in DoseSpot.
+    const assignRes = await fetch(`${DS_BASE}/webapi/v2/api/patients/${patientId}/pharmacies`, {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({ PharmacyId: first.PharmacyId, IsPrimary: true }),
+    })
+    if (!assignRes.ok) {
+      const body = await assignRes.text().catch(() => '')
+      return { pharmacyId: null, error: `pharmacy assign HTTP ${assignRes.status}: ${body.slice(0, 200)}` }
+    }
+
+    // Cache the match so we skip search on subsequent DoseSpot launches.
+    await sql`
+      UPDATE children SET
+        dosespot_pharmacy_id           = ${first.PharmacyId},
+        dosespot_pharmacy_source_text  = ${preferredText}
+      WHERE id = ${child.id}::uuid`
+
+    const label = [first.StoreName, first.City, first.State].filter(Boolean).join(' · ')
+    return { pharmacyId: first.PharmacyId, matched: label || String(first.PharmacyId) }
+  } catch (e: any) {
+    return { pharmacyId: null, error: e?.message ?? String(e) }
+  }
+}
+
 async function findOrCreateDoseSpotPatient(
   child: Record<string, any>,
   family: Record<string, any>,
@@ -216,6 +298,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const sql = neon(process.env.DATABASE_URL!)
 
+    // Bootstrap the pharmacy-cache columns idempotently. Cheap on hot
+    // starts, correct on cold. Both columns are server-set only.
+    try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
+    try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
+
     const [providerRow] = await sql`SELECT id, dosespot_clinician_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
     if (!providerRow) return res.status(403).json({ error: 'Provider not found' })
 
@@ -252,6 +339,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let dsPatientId: number | undefined = child.dosespot_patient_id || undefined
 
     let syncError: string | undefined
+    let pharmacySyncNote: string | undefined
     try {
       const token   = await getDoseSpotToken()
       console.error('[dosespot/sso] got token, syncing patient. child.dosespot_patient_id:', child.dosespot_patient_id)
@@ -259,6 +347,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[dosespot/sso] dsPatientId after sync:', dsPatientId)
       if (dsPatientId && !child.dosespot_patient_id) {
         await sql`UPDATE children SET dosespot_patient_id = ${dsPatientId} WHERE id = ${child_id}::uuid`
+      }
+
+      // Preferred pharmacy sync — best-effort. Never blocks DoseSpot
+      // launch. Logs the outcome so we can see match/mismatch patterns
+      // in Vercel function logs without failing the flow.
+      if (dsPatientId) {
+        const pharm = await syncPreferredPharmacy(child, family, dsPatientId, token, sql)
+        if (pharm.matched)      console.error('[dosespot/sso] preferred pharmacy set:', pharm.matched)
+        else if (pharm.error)   console.error('[dosespot/sso] preferred pharmacy skipped:', pharm.error)
+        pharmacySyncNote = pharm.matched ? `Preferred pharmacy: ${pharm.matched}` : pharm.error
       }
     } catch (e: any) {
       syncError = e.message
@@ -268,7 +366,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const clinicianId = (providerRow.dosespot_clinician_id as string | null) || DS_ADMIN
     const ssoUrl = buildSsoUrl(clinicianId, dsPatientId)
     console.error('[dosespot/sso] final dsPatientId:', dsPatientId, '| URL includes PatientId:', ssoUrl.includes('PatientId'))
-    return res.status(200).json({ ssoUrl, syncError, dsPatientId })
+    return res.status(200).json({ ssoUrl, syncError, dsPatientId, pharmacySyncNote })
 
   } catch (err: any) {
     console.error('[dosespot/sso] error:', err?.message)
