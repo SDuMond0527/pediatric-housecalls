@@ -113,6 +113,18 @@ export function AdminAnalytics() {
   // no-shows, upcoming bookings, and test rows and made the chart useless.
   const vtMap: Record<string, number> = {}
   appts.filter(a => a.status === 'done').forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
+
+  // Completed visits by month × visit type — matrix table showing which
+  // service mix Sara actually delivered each month. Uses scheduled_date
+  // month bucket (YYYY-MM) and only counts status === 'done'.
+  const monthVtMap: Record<string, Record<string, number>> = {}
+  appts.filter(a => a.status === 'done').forEach(a => {
+    const month = a.scheduled_date?.slice(0, 7)
+    if (!month) return
+    monthVtMap[month] = monthVtMap[month] ?? {}
+    monthVtMap[month][a.visit_type] = (monthVtMap[month][a.visit_type] ?? 0) + 1
+  })
+  const monthList = Object.keys(monthVtMap).sort().reverse().slice(0, 12) // most recent 12 months
   const vtSorted = Object.entries(vtMap).sort((a, b) => b[1] - a[1])
   const maxVt = vtSorted[0]?.[1] ?? 1
 
@@ -311,6 +323,53 @@ export function AdminAnalytics() {
             ) : <p className="text-[13px] text-[#1A1A2E]">No appointments recorded yet.</p>}
           </div>
         </div>
+
+        {/* Completed visits by type × month */}
+        {monthList.length > 0 && (
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm overflow-x-auto">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by month</h3>
+            <p className="text-[12px] text-[#1A1A2E] mb-5">Only visits marked done, broken out by type and month. Last 12 months.</p>
+            <table className="w-full text-[13px] min-w-[520px]">
+              <thead>
+                <tr className="border-b border-[#E8E8E4]">
+                  <th className="text-left py-2 pr-3 font-medium text-[#555]">Month</th>
+                  {vtSorted.map(([type]) => (
+                    <th key={type} className="text-right py-2 px-2 font-medium text-[#555] whitespace-nowrap">{type}</th>
+                  ))}
+                  <th className="text-right py-2 pl-3 font-semibold text-[#1A1A2E]">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthList.map(month => {
+                  const [y, m] = month.split('-').map(Number)
+                  const label = format(new Date(y, m - 1, 1), 'MMM yyyy')
+                  const row = monthVtMap[month] ?? {}
+                  const rowTotal = vtSorted.reduce((s, [type]) => s + (row[type] ?? 0), 0)
+                  return (
+                    <tr key={month} className="border-b border-[#F1EFE8] last:border-0">
+                      <td className="py-2 pr-3 text-[#1A1A2E]">{label}</td>
+                      {vtSorted.map(([type]) => (
+                        <td key={type} className="text-right py-2 px-2 tabular-nums text-[#1A1A2E]">
+                          {row[type] ?? 0}
+                        </td>
+                      ))}
+                      <td className="text-right py-2 pl-3 font-semibold tabular-nums text-[#1D9E75]">{rowTotal}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-[#E8E8E4]">
+                  <td className="pt-3 pr-3 font-semibold text-[#1A1A2E]">All months</td>
+                  {vtSorted.map(([type, count]) => (
+                    <td key={type} className="text-right pt-3 px-2 font-semibold tabular-nums text-[#1A1A2E]">{count}</td>
+                  ))}
+                  <td className="text-right pt-3 pl-3 font-semibold tabular-nums text-[#1D9E75]">{totalDone}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
         {/* Bookings trend */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
