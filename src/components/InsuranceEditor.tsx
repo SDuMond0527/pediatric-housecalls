@@ -18,6 +18,7 @@ export type InsuranceValue = {
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
+  insurance_dependent_code: string
   insurance_subscriber_name: string
   insurance_subscriber_dob: string
   insurance_subscriber_gender: string
@@ -32,6 +33,7 @@ export function emptyInsurance(): InsuranceValue {
     insurance_provider: '',
     insurance_member_id: '',
     insurance_group_number: '',
+    insurance_dependent_code: '',
     insurance_subscriber_name: '',
     insurance_subscriber_dob: '',
     insurance_subscriber_gender: '',
@@ -39,6 +41,12 @@ export function emptyInsurance(): InsuranceValue {
     insurance_card_front_url: '',
     insurance_card_back_url: '',
   }
+}
+
+/** BCBS NC requires a 2-digit dependent suffix on the member ID. Show the extra field whenever the provider string reads as any BCBS variant. */
+export function looksLikeBcbs(providerValue?: string | null): boolean {
+  const v = String(providerValue || '').toLowerCase()
+  return v.includes('bcbs') || v.includes('blue cross')
 }
 
 /** Detect self-pay from any of the common spellings for the provider value. */
@@ -75,6 +83,7 @@ export function insurancePayload(v: InsuranceValue): Record<string, unknown> {
     insurance_provider:                v.self_pay ? 'Self-pay' : v.insurance_provider.trim(),
     insurance_member_id:               v.self_pay ? null : v.insurance_member_id.trim(),
     insurance_group_number:            v.self_pay ? null : v.insurance_group_number.trim(),
+    insurance_dependent_code:          v.self_pay ? null : (v.insurance_dependent_code?.trim() || null),
     insurance_subscriber_name:         v.self_pay ? null : v.insurance_subscriber_name.trim(),
     insurance_subscriber_dob:          v.self_pay ? null : v.insurance_subscriber_dob,
     insurance_subscriber_gender:       v.self_pay ? null : v.insurance_subscriber_gender,
@@ -137,6 +146,17 @@ export function InsuranceEditor({
           <Input label="Group # *" placeholder="G00000001"
             value={value.insurance_group_number}
             onChange={e => onChange({ insurance_group_number: e.target.value })} />
+
+          {looksLikeBcbs(value.insurance_provider) && (
+            <div>
+              <Input label="Dependent code (BCBS NC) — 2 digits"
+                placeholder="e.g. 03"
+                maxLength={2}
+                value={value.insurance_dependent_code}
+                onChange={e => onChange({ insurance_dependent_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
+              <p className="text-[10px] text-[#1A1A2E] mt-1">Required for BCBS NC. 01=subscriber, 02=spouse, 03+=kids by DOB. Check EOB or call BCBS NC.</p>
+            </div>
+          )}
 
           {showSubscriber && (
             <>

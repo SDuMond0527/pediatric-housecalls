@@ -31,6 +31,7 @@ export type ChildEntry = {
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
+  insurance_dependent_code: string
   insurance_subscriber_name: string
   insurance_subscriber_dob: string
   insurance_subscriber_gender: string
@@ -48,7 +49,7 @@ export function emptyChild(): ChildEntry {
     gender: '', allergies: '', current_medications: '', medical_history: '',
     preferred_pharmacy: '', pcp: '', vaccination_status: '',
     self_pay: false,
-    insurance_provider: '', insurance_member_id: '', insurance_group_number: '',
+    insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '',
     insurance_subscriber_name: '', insurance_subscriber_dob: '',
     insurance_subscriber_gender: '', insurance_subscriber_relationship: 'child',
     insurance_card_front_url: '', insurance_card_back_url: '',
@@ -107,6 +108,7 @@ export function buildChildCreatePayload(
     insurance_provider:                 child.self_pay ? 'Self-pay' : child.insurance_provider.trim(),
     insurance_member_id:                child.self_pay ? null : child.insurance_member_id.trim(),
     insurance_group_number:             child.self_pay ? null : child.insurance_group_number.trim(),
+    insurance_dependent_code:           child.self_pay ? null : (child.insurance_dependent_code?.trim() || null),
     insurance_subscriber_name:          child.self_pay ? null : child.insurance_subscriber_name.trim(),
     insurance_subscriber_dob:           child.self_pay ? null : child.insurance_subscriber_dob,
     insurance_subscriber_gender:        child.self_pay ? null : child.insurance_subscriber_gender,
@@ -142,6 +144,7 @@ export function ChildIntakeForm({
     insurance_provider: child.insurance_provider,
     insurance_member_id: child.insurance_member_id,
     insurance_group_number: child.insurance_group_number,
+    insurance_dependent_code: child.insurance_dependent_code,
     insurance_subscriber_name: child.insurance_subscriber_name,
     insurance_subscriber_dob: child.insurance_subscriber_dob,
     insurance_subscriber_gender: child.insurance_subscriber_gender,

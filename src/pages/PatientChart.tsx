@@ -182,7 +182,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '' })
+  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -425,6 +425,7 @@ export function PatientChart() {
         insurance_provider: isSelfPay ? '' : (child?.insurance_provider || ''),
         insurance_member_id: child?.insurance_member_id || '',
         insurance_group_number: child?.insurance_group_number || '',
+        insurance_dependent_code: child?.insurance_dependent_code || '',
         insurance_subscriber_name: child?.insurance_subscriber_name || '',
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
@@ -451,6 +452,7 @@ export function PatientChart() {
           insurance_provider:                isSelf ? 'Self-pay' : (insEdit.insurance_provider || null),
           insurance_member_id:               isSelf ? null : (insEdit.insurance_member_id || null),
           insurance_group_number:            isSelf ? null : (insEdit.insurance_group_number || null),
+          insurance_dependent_code:          isSelf ? null : (insEdit.insurance_dependent_code || null),
           insurance_subscriber_name:         isSelf ? null : (insEdit.insurance_subscriber_name || null),
           insurance_subscriber_dob:          isSelf ? null : (insEdit.insurance_subscriber_dob || null),
           insurance_subscriber_gender:       isSelf ? null : (insEdit.insurance_subscriber_gender || null),
@@ -464,7 +466,7 @@ export function PatientChart() {
       const CLEARABLE_BY_SECTION: Record<string, string[]> = {
         contact:   ['parent_phone', 'parent_email', 'parent_address', 'parent_city', 'parent_state', 'parent_zip'],
         medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'pcp', 'pcp_id', 'vaccination_status'],
-        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship'],
+        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship'],
       }
       const clears = computeClears(child ?? {}, body, CLEARABLE_BY_SECTION[section] || [])
       const payload = clears.length ? { ...body, _clear: clears } : body
@@ -1010,6 +1012,7 @@ export function PatientChart() {
                           insurance_provider: insEdit.insurance_provider,
                           insurance_member_id: insEdit.insurance_member_id,
                           insurance_group_number: insEdit.insurance_group_number,
+                          insurance_dependent_code: insEdit.insurance_dependent_code,
                           insurance_subscriber_name: insEdit.insurance_subscriber_name,
                           insurance_subscriber_dob: insEdit.insurance_subscriber_dob,
                           insurance_subscriber_gender: insEdit.insurance_subscriber_gender,
@@ -1042,6 +1045,9 @@ export function PatientChart() {
                             <Field label="Insurance plan" value={child?.insurance_provider} />
                             <Field label="Member ID" value={child?.insurance_member_id} />
                             <Field label="Group number" value={child?.insurance_group_number} />
+                            {(String(child?.insurance_provider || '').toLowerCase().includes('bcbs') || String(child?.insurance_provider || '').toLowerCase().includes('blue cross')) && (
+                              <Field label="Dependent code (BCBS NC)" value={child?.insurance_dependent_code} />
+                            )}
                             <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
                             <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
                             <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />

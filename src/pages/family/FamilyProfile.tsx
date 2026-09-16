@@ -22,6 +22,7 @@ type ChildEdit = {
   insurance_provider: string
   insurance_member_id: string
   insurance_group_number: string
+  insurance_dependent_code: string
   insurance_subscriber_name: string
   insurance_subscriber_dob: string
   insurance_subscriber_gender: string
@@ -48,6 +49,7 @@ function childEditFrom(c: Child): ChildEdit {
     self_pay: isSelfPay,
     insurance_provider: isSelfPay ? '' : (c.insurance_provider || ''),
     insurance_member_id: c.insurance_member_id || '',
+    insurance_dependent_code: c.insurance_dependent_code || '',
     insurance_group_number: c.insurance_group_number || '',
     insurance_subscriber_name: (c as any).insurance_subscriber_name || '',
     insurance_subscriber_dob: (c as any).insurance_subscriber_dob ? String((c as any).insurance_subscriber_dob).split('T')[0] : '',
@@ -191,6 +193,7 @@ export function FamilyProfile() {
           ...(prev[child.id] || childEditFrom(child)),
           insurance_provider: '',
           insurance_member_id: '',
+          insurance_dependent_code: '',
           insurance_group_number: '',
           insurance_subscriber_name: '',
           insurance_subscriber_dob: '',
@@ -221,6 +224,7 @@ export function FamilyProfile() {
         date_of_birth: edit.date_of_birth || null,
         insurance_provider:                edit.self_pay ? 'Self-pay' : (edit.insurance_provider || null),
         insurance_member_id:               edit.self_pay ? null : (edit.insurance_member_id || null),
+        insurance_dependent_code:          edit.self_pay ? null : (edit.insurance_dependent_code || null),
         insurance_group_number:            edit.self_pay ? null : (edit.insurance_group_number || null),
         insurance_subscriber_name:         edit.self_pay ? null : (edit.insurance_subscriber_name || null),
         insurance_subscriber_dob:          edit.self_pay ? null : (edit.insurance_subscriber_dob || null),
@@ -240,7 +244,7 @@ export function FamilyProfile() {
       const clears = computeClears(child as any, edit as any, [
         'allergies', 'current_medications', 'medical_history',
         'preferred_pharmacy', 'pcp',
-        'insurance_provider', 'insurance_member_id', 'insurance_group_number',
+        'insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code',
         'insurance_subscriber_name', 'insurance_subscriber_dob',
         'insurance_subscriber_gender', 'insurance_subscriber_relationship',
         'insurance_card_front_url', 'insurance_card_back_url',
@@ -454,6 +458,7 @@ export function FamilyProfile() {
                           insurance_provider: edit.insurance_provider,
                           insurance_member_id: edit.insurance_member_id,
                           insurance_group_number: edit.insurance_group_number,
+                          insurance_dependent_code: edit.insurance_dependent_code,
                           insurance_subscriber_name: edit.insurance_subscriber_name,
                           insurance_subscriber_dob: edit.insurance_subscriber_dob,
                           insurance_subscriber_gender: edit.insurance_subscriber_gender,
