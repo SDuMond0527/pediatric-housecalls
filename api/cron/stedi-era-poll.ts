@@ -37,6 +37,69 @@ const STEDI_CLAIM_TIMELINE_URL = (id: string) =>
 //   Poll Transactions   — GET /polling/transactions?startDateTime=...
 //   835 ERA JSON        — GET /change/medicalnetwork/reports/v2/{transactionId}/835
 // Docs: https://www.stedi.com/docs/healthcare/api-reference/get-healthcare-reports-835
+// ── ADDITIVE denial-code extractor (2026-09-16) ────────────────────────────
+// Duplicated verbatim from api/stedi/era.ts and
+// api/admin/backfill-stedi-cas.ts — see note in api/appointments/[id].ts
+// about Vercel rejecting api/lib/*.ts helpers. Runs alongside the
+// existing bucket logic in applyEraPaymentToClaim; callers wrap the
+// invocation in try/catch. Cannot break ERA processing.
+type DenialCodeEntry = { group_code: string; reason_code: string; amount: number }
+function extractDenialCodes(era835: any): DenialCodeEntry[] {
+  const entries: DenialCodeEntry[] = []
+  try {
+    const addAdj = (adj: any) => {
+      if (!adj || typeof adj !== 'object') return
+      const groupCode = String(adj.claimAdjustmentGroupCode ?? adj.adjustmentGroupCode ?? adj.groupCode ?? '')
+      let sawFlat = false
+      for (let i = 1; i <= 6; i++) {
+        const reason = adj[`adjustmentReasonCode${i}`]
+        const amount = adj[`adjustmentAmount${i}`]
+        if (reason == null && amount == null) continue
+        sawFlat = true
+        entries.push({
+          group_code: groupCode,
+          reason_code: String(reason ?? ''),
+          amount: parseFloat(String(amount ?? '0')) || 0,
+        })
+      }
+      if (sawFlat) return
+      const details = adj.claimAdjustmentDetails ?? adj.adjustmentDetails ?? null
+      if (details && Array.isArray(details)) {
+        for (const d of details) {
+          entries.push({
+            group_code: groupCode,
+            reason_code: String(d.adjustmentReasonCode ?? d.reasonCode ?? ''),
+            amount: parseFloat(String(d.adjustmentAmount ?? d.amount ?? '0')) || 0,
+          })
+        }
+        return
+      }
+      entries.push({
+        group_code: groupCode,
+        reason_code: String(adj.adjustmentReasonCode ?? adj.reasonCode ?? ''),
+        amount: parseFloat(String(adj.adjustmentAmount ?? adj.amount ?? '0')) || 0,
+      })
+    }
+    const ADJ_KEYS = new Set(['claimAdjustments', 'serviceAdjustments', 'serviceLineAdjustments', 'adjustments'])
+    const walk = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return
+      if (Array.isArray(obj)) { for (const item of obj) walk(item); return }
+      for (const key of Object.keys(obj)) {
+        if (ADJ_KEYS.has(key)) {
+          const arr = obj[key]
+          if (Array.isArray(arr)) for (const adj of arr) addAdj(adj)
+        } else {
+          walk(obj[key])
+        }
+      }
+    }
+    walk(era835)
+  } catch (e) {
+    // Defensive — return whatever we collected
+  }
+  return entries
+}
+
 const STEDI_POLL_TRANSACTIONS_URL =
   'https://healthcare.us.stedi.com/2024-04-01/polling/transactions'
 const STEDI_835_REPORT_URL = (transactionId: string) =>
@@ -153,6 +216,18 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
       patient_non_covered_era    = ${parsed.patient_non_covered},
       updated_at                 = NOW()
     WHERE id = ${claim.id}`
+
+  // ── ADDITIVE denial-code capture ───────────────────────────────────
+  // Never blocks or throws — worst case, denial_codes stays null.
+  try {
+    await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb`
+    const codes = extractDenialCodes(eraRaw)
+    if (codes.length > 0) {
+      await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claim.id}`
+    }
+  } catch (denialErr: any) {
+    console.error('[cron/stedi-era-poll] denial-code capture failed (non-fatal):', denialErr?.message)
+  }
 
   // Prefer the Stedi-provided subtotal (patient_responsibility) if
   // present. Fall back to the sum of individual categories when the

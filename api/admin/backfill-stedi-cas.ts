@@ -44,6 +44,67 @@ interface CasBreakdown {
   contractual_adjustment: number
 }
 
+// ── ADDITIVE denial-code extractor (2026-09-16) ────────────────────────────
+// Duplicated verbatim from api/stedi/era.ts and
+// api/cron/stedi-era-poll.ts. Runs alongside existing bucketing without
+// modifying it. Callers wrap in try/catch — cannot break ERA backfill.
+type DenialCodeEntry = { group_code: string; reason_code: string; amount: number }
+function extractDenialCodes(era835: any): DenialCodeEntry[] {
+  const entries: DenialCodeEntry[] = []
+  try {
+    const addAdj = (adj: any) => {
+      if (!adj || typeof adj !== 'object') return
+      const groupCode = String(adj.claimAdjustmentGroupCode ?? adj.adjustmentGroupCode ?? adj.groupCode ?? '')
+      let sawFlat = false
+      for (let i = 1; i <= 6; i++) {
+        const reason = adj[`adjustmentReasonCode${i}`]
+        const amount = adj[`adjustmentAmount${i}`]
+        if (reason == null && amount == null) continue
+        sawFlat = true
+        entries.push({
+          group_code: groupCode,
+          reason_code: String(reason ?? ''),
+          amount: parseFloat(String(amount ?? '0')) || 0,
+        })
+      }
+      if (sawFlat) return
+      const details = adj.claimAdjustmentDetails ?? adj.adjustmentDetails ?? null
+      if (details && Array.isArray(details)) {
+        for (const d of details) {
+          entries.push({
+            group_code: groupCode,
+            reason_code: String(d.adjustmentReasonCode ?? d.reasonCode ?? ''),
+            amount: parseFloat(String(d.adjustmentAmount ?? d.amount ?? '0')) || 0,
+          })
+        }
+        return
+      }
+      entries.push({
+        group_code: groupCode,
+        reason_code: String(adj.adjustmentReasonCode ?? adj.reasonCode ?? ''),
+        amount: parseFloat(String(adj.adjustmentAmount ?? adj.amount ?? '0')) || 0,
+      })
+    }
+    const ADJ_KEYS = new Set(['claimAdjustments', 'serviceAdjustments', 'serviceLineAdjustments', 'adjustments'])
+    const walk = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return
+      if (Array.isArray(obj)) { for (const item of obj) walk(item); return }
+      for (const key of Object.keys(obj)) {
+        if (ADJ_KEYS.has(key)) {
+          const arr = obj[key]
+          if (Array.isArray(arr)) for (const adj of arr) addAdj(adj)
+        } else {
+          walk(obj[key])
+        }
+      }
+    }
+    walk(era835)
+  } catch (e) {
+    // Defensive — return whatever we collected
+  }
+  return entries
+}
+
 function parseCasAdjustments(era835: any): CasBreakdown {
   const totals: CasBreakdown = {
     patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
@@ -278,6 +339,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (!claim) continue
             const cas = parseCasAdjustments(cp.scoped)
             await applyCasToClaim(sql, claim.id, cas, cp.payerClaimControlNumber)
+            // ── ADDITIVE denial-code capture ─────────────────────────
+            // Wrapped in try/catch; never blocks the backfill.
+            try {
+              await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb`
+              const codes = extractDenialCodes(cp.scoped)
+              if (codes.length > 0) {
+                await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claim.id}::uuid`
+              }
+            } catch (denialErr: any) {
+              console.error('[backfill-stedi-cas] denial-code capture failed (non-fatal):', denialErr?.message)
+            }
             matchedThis += 1
           } catch (perErr: any) {
             summary.errors.push(`apply ${transactionId}: ${perErr?.message ?? String(perErr)}`)

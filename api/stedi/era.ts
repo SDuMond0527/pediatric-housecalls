@@ -70,6 +70,73 @@ function findAndParseClaimPayment(eraBody: any, patientControlNumber: string) {
   return null
 }
 
+// ── ADDITIVE denial-code extractor (2026-09-16) ────────────────────────────
+// Walks an 835 payload and collects every CAS adjustment entry
+// (group_code + reason_code + amount). Runs alongside the existing
+// bucket logic without modifying it — callers wrap the invocation in
+// try/catch, and this function itself catches its own errors so a
+// malformed payload can never crash the ERA processing pipeline.
+// Duplicated verbatim into api/cron/stedi-era-poll.ts and
+// api/admin/backfill-stedi-cas.ts (Vercel treats api/lib/*.ts files as
+// serverless functions and rejects deploys — see the note in
+// api/appointments/[id].ts).
+type DenialCodeEntry = { group_code: string; reason_code: string; amount: number }
+function extractDenialCodes(era835: any): DenialCodeEntry[] {
+  const entries: DenialCodeEntry[] = []
+  try {
+    const addAdj = (adj: any) => {
+      if (!adj || typeof adj !== 'object') return
+      const groupCode = String(adj.claimAdjustmentGroupCode ?? adj.adjustmentGroupCode ?? adj.groupCode ?? '')
+      let sawFlat = false
+      for (let i = 1; i <= 6; i++) {
+        const reason = adj[`adjustmentReasonCode${i}`]
+        const amount = adj[`adjustmentAmount${i}`]
+        if (reason == null && amount == null) continue
+        sawFlat = true
+        entries.push({
+          group_code: groupCode,
+          reason_code: String(reason ?? ''),
+          amount: parseFloat(String(amount ?? '0')) || 0,
+        })
+      }
+      if (sawFlat) return
+      const details = adj.claimAdjustmentDetails ?? adj.adjustmentDetails ?? null
+      if (details && Array.isArray(details)) {
+        for (const d of details) {
+          entries.push({
+            group_code: groupCode,
+            reason_code: String(d.adjustmentReasonCode ?? d.reasonCode ?? ''),
+            amount: parseFloat(String(d.adjustmentAmount ?? d.amount ?? '0')) || 0,
+          })
+        }
+        return
+      }
+      entries.push({
+        group_code: groupCode,
+        reason_code: String(adj.adjustmentReasonCode ?? adj.reasonCode ?? ''),
+        amount: parseFloat(String(adj.adjustmentAmount ?? adj.amount ?? '0')) || 0,
+      })
+    }
+    const ADJ_KEYS = new Set(['claimAdjustments', 'serviceAdjustments', 'serviceLineAdjustments', 'adjustments'])
+    const walk = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return
+      if (Array.isArray(obj)) { for (const item of obj) walk(item); return }
+      for (const key of Object.keys(obj)) {
+        if (ADJ_KEYS.has(key)) {
+          const arr = obj[key]
+          if (Array.isArray(arr)) for (const adj of arr) addAdj(adj)
+        } else {
+          walk(obj[key])
+        }
+      }
+    }
+    walk(era835)
+  } catch (e) {
+    // Defensive — return whatever we collected so far
+  }
+  return entries
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -169,6 +236,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               updated_at               = NOW()
             WHERE id = ${claimId}::uuid
           `
+
+          // ── ADDITIVE denial-code capture ─────────────────────────────
+          // Fully wrapped in try/catch. If any part of this fails,
+          // the existing ERA processing above is completely unaffected.
+          // Feature is defensive-only — worst case, denial_codes stays
+          // null on this claim, and appeal workflow shows no button.
+          try {
+            await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb`
+            const codes = extractDenialCodes(detail)
+            if (codes.length > 0) {
+              await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claimId}::uuid`
+            }
+          } catch (denialErr: any) {
+            console.error('[stedi/era] denial-code capture failed (non-fatal):', denialErr?.message)
+          }
 
           return res.status(200).json({ available: true, source: 'live', ...parsed })
         }
