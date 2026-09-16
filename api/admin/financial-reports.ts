@@ -248,6 +248,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ORDER BY overpayment DESC
     `
 
+    // ── 7. Payer mix ───────────────────────────────────────────────────────
+    // What % of your claims (and charges) went to each payer in the window.
+    // Uses service_date so a claim shows up in the month the visit actually
+    // happened, regardless of when the biller submitted it.
+    const payerMix = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(payer_name), ''), 'Unknown / self-pay') AS payer_name,
+        COUNT(*)::int AS claim_count,
+        SUM(COALESCE(total_charge, 0))::numeric(12,2) AS total_charged,
+        ROUND(COUNT(*)::numeric * 100 / NULLIF(SUM(COUNT(*)) OVER (), 0), 1) AS pct_of_claims,
+        ROUND(SUM(COALESCE(total_charge, 0)) * 100 / NULLIF(SUM(SUM(COALESCE(total_charge, 0))) OVER (), 0), 1) AS pct_of_charges
+      FROM claims
+      WHERE practice_id = ${practiceId}::uuid
+        AND service_date IS NOT NULL
+        AND service_date BETWEEN ${startStr}::date AND ${endStr}::date
+      GROUP BY payer_name
+      ORDER BY claim_count DESC
+    `
+
+    // ── 8. Reimbursement by payer × visit type ─────────────────────────────
+    // For claims where an ERA came back, what did each payer actually pay
+    // for each visit type. The single most useful table for contract
+    // negotiation — shows exactly which contracts are worst.
+    const reimbByPayer = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(cl.payer_name), ''), 'Unknown') AS payer_name,
+        COALESCE(NULLIF(TRIM(a.visit_type), ''), 'Unspecified') AS visit_type,
+        COUNT(*)::int AS claim_count,
+        AVG(COALESCE(cl.total_charge, 0))::numeric(12,2) AS avg_charged,
+        AVG(COALESCE(cl.insurance_payment_era, 0))::numeric(12,2) AS avg_paid,
+        AVG(COALESCE(cl.contractual_adjustment_era, 0))::numeric(12,2) AS avg_adjustment,
+        CASE WHEN AVG(COALESCE(cl.total_charge, 0)) > 0
+             THEN ROUND(AVG(COALESCE(cl.insurance_payment_era, 0)) * 100 / AVG(COALESCE(cl.total_charge, 0)), 1)
+             ELSE 0 END AS payment_pct
+      FROM claims cl
+      LEFT JOIN appointments a ON a.id = cl.appointment_id
+      WHERE cl.practice_id = ${practiceId}::uuid
+        AND cl.era_received_at IS NOT NULL
+        AND cl.era_received_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+      GROUP BY payer_name, visit_type
+      ORDER BY payer_name ASC, claim_count DESC
+    `
+
+    // ── 9. Denial / rejection rate by payer ────────────────────────────────
+    // How often each payer denies or errors out a claim. Uses submission
+    // date so a claim submitted in the window counts here even if the ERA
+    // comes back later.
+    const denialByPayer = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(payer_name), ''), 'Unknown') AS payer_name,
+        COUNT(*)::int AS total_submitted,
+        SUM(CASE WHEN status = 'error'           THEN 1 ELSE 0 END)::int AS error_count,
+        SUM(CASE WHEN status = 'denied'          THEN 1 ELSE 0 END)::int AS denied_count,
+        SUM(CASE WHEN era_received_at IS NOT NULL
+                  AND COALESCE(insurance_payment_era, 0) = 0
+                  AND COALESCE(contractual_adjustment_era, 0) = 0
+                 THEN 1 ELSE 0 END)::int AS zero_pay_count,
+        SUM(CASE WHEN status = 'paid'
+                   OR (era_received_at IS NOT NULL AND COALESCE(insurance_payment_era, 0) > 0)
+                 THEN 1 ELSE 0 END)::int AS paid_count,
+        ROUND(
+          (SUM(CASE WHEN status IN ('error', 'denied') THEN 1 ELSE 0 END) +
+           SUM(CASE WHEN era_received_at IS NOT NULL
+                     AND COALESCE(insurance_payment_era, 0) = 0
+                     AND COALESCE(contractual_adjustment_era, 0) = 0
+                    THEN 1 ELSE 0 END))::numeric * 100 / NULLIF(COUNT(*), 0),
+          1
+        ) AS denial_rate_pct
+      FROM claims
+      WHERE practice_id = ${practiceId}::uuid
+        AND submitted_at IS NOT NULL
+        AND submitted_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+      GROUP BY payer_name
+      ORDER BY total_submitted DESC
+    `
+
     return res.status(200).json({
       window: { start: startStr, end: endStr },
       ar_insurance: arInsuranceRows,
@@ -258,6 +334,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       adjustments: adjustments[0] ?? { contractual_adjustments: 0, write_offs: 0, write_off_count: 0 },
       adjustments_by_payer: adjByPayer,
       refunds,
+      payer_mix: payerMix,
+      reimbursement_by_payer: reimbByPayer,
+      denials_by_payer: denialByPayer,
     })
   } catch (e: any) {
     console.error('admin/financial-reports error:', e)

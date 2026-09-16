@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format, startOfMonth, subMonths } from 'date-fns'
-import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw } from 'lucide-react'
+import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
 import { getFinancialReports } from '../../lib/api'
 
 type ReportsData = Awaited<ReturnType<typeof getFinancialReports>>
@@ -109,6 +109,16 @@ export function AdminFinancialReports() {
           <AdjustmentsSection data={data} />
 
           <RefundsSection data={data} />
+
+          {/* ── Phase 2: practice health ─────────────────────────────── */}
+          <div className="pt-4 mt-2 border-t border-[#E8E8E4]">
+            <div className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Practice health (quarterly review)</div>
+            <p className="text-[12px] text-[#1A1A2E]/70">Reports below are less about closing the month and more about spotting trends — payer concentration, contract quality, and problem payers.</p>
+          </div>
+
+          <PayerMixSection data={data} />
+          <ReimbursementByPayerSection data={data} />
+          <DenialsByPayerSection data={data} />
         </div>
       )}
     </div>
@@ -366,6 +376,177 @@ function RefundsSection({ data }: { data: ReportsData }) {
                 <td className="px-3 py-2 text-right font-semibold text-[#991B1B] tabular-nums">{fmtMoney(r.overpayment)}</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Payer mix ────────────────────────────────────────────────────────────
+
+function PayerMixSection({ data }: { data: ReportsData }) {
+  const rows = data.payer_mix
+  return (
+    <ReportShell
+      title="Payer mix"
+      icon={PieChart}
+      plainEnglish="What share of your visits (and dollars billed) go to each payer. If any single payer is above 40%, your practice is heavily dependent on that contract — worth knowing before you negotiate."
+      onExport={() => {
+        const csv = toCsv(rows, [
+          { key: 'payer_name',      label: 'Payer' },
+          { key: 'claim_count',     label: 'Claims' },
+          { key: 'pct_of_claims',   label: '% of claims' },
+          { key: 'total_charged',   label: 'Total charged' },
+          { key: 'pct_of_charges',  label: '% of charges' },
+        ])
+        downloadCsv('payer-mix.csv', csv)
+      }}>
+      {rows.length === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No claims with a service date in this window.</div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+              <th className="text-left px-3 py-2">Payer</th>
+              <th className="text-right px-3 py-2">Claims</th>
+              <th className="text-right px-3 py-2">% of claims</th>
+              <th className="text-right px-3 py-2">Charged</th>
+              <th className="text-right px-3 py-2">% of $</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#F1EFE8]">
+            {rows.map((r: any, i: number) => {
+              const claimsPct = parseFloat(String(r.pct_of_claims ?? 0))
+              const claimsHigh = claimsPct >= 40
+              return (
+                <tr key={i} className="hover:bg-[#FAFAF8]">
+                  <td className="px-3 py-2 text-[#1A1A2E]">{r.payer_name}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.claim_count}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${claimsHigh ? 'text-[#991B1B] font-semibold' : ''}`}>{claimsPct.toFixed(1)}%</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.total_charged)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{parseFloat(String(r.pct_of_charges ?? 0)).toFixed(1)}%</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Reimbursement by payer × visit type ──────────────────────────────────
+
+function ReimbursementByPayerSection({ data }: { data: ReportsData }) {
+  const rows = data.reimbursement_by_payer
+  return (
+    <ReportShell
+      title="Reimbursement by payer"
+      icon={HandCoins}
+      plainEnglish="For visits where insurance paid, what each payer actually gave you for each visit type. Compare the &quot;% of charges&quot; column across payers — a payer paying 30% on a sick visit vs. another paying 65% is your negotiation talking point."
+      onExport={() => {
+        const csv = toCsv(rows, [
+          { key: 'payer_name',     label: 'Payer' },
+          { key: 'visit_type',     label: 'Visit type' },
+          { key: 'claim_count',    label: 'Claims' },
+          { key: 'avg_charged',    label: 'Avg charged' },
+          { key: 'avg_paid',       label: 'Avg paid' },
+          { key: 'avg_adjustment', label: 'Avg adjustment' },
+          { key: 'payment_pct',    label: '% of charges' },
+        ])
+        downloadCsv('reimbursement-by-payer.csv', csv)
+      }}>
+      {rows.length === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No ERAs received in this window — nothing to reimburse-analyze yet.</div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+              <th className="text-left px-3 py-2">Payer</th>
+              <th className="text-left px-3 py-2">Visit type</th>
+              <th className="text-right px-3 py-2">Claims</th>
+              <th className="text-right px-3 py-2">Avg charged</th>
+              <th className="text-right px-3 py-2">Avg paid</th>
+              <th className="text-right px-3 py-2">Adjustment</th>
+              <th className="text-right px-3 py-2">% paid</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#F1EFE8]">
+            {rows.map((r: any, i: number) => {
+              const pct = parseFloat(String(r.payment_pct ?? 0))
+              const color = pct >= 60 ? 'text-[#1D9E75]' : pct >= 40 ? 'text-[#B45309]' : 'text-[#991B1B]'
+              return (
+                <tr key={i} className="hover:bg-[#FAFAF8]">
+                  <td className="px-3 py-2 text-[#1A1A2E]">{r.payer_name}</td>
+                  <td className="px-3 py-2 text-[#555]">{r.visit_type}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.claim_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.avg_charged)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.avg_paid)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[#B45309]">{fmtMoney(r.avg_adjustment)}</td>
+                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${color}`}>{pct.toFixed(1)}%</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Denials by payer ────────────────────────────────────────────────────
+
+function DenialsByPayerSection({ data }: { data: ReportsData }) {
+  const rows = data.denials_by_payer
+  return (
+    <ReportShell
+      title="Denial rate by payer"
+      icon={XCircle}
+      plainEnglish="For claims you sent to each payer, how often they either bounced back with an error, denied, or paid $0. Anything above 5-10% is a problem to investigate — usually wrong payer ID, missing subscriber info, or a coding issue the biller needs to fix."
+      onExport={() => {
+        const csv = toCsv(rows, [
+          { key: 'payer_name',       label: 'Payer' },
+          { key: 'total_submitted',  label: 'Submitted' },
+          { key: 'paid_count',       label: 'Paid' },
+          { key: 'error_count',      label: 'Errored' },
+          { key: 'denied_count',     label: 'Denied' },
+          { key: 'zero_pay_count',   label: 'Zero-pay' },
+          { key: 'denial_rate_pct',  label: 'Denial %' },
+        ])
+        downloadCsv('denials-by-payer.csv', csv)
+      }}>
+      {rows.length === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No claims submitted in this window.</div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+              <th className="text-left px-3 py-2">Payer</th>
+              <th className="text-right px-3 py-2">Submitted</th>
+              <th className="text-right px-3 py-2">Paid</th>
+              <th className="text-right px-3 py-2">Errored</th>
+              <th className="text-right px-3 py-2">Denied</th>
+              <th className="text-right px-3 py-2">Zero-pay</th>
+              <th className="text-right px-3 py-2">Denial %</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#F1EFE8]">
+            {rows.map((r: any, i: number) => {
+              const denialPct = parseFloat(String(r.denial_rate_pct ?? 0))
+              const color = denialPct >= 10 ? 'text-[#991B1B]' : denialPct >= 5 ? 'text-[#B45309]' : 'text-[#1D9E75]'
+              return (
+                <tr key={i} className="hover:bg-[#FAFAF8]">
+                  <td className="px-3 py-2 text-[#1A1A2E]">{r.payer_name}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.total_submitted}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[#1D9E75]">{r.paid_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.error_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.denied_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.zero_pay_count}</td>
+                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${color}`}>{denialPct.toFixed(1)}%</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

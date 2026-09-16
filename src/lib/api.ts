@@ -638,6 +638,9 @@ export const getFinancialReports = (start: string, end: string) =>
     adjustments: { contractual_adjustments: number; write_offs: number; write_off_count: number }
     adjustments_by_payer: any[]
     refunds: any[]
+    payer_mix: any[]
+    reimbursement_by_payer: any[]
+    denials_by_payer: any[]
   }>(`/api/admin/financial-reports?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
 
 export const createPatientStatement = (data: any) =>
