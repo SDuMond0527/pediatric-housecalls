@@ -96,9 +96,12 @@ export function AdminAnalytics() {
   const nonUpcoming = totalAppts - statusMap.upcoming
   const completionRate = nonUpcoming > 0 ? Math.round((statusMap.done / nonUpcoming) * 100) : 0
 
-  // Visit type breakdown
+  // Visit type breakdown — only completed visits, so the chart reflects
+  // what was actually delivered (matches the "Completed visits" tile).
+  // Counting every appointment regardless of status pulled in cancels,
+  // no-shows, upcoming bookings, and test rows and made the chart useless.
   const vtMap: Record<string, number> = {}
-  appts.forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
+  appts.filter(a => a.status === 'done').forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
   const vtSorted = Object.entries(vtMap).sort((a, b) => b[1] - a[1])
   const maxVt = vtSorted[0]?.[1] ?? 1
 
@@ -252,7 +255,8 @@ export function AdminAnalytics() {
 
           {/* By visit type */}
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-4">Visits by type</h3>
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by type</h3>
+            <p className="text-[11px] text-[#555] mb-4">Only visits marked done — cancels, no-shows, and upcoming appointments excluded.</p>
             {vtSorted.length > 0 ? (
               <div className="space-y-3">
                 {vtSorted.map(([type, count]) => (
