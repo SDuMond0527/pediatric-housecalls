@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { getBroadcasts } from '../../lib/api'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
+import { GlobalPatientSearch } from '../GlobalPatientSearch'
 
 export function AppLayout() {
   const { user, loading } = useAuth()
@@ -48,11 +49,20 @@ export function AppLayout() {
 
       <div className="md:ml-[220px]">
         {DEMO_MODE && <DemoBanner />}
+        {/* Mobile top bar — hamburger + search */}
         <div className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-[#E8E8E4]">
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-[#F1EFE8]">
             <Menu size={18} />
           </button>
-          <span className="font-display font-medium text-[#1A1A2E]">{PRACTICE_NAME}</span>
+          <span className="font-display font-medium text-[#1A1A2E] flex-shrink-0">{PRACTICE_NAME}</span>
+          <div className="flex-1 min-w-0">
+            <GlobalPatientSearch />
+          </div>
+        </div>
+        {/* Desktop patient search bar — sits above every provider page so
+            the same search is available regardless of which page they're on. */}
+        <div className="hidden md:flex items-center justify-end bg-white border-b border-[#E8E8E4] px-6 py-2">
+          <GlobalPatientSearch />
         </div>
         <Outlet context={{ broadcastCount, setBroadcastCount }} />
       </div>

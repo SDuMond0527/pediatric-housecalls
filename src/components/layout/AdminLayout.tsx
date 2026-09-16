@@ -6,6 +6,7 @@ import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 import { getEraCount } from '../../lib/api'
 import { dailyAffirmation } from '../../lib/affirmations'
+import { GlobalPatientSearch } from '../GlobalPatientSearch'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -158,12 +159,17 @@ export function AdminLayout() {
             Today page's header so admins get the same warm welcome as
             providers. */}
         {provider && (
-          <div className="bg-white border-b border-[#E8E8E4] px-6 md:px-8 py-4">
-            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">
-              {greetingFor()}, {(provider.name || 'friend').split(' ').slice(-2)[0]}!
+          <div className="bg-white border-b border-[#E8E8E4] px-6 md:px-8 py-4 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="font-display text-[18px] font-medium text-[#1A1A2E] truncate">
+                {greetingFor()}, {(provider.name || 'friend').split(' ').slice(-2)[0]}!
+              </div>
+              <div className="text-[12px] text-[#7F77DD] mt-0.5 font-medium truncate">
+                {dailyAffirmation()}
+              </div>
             </div>
-            <div className="text-[12px] text-[#7F77DD] mt-0.5 font-medium">
-              {dailyAffirmation()}
+            <div className="hidden sm:block flex-shrink-0 w-full max-w-xs">
+              <GlobalPatientSearch />
             </div>
           </div>
         )}
