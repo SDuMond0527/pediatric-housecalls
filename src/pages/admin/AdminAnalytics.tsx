@@ -89,11 +89,22 @@ export function AdminAnalytics() {
   const converted     = waitlist.filter(w => w.status === 'converted').length
   const conversionPct = waitlist.length > 0 ? Math.round((converted / waitlist.length) * 100) : 0
 
-  // Status breakdown
-  const statusMap: Record<string, number> = { done: 0, upcoming: 0, 'in-progress': 0, cancelled: 0 }
-  appts.forEach(a => { statusMap[a.status] = (statusMap[a.status] ?? 0) + 1 })
+  // Status breakdown — "upcoming" only counts visits still in the
+  // future. Rows whose scheduled_date has passed but were never
+  // manually flipped to done/cancelled are stale and roll into a
+  // separate "past due" bucket so they don't inflate what's actually
+  // on the schedule.
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const statusMap: Record<string, number> = { done: 0, upcoming: 0, 'in-progress': 0, cancelled: 0, past_due: 0 }
+  appts.forEach(a => {
+    if (a.status === 'upcoming' && a.scheduled_date && a.scheduled_date < todayStr) {
+      statusMap.past_due += 1
+    } else {
+      statusMap[a.status] = (statusMap[a.status] ?? 0) + 1
+    }
+  })
   const totalAppts = appts.length
-  const nonUpcoming = totalAppts - statusMap.upcoming
+  const nonUpcoming = totalAppts - statusMap.upcoming - statusMap.past_due
   const completionRate = nonUpcoming > 0 ? Math.round((statusMap.done / nonUpcoming) * 100) : 0
 
   // Visit type breakdown — only completed visits, so the chart reflects
@@ -275,6 +286,7 @@ export function AdminAnalytics() {
                   {([
                     { key: 'done',        label: 'Completed',   color: '#1D9E75' },
                     { key: 'upcoming',    label: 'Upcoming',    color: '#7F77DD' },
+                    { key: 'past_due',    label: 'Past due',    color: '#EF9F27' },
                     { key: 'in-progress', label: 'In progress', color: '#378ADD' },
                     { key: 'cancelled',   label: 'Cancelled',   color: '#C0392B' },
                   ] as const).map(s => {
