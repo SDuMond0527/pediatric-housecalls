@@ -2320,6 +2320,26 @@ export function PatientChart() {
           </div>
         </div>
       )}
+
+      {/* Insurance card lightbox — clicking anywhere outside the image
+          closes it; clicking on the image itself does not. */}
+      {cardZoomUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setCardZoomUrl(null)}>
+          <img
+            src={cardZoomUrl}
+            alt="Insurance card enlarged"
+            onClick={e => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg cursor-default" />
+          <button
+            type="button"
+            onClick={() => setCardZoomUrl(null)}
+            className="absolute top-4 right-4 bg-white/90 hover:bg-white text-[#1A1A2E] p-2 rounded-lg shadow-sm">
+            <X size={20} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2399,25 +2419,6 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
           )}
         </div>
       </div>
-
-      {/* Insurance card lightbox */}
-      {cardZoomUrl && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setCardZoomUrl(null)}>
-          <img
-            src={cardZoomUrl}
-            alt="Insurance card enlarged"
-            onClick={e => e.stopPropagation()}
-            className="max-w-full max-h-full object-contain rounded-lg cursor-default" />
-          <button
-            type="button"
-            onClick={() => setCardZoomUrl(null)}
-            className="absolute top-4 right-4 bg-white/90 hover:bg-white text-[#1A1A2E] p-2 rounded-lg shadow-sm">
-            <X size={20} />
-          </button>
-        </div>
-      )}
     </div>
   )
 }
