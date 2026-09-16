@@ -4,7 +4,17 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion, providerUpdateChild } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
+import { Ban } from 'lucide-react'
+
+const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
+  bad_debt:       'Bad debt (payer won\'t pay + patient won\'t either)',
+  small_balance:  'Small balance (not worth pursuing)',
+  hardship:       'Courtesy / hardship',
+  billing_error:  'Billing error (our mistake)',
+  timely_filing:  'Timely filing exceeded',
+  other:          'Other',
+}
 import { useAuth } from '../../contexts/AuthContext'
 import { PatientStatementModal } from './PatientStatementModal'
 
@@ -98,6 +108,32 @@ export function AdminClaims() {
   const [notifyOpen, setNotifyOpen] = useState<Record<string, boolean>>({})
   const [notifyForm, setNotifyForm] = useState<Record<string, { providerId: string; message: string }>>({})
   const [notifySending, setNotifySending] = useState<Record<string, boolean>>({})
+
+  // Write-off modal — captures reason + optional note, hits the
+  // /api/claims/[id]/write-off endpoint, then refreshes the list so the
+  // written-off claim disappears from AR-insurance aging.
+  const [writeOffTarget, setWriteOffTarget] = useState<any | null>(null)
+  const [writeOffReason, setWriteOffReasonState] = useState<WriteOffReason>('bad_debt')
+  const [writeOffNote, setWriteOffNote] = useState('')
+  const [writingOff, setWritingOff] = useState(false)
+  const [writeOffError, setWriteOffError] = useState<string | null>(null)
+
+  async function confirmWriteOff() {
+    if (!writeOffTarget) return
+    setWritingOff(true)
+    setWriteOffError(null)
+    try {
+      await writeOffClaim(writeOffTarget.id, { reason: writeOffReason, note: writeOffNote })
+      setWriteOffTarget(null)
+      setWriteOffNote('')
+      setWriteOffReasonState('bad_debt')
+      await load()
+    } catch (e: any) {
+      setWriteOffError(e?.message ?? 'Failed to write off claim')
+    } finally {
+      setWritingOff(false)
+    }
+  }
   const [notifyResult, setNotifyResult] = useState<Record<string, string>>({})
 
   async function handleSendNotify(claimId: string) {
@@ -1262,6 +1298,13 @@ export function AdminClaims() {
                                 <Send size={13} className="mr-1.5" /> Submit to insurance
                               </Button>
                             )}
+                            {/* Write-off on the review tab — for stuck
+                                errors + billing mistakes that shouldn't
+                                sit here forever. */}
+                            <Button variant="secondary"
+                              onClick={() => { setWriteOffTarget(c); setWriteOffReasonState('billing_error'); setWriteOffNote(''); setWriteOffError(null) }}>
+                              <Ban size={13} className="mr-1.5 text-[#991B1B]" /> Write off
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1400,6 +1443,14 @@ export function AdminClaims() {
                               <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
                             </span>
                           )}
+                          {/* Write off — for stuck submitted claims that
+                              will never be paid. Removes them from the
+                              AR-insurance aging report with a categorized
+                              reason so financial reports track the cause. */}
+                          <button onClick={() => { setWriteOffTarget(c); setWriteOffReasonState('bad_debt'); setWriteOffNote(''); setWriteOffError(null) }}
+                            className="inline-flex items-center gap-1 text-[11px] text-[#991B1B] hover:underline font-medium">
+                            <Ban size={11} /> Write off
+                          </button>
                         </div>
                         {renderNotifySection(c)}
                       </div>
@@ -1418,6 +1469,64 @@ export function AdminClaims() {
           onClose={() => setStatementClaim(null)}
           onSent={() => setStatementClaim(null)}
         />
+      )}
+
+      {/* Write-off modal — reason + optional note, then flips the claim to
+          status='written_off' and drops it out of AR-insurance aging. */}
+      {writeOffTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setWriteOffTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ban size={18} className="text-[#991B1B]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Write off this claim</h2>
+              </div>
+              <button onClick={() => setWriteOffTarget(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            </div>
+            <div className="text-[12px] text-[#1A1A2E] mb-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-2.5">
+              <div className="font-medium">
+                {[(writeOffTarget.child_first_name ?? writeOffTarget.patient_first_name), (writeOffTarget.child_last_name ?? writeOffTarget.patient_last_name)].filter(Boolean).join(' ')}
+              </div>
+              <div className="text-[#555] mt-0.5">
+                {writeOffTarget.payer_name} · {fmtDate(writeOffTarget.service_date)} · Charged {fmtMoney(writeOffTarget.total_charge)}
+              </div>
+            </div>
+            <p className="text-[12px] text-[#7A1414] mb-3">
+              Removes this claim from AR-insurance aging and tags the reason so financial reports
+              can show revenue leakage by cause.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-[#555] block mb-1">Reason</label>
+                <select
+                  className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                  value={writeOffReason}
+                  onChange={e => setWriteOffReasonState(e.target.value as WriteOffReason)}>
+                  {(Object.entries(CLAIM_WRITE_OFF_LABELS) as [WriteOffReason, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-[#555] block mb-1">Note (optional — audit trail)</label>
+                <input
+                  type="text"
+                  className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                  value={writeOffNote}
+                  onChange={e => setWriteOffNote(e.target.value)}
+                  placeholder="e.g. Timely filing deadline passed 2026-08-20"
+                />
+              </div>
+              {writeOffError && (
+                <div className="text-[12px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-2.5 py-1.5 rounded-lg">{writeOffError}</div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <Button variant="secondary" size="sm" onClick={() => setWriteOffTarget(null)}>Cancel</Button>
+              <Button variant="danger" size="sm" loading={writingOff} onClick={confirmWriteOff}>Write off</Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {rejectionModal && (
