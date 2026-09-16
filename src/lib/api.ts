@@ -608,6 +608,17 @@ export const updatePatientStatement = (id: string, data: any) =>
 export const sendPatientStatement = (id: string) =>
   apiFetch<any>(`/api/patient-statements/${id}/send`, { method: 'POST' })
 
+// Pam's manual "record a payment" flow — used when the biller runs the
+// card in Square outside the portal and needs to reflect that on the
+// statement. Flips status to 'paid' and stores amount + date + note.
+export const markPatientStatementPaid = (id: string, body: {
+  amount_paid: number | string
+  paid_at?: string
+  payment_method?: string
+  payment_note?: string
+}) =>
+  apiFetch<any>(`/api/patient-statements/${id}/mark-paid`, { method: 'POST', body: JSON.stringify(body) })
+
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)
 

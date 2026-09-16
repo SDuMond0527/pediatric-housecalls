@@ -8,6 +8,7 @@ import {
   updatePatientStatement,
   sendPatientStatement,
   pullStediEra,
+  markPatientStatementPaid,
 } from '../../lib/api'
 
 interface Props {
@@ -52,6 +53,17 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [remainingBalance, setRemainingBalance] = useState('')
   const [priorBalance, setPriorBalance] = useState('')
   const [totalAmountDue, setTotalAmountDue] = useState('')
+
+  // "Record a payment" (manual mark-paid) — used by the biller when they
+  // run the card in Square outside the portal per the practice's
+  // "auto-charge card on file after 2 weeks" policy. Not shown until
+  // the biller clicks "Record payment" on a sent statement.
+  const [recordingPayment, setRecordingPayment] = useState(false)
+  const [markingPaid, setMarkingPaid] = useState(false)
+  const [paidAmount, setPaidAmount] = useState('')
+  const [paidDate, setPaidDate] = useState('')
+  const [paidMethod, setPaidMethod] = useState('Card on file (Square)')
+  const [paidNote, setPaidNote] = useState('')
 
 
   useEffect(() => {
@@ -191,6 +203,39 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     } catch (e: any) {
       setError(e.message ?? 'Failed to send statement')
       setSending(false)
+    }
+  }
+
+  function openRecordPayment() {
+    // Default paid amount to the balance we're expecting (total_amount_due).
+    // Default paid date to today. Biller can override either.
+    setPaidAmount(totalAmountDue || amountBilled || '')
+    setPaidDate(new Date().toISOString().slice(0, 10))
+    setPaidMethod('Card on file (Square)')
+    setPaidNote('')
+    setRecordingPayment(true)
+    setError(null)
+  }
+
+  async function submitRecordPayment() {
+    if (!statement) return
+    setMarkingPaid(true)
+    setError(null)
+    try {
+      const saved = await markPatientStatementPaid(statement.id, {
+        amount_paid: paidAmount,
+        paid_at: paidDate ? new Date(paidDate + 'T12:00:00').toISOString() : undefined,
+        payment_method: paidMethod,
+        payment_note: paidNote,
+      })
+      setStatement(saved)
+      populateFromStatement(saved)
+      setRecordingPayment(false)
+      onSent()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to record payment')
+    } finally {
+      setMarkingPaid(false)
     }
   }
 
@@ -351,6 +396,85 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 </div>
               </div>
 
+              {/* Record-a-payment inline form — only shown while the biller
+                  is filling out the manual payment record. Sits above the
+                  financial summary so it's the first thing they see after
+                  clicking "Record payment". */}
+              {recordingPayment && (
+                <div className="border border-[#1D9E75] rounded-xl p-4 bg-[#F0FDF4]">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[13px] font-semibold text-[#1A7D5A] uppercase tracking-wider">
+                      Record a payment
+                    </div>
+                    <button
+                      onClick={() => { setRecordingPayment(false); setError(null) }}
+                      className="text-[#1A7D5A] hover:text-[#0F5F44]">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <p className="text-[12px] text-[#0F5F44] mb-3">
+                    Use this when you've run the card in Square (or received a check / cash) outside the portal.
+                    Marks the statement as paid and stamps the amount + date.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Amount paid</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1A1A2E] text-[13px] pointer-events-none">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={`${inputCls} pl-6`}
+                          value={paidAmount}
+                          onChange={e => setPaidAmount(e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Paid date</label>
+                      <input
+                        type="date"
+                        className={inputCls}
+                        value={paidDate}
+                        onChange={e => setPaidDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Payment method</label>
+                      <select
+                        className={inputCls}
+                        value={paidMethod}
+                        onChange={e => setPaidMethod(e.target.value)}>
+                        <option value="Card on file (Square)">Card on file (Square)</option>
+                        <option value="Card charged in Square">Card charged in Square</option>
+                        <option value="Check">Check</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Reference / note (optional)</label>
+                      <input
+                        type="text"
+                        className={inputCls}
+                        value={paidNote}
+                        onChange={e => setPaidNote(e.target.value)}
+                        placeholder="Square receipt #, check #, etc."
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="secondary" size="sm" onClick={() => { setRecordingPayment(false); setError(null) }}>
+                      Cancel
+                    </Button>
+                    <Button variant="teal" size="sm" loading={markingPaid} onClick={submitRecordPayment}>
+                      Mark as paid
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Section 3: Financial Summary */}
               <div>
                 <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Financial Summary</div>
@@ -429,6 +553,15 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 title={!canSend ? 'Add an email or phone number to send' : undefined}
               >
                 Generate &amp; Send Statement
+              </Button>
+            )}
+
+            {/* Biller manual "Record payment" — shown for sent (unpaid)
+                statements. Hidden while the record-payment inline form
+                is open (its own Save/Cancel controls take over). */}
+            {isSent && !editing && !recordingPayment && (
+              <Button variant="teal" size="sm" onClick={openRecordPayment}>
+                Record payment
               </Button>
             )}
 
