@@ -28,6 +28,7 @@ import { AdminStatements } from './pages/admin/AdminStatements'
 import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
+import { AdminPendingWriteOffs } from './pages/admin/AdminPendingWriteOffs'
 import { FamilyLogin } from './pages/family/FamilyLogin'
 import { FamilySignup } from './pages/family/FamilySignup'
 import { FamilySetup } from './pages/family/FamilySetup'
@@ -127,6 +128,7 @@ export default function App() {
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
+                <Route path="pending-write-offs" element={<AdminPendingWriteOffs />} />
               </Route>
             </Routes>
           </AuthProvider>

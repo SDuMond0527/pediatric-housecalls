@@ -670,9 +670,19 @@ export const markPatientStatementPaid = (id: string, body: {
 // billing error / timely filing / other.
 export type WriteOffReason = 'bad_debt' | 'small_balance' | 'hardship' | 'billing_error' | 'timely_filing' | 'other'
 export const writeOffPatientStatement = (id: string, body: { reason: WriteOffReason; note?: string }) =>
-  apiFetch<any>(`/api/patient-statements/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
+  apiFetch<{ action: 'committed' | 'pending'; statement: any }>(`/api/patient-statements/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
 export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?: string }) =>
-  apiFetch<any>(`/api/claims/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
+  apiFetch<{ action: 'committed' | 'pending'; claim: any }>(`/api/claims/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
+
+// Approval workflow — owner (super_admin) reviews pending requests.
+export const getPendingWriteOffs = () =>
+  apiFetch<{ statements: any[]; claims: any[]; total: number }>('/api/admin/pending-write-offs')
+export const getPendingWriteOffCount = () =>
+  apiFetch<{ count: number }>('/api/admin/pending-write-offs?count=1')
+export const reviewPatientStatementWriteOff = (id: string, body: { approved: boolean; review_note?: string }) =>
+  apiFetch<any>(`/api/patient-statements/${id}/review-write-off`, { method: 'POST', body: JSON.stringify(body) })
+export const reviewClaimWriteOff = (id: string, body: { approved: boolean; review_note?: string }) =>
+  apiFetch<any>(`/api/claims/${id}/review-write-off`, { method: 'POST', body: JSON.stringify(body) })
 
 export const pullStediEra = (claimId: string) =>
   apiFetch<any>(`/api/stedi/era?claim_id=${encodeURIComponent(claimId)}`)

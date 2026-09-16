@@ -43,6 +43,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_reason text` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS written_off_by uuid` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_note text` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_pending boolean` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_requested_by uuid` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_requested_at timestamptz` } catch {}
 
     const { reason, note } = req.body ?? {}
     const reasonStr = String(reason ?? '').trim()
@@ -52,8 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
+    const [me] = await sql`SELECT is_super_admin FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
+    const isOwner = Boolean(me?.is_super_admin)
+
     const [existing] = await sql`
-      SELECT id, status FROM claims
+      SELECT id, status, write_off_pending FROM claims
       WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid
       LIMIT 1
     `
@@ -64,21 +70,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (existing.status === 'paid') {
       return res.status(400).json({ error: 'Paid claims cannot be written off.' })
     }
+    if (existing.write_off_pending) {
+      return res.status(409).json({ error: 'A write-off request is already pending for this claim. The owner needs to approve or deny it first.' })
+    }
 
     const noteStr = note && String(note).trim() ? String(note).trim() : null
 
+    if (isOwner) {
+      const [updated] = await sql`
+        UPDATE claims SET
+          status            = 'written_off',
+          written_off_at    = NOW(),
+          write_off_reason  = ${reasonStr},
+          written_off_by    = ${providerId}::uuid,
+          write_off_note    = ${noteStr},
+          write_off_pending      = FALSE,
+          write_off_requested_by = ${providerId}::uuid,
+          write_off_requested_at = NOW(),
+          updated_at        = NOW()
+        WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *
+      `
+      return res.status(200).json({ action: 'committed', claim: updated })
+    }
+
     const [updated] = await sql`
       UPDATE claims SET
-        status            = 'written_off',
-        written_off_at    = NOW(),
-        write_off_reason  = ${reasonStr},
-        written_off_by    = ${providerId}::uuid,
-        write_off_note    = ${noteStr},
-        updated_at        = NOW()
+        write_off_pending      = TRUE,
+        write_off_requested_by = ${providerId}::uuid,
+        write_off_requested_at = NOW(),
+        write_off_reason       = ${reasonStr},
+        write_off_note         = ${noteStr},
+        updated_at             = NOW()
       WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *
     `
-    return res.status(200).json(updated)
+    return res.status(200).json({ action: 'pending', claim: updated })
   } catch (e: any) {
     console.error('claims/[id]/write-off error:', e)
     return res.status(500).json({ error: e.message ?? 'Internal server error' })

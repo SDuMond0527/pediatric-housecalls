@@ -123,11 +123,15 @@ export function AdminClaims() {
     setWritingOff(true)
     setWriteOffError(null)
     try {
-      await writeOffClaim(writeOffTarget.id, { reason: writeOffReason, note: writeOffNote })
+      const result = await writeOffClaim(writeOffTarget.id, { reason: writeOffReason, note: writeOffNote })
       setWriteOffTarget(null)
       setWriteOffNote('')
       setWriteOffReasonState('bad_debt')
       await load()
+      if (result?.action === 'pending') {
+        // Confirmation for biller — request sent, awaiting owner approval.
+        alert('Write-off request submitted. It will commit once the practice owner approves it.')
+      }
     } catch (e: any) {
       setWriteOffError(e?.message ?? 'Failed to write off claim')
     } finally {

@@ -88,12 +88,16 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     setSavingWriteOff(true)
     setError(null)
     try {
-      const saved = await writeOffPatientStatement(statement.id, { reason: writeOffReason, note: writeOffNote })
+      const result = await writeOffPatientStatement(statement.id, { reason: writeOffReason, note: writeOffNote })
+      const saved = (result as any)?.statement ?? result
       setStatement(saved)
       populateFromStatement(saved)
       setWritingOff(false)
       setWriteOffNote('')
       onSent()
+      if ((result as any)?.action === 'pending') {
+        alert('Write-off request submitted. It will commit once the practice owner approves it.')
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Failed to write off statement')
     } finally {

@@ -40,12 +40,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const statementId = req.query.id as string
     if (!statementId) return res.status(400).json({ error: 'id required' })
 
-    // Idempotent bootstrap — add the four columns the first time a
-    // write-off is ever recorded so we don't need a separate migration.
+    // Idempotent bootstrap — commit columns + approval-workflow columns.
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS voided_at timestamptz` } catch {}
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_reason text` } catch {}
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS voided_by uuid` } catch {}
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_note text` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_pending boolean` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_requested_by uuid` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_requested_at timestamptz` } catch {}
 
     const { reason, note } = req.body ?? {}
     const reasonStr = String(reason ?? '').trim()
@@ -55,8 +57,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
+    // Owner-approval workflow: only super_admin (practice owner) can
+    // commit a write-off directly. Every other admin (Pam / Andrea /
+    // billing staff) creates a pending request that the owner reviews.
+    const [me] = await sql`SELECT is_super_admin FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
+    const isOwner = Boolean(me?.is_super_admin)
+
     const [existing] = await sql`
-      SELECT id, status FROM patient_statements
+      SELECT id, status, write_off_pending FROM patient_statements
       WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid
       LIMIT 1
     `
@@ -67,21 +75,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (existing.status === 'paid') {
       return res.status(400).json({ error: 'Paid statements cannot be written off. Refund the family instead if the amount was in error.' })
     }
+    if (existing.write_off_pending) {
+      return res.status(409).json({ error: 'A write-off request is already pending for this statement. The owner needs to approve or deny it first.' })
+    }
 
     const noteStr = note && String(note).trim() ? String(note).trim() : null
 
+    if (isOwner) {
+      // Direct commit — owner is the final approver so no queue needed.
+      const [updated] = await sql`
+        UPDATE patient_statements SET
+          status       = 'void',
+          voided_at    = NOW(),
+          void_reason  = ${reasonStr},
+          voided_by    = ${providerId}::uuid,
+          void_note    = ${noteStr},
+          write_off_pending      = FALSE,
+          write_off_requested_by = ${providerId}::uuid,
+          write_off_requested_at = NOW(),
+          updated_at   = NOW()
+        WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid
+        RETURNING *
+      `
+      return res.status(200).json({ action: 'committed', statement: updated })
+    }
+
+    // Non-owner: create a pending request. Reason + note captured on
+    // the row itself so the owner sees the full context in the queue.
     const [updated] = await sql`
       UPDATE patient_statements SET
-        status       = 'void',
-        voided_at    = NOW(),
-        void_reason  = ${reasonStr},
-        voided_by    = ${providerId}::uuid,
-        void_note    = ${noteStr},
-        updated_at   = NOW()
+        write_off_pending      = TRUE,
+        write_off_requested_by = ${providerId}::uuid,
+        write_off_requested_at = NOW(),
+        void_reason            = ${reasonStr},
+        void_note              = ${noteStr},
+        updated_at             = NOW()
       WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid
       RETURNING *
     `
-    return res.status(200).json(updated)
+    return res.status(200).json({ action: 'pending', statement: updated })
   } catch (e: any) {
     console.error('patient-statements/[id]/write-off error:', e)
     return res.status(500).json({ error: e.message ?? 'Internal server error' })

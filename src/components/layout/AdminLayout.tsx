@@ -1,10 +1,10 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
-import { getEraCount } from '../../lib/api'
+import { getEraCount, getPendingWriteOffCount } from '../../lib/api'
 import { dailyAffirmation } from '../../lib/affirmations'
 import { GlobalPatientSearch } from '../GlobalPatientSearch'
 
@@ -25,7 +25,7 @@ const NAV = [
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
 ]
 
-function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any; signOut: () => void; eraCount: number; onNav?: () => void }) {
+function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
@@ -70,6 +70,19 @@ function SidebarContent({ provider, signOut, eraCount, onNav }: { provider: any;
         {provider?.is_super_admin && (
           <>
             <div className="mx-5 my-2 border-t border-white/10" />
+            <NavLink to="/admin/pending-write-offs" onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <Ban size={16} className="opacity-70" />
+              Pending write-offs
+              {pendingWriteOffCount > 0 && (
+                <span className="ml-auto bg-[#EF4444] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                  {pendingWriteOffCount}
+                </span>
+              )}
+            </NavLink>
             <NavLink to="/admin/provision" onClick={onNav}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
@@ -110,6 +123,7 @@ export function AdminLayout() {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [eraCount, setEraCount] = useState(0)
+  const [pendingWriteOffCount, setPendingWriteOffCount] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -117,10 +131,12 @@ export function AdminLayout() {
 
   useEffect(() => {
     if (!user) return
-    getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
-    const interval = setInterval(() => {
+    const refresh = () => {
       getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
-    }, 60000)
+      getPendingWriteOffCount().then(d => setPendingWriteOffCount(d?.count ?? 0)).catch(() => {})
+    }
+    refresh()
+    const interval = setInterval(refresh, 60000)
     return () => clearInterval(interval)
   }, [user])
 
@@ -134,7 +150,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Desktop sidebar */}
       <div className="hidden md:fixed md:left-0 md:top-0 md:block md:z-40">
-        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} />
+        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount}/>
       </div>
 
       {/* Mobile overlay sidebar */}
@@ -142,7 +158,7 @@ export function AdminLayout() {
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
           <div className="relative">
-            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} onNav={() => setSidebarOpen(false)} />
+            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} onNav={() => setSidebarOpen(false)} />
           </div>
         </div>
       )}
