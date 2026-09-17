@@ -700,19 +700,41 @@ export const markClaimDenialHandled = (id: string, notes: string) =>
   apiFetch<any>(`/api/claims/${id}/mark-denial-handled`, { method: 'POST', body: JSON.stringify({ notes }) })
 
 // Fetches a Stedi-generated PDF (CMS-1500 or 835 ERA) and opens it inline
-// in a new tab. Same pattern as downloadEncounterNoteHtml — the browser's
-// built-in PDF viewer handles both viewing and downloading from there.
+// in a new tab. Two important workarounds baked in:
+//   1. window.open must be called SYNCHRONOUSLY with the user click, or
+//      Chrome/Safari popup-blockers eat it and the caller sees a blank
+//      screen. So we open the tab first, then navigate it after fetch.
+//   2. Some Vercel/Neon paths strip Content-Type on the response, so we
+//      force type: 'application/pdf' when we build the Blob — otherwise
+//      the browser downloads a nameless octet-stream instead of rendering.
 async function openClaimPdf(url: string) {
-  const headers = await authHeaders()
-  const res = await fetch(url, { headers })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+  const newWindow = window.open('', '_blank', 'noopener,noreferrer')
+  if (!newWindow) {
+    throw new Error('Your browser blocked the popup. Allow popups for this site and try again.')
   }
-  const blob = await res.blob()
-  const objectUrl = URL.createObjectURL(blob)
-  window.open(objectUrl, '_blank', 'noopener,noreferrer')
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  // Give the blank tab something to look at while the PDF loads.
+  try {
+    newWindow.document.title = 'Loading PDF…'
+    newWindow.document.body.innerHTML = '<div style="font-family: system-ui; padding: 24px; color: #555;">Loading PDF from Stedi…</div>'
+  } catch { /* cross-origin write blocked; harmless */ }
+
+  try {
+    const headers = await authHeaders()
+    const res = await fetch(url, { headers })
+    if (!res.ok) {
+      newWindow.close()
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+    }
+    const bytes = await res.arrayBuffer()
+    const blob = new Blob([bytes], { type: 'application/pdf' })
+    const objectUrl = URL.createObjectURL(blob)
+    newWindow.location.href = objectUrl
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000)
+  } catch (err) {
+    try { newWindow.close() } catch {}
+    throw err
+  }
 }
 export const downloadClaim1500Pdf = (id: string) => openClaimPdf(`/api/claims/${id}/1500-pdf`)
 export const downloadClaimEraPdf  = (id: string) => openClaimPdf(`/api/claims/${id}/era-pdf`)
