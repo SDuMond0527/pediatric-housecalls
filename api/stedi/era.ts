@@ -137,6 +137,72 @@ function extractDenialCodes(era835: any): DenialCodeEntry[] {
   return entries
 }
 
+// ── X12 835 parser (2026-09-16) ────────────────────────────────────────────
+// Same parser as api/admin/refetch-known-eras.ts and
+// api/webhooks/stedi-transaction.ts. Reads raw X12 EDI from
+// /eras/{id}/x12 (the CAS-inclusive endpoint) and pulls out CLP claim
+// headers + subsequent CAS adjustment segments.
+type X12CasEntry = { group: string; reason: string; amount: number }
+type ParsedX12Claim = {
+  pcn: string
+  payerClaimControlNumber: string
+  totalCharge: number
+  totalPaid: number
+  patientResponsibility: number
+  cas: X12CasEntry[]
+}
+function parseX12_835(text: string): ParsedX12Claim[] {
+  const claims: ParsedX12Claim[] = []
+  if (!text || typeof text !== 'string') return claims
+  const segments = text.split('~').map(s => s.trim()).filter(Boolean)
+  let current: ParsedX12Claim | null = null
+  for (const seg of segments) {
+    const fields = seg.split('*')
+    const tag = fields[0]
+    if (tag === 'CLP') {
+      if (current) claims.push(current)
+      current = {
+        pcn:                    String(fields[1] ?? '').trim(),
+        totalCharge:            parseFloat(String(fields[3] ?? '0')) || 0,
+        totalPaid:              parseFloat(String(fields[4] ?? '0')) || 0,
+        patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
+        payerClaimControlNumber: String(fields[7] ?? '').trim(),
+        cas: [],
+      }
+    } else if (tag === 'CAS' && current) {
+      const group = String(fields[1] ?? '').trim()
+      for (let i = 2; i < fields.length; i += 3) {
+        const reason = String(fields[i] ?? '').trim()
+        const amount = parseFloat(String(fields[i + 1] ?? '0')) || 0
+        if (reason && amount !== 0) current.cas.push({ group, reason, amount })
+      }
+    }
+  }
+  if (current) claims.push(current)
+  return claims
+}
+function bucketCasFromX12(cas: X12CasEntry[]) {
+  const totals = {
+    patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
+    patient_non_covered: 0, contractual_adjustment: 0,
+  }
+  for (const c of cas) {
+    if (c.group === 'PR') {
+      switch (c.reason) {
+        case '1':  totals.patient_deductible  += c.amount; break
+        case '2':  totals.patient_coinsurance += c.amount; break
+        case '3':  totals.patient_copay       += c.amount; break
+        case '96': totals.patient_non_covered += c.amount; break
+        default:   totals.patient_non_covered += c.amount; break
+      }
+    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+      totals.contractual_adjustment += c.amount
+    }
+  }
+  for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] = +totals[k].toFixed(2)
+  return totals
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -206,45 +272,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (listRes.ok) {
         const listData = await listRes.json()
         const remittances: any[] = listData?.remittances ?? listData?.items ?? []
+        const pcnUpper = patientControlNumber.toUpperCase()
 
         for (const rem of remittances) {
           const remId = rem?.id ?? rem?.remittanceId
           if (!remId) continue
 
-          const detailRes = await fetch(
-            `https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}`,
-            { headers: { Authorization: `Key ${stediApiKey}` } }
+          // Fetch /eras/{id}/x12 — the CAS-inclusive endpoint. The
+          // /eras/{id} JSON endpoint returns only the remittance header
+          // (verified 2026-09-16 by dumping the response). CAS lives in
+          // the X12 EDI text at the /x12 sub-resource.
+          const x12Res = await fetch(
+            `https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}/x12`,
+            { headers: { Authorization: `Key ${stediApiKey}`, Accept: 'application/edi-x12, text/plain' } }
           )
-          if (!detailRes.ok) continue
+          if (!x12Res.ok) continue
+          const x12Text = await x12Res.text()
+          const parsedClaims = parseX12_835(x12Text)
 
-          const detail = await detailRes.json()
-          const parsed = findAndParseClaimPayment(detail, patientControlNumber)
-          if (!parsed) continue
+          const pc = parsedClaims.find(c => String(c.pcn ?? '').toUpperCase() === pcnUpper)
+          if (!pc) continue
 
-          // Cache the result back onto the claim so next call is instant
+          const cas = bucketCasFromX12(pc.cas)
+
           await sql`
             UPDATE claims SET
-              era_received_at          = NOW(),
-              era_raw                  = ${JSON.stringify(detail)}::jsonb,
-              amount_billed_era        = ${parsed.amount_billed},
-              insurance_payment_era    = ${parsed.insurance_payment},
-              contractual_adjustment_era = ${parsed.contractual_adjustment},
-              patient_deductible_era   = ${parsed.patient_deductible},
-              patient_coinsurance_era  = ${parsed.patient_coinsurance},
-              patient_copay_era        = ${parsed.patient_copay},
-              patient_non_covered_era  = ${parsed.patient_non_covered},
-              updated_at               = NOW()
+              era_received_at            = NOW(),
+              era_raw_835                = ${JSON.stringify({
+                                              pcn: pc.pcn,
+                                              payerClaimControlNumber: pc.payerClaimControlNumber,
+                                              totalCharge: pc.totalCharge,
+                                              totalPaid: pc.totalPaid,
+                                              patientResponsibility: pc.patientResponsibility,
+                                              cas: pc.cas,
+                                            })}::jsonb,
+              amount_billed_era          = ${pc.totalCharge},
+              insurance_payment_era      = ${pc.totalPaid},
+              contractual_adjustment_era = ${cas.contractual_adjustment},
+              patient_deductible_era     = ${cas.patient_deductible},
+              patient_coinsurance_era    = ${cas.patient_coinsurance},
+              patient_copay_era          = ${cas.patient_copay},
+              patient_non_covered_era    = ${cas.patient_non_covered},
+              updated_at                 = NOW()
             WHERE id = ${claimId}::uuid
           `
 
-          // ── ADDITIVE denial-code capture ─────────────────────────────
-          // Fully wrapped in try/catch. If any part of this fails,
-          // the existing ERA processing above is completely unaffected.
-          // Feature is defensive-only — worst case, denial_codes stays
-          // null on this claim, and appeal workflow shows no button.
+          // Shape response like the previous JSON parser did
+          const parsed = {
+            amount_billed:          pc.totalCharge,
+            insurance_payment:      pc.totalPaid,
+            contractual_adjustment: cas.contractual_adjustment,
+            patient_deductible:     cas.patient_deductible,
+            patient_coinsurance:    cas.patient_coinsurance,
+            patient_copay:          cas.patient_copay,
+            patient_non_covered:    cas.patient_non_covered,
+          }
+
           try {
             await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb`
-            const codes = extractDenialCodes(detail)
+            const codes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
             if (codes.length > 0) {
               await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claimId}::uuid`
             }

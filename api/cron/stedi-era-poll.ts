@@ -461,6 +461,72 @@ function pollLookBackIso(): string {
   return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 }
 
+// ── X12 835 parser (2026-09-16) ────────────────────────────────────────────
+// Same parser as api/admin/refetch-known-eras.ts and
+// api/webhooks/stedi-transaction.ts and api/stedi/era.ts. Reads raw X12
+// EDI from /eras/{id}/x12 (the CAS-inclusive endpoint) and pulls out
+// CLP claim headers + subsequent CAS adjustment segments.
+type X12CasEntry_Cron = { group: string; reason: string; amount: number }
+type ParsedX12Claim_Cron = {
+  pcn: string
+  payerClaimControlNumber: string
+  totalCharge: number
+  totalPaid: number
+  patientResponsibility: number
+  cas: X12CasEntry_Cron[]
+}
+function parseX12_835(text: string): ParsedX12Claim_Cron[] {
+  const claims: ParsedX12Claim_Cron[] = []
+  if (!text || typeof text !== 'string') return claims
+  const segments = text.split('~').map(s => s.trim()).filter(Boolean)
+  let current: ParsedX12Claim_Cron | null = null
+  for (const seg of segments) {
+    const fields = seg.split('*')
+    const tag = fields[0]
+    if (tag === 'CLP') {
+      if (current) claims.push(current)
+      current = {
+        pcn:                    String(fields[1] ?? '').trim(),
+        totalCharge:            parseFloat(String(fields[3] ?? '0')) || 0,
+        totalPaid:              parseFloat(String(fields[4] ?? '0')) || 0,
+        patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
+        payerClaimControlNumber: String(fields[7] ?? '').trim(),
+        cas: [],
+      }
+    } else if (tag === 'CAS' && current) {
+      const group = String(fields[1] ?? '').trim()
+      for (let i = 2; i < fields.length; i += 3) {
+        const reason = String(fields[i] ?? '').trim()
+        const amount = parseFloat(String(fields[i + 1] ?? '0')) || 0
+        if (reason && amount !== 0) current.cas.push({ group, reason, amount })
+      }
+    }
+  }
+  if (current) claims.push(current)
+  return claims
+}
+function bucketCasFromX12(cas: X12CasEntry_Cron[]) {
+  const totals = {
+    patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
+    patient_non_covered: 0, contractual_adjustment: 0,
+  }
+  for (const c of cas) {
+    if (c.group === 'PR') {
+      switch (c.reason) {
+        case '1':  totals.patient_deductible  += c.amount; break
+        case '2':  totals.patient_coinsurance += c.amount; break
+        case '3':  totals.patient_copay       += c.amount; break
+        case '96': totals.patient_non_covered += c.amount; break
+        default:   totals.patient_non_covered += c.amount; break
+      }
+    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+      totals.contractual_adjustment += c.amount
+    }
+  }
+  for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] = +totals[k].toFixed(2)
+  return totals
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (CRON_SECRET && req.headers.authorization !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' })
@@ -538,91 +604,100 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ────────────────────────────────────────────────────────────────
-  // Pass 2 — CAS-breakdown hydration via 835 ERA JSON.
+  // Pass 2 — CAS hydration via /eras + /x12.
   //
-  // Enumerate recently-processed INBOUND transactions from Stedi's
-  // Poll Transactions API, filter to 835 report artifacts, skip any
-  // transactionId we've already digested, then fetch the 835 report
-  // and apply CAS-derived amounts to matching claims.
+  // The old approach (STEDI_POLL_TRANSACTIONS_URL → /reports/v2/{id}/835)
+  // returned only remittance summaries (no CAS). Confirmed 2026-09-16
+  // by dumping the response. This pass now uses the /eras endpoint
+  // family — same URLs the webhook enrichment and manual refetch button
+  // use — which returns raw X12 EDI with real CAS segments.
   //
+  // Idempotent: re-parsing the same remittance writes the same values.
   // Wrapped in its own try/catch — a bug here must NEVER blow up the
   // Lifecycle pass above.
   try {
-    let pageToken: string | undefined = undefined
-    const startDateTime = pollLookBackIso()
-    const seen = new Set<string>()
+    const allClaims: any = await sql`SELECT id, payer_id FROM claims WHERE payer_id IS NOT NULL`
+    const pcnToClaim = new Map<string, string>()
+    const payerIds = new Set<string>()
+    for (const c of allClaims) {
+      const pcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
+      pcnToClaim.set(pcn, c.id as string)
+      payerIds.add(c.payer_id as string)
+    }
 
-    for (let page = 0; page < 5; page++) {
-      const params = new URLSearchParams()
-      params.set('pageSize', '100')
-      if (pageToken) params.set('pageToken', pageToken)
-      else params.set('startDateTime', startDateTime)
-
-      const listRes = await fetch(`${STEDI_POLL_TRANSACTIONS_URL}?${params}`, {
-        headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
-      })
-      if (!listRes.ok) {
-        const body = await listRes.text().catch(() => '')
-        summary.errors.push(`poll-transactions: ${listRes.status} ${body.slice(0, 200)}`)
-        break
-      }
-      const list = await listRes.json()
-      const items: any[] = list?.items ?? []
-      pageToken = list?.nextPageToken
-
-      for (const tx of items) {
-        const transactionId: string | undefined = tx?.transactionId
-        if (!transactionId || seen.has(transactionId)) continue
-        seen.add(transactionId)
-
-        // Filter to 835 report artifacts. Stedi reports the file type
-        // via `artifacts[].artifactType` — we accept both '835' and
-        // upstream variants seen in test.
-        const arts: any[] = Array.isArray(tx?.artifacts) ? tx.artifacts : []
-        const is835 = arts.some(a =>
-          String(a?.artifactType ?? '').toLowerCase().includes('835') ||
-          String(a?.model ?? '').toLowerCase().includes('remittance'))
-        if (tx?.direction !== 'INBOUND' || !is835 || tx?.status !== 'succeeded') { summary.cas.skipped += 1; continue }
-        summary.cas.transactionsSeen += 1
-
-        // Idempotency guard.
-        const [prior] = await sql`SELECT 1 FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
-        if (prior) { summary.cas.skipped += 1; continue }
-
-        // Fetch the 835.
-        const reportRes = await fetch(STEDI_835_REPORT_URL(transactionId), {
+    for (const payerId of payerIds) {
+      try {
+        const params = new URLSearchParams()
+        params.set('tradingPartnerId', payerId)
+        params.set('limit', '25')
+        const listRes = await fetch(`https://claims-manager.us.stedi.com/2025-09-01/eras?${params}`, {
           headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
         })
-        if (!reportRes.ok) {
-          // 404 = report not materialized yet, don't mark processed;
-          // any other failure logs but doesn't block the loop.
-          summary.errors.push(`835 fetch ${transactionId}: ${reportRes.status}`)
+        if (!listRes.ok) {
+          summary.errors.push(`eras list ${payerId}: ${listRes.status}`)
           continue
         }
-        const era835 = await reportRes.json()
+        const listBody = await listRes.json() as any
+        const rems: any[] = listBody?.remittances ?? listBody?.items ?? []
+        summary.cas.transactionsSeen += rems.length
 
-        let matchedThis = 0
-        for (const cp of extractClaimPayments(era835)) {
+        for (const rem of rems) {
+          const remId = rem?.id ?? rem?.remittanceId
+          if (!remId) continue
           try {
-            const claim = await findClaimByPcnOrPayerControlNumber(sql, cp.pcn, cp.payerClaimControlNumber)
-            if (!claim) continue
-            const cas = parseCasAdjustments(cp.scoped)
-            await applyCasToClaim(sql, claim.id, cas, cp.payerClaimControlNumber)
-            matchedThis += 1
-          } catch (perErr: any) {
-            summary.errors.push(`CAS apply ${transactionId}: ${perErr?.message ?? String(perErr)}`)
+            const x12Res = await fetch(`https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}/x12`, {
+              headers: { Authorization: `Key ${STEDI_API_KEY}`, Accept: 'application/edi-x12, text/plain' },
+            })
+            if (!x12Res.ok) {
+              summary.errors.push(`x12 ${remId}: ${x12Res.status}`)
+              continue
+            }
+            const x12Text = await x12Res.text()
+            const parsedClaims = parseX12_835(x12Text)
+            summary.cas.transactionsProcessed += 1
+
+            for (const pc of parsedClaims) {
+              const pcn = String(pc.pcn ?? '').toUpperCase()
+              const claimId = pcnToClaim.get(pcn)
+              if (!claimId) continue
+              const cas = bucketCasFromX12(pc.cas)
+              await sql`
+                UPDATE claims SET
+                  era_received_at            = COALESCE(era_received_at, NOW()),
+                  era_raw_835                = ${JSON.stringify({
+                                                  pcn: pc.pcn,
+                                                  payerClaimControlNumber: pc.payerClaimControlNumber,
+                                                  totalCharge: pc.totalCharge,
+                                                  totalPaid: pc.totalPaid,
+                                                  patientResponsibility: pc.patientResponsibility,
+                                                  cas: pc.cas,
+                                                })}::jsonb,
+                  amount_billed_era          = ${pc.totalCharge},
+                  insurance_payment_era      = ${pc.totalPaid},
+                  contractual_adjustment_era = ${cas.contractual_adjustment},
+                  patient_deductible_era     = ${cas.patient_deductible},
+                  patient_coinsurance_era    = ${cas.patient_coinsurance},
+                  patient_copay_era          = ${cas.patient_copay},
+                  patient_non_covered_era    = ${cas.patient_non_covered},
+                  updated_at                 = NOW()
+                WHERE id = ${claimId}::uuid
+              `
+              const denialCodes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
+              if (denialCodes.length > 0) {
+                await sql`UPDATE claims SET denial_codes = ${JSON.stringify(denialCodes)}::jsonb WHERE id = ${claimId}::uuid`
+              }
+              if (pc.payerClaimControlNumber) {
+                await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
+              }
+              summary.cas.claimsUpdated += 1
+            }
+          } catch (perRemErr: any) {
+            summary.errors.push(`rem ${remId}: ${perRemErr?.message ?? String(perRemErr)}`)
           }
         }
-        summary.cas.transactionsProcessed += 1
-        summary.cas.claimsUpdated += matchedThis
-        await sql`
-          INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
-          VALUES (${transactionId}, ${matchedThis}, 'cron')
-          ON CONFLICT (transaction_id) DO UPDATE SET
-            matched_claim_count = EXCLUDED.matched_claim_count,
-            processed_at = NOW()`
+      } catch (perPayerErr: any) {
+        summary.errors.push(`payer ${payerId}: ${perPayerErr?.message ?? String(perPayerErr)}`)
       }
-      if (!pageToken) break
     }
   } catch (e: any) {
     console.error('[stedi-era-poll] cas pass error:', e)
