@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml } from '../lib/api'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
 import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
@@ -1693,6 +1693,16 @@ export function PatientChart() {
                                   <Pencil size={12} />
                                   {note.is_signed ? 'Open note' : 'Edit note'}
                                 </button>
+                                {note.is_signed && (
+                                  <button
+                                    onClick={() => downloadEncounterNoteHtml(note.id).catch(e => alert(e?.message ?? 'Download failed'))}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                                    title="Opens the note in a new tab. Use browser print → Save as PDF for payer portal upload."
+                                  >
+                                    <Download size={12} />
+                                    Download
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => { launchDoseSpot(); setActiveTab('prescribe') }}
                                   disabled={dsLoading}

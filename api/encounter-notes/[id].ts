@@ -356,6 +356,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS medical_history_snapshot text` } catch {}
 
   if (req.method === 'GET') {
+    // ?format=html → return the note as a printable HTML document
+    // biller/provider can save-as-PDF via browser print. Same renderer
+    // used for the PCP fax path so the layout is proven and consistent.
+    if (req.query.format === 'html' || req.query.download === '1') {
+      const [note] = await sql`
+        SELECT en.*, ch.medical_history AS child_medical_history
+        FROM encounter_notes en
+        LEFT JOIN children ch ON ch.id = en.child_id
+        WHERE en.id = ${id}::uuid AND en.practice_id = ${practiceId}::uuid
+        LIMIT 1`
+      if (!note) return res.status(404).json({ error: 'Note not found' })
+
+      const [child] = note.child_id
+        ? await sql`
+            SELECT c.*, p.id AS pcp_id_val, p.name AS pcp_name, p.fax_number AS pcp_fax
+            FROM children c
+            LEFT JOIN pcps p ON p.id = c.pcp_id
+            WHERE c.id = ${note.child_id}::uuid AND c.practice_id = ${practiceId}::uuid
+            LIMIT 1`
+        : [null]
+      const [provider] = note.provider_id
+        ? await sql`SELECT name FROM providers WHERE id = ${note.provider_id}::uuid LIMIT 1`
+        : [null]
+      const [appt] = note.appointment_id
+        ? await sql`SELECT scheduled_date, visit_type FROM appointments WHERE id = ${note.appointment_id}::uuid LIMIT 1`
+        : [null]
+
+      const html = buildNoteHtml(
+        note,
+        child ?? {},
+        child ? { name: child.pcp_name, fax_number: child.pcp_fax } : null,
+        provider,
+        appt,
+      )
+
+      const dateStr = appt?.scheduled_date
+        ? String(appt.scheduled_date).slice(0, 10)
+        : String(note.signed_at ?? note.created_at ?? '').slice(0, 10)
+      const patientSlug = [child?.first_name, child?.last_name]
+        .filter(Boolean).join('_').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'patient'
+      const filename = `encounter_${patientSlug}_${dateStr}.html`
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      // inline (not attachment) so it opens in a new tab — biller then
+      // hits Cmd+P → Save as PDF for payer portal upload.
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+      return res.status(200).send(html)
+    }
+
     const rows = await sql`
       SELECT en.*, ch.medical_history AS child_medical_history
       FROM encounter_notes en

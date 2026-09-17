@@ -426,6 +426,25 @@ export const createEncounterNote = (body: Record<string, unknown>) =>
 export const updateEncounterNote = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PUT', body: JSON.stringify(body) })
 
+// Download an encounter note as HTML in a new browser tab. The biller
+// then hits Cmd+P → Save as PDF for payer-portal uploads. Requires a
+// Bearer token so we can't use a plain <a href> — we fetch the HTML
+// with auth headers, then open it as a blob URL in a new window.
+export async function downloadEncounterNoteHtml(id: string) {
+  const headers = await authHeaders()
+  const res = await fetch(`/api/encounter-notes/${id}?format=html`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+  }
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener,noreferrer')
+  // Revoke after a short delay so the new window has time to load.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+
 export const patchEncounterNote = (id: string, body: { diagnoses?: unknown; cpt_codes?: unknown }) =>
   apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 

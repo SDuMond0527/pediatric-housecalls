@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, type WriteOffReason } from '../../lib/api'
 import { Ban } from 'lucide-react'
 
 const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
@@ -1545,6 +1545,15 @@ export function AdminClaims() {
                             className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium">
                             <Receipt size={11} /> Generate statement
                           </button>
+                          {c.encounter_note_id && (
+                            <button
+                              onClick={() => downloadEncounterNoteHtml(c.encounter_note_id).catch(e => alert(e?.message ?? 'Download failed'))}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium"
+                              title="Opens the encounter note in a new tab. Use browser print → Save as PDF for payer portal upload."
+                            >
+                              <Download size={11} /> Download encounter note
+                            </button>
+                          )}
                           {(c.statement_status === 'sent' || c.statement_status === 'paid') && (
                             <span className="inline-flex items-center gap-0.5 bg-[#EEF6FB] text-[#2D7BA6] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
                               <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
