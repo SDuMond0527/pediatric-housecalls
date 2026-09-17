@@ -6,6 +6,7 @@ import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send,
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
 
 const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
@@ -823,9 +824,12 @@ export function AdminClaims() {
                       <div className="flex items-center gap-3 min-w-0">
                         <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
                         <div>
-                          <div className="text-[14px] font-medium text-[#1A1A2E]">
-                            {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
-                            <span className="ml-2 text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                          <div className="text-[14px] font-medium text-[#1A1A2E] inline-flex items-center gap-2 flex-wrap">
+                            <span>
+                              {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
+                            </span>
+                            <ChartNumberPill value={c.chart_number} />
+                            <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (
@@ -1442,9 +1446,12 @@ export function AdminClaims() {
                       <div className="flex items-center gap-3 min-w-0">
                         <FileText size={15} className="text-[#7F77DD] flex-shrink-0" />
                         <div>
-                          <div className="text-[14px] font-medium text-[#1A1A2E]">
-                            {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
-                            <span className="ml-2 text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                          <div className="text-[14px] font-medium text-[#1A1A2E] inline-flex items-center gap-2 flex-wrap">
+                            <span>
+                              {[(c.child_first_name ?? c.patient_first_name), (c.child_last_name ?? c.patient_last_name)].filter(Boolean).join(' ') || 'Unknown patient'}
+                            </span>
+                            <ChartNumberPill value={c.chart_number} />
+                            <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                             {c.era_received_at && !c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA

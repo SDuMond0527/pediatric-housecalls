@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { RefreshCw, Check, X, Ban, FileText, Receipt } from 'lucide-react'
 import { getPendingWriteOffs, reviewPatientStatementWriteOff, reviewClaimWriteOff } from '../../lib/api'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 
 const REASON_LABEL: Record<string, string> = {
   bad_debt:       'Bad debt',
@@ -40,6 +41,7 @@ type Request = {
   payer_name: string | null
   patient_first_name: string | null
   patient_last_name: string | null
+  chart_number: string | null
   service_date: string | null
 }
 
@@ -123,6 +125,7 @@ export function AdminPendingWriteOffs() {
                   <span className="font-display text-[15px] font-medium text-[#1A1A2E]">
                     {[r.patient_first_name, r.patient_last_name].filter(Boolean).join(' ') || 'Unknown patient'}
                   </span>
+                  <ChartNumberPill value={r.chart_number} size="xs" />
                   <span className="text-[12px] text-[#555]">· {fmtDate(r.service_date)}</span>
                 </div>
                 <div className="text-[12px] text-[#555] mt-1">

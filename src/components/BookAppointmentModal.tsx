@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, CalendarPlus } from 'lucide-react'
 import { Button } from './ui/Button'
+import { ChartNumberPill } from './ChartNumberPill'
 import { createAppointmentWithOverlapRetry, invokeNotifications, getProviders, getPracticeZones } from '../lib/api'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
@@ -123,7 +124,10 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
             <CalendarPlus size={18} className="text-[#7F77DD]" />
             <div>
               <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Book Appointment</h2>
-              <p className="text-[12px] text-[#1A1A2E]">{childName}</p>
+              <p className="text-[12px] text-[#1A1A2E] flex items-center gap-2 flex-wrap">
+                <span>{childName}</span>
+                <ChartNumberPill value={child?.chart_number} size="xs" />
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-[#1A1A2E] hover:text-[#333] transition-colors">

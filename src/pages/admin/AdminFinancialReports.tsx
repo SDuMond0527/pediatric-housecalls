@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
 import { getFinancialReports } from '../../lib/api'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 
 type ReportsData = Awaited<ReturnType<typeof getFinancialReports>>
 
@@ -182,7 +183,12 @@ function ArAgingSection({
           <tbody className="divide-y divide-[#F1EFE8]">
             {rows.map((r, i) => (
               <tr key={i} className="hover:bg-[#FAFAF8]">
-                <td className="px-3 py-2 text-[#1A1A2E]">{r[groupKey]}</td>
+                <td className="px-3 py-2 text-[#1A1A2E]">
+                  <span className="inline-flex items-center gap-2 flex-wrap">
+                    <span>{r[groupKey]}</span>
+                    <ChartNumberPill value={r.chart_number} size="xs" />
+                  </span>
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_0_30)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_31_60)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_61_90)}</td>

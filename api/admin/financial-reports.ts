@@ -82,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const arPatientRows = await sql`
       SELECT
         COALESCE(NULLIF(TRIM(CONCAT(ps.patient_first_name, ' ', ps.patient_last_name)), ''), 'Unknown patient') AS patient_name,
+        MAX(chart_number)                                                                        AS chart_number,
         SUM(CASE WHEN age_days BETWEEN 0  AND 30  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_0_30,
         SUM(CASE WHEN age_days BETWEEN 31 AND 60  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_31_60,
         SUM(CASE WHEN age_days BETWEEN 61 AND 90  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_61_90,
@@ -93,9 +94,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SELECT
           ps.patient_first_name,
           ps.patient_last_name,
-          COALESCE(ps.total_amount_due, 0)::numeric AS outstanding,
+          ch.chart_number                                          AS chart_number,
+          COALESCE(ps.total_amount_due, 0)::numeric                AS outstanding,
           EXTRACT(DAY FROM (NOW() - COALESCE(ps.sent_at, ps.created_at)))::int AS age_days
         FROM patient_statements ps
+        LEFT JOIN claims cl ON cl.id = ps.claim_id
+        LEFT JOIN children ch ON ch.id = COALESCE(
+          cl.child_id,
+          (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1)
+        )
         WHERE ps.practice_id = ${practiceId}::uuid
           AND ps.status = 'sent'
           AND COALESCE(ps.total_amount_due, 0) > 0

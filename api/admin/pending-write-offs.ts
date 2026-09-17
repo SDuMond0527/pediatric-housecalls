@@ -64,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.payer_name                                       AS payer_name,
         COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
         COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
+        ch.chart_number                                    AS chart_number,
         COALESCE(ps.date_of_service::text, c.service_date::text) AS service_date
       FROM patient_statements ps
       LEFT JOIN claims c    ON c.id  = ps.claim_id
@@ -86,6 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cl.payer_name                                       AS payer_name,
         COALESCE(cl.patient_first_name, ch.first_name)      AS patient_first_name,
         COALESCE(cl.patient_last_name,  ch.last_name)       AS patient_last_name,
+        ch.chart_number                                     AS chart_number,
         cl.service_date::text                               AS service_date
       FROM claims cl
       LEFT JOIN children ch  ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))

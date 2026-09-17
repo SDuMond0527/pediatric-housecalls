@@ -2,6 +2,34 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
+// Assign the next GoRoam-prefixed chart number using a Postgres sequence.
+// The sequence is race-safe by design (nextval is atomic and monotonic).
+// The only tricky bit is initial alignment: a freshly-created sequence
+// starts at 1, which would collide with existing GoRoam1..GoRoam221 rows.
+// So on first call after creation, we align to (existing max + 1). We
+// intentionally do NOT re-align on every call — per-request setval can
+// move the sequence backwards and break nextval's monotonicity.
+async function nextChartNumber(sql: any): Promise<string> {
+  await sql`CREATE SEQUENCE IF NOT EXISTS chart_number_seq`
+  const [seq] = await sql`SELECT last_value, is_called FROM chart_number_seq`
+  if (!seq.is_called && Number(seq.last_value) === 1) {
+    // Freshly-created sequence — align above existing max exactly once.
+    await sql`
+      SELECT setval(
+        'chart_number_seq',
+        COALESCE(
+          (SELECT MAX(CAST(REGEXP_REPLACE(chart_number, '^GoRoam', '') AS INTEGER))
+             FROM children WHERE chart_number ~ '^GoRoam[0-9]+$'),
+          0
+        ) + 1,
+        false
+      )
+    `
+  }
+  const [row] = await sql`SELECT nextval('chart_number_seq') AS n`
+  return `GoRoam${row.n}`
+}
+
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
@@ -229,6 +257,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return inh[k] ?? null
         }
 
+        // Assign a GoRoam-prefixed chart number. Sequence is created +
+        // aligned above current max on server boot below; nextval is
+        // atomic so concurrent inserts don't collide. Sara requested
+        // GoRoam prefix on 2026-09-17 (replaces legacy PHC).
+        const chartNumber = await nextChartNumber(sql)
+
         const [row] = await sql`
           INSERT INTO children (
             practice_id, display_label, first_name, last_name, family_id, date_of_birth,
@@ -238,7 +272,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             insurance_provider, insurance_member_id, insurance_group_number,
             insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
             insurance_card_front_url, insurance_card_back_url,
-            preferred_pharmacy, dosespot_pharmacy_id, pcp, pcp_id
+            preferred_pharmacy, dosespot_pharmacy_id, pcp, pcp_id,
+            chart_number
           )
           VALUES (
             ${practiceId}::uuid, ${label}, ${fn}, ${ln || null}, ${familyId}::uuid, ${date_of_birth || null},
@@ -250,7 +285,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${pick('insurance_subscriber_name')}, ${pick('insurance_subscriber_dob') || null}::date,
             ${pick('insurance_subscriber_gender')}, ${pick('insurance_subscriber_relationship')},
             ${pick('insurance_card_front_url')}, ${pick('insurance_card_back_url')},
-            ${pick('preferred_pharmacy')}, ${b.dosespot_pharmacy_id ?? null}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid
+            ${pick('preferred_pharmacy')}, ${b.dosespot_pharmacy_id ?? null}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid,
+            ${chartNumber}
           )
           RETURNING *`
         return res.json(row)
@@ -481,6 +517,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const label = [fn, ln].filter(Boolean).join(' ')
+    const chartNumber = await nextChartNumber(sql)
     const [row] = await sql`
       INSERT INTO children (
         practice_id, display_label, first_name, last_name, date_of_birth, gender,
@@ -493,7 +530,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         insurance_subscriber_relationship,
         insurance_card_front_url, insurance_card_back_url,
         nickname,
-        allergies, current_medications, medical_history, vaccination_status
+        allergies, current_medications, medical_history, vaccination_status,
+        chart_number
       )
       VALUES (
         ${practiceId}::uuid,
@@ -526,7 +564,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${allergies || null},
         ${current_medications || null},
         ${medical_history || null},
-        ${vaccination_status || null}
+        ${vaccination_status || null},
+        ${chartNumber}
       )
       RETURNING *`
     return res.json(row)

@@ -8,6 +8,7 @@ import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBi
 import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
+import { ChartNumberPill } from '../components/ChartNumberPill'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { useAuth } from '../contexts/AuthContext'
@@ -658,8 +659,9 @@ export function PatientChart() {
             <ChevronLeft size={18} />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-display text-[18px] font-medium text-[#1A1A2E] flex items-center gap-2">
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
               {name}
+              <ChartNumberPill value={child?.chart_number} size="md" />
               {child?.nickname && <span className="text-[13px] font-normal text-[#1A1A2E]">"{child.nickname}"</span>}
               {child?.is_archived && (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#1A1A2E]">Archived</span>

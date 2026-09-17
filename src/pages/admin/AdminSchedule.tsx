@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { EncounterNoteModal } from '../../components/EncounterNoteModal'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { displayVisitType } from '../../lib/appointmentDisplay'
@@ -815,7 +816,7 @@ export function AdminSchedule() {
                               {(name || familyName || dob || sex || phone || email || address) && (
                                 <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                   <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
-                                  {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
+                                  {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><span className="inline-flex items-center gap-2 flex-wrap"><strong>{name}</strong><ChartNumberPill value={child?.chart_number} size="xs" /></span></div>}
                                   <F label="Family" value={familyName} />
                                   <F label="Date of birth" value={dob} />
                                   <F label="Sex" value={sex} />
@@ -1468,8 +1469,9 @@ export function AdminSchedule() {
             {selectedPatient ? (
               <div className="flex items-center justify-between px-3 py-2 border border-[#1D9E75] rounded-lg bg-[#F0FAF6]">
                 <div>
-                  <div className="text-[13px] font-medium text-[#1A1A2E]">
-                    {[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}
+                  <div className="text-[13px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
+                    <span>{[selectedPatient.first_name, selectedPatient.last_name].filter(Boolean).join(' ') || selectedPatient.display_label}</span>
+                    <ChartNumberPill value={selectedPatient.chart_number} size="xs" />
                   </div>
                   {selectedPatient.family_display_name && (
                     <div className="text-[11px] text-[#1A1A2E]">{selectedPatient.family_display_name}</div>
@@ -1495,8 +1497,9 @@ export function AdminSchedule() {
                     {patientResults.map(child => (
                       <button key={child.id} type="button" onMouseDown={() => selectPatient(child)}
                         className="w-full text-left px-3 py-2.5 hover:bg-[#FAFAF8] border-b border-[#F1EFE8] last:border-0">
-                        <div className="text-[13px] font-medium text-[#1A1A2E]">
-                          {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
+                        <div className="text-[13px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
+                          <span>{[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}</span>
+                          <ChartNumberPill value={child.chart_number} size="xs" />
                         </div>
                         <div className="text-[11px] text-[#1A1A2E]">
                           {child.family_display_name || child.family_email || ''}

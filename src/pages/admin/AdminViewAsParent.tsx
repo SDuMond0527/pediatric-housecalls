@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ArrowLeft, Eye, Clock, User, Stethoscope, Syringe, Home } from 'lucide-react'
 import { getFamilyPortalView } from '../../lib/api'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { PatientBillingList, type BillingStatement } from '../../components/PatientBillingList'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
 
@@ -159,6 +160,7 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
                   {String(child.display_label || child.first_name || '?').charAt(0).toUpperCase()}
                 </div>
                 <div className="text-[13px] font-medium text-[#1A1A2E]">{child.display_label || `${child.first_name} ${child.last_name}`}</div>
+                <ChartNumberPill value={(child as any).chart_number} size="xs" />
               </div>
             ))}
           </div>

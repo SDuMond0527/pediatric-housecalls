@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { searchChildren } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { ChartNumberPill } from './ChartNumberPill'
 
 // Global patient search — mounted in the header of every admin +
 // provider page. Debounced live-suggest with keyboard nav; clicking a
@@ -91,7 +92,10 @@ export function GlobalPatientSearch() {
                   onClick={() => goToChart(c.id)}
                   onMouseEnter={() => setHighlight(i)}
                   className={`w-full text-left px-3 py-2 border-b border-[#F1EFE8] last:border-0 ${i === highlight ? 'bg-[#F5F4FE]' : 'hover:bg-[#FAFAF8]'}`}>
-                  <div className="text-[13px] font-medium text-[#1A1A2E]">{name}</div>
+                  <div className="text-[13px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
+                    <span>{name}</span>
+                    <ChartNumberPill value={c.chart_number} size="xs" />
+                  </div>
                   {dob && <div className="text-[11px] text-[#555]">DOB {dob}</div>}
                 </button>
               )

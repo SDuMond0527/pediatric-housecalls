@@ -5,6 +5,7 @@ import { format, parseISO, differenceInYears } from 'date-fns'
 import { searchChildren, providerCreateChild, providerUpdateChild, providerUploadInsuranceCard } from '../lib/api'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
+import { ChartNumberPill } from '../components/ChartNumberPill'
 
 const EMPTY_FORM = {
   first_name: '', last_name: '', date_of_birth: '', gender: '', nickname: '',
@@ -353,8 +354,9 @@ export function Patients() {
                     <span className="text-[12px] font-semibold text-[#7F77DD]">{initials(child)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-display text-[15px] font-medium text-[#1A1A2E] flex items-center gap-2">
+                    <div className="font-display text-[15px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
                       {childName(child)}
+                      <ChartNumberPill value={child.chart_number} />
                       {child.is_archived && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F1EFE8] text-[#1A1A2E]">Archived</span>}
                     </div>
                     <div className="text-[12px] text-[#1A1A2E] mt-0.5 flex items-center gap-2 flex-wrap">

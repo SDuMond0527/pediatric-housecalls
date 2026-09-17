@@ -13,6 +13,7 @@ import { Input } from '../components/ui/Input'
 import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { DUAL_VISIT_TYPES, isIvFluidsPair } from '../lib/dualVisitTypes'
+import { ChartNumberPill } from '../components/ChartNumberPill'
 
 interface WaitlistEntry {
   id: string
@@ -125,7 +126,7 @@ function WaitlistPatientDetails({ entry, child }: { entry: WaitlistEntry; child:
       {patientHas && (
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
           <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Patient</div>
-          {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><strong>{name}</strong></div>}
+          {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><span className="inline-flex items-center gap-2 flex-wrap"><strong>{name}</strong><ChartNumberPill value={child?.chart_number} size="xs" /></span></div>}
           <F label="Family" value={familyName} />
           <F label="Date of birth" value={dob} />
           <F label="Sex" value={sex} />
@@ -925,7 +926,10 @@ export function Waitlist() {
                           return (
                             <button key={child.id} type="button" onMouseDown={() => selectChild(child)}
                               className="w-full text-left px-3 py-2.5 hover:bg-[#F5F4FE] border-b border-[#E8E8E4] last:border-0">
-                              <div className="text-[14px] font-medium text-[#1A1A2E]">{cn}</div>
+                              <div className="text-[14px] font-medium text-[#1A1A2E] flex items-center gap-2 flex-wrap">
+                                <span>{cn}</span>
+                                <ChartNumberPill value={child.chart_number} size="xs" />
+                              </div>
                               {dob && <div className="text-[12px] text-[#1A1A2E]">DOB: {dob}</div>}
                             </button>
                           )

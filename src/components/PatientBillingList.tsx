@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { CheckCircle2, Send, ExternalLink, Receipt, ChevronDown } from 'lucide-react'
+import { ChartNumberPill } from './ChartNumberPill'
 
 export type BillingStatement = {
   id: string
@@ -26,6 +27,7 @@ export type BillingStatement = {
   payer_name?: string | null
   patient_first_name?: string | null
   patient_last_name?: string | null
+  chart_number?: string | null
   patient_dob?: string | null
   service_date?: string | null
 }
@@ -126,6 +128,7 @@ function StatementCard({ stmt, showPatientName, showPayButton }: { stmt: Billing
               {showPatientName && (
                 <span className="font-display text-[14px] font-medium text-[#1A1A2E]">{patientName}</span>
               )}
+              <ChartNumberPill value={stmt.chart_number} size="xs" />
               <span className="font-display text-[14px] font-medium text-[#1A1A2E]">
                 {stmt.visit_type || 'Visit'}
               </span>

@@ -59,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.payer_name,
         COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
         COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
+        ch.chart_number                                                       AS chart_number,
         COALESCE(ps.patient_dob::text,  c.patient_dob::text,  ch.date_of_birth::text) AS patient_dob,
         COALESCE(ps.date_of_service::text, c.service_date::text)             AS service_date
       FROM patient_statements ps

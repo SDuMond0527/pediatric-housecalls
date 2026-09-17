@@ -4,6 +4,7 @@ import { Receipt, CheckCircle2, Clock, Send, ExternalLink, RefreshCw, AlertOctag
 import { getAllPatientStatements } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 
 type StatusFilter = 'all' | 'draft' | 'sent' | 'paid'
 
@@ -148,6 +149,7 @@ export function AdminStatements() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-[#1A1A2E]">{stmt.patient_name || '—'}</span>
+                        <ChartNumberPill value={stmt.chart_number} />
                         {(() => {
                           const outcome = detectErraOutcome(stmt.denial_codes)
                           if (outcome.status === 'clean') return null
@@ -208,6 +210,7 @@ export function AdminStatements() {
                               cpt_codes: stmt.cpt_codes ?? [],
                               denial_codes: stmt.denial_codes,
                               remark_codes: stmt.remark_codes,
+                              chart_number: stmt.chart_number,
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">
                             Edit

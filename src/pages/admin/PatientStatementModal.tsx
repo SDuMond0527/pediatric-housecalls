@@ -13,6 +13,7 @@ import {
   type WriteOffReason,
 } from '../../lib/api'
 import { CARC_CODES, RARC_CODES, detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 
 const WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
   bad_debt:       'Bad debt (family will not pay)',
@@ -347,8 +348,10 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
         <div className="flex items-start justify-between px-6 py-4 border-b border-[#E8E8E4] flex-shrink-0">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1A1A2E]">Patient Statement</h2>
-            <p className="text-[12px] text-[#1A1A2E] mt-0.5">
-              {patientName} &bull; DOS: {fmtDate(claim.service_date)}
+            <p className="text-[12px] text-[#1A1A2E] mt-0.5 flex items-center gap-2">
+              <span>{patientName}</span>
+              <ChartNumberPill value={claim.chart_number} />
+              <span>&bull; DOS: {fmtDate(claim.service_date)}</span>
             </p>
           </div>
           <div className="flex items-center gap-3">

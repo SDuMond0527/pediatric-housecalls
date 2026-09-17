@@ -154,6 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? await sql`
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
+              c.chart_number AS chart_number,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
@@ -167,6 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : await sql`
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
+              c.chart_number AS chart_number,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at

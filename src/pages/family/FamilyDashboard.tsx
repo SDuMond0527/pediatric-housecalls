@@ -6,6 +6,7 @@ import { familyGetWaitlistEntries, familyGetSlotOffers, familyUpdateSlotOffer, f
 import { PatientBillingList, type BillingStatement } from '../../components/PatientBillingList'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { BookingRequest, SlotOffer } from '../../types/family'
@@ -226,6 +227,7 @@ export function FamilyDashboard() {
                   {child.display_label.charAt(0).toUpperCase()}
                 </div>
                 <div className="text-[13px] font-medium text-[#1A1A2E]">{child.display_label}</div>
+                <ChartNumberPill value={(child as any).chart_number} size="xs" />
               </div>
             ))}
           </div>
