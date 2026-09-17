@@ -806,11 +806,10 @@ export function AdminClaims() {
                 // 99349 plus a convenience fee, for example — still go
                 // through insurance first, and the patient statement
                 // gets generated from the ERA later.
-                // Sara asked 2026-09-17 that biller can generate a
-                // statement on every claim regardless of payer type or
-                // CPT categories. Previously this gated on self-pay /
-                // all-non-covered CPTs.
-                const showStatementButton = true
+                const cpts: any[] = Array.isArray(c.cpt_codes) ? c.cpt_codes : []
+                const allCptsNonCovered = cpts.length > 0
+                  && cpts.every((code: any) => code?.category === 'Non-Covered Services')
+                const showStatementButton = isSelfPay || allCptsNonCovered
                 const stediError = (() => {
                   if (!c.submission_error) return null
                   try {
