@@ -738,8 +738,6 @@ export const downloadClaim1500Pdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/1500-pdf`, `1500-claim-${id.slice(0, 8)}.pdf`)
 export const downloadClaimEraPdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/era-pdf`, `ERA-claim-${id.slice(0, 8)}.pdf`)
-export const downloadClaim1500Pdf = (id: string) => openClaimPdf(`/api/claims/${id}/1500-pdf`)
-export const downloadClaimEraPdf  = (id: string) => openClaimPdf(`/api/claims/${id}/era-pdf`)
 
 // Approval workflow — owner (super_admin) reviews pending requests.
 export const getPendingWriteOffs = () =>
