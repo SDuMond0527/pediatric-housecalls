@@ -26,13 +26,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { status } = req.query as { status?: string }
 
-    // Idempotent bootstrap — these columns are also created by
-    // /api/claims/[id]/mark-denial-handled, but this endpoint's SELECT
-    // references them so preview / fresh envs would 500 before the
-    // mark-handled endpoint was ever hit. Sara 2026-09-17.
+    // Idempotent bootstrap — this endpoint's SELECT references six
+    // claims columns that other endpoints (ERA webhook, ERA cron,
+    // mark-denial-handled) create on first use. If none of those have
+    // fired yet on this environment, the SELECT 500s with "column X
+    // does not exist". Bootstrap every referenced column here so this
+    // endpoint stands on its own. Sara 2026-09-17.
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handled_at timestamptz` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handled_by_name text` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handling_notes text` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb` } catch {}
 
     const rows = await sql`
       SELECT
