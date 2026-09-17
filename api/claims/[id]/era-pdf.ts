@@ -71,29 +71,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const stediKey = process.env.STEDI_API_KEY
     if (!stediKey) return res.status(500).json({ error: 'STEDI_API_KEY not configured' })
 
+    // Default response is base64 (not raw PDF) unless we request
+    // application/pdf — but we want base64 anyway so the client can
+    // decode locally + sidestep any Vercel binary-response mangling.
     const stediRes = await fetch(
       `https://healthcare.us.stedi.com/2024-04-01/electronic-remittance-advice/${encodeURIComponent(claim.stedi_era_transaction_id)}/pdf`,
-      { headers: { Authorization: `Key ${stediKey}`, Accept: 'application/pdf' } }
+      { headers: { Authorization: `Key ${stediKey}` } }
     )
     if (!stediRes.ok) {
       const bodyText = await stediRes.text().catch(() => '')
-      return res.status(502).json({
-        error: `Stedi ERA PDF fetch failed (HTTP ${stediRes.status}). ${bodyText.slice(0, 400)}`,
-      })
+      return res.status(502).json({ error: `Stedi ERA PDF fetch failed (HTTP ${stediRes.status}). ${bodyText.slice(0, 400)}` })
     }
+    // Response is a base64 string (possibly wrapped in JSON quotes).
+    let b64 = (await stediRes.text()).trim()
+    if (b64.startsWith('"') && b64.endsWith('"')) b64 = b64.slice(1, -1)
 
-    // With Accept: application/pdf, Stedi streams raw PDF bytes.
-    const buf = Buffer.from(await stediRes.arrayBuffer())
+    const magic = Buffer.from(b64.slice(0, 12), 'base64').slice(0, 5).toString('utf8')
+    if (magic !== '%PDF-') {
+      return res.status(502).json({ error: `Stedi's base64 didn't decode to a PDF (leading bytes: "${magic}"). First 400 chars of response: ${b64.slice(0, 400)}` })
+    }
 
     const first = String(claim.patient_first_name ?? '').replace(/[^A-Za-z0-9]/g, '')
     const last  = String(claim.patient_last_name  ?? '').replace(/[^A-Za-z0-9]/g, '')
     const dos   = String(claim.service_date ?? '').slice(0, 10) || 'undated'
     const filename = `ERA-${first || 'patient'}-${last || 'unknown'}-${dos}.pdf`
 
-    res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
-    res.setHeader('Cache-Control', 'private, max-age=300')
-    res.status(200).send(buf)
+    return res.status(200).json({ pdf_base64: b64, filename, size: Math.round(b64.length * 0.75) })
   } catch (e: any) {
     console.error('claims/[id]/era-pdf error:', e)
     return res.status(500).json({ error: e?.message ?? 'Internal server error' })

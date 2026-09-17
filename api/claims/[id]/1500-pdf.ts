@@ -72,38 +72,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const stediUrl = `https://healthcare.us.stedi.com/2024-04-01/export/pdf?businessId=${encodeURIComponent(correlationId)}`
     const stediRes = await fetch(stediUrl, { headers: { Authorization: `Key ${stediKey}` } })
-
-    const stediContentType = stediRes.headers.get('content-type') ?? ''
     const rawBody = await stediRes.text()
 
-    // ?debug=1 → return everything we know as JSON so we can see exactly
-    // what Stedi is giving us without downloading a maybe-broken PDF.
-    const debug = req.query.debug === '1'
-
     if (!stediRes.ok) {
-      if (debug) return res.status(200).json({ ok: false, stedi_status: stediRes.status, content_type: stediContentType, body_preview: rawBody.slice(0, 1000), stedi_url: stediUrl })
       return res.status(502).json({ error: `Stedi PDF fetch failed (HTTP ${stediRes.status}). ${rawBody.slice(0, 400)}` })
     }
 
-    // Stedi's Business Identifier variant returns JSON: { pdfs: [{ data: base64 }] }
+    // Stedi Business Identifier variant returns JSON: { pdfs: [{ data: base64 }] }
     let body: any = null
     try { body = JSON.parse(rawBody) } catch {}
     const b64 = body?.pdfs?.[0]?.data
     if (!b64) {
-      if (debug) return res.status(200).json({ ok: false, reason: 'no_pdf_in_response', content_type: stediContentType, top_keys: body ? Object.keys(body) : null, body_preview: rawBody.slice(0, 1000), stedi_errors: body?.errors ?? null })
-      return res.status(502).json({ error: 'Stedi returned no PDF for this claim. It may still be processing.', stedi_errors: body?.errors ?? null })
+      return res.status(502).json({ error: 'Stedi returned no PDF for this claim.', stedi_errors: body?.errors ?? null, stedi_body_preview: rawBody.slice(0, 400) })
     }
 
-    const pdf = Buffer.from(b64, 'base64')
-    const magic = pdf.slice(0, 5).toString('utf8')  // Should be "%PDF-"
-
-    if (debug) return res.status(200).json({ ok: true, base64_length: b64.length, decoded_bytes: pdf.length, magic, first_50_chars_of_base64: b64.slice(0, 50), first_10_bytes_hex: pdf.slice(0, 10).toString('hex'), correlation_id: correlationId })
-
-    // Guard — if what we decoded doesn't look like a PDF, surface that
-    // instead of silently sending garbage. This matches the current
-    // "Failed to load PDF document" symptom.
+    // Validate the decoded bytes on the server so we never hand the
+    // client a fake "PDF" that Chrome then chokes on.
+    const magic = Buffer.from(b64.slice(0, 12), 'base64').slice(0, 5).toString('utf8')
     if (magic !== '%PDF-') {
-      return res.status(502).json({ error: `Decoded content is not a PDF (magic bytes = "${magic}"). Try /api/claims/${claim.id}/1500-pdf?debug=1 to inspect the raw Stedi response.` })
+      return res.status(502).json({ error: `Stedi's base64 didn't decode to a PDF (leading bytes: "${magic}"). Full stedi_body: ${rawBody.slice(0, 400)}` })
     }
 
     const first = String(claim.patient_first_name ?? '').replace(/[^A-Za-z0-9]/g, '')
@@ -111,11 +98,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dos   = String(claim.service_date ?? '').slice(0, 10) || 'undated'
     const filename = `1500-${first || 'patient'}-${last || 'unknown'}-${dos}.pdf`
 
-    res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
-    res.setHeader('Content-Length', String(pdf.length))
-    res.setHeader('Cache-Control', 'private, max-age=300')
-    res.status(200).end(pdf)
+    // Return the base64 as JSON, not binary. The browser decodes it
+    // locally so nothing in the Vercel serverless response pipeline
+    // can mangle Buffer bytes (which is the current symptom).
+    return res.status(200).json({ pdf_base64: b64, filename, size: Math.round(b64.length * 0.75) })
   } catch (e: any) {
     console.error('claims/[id]/1500-pdf error:', e)
     return res.status(500).json({ error: e?.message ?? 'Internal server error' })

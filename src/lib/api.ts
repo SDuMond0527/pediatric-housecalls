@@ -699,27 +699,33 @@ export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?:
 export const markClaimDenialHandled = (id: string, notes: string) =>
   apiFetch<any>(`/api/claims/${id}/mark-denial-handled`, { method: 'POST', body: JSON.stringify({ notes }) })
 
-// Fetches a Stedi-generated PDF and offers it to the user two ways:
-//   1. Attempts to open it inline in a new tab (using a pre-opened tab
-//      + explicit application/pdf blob to defeat popup blockers +
-//      Vercel MIME stripping).
-//   2. As a hard fallback, triggers a direct file download via a
-//      temporary anchor — that path is universally reliable because
-//      the browser treats it as a "save file" gesture, not a "navigate"
-//      one. If the inline path fails silently (blank white page),
-//      Andrea still gets the file.
-async function openClaimPdf(url: string, filename: string) {
+// Fetches a Stedi-generated PDF. Server now returns
+//   { pdf_base64, filename, size }
+// rather than streaming binary — decoded in the browser so nothing in
+// the Vercel serverless response pipeline can corrupt Buffer bytes.
+// After decode: trigger a real file download (always works) AND open
+// the blob in a new tab (nice inline preview if the popup blocker
+// allows it).
+async function openClaimPdf(url: string, fallbackFilename: string) {
   const headers = await authHeaders()
   const res = await fetch(url, { headers })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
   }
-  const bytes = await res.arrayBuffer()
+  const json: any = await res.json()
+  const b64 = String(json?.pdf_base64 ?? '')
+  const filename = String(json?.filename ?? fallbackFilename)
+  if (!b64) throw new Error('Server returned no PDF base64.')
+
+  // atob → binary string → Uint8Array
+  const bin = atob(b64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   const blob = new Blob([bytes], { type: 'application/pdf' })
   const objectUrl = URL.createObjectURL(blob)
 
-  // Direct download — always works, always gives the biller the file.
+  // Real download — universally reliable.
   const a = document.createElement('a')
   a.href = objectUrl
   a.download = filename
@@ -728,8 +734,7 @@ async function openClaimPdf(url: string, filename: string) {
   a.click()
   document.body.removeChild(a)
 
-  // Also try opening inline in a new tab as a convenience. If popup
-  // blockers eat this, no harm done — the download already fired.
+  // Inline preview as a bonus.
   window.open(objectUrl, '_blank')
 
   setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000)
