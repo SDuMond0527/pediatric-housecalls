@@ -875,6 +875,23 @@ export function AdminClaims() {
                             <span className="font-semibold">Stedi rejection: </span>{stediError}
                           </div>
                         )}
+                        {/* Aetna reminder — Aetna denies routine test CPT codes
+                            for this pediatric practice, so the biller MUST swap
+                            them to self-pay codes before submission. Sara
+                            2026-09-17. Matches on payer_name or Stedi id. */}
+                        {(() => {
+                          const payer = String(c.payer_name ?? '').toLowerCase()
+                          const isAetna = payer.includes('aetna') || String(c.payer_id ?? '') === '60054'
+                          if (!isAetna) return null
+                          return (
+                            <div className="rounded-xl border-2 border-[#B45309] bg-[#FFF4D6] px-4 py-3 flex items-start gap-3">
+                              <AlertOctagon size={18} className="text-[#B45309] flex-shrink-0 mt-0.5" />
+                              <div className="text-[13px] font-semibold text-[#78350F] leading-snug">
+                                Reminder: Aetna patient! Please change any test CPT codes to self-pay CPT codes before submitting!
+                              </div>
+                            </div>
+                          )
+                        })()}
                         {/* Claim detail grid */}
                         {editPatient[c.id] ? (
                           <div className="space-y-3">
