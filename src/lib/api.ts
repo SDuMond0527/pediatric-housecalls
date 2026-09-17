@@ -710,36 +710,46 @@ async function openClaimPdf(url: string, fallbackFilename: string) {
   const headers = await authHeaders()
   const res = await fetch(url, { headers })
   const text = (await res.text()).trim()
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
 
-  // The server now returns the base64 PDF as plain text on 200, or a
-  // plain-text error string starting with "ERR: " on 4xx/5xx. Anything
-  // else (HTML from SPA fallback, misrouted request, etc.) surfaces
-  // as an actionable error message instead of silently downloading
-  // garbage.
-  if (!res.ok || text.startsWith('ERR:') || text.startsWith('<')) {
+  // Plain-text "ERR: ..." messages on failure — surface as-is.
+  if (!res.ok) {
     throw new Error(text.slice(0, 400) || `HTTP ${res.status}`)
   }
-
-  // Decode base64 → PDF bytes → Blob.
-  const bin = atob(text)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  const blob = new Blob([bytes], { type: 'application/pdf' })
-  const objectUrl = URL.createObjectURL(blob)
+  if (text.startsWith('ERR:')) {
+    throw new Error(text.slice(0, 400))
+  }
 
   const filename = res.headers.get('x-pdf-filename') || fallbackFilename
 
-  // Real download — universally reliable path.
-  const a = document.createElement('a')
-  a.href = objectUrl
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  // Server returns EITHER a PDF (as plain-text base64) OR an HTML view
+  // (rendered on our side when the PDF endpoint isn't available). Detect
+  // by Content-Type and handle both.
+  const isHtml = contentType.includes('text/html') || text.startsWith('<')
+  const blob = isHtml
+    ? new Blob([text], { type: 'text/html;charset=utf-8' })
+    : (() => {
+        const bin = atob(text)
+        const bytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        return new Blob([bytes], { type: 'application/pdf' })
+      })()
+  const objectUrl = URL.createObjectURL(blob)
 
-  // Inline preview as a bonus.
-  window.open(objectUrl, '_blank')
+  // HTML → open in tab (biller prints to PDF from there).
+  // PDF → download the file AND try to open a preview tab.
+  if (isHtml) {
+    window.open(objectUrl, '_blank')
+  } else {
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = filename
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.open(objectUrl, '_blank')
+  }
 
   setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000)
 }
