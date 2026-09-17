@@ -680,26 +680,31 @@ export function AdminClaims() {
         <div className="mb-4 border rounded-xl px-4 py-3 bg-[#F0FDF4] border-[#A9DFBF] text-[#0F5F44]">
           <div className="flex items-start justify-between gap-3">
             <div className="text-[13px] font-medium">
-              Refetch known ERAs — {refetchResult.totals.stedi_fetched} fetched from Stedi, {refetchResult.totals.claims_saved} claim{refetchResult.totals.claims_saved === 1 ? '' : 's'} saved with raw 835.
+              Refetch via /eras — {refetchResult.remittances_fetched}/{refetchResult.remittances_seen} remittances, {refetchResult.claims_matched} claim{refetchResult.claims_matched === 1 ? '' : 's'} matched + CAS applied.
             </div>
             <button onClick={() => setRefetchResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
           </div>
           <div className="text-[11px] mt-2 grid grid-cols-3 gap-x-4 gap-y-1 opacity-90">
-            <div><span className="opacity-70">Transactions in DB:</span> {refetchResult.transactions_found_in_db}</div>
-            <div><span className="opacity-70">Stedi fetched:</span> {refetchResult.totals.stedi_fetched}</div>
-            <div><span className="opacity-70">Errors:</span> {refetchResult.totals.errors}</div>
+            <div><span className="opacity-70">List HTTP:</span> {refetchResult.list_http}</div>
+            <div><span className="opacity-70">Remittances seen:</span> {refetchResult.remittances_seen}</div>
+            <div><span className="opacity-70">Claim payments seen:</span> {refetchResult.claim_payments_seen}</div>
           </div>
-          {refetchResult.per_transaction.length > 0 && (
+          {refetchResult.per_remittance.length > 0 && (
             <div className="mt-2 space-y-1 text-[11px] font-mono opacity-90">
-              {refetchResult.per_transaction.map(t => (
-                <div key={t.transaction_id} className="border-t border-[#A9DFBF] pt-1">
-                  <div><span className="opacity-70">tx=</span>{t.transaction_id.slice(0, 12)}…  <span className="opacity-70">http=</span>{t.stedi_status ?? '—'}  <span className="opacity-70">payments_seen=</span>{t.claim_payments_seen}  <span className="opacity-70">claims_saved=</span>{t.claims_saved}</div>
-                  {t.errors.length > 0 && (
-                    <div className="text-[#991B1B]">errors: {t.errors.join(' · ')}</div>
-                  )}
+              {refetchResult.per_remittance.map(r => (
+                <div key={r.remittance_id} className="border-t border-[#A9DFBF] pt-1">
+                  <div><span className="opacity-70">rem=</span>{r.remittance_id.slice(0, 20)}…  <span className="opacity-70">http=</span>{r.detail_http}  <span className="opacity-70">payments=</span>{r.claim_payments_seen}  <span className="opacity-70">matched=</span>{r.matched.length}</div>
+                  {r.matched.map((m, i) => (
+                    <div key={i} className="ml-3 text-[#0F5F44]">
+                      claim={m.claim_id.slice(0, 8)}… CAS: ded=${m.cas.patient_deductible.toFixed(2)} coins=${m.cas.patient_coinsurance.toFixed(2)} copay=${m.cas.patient_copay.toFixed(2)} nonCov=${m.cas.patient_non_covered.toFixed(2)} contract=${m.cas.contractual_adjustment.toFixed(2)} · denial_codes={m.denial_codes_count}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
+          )}
+          {refetchResult.errors.length > 0 && (
+            <div className="text-[11px] mt-2 text-[#991B1B]">Errors: {refetchResult.errors.slice(0, 3).join(' · ')}</div>
           )}
         </div>
       )}
