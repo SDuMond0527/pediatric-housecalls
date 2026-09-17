@@ -699,6 +699,24 @@ export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?:
 export const markClaimDenialHandled = (id: string, notes: string) =>
   apiFetch<any>(`/api/claims/${id}/mark-denial-handled`, { method: 'POST', body: JSON.stringify({ notes }) })
 
+// Fetches a Stedi-generated PDF (CMS-1500 or 835 ERA) and opens it inline
+// in a new tab. Same pattern as downloadEncounterNoteHtml — the browser's
+// built-in PDF viewer handles both viewing and downloading from there.
+async function openClaimPdf(url: string) {
+  const headers = await authHeaders()
+  const res = await fetch(url, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+  }
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  window.open(objectUrl, '_blank', 'noopener,noreferrer')
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+}
+export const downloadClaim1500Pdf = (id: string) => openClaimPdf(`/api/claims/${id}/1500-pdf`)
+export const downloadClaimEraPdf  = (id: string) => openClaimPdf(`/api/claims/${id}/era-pdf`)
+
 // Approval workflow — owner (super_admin) reviews pending requests.
 export const getPendingWriteOffs = () =>
   apiFetch<{ statements: any[]; claims: any[]; total: number }>('/api/admin/pending-write-offs')

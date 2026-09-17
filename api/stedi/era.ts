@@ -365,6 +365,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (pc.remarks && pc.remarks.length > 0) {
               await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
             }
+            // Stedi remittance transaction ID → drives /api/claims/[id]/era-pdf.
+            await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS stedi_era_transaction_id text`
+            await sql`UPDATE claims SET stedi_era_transaction_id = ${String(remId)} WHERE id = ${claimId}::uuid`
           } catch (denialErr: any) {
             console.error('[stedi/era] denial-code capture failed (non-fatal):', denialErr?.message)
           }

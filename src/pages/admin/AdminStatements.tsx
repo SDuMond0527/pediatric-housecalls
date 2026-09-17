@@ -223,6 +223,8 @@ export function AdminStatements() {
                               denial_handled_by_name: stmt.denial_handled_by_name,
                               denial_handling_notes: stmt.denial_handling_notes,
                               chart_number: stmt.chart_number,
+                              era_received_at: stmt.era_received_at,
+                              has_1500_pdf: stmt.has_1500_pdf,
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">
                             Edit

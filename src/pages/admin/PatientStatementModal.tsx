@@ -11,6 +11,8 @@ import {
   markPatientStatementPaid,
   writeOffPatientStatement,
   markClaimDenialHandled,
+  downloadClaim1500Pdf,
+  downloadClaimEraPdf,
   type WriteOffReason,
 } from '../../lib/api'
 import { CARC_CODES, RARC_CODES, detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
@@ -653,22 +655,45 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
 
               {/* Section 2: Encounter Details */}
               <div>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Encounter Details</div>
-                  {claim.stedi_claim_id && (
-                    <button
-                      onClick={handlePullEra}
-                      disabled={pullingEra}
-                      className="inline-flex items-center gap-1.5 text-[11px] text-[#7F77DD] hover:underline disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                    >
-                      <Download size={11} />
-                      {pullingEra
-                        ? 'Pulling…'
-                        : claim.era_received_at
-                          ? 'Refresh ERA'
-                          : 'Pull from Stedi ERA'}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Stedi CMS-1500 PDF — visible once we know the claim
+                        made it to Stedi. Accept either the raw response
+                        (AdminClaims path) or the has_1500_pdf boolean
+                        (AdminStatements path — full stedi_response would
+                        bloat that list endpoint). */}
+                    {(claim.has_1500_pdf || claim.stedi_response?.claimReference?.correlationId) && (
+                      <button
+                        onClick={() => downloadClaim1500Pdf(claim.id).catch(e => setError(e?.message ?? 'Failed to load 1500 PDF'))}
+                        className="inline-flex items-center gap-1.5 text-[11px] text-[#7F77DD] hover:underline font-medium"
+                        title="Opens the CMS-1500 form Stedi generated for this claim.">
+                        <Download size={11} /> View 1500 form
+                      </button>
+                    )}
+                    {claim.era_received_at && (
+                      <button
+                        onClick={() => downloadClaimEraPdf(claim.id).catch(e => setError(e?.message ?? 'Failed to load ERA PDF'))}
+                        className="inline-flex items-center gap-1.5 text-[11px] text-[#7F77DD] hover:underline font-medium"
+                        title="Opens the 835 ERA remittance PDF from Stedi.">
+                        <Download size={11} /> View ERA PDF
+                      </button>
+                    )}
+                    {claim.stedi_claim_id && (
+                      <button
+                        onClick={handlePullEra}
+                        disabled={pullingEra}
+                        className="inline-flex items-center gap-1.5 text-[11px] text-[#7F77DD] hover:underline disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        <Download size={11} />
+                        {pullingEra
+                          ? 'Pulling…'
+                          : claim.era_received_at
+                            ? 'Refresh ERA'
+                            : 'Pull from Stedi ERA'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="bg-[#FAFAF8] rounded-xl border border-[#E8E8E4] p-4 space-y-2">
                   <div className="grid grid-cols-3 gap-4 text-[13px]">

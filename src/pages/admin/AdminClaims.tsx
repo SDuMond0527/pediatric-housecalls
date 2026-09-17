@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -1621,6 +1621,26 @@ export function AdminClaims() {
                               title="Opens the encounter note in a new tab. Use browser print → Save as PDF for payer portal upload."
                             >
                               <Download size={11} /> Download encounter note
+                            </button>
+                          )}
+                          {/* Stedi auto-generates a rendered CMS-1500 PDF for
+                              every submitted professional claim. Hidden
+                              until the claim actually made it to Stedi
+                              (correlationId returned in the sync response). */}
+                          {c.stedi_response?.claimReference?.correlationId && (
+                            <button
+                              onClick={() => downloadClaim1500Pdf(c.id).catch(e => alert(e?.message ?? 'Failed to load 1500 PDF'))}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium"
+                              title="Opens the CMS-1500 form Stedi generated when we submitted this claim. Use browser download from the PDF viewer.">
+                              <Download size={11} /> View 1500 form
+                            </button>
+                          )}
+                          {c.era_received_at && (
+                            <button
+                              onClick={() => downloadClaimEraPdf(c.id).catch(e => alert(e?.message ?? 'Failed to load ERA PDF'))}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium"
+                              title="Opens the 835 ERA remittance PDF from Stedi.">
+                              <Download size={11} /> View ERA PDF
                             </button>
                           )}
                           {(c.statement_status === 'sent' || c.statement_status === 'paid') && (

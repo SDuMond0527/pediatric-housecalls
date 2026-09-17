@@ -666,6 +666,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               if (pc.remarks && pc.remarks.length > 0) {
                 await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
               }
+              // Save Stedi's remittance transaction ID so /api/claims/[id]/era-pdf
+              // can call /electronic-remittance-advice/{id}/pdf without a second lookup.
+              try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS stedi_era_transaction_id text` } catch {}
+              await sql`UPDATE claims SET stedi_era_transaction_id = ${String(remId)} WHERE id = ${claimId}::uuid`
               if (pc.payerClaimControlNumber) {
                 await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
               }

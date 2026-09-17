@@ -66,6 +66,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         c.denial_handled_at,
         c.denial_handled_by_name,
         c.denial_handling_notes,
+        c.era_received_at,
+        (c.stedi_response IS NOT NULL AND c.stedi_response->'claimReference'->>'correlationId' IS NOT NULL) AS has_1500_pdf,
         ch.chart_number,
         COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
         COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
