@@ -150,12 +150,14 @@ type ParsedX12Claim = {
   totalPaid: number
   patientResponsibility: number
   cas: X12CasEntry[]
+  remarks: string[]
 }
 function parseX12_835(text: string): ParsedX12Claim[] {
   const claims: ParsedX12Claim[] = []
   if (!text || typeof text !== 'string') return claims
   const segments = text.split('~').map(s => s.trim()).filter(Boolean)
   let current: ParsedX12Claim | null = null
+  const looksLikeRarc = (s: string) => /^(?:M|MA|N)[A-Z]?\d+$/i.test(s)
   for (const seg of segments) {
     const fields = seg.split('*')
     const tag = fields[0]
@@ -168,6 +170,7 @@ function parseX12_835(text: string): ParsedX12Claim[] {
         patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
         payerClaimControlNumber: String(fields[7] ?? '').trim(),
         cas: [],
+        remarks: [],
       }
     } else if (tag === 'CAS' && current) {
       const group = String(fields[1] ?? '').trim()
@@ -176,11 +179,24 @@ function parseX12_835(text: string): ParsedX12Claim[] {
         const amount = parseFloat(String(fields[i + 1] ?? '0')) || 0
         if (reason && amount !== 0) current.cas.push({ group, reason, amount })
       }
+    } else if (tag === 'LQ' && current) {
+      const codeType = String(fields[1] ?? '').trim()
+      const code = String(fields[2] ?? '').trim() || codeType
+      if (code && looksLikeRarc(code) && !current.remarks.includes(code)) current.remarks.push(code)
+    } else if ((tag === 'MOA' || tag === 'MIA') && current) {
+      for (let i = 3; i <= 7; i++) {
+        const code = String(fields[i] ?? '').trim()
+        if (code && looksLikeRarc(code) && !current.remarks.includes(code)) current.remarks.push(code)
+      }
     }
   }
   if (current) claims.push(current)
   return claims
 }
+// Only these CO codes are truly contractual (fee-schedule write-downs).
+// Everything else in CO group is a denial or documentation request and
+// must be surfaced via denial_codes rather than absorbed into contractual.
+const CONTRACTUAL_CO_CODES = new Set(['45', '97', '24', '131', '137'])
 function bucketCasFromX12(cas: X12CasEntry[]) {
   const totals = {
     patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
@@ -195,7 +211,7 @@ function bucketCasFromX12(cas: X12CasEntry[]) {
         case '96': totals.patient_non_covered += c.amount; break
         default:   totals.patient_non_covered += c.amount; break
       }
-    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+    } else if (c.group === 'CO' && CONTRACTUAL_CO_CODES.has(c.reason)) {
       totals.contractual_adjustment += c.amount
     }
   }
@@ -216,13 +232,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const claimId = req.query.claim_id as string
     if (!claimId) return res.status(400).json({ error: 'claim_id required' })
 
+    // Bootstrap columns so the SELECT below never blows up on a fresh env
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb` } catch {}
+
     const [claim] = await sql`
       SELECT id, stedi_claim_id, payer_id,
              era_received_at,
              amount_billed_era, insurance_payment_era,
              contractual_adjustment_era, patient_deductible_era,
              patient_coinsurance_era, patient_copay_era, patient_non_covered_era,
-             era_raw
+             era_raw, denial_codes, remark_codes
       FROM claims
       WHERE id = ${claimId}::uuid AND practice_id = ${provider.practice_id}::uuid
       LIMIT 1
@@ -242,6 +262,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         patient_coinsurance:    claim.patient_coinsurance_era,
         patient_copay:          claim.patient_copay_era,
         patient_non_covered:    claim.patient_non_covered_era,
+        denial_codes:           claim.denial_codes,
+        remark_codes:           claim.remark_codes,
       })
     }
 
@@ -305,6 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                                               totalPaid: pc.totalPaid,
                                               patientResponsibility: pc.patientResponsibility,
                                               cas: pc.cas,
+                                              remarks: pc.remarks,
                                             })}::jsonb,
               amount_billed_era          = ${pc.totalCharge},
               insurance_payment_era      = ${pc.totalPaid},
@@ -317,7 +340,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             WHERE id = ${claimId}::uuid
           `
 
-          // Shape response like the previous JSON parser did
+          // Shape response like the previous JSON parser did. Include the
+          // denial + remark codes so the modal can flip the "Rejected by
+          // Payer" banner immediately without a page refresh.
           const parsed = {
             amount_billed:          pc.totalCharge,
             insurance_payment:      pc.totalPaid,
@@ -326,6 +351,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             patient_coinsurance:    cas.patient_coinsurance,
             patient_copay:          cas.patient_copay,
             patient_non_covered:    cas.patient_non_covered,
+            denial_codes:           pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount })),
+            remark_codes:           pc.remarks,
           }
 
           try {
@@ -333,6 +360,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const codes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
             if (codes.length > 0) {
               await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claimId}::uuid`
+            }
+            await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb`
+            if (pc.remarks && pc.remarks.length > 0) {
+              await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
             }
           } catch (denialErr: any) {
             console.error('[stedi/era] denial-code capture failed (non-fatal):', denialErr?.message)

@@ -62,12 +62,14 @@ type ParsedX12Claim = {
   totalPaid: number
   patientResponsibility: number
   cas: Array<{ group: string; reason: string; amount: number }>
+  remarks: string[]    // RARC codes from LQ / MOA / MIA segments (M127, N393, MA63, etc.)
 }
 function parseX12_835(text: string): ParsedX12Claim[] {
   const claims: ParsedX12Claim[] = []
   if (!text || typeof text !== 'string') return claims
   const segments = text.split('~').map(s => s.trim()).filter(Boolean)
   let current: ParsedX12Claim | null = null
+  const looksLikeRarc = (s: string) => /^(?:M|MA|N)[A-Z]?\d+$/i.test(s)
   for (const seg of segments) {
     const fields = seg.split('*')
     const tag = fields[0]
@@ -80,6 +82,7 @@ function parseX12_835(text: string): ParsedX12Claim[] {
         patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
         payerClaimControlNumber: String(fields[7] ?? '').trim(),
         cas: [],
+        remarks: [],
       }
     } else if (tag === 'CAS' && current) {
       const group = String(fields[1] ?? '').trim()
@@ -90,11 +93,36 @@ function parseX12_835(text: string): ParsedX12Claim[] {
           current.cas.push({ group, reason, amount })
         }
       }
+    } else if (tag === 'LQ' && current) {
+      // LQ*HE*<code> — remark code (RARC). Sometimes qualifier is omitted
+      // and the code is in fields[1]. Accept both shapes.
+      const codeType = String(fields[1] ?? '').trim()
+      const code = String(fields[2] ?? '').trim() || codeType
+      if (code && looksLikeRarc(code) && !current.remarks.includes(code)) {
+        current.remarks.push(code)
+      }
+    } else if ((tag === 'MOA' || tag === 'MIA') && current) {
+      // MOA and MIA can carry up to 5 remark codes in fields 3-7.
+      for (let i = 3; i <= 7; i++) {
+        const code = String(fields[i] ?? '').trim()
+        if (code && looksLikeRarc(code) && !current.remarks.includes(code)) {
+          current.remarks.push(code)
+        }
+      }
     }
   }
   if (current) claims.push(current)
   return claims
 }
+
+// CARC group=CO codes that are TRULY contractual (a real fee-schedule
+// write-down the practice agreed to). Every other CO code is a denial
+// / rejection / documentation request — must NOT be silently absorbed
+// into `contractual_adjustment`, which used to hide Aetna's CO-252
+// "records required" $495 on Carson Yates's ERA. Sara caught it
+// 2026-09-16.
+const CONTRACTUAL_CO_CODES = new Set(['45', '97', '24', '131', '137'])
+
 function bucketCasFromX12(cas: Array<{ group: string; reason: string; amount: number }>): CasBreakdown {
   const totals: CasBreakdown = {
     patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
@@ -109,9 +137,13 @@ function bucketCasFromX12(cas: Array<{ group: string; reason: string; amount: nu
         case '96': totals.patient_non_covered += c.amount; break
         default:   totals.patient_non_covered += c.amount; break
       }
-    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+    } else if (c.group === 'CO' && CONTRACTUAL_CO_CODES.has(c.reason)) {
       totals.contractual_adjustment += c.amount
     }
+    // All other CO codes (denials + documentation requests) and OA/PI
+    // are left OUT of the bucketed totals — surfaced separately via
+    // claims.denial_codes + claims.remark_codes so the biller sees the
+    // rejection in the UI banner instead of it being buried.
   }
   for (const k of Object.keys(totals) as (keyof CasBreakdown)[]) totals[k] = +totals[k].toFixed(2)
   return totals
@@ -611,6 +643,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                                                   totalPaid: pc.totalPaid,
                                                   patientResponsibility: pc.patientResponsibility,
                                                   cas: pc.cas,
+                                                  remarks: pc.remarks,
                                                 })}::jsonb,
                   amount_billed_era          = ${pc.totalCharge},
                   insurance_payment_era      = ${pc.totalPaid},
@@ -625,6 +658,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const denialCodes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
               if (denialCodes.length > 0) {
                 await sql`UPDATE claims SET denial_codes = ${JSON.stringify(denialCodes)}::jsonb WHERE id = ${claimId}::uuid`
+              }
+              // Persist remark (RARC) codes so the UI can tell the biller
+              // exactly what documentation Aetna / BCBS want back. Column
+              // may not exist yet — bootstrap idempotently.
+              try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb` } catch {}
+              if (pc.remarks && pc.remarks.length > 0) {
+                await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
               }
               if (pc.payerClaimControlNumber) {
                 await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`

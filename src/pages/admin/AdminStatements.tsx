@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { Receipt, CheckCircle2, Clock, Send, ExternalLink, RefreshCw } from 'lucide-react'
+import { Receipt, CheckCircle2, Clock, Send, ExternalLink, RefreshCw, AlertOctagon } from 'lucide-react'
 import { getAllPatientStatements } from '../../lib/api'
 import { PatientStatementModal } from './PatientStatementModal'
+import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 
 type StatusFilter = 'all' | 'draft' | 'sent' | 'paid'
 
@@ -145,7 +146,22 @@ export function AdminStatements() {
                 return (
                   <tr key={stmt.id} className="hover:bg-[#FAFAF8] transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-[#1A1A2E]">{stmt.patient_name || '—'}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-[#1A1A2E]">{stmt.patient_name || '—'}</span>
+                        {(() => {
+                          const outcome = detectErraOutcome(stmt.denial_codes)
+                          if (outcome.status === 'clean') return null
+                          const isDoc = outcome.status === 'documentation_needed'
+                          const cls = isDoc
+                            ? 'bg-[#FEF3C7] text-[#78350F]'
+                            : 'bg-[#FEE2E2] text-[#7F1D1D]'
+                          return (
+                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse ${cls}`} title={outcome.codes.join(', ')}>
+                              <AlertOctagon size={9} /> {outcomeLabel(outcome.status).toUpperCase()}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       {stmt.family_email && <div className="text-[11px] text-[#1A1A2E] mt-0.5">{stmt.family_email}</div>}
                     </td>
                     <td className="px-4 py-3 text-[#555] tabular-nums">{fmtDate(stmt.date_of_service)}</td>
@@ -190,6 +206,8 @@ export function AdminStatements() {
                               family_email: stmt.patient_email || stmt.family_email,
                               family_phone: stmt.patient_phone || stmt.family_phone,
                               cpt_codes: stmt.cpt_codes ?? [],
+                              denial_codes: stmt.denial_codes,
+                              remark_codes: stmt.remark_codes,
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">
                             Edit

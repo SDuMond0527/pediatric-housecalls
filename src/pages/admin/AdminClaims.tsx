@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
+import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, type WriteOffReason } from '../../lib/api'
+import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { Ban } from 'lucide-react'
 
 const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
@@ -1454,6 +1455,19 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
+                            {(() => {
+                              const outcome = detectErraOutcome(c.denial_codes)
+                              if (outcome.status === 'clean') return null
+                              const isDoc = outcome.status === 'documentation_needed'
+                              const cls = isDoc
+                                ? 'bg-[#FEF3C7] text-[#78350F]'
+                                : 'bg-[#FEE2E2] text-[#7F1D1D]'
+                              return (
+                                <span className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse ${cls}`} title={outcome.codes.join(', ')}>
+                                  <AlertOctagon size={9} /> {outcomeLabel(outcome.status).toUpperCase()}
+                                </span>
+                              )
+                            })()}
                           </div>
                           <div className="text-[12px] text-[#1A1A2E] mt-0.5">
                             {c.payer_name} · {fmtMoney(c.total_charge)}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { X, Download } from 'lucide-react'
+import { X, Download, AlertOctagon } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import {
   getPatientStatement,
@@ -12,6 +12,7 @@ import {
   writeOffPatientStatement,
   type WriteOffReason,
 } from '../../lib/api'
+import { CARC_CODES, RARC_CODES, detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 
 const WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
   bad_debt:       'Bad debt (family will not pay)',
@@ -364,6 +365,70 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {(() => {
+            const outcome = detectErraOutcome(claim.denial_codes)
+            if (outcome.status === 'clean') return null
+            const isDoc = outcome.status === 'documentation_needed'
+            const bannerBg = isDoc ? 'bg-[#FEF3C7] border-[#F59E0B]' : 'bg-[#FEE2E2] border-[#DC2626]'
+            const bannerText = isDoc ? 'text-[#78350F]' : 'text-[#7F1D1D]'
+            const pulseColor = isDoc ? 'bg-[#F59E0B]' : 'bg-[#DC2626]'
+            const cas: Array<{ group_code: string; reason_code: string; amount: number }> = claim.denial_codes ?? []
+            const remarks: string[] = claim.remark_codes ?? []
+            return (
+              <div className={`rounded-xl border-2 p-4 ${bannerBg} ${bannerText}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`relative inline-flex h-3 w-3`}>
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${pulseColor} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-3 w-3 ${pulseColor}`}></span>
+                  </span>
+                  <AlertOctagon size={16} />
+                  <div className="text-[13px] font-bold uppercase tracking-wide">
+                    {outcomeLabel(outcome.status)}
+                  </div>
+                </div>
+                <div className="text-[12px] leading-relaxed">
+                  {isDoc
+                    ? 'Payer has NOT paid this claim — they need documentation. Do not send this statement to the family. Gather the items below, then resubmit with attachments.'
+                    : outcome.status === 'partial_denial'
+                      ? 'Payer paid part of this claim and denied the rest. Review the reason codes before sending.'
+                      : 'Payer denied this claim. Review the reason codes and either resubmit corrected or bill the family per practice policy.'}
+                </div>
+                {cas.filter(c => {
+                  if (c.group_code === 'PR') return false
+                  if (c.group_code === 'CO' && new Set(['45','97','24','131','137']).has(c.reason_code)) return false
+                  return true
+                }).length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <div className="text-[11px] font-semibold uppercase opacity-75">Reason codes</div>
+                    {cas.filter(c => {
+                      if (c.group_code === 'PR') return false
+                      if (c.group_code === 'CO' && new Set(['45','97','24','131','137']).has(c.reason_code)) return false
+                      return true
+                    }).map((c, i) => (
+                      <div key={`${c.group_code}-${c.reason_code}-${i}`} className="text-[12px]">
+                        <span className="font-mono font-semibold">{c.group_code}-{c.reason_code}</span>
+                        {c.amount ? <span className="ml-2 opacity-75">${Math.abs(c.amount).toFixed(2)}</span> : null}
+                        <span className="ml-2">
+                          {CARC_CODES[c.reason_code]?.description ?? '(unknown code — look up in payer portal)'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {remarks.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <div className="text-[11px] font-semibold uppercase opacity-75">Payer remarks (what to send)</div>
+                    {remarks.map(code => (
+                      <div key={code} className="text-[12px]">
+                        <span className="font-mono font-semibold">{code}</span>
+                        <span className="ml-2">{RARC_CODES[code] ?? '(unknown remark code — look up in payer portal)'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           {loading ? (
             <div className="py-12 text-center text-[13px] text-[#1A1A2E]">Loading…</div>
           ) : (

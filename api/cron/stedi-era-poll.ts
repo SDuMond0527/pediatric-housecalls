@@ -530,12 +530,14 @@ type ParsedX12Claim_Cron = {
   totalPaid: number
   patientResponsibility: number
   cas: X12CasEntry_Cron[]
+  remarks: string[]
 }
 function parseX12_835(text: string): ParsedX12Claim_Cron[] {
   const claims: ParsedX12Claim_Cron[] = []
   if (!text || typeof text !== 'string') return claims
   const segments = text.split('~').map(s => s.trim()).filter(Boolean)
   let current: ParsedX12Claim_Cron | null = null
+  const looksLikeRarc = (s: string) => /^(?:M|MA|N)[A-Z]?\d+$/i.test(s)
   for (const seg of segments) {
     const fields = seg.split('*')
     const tag = fields[0]
@@ -548,6 +550,7 @@ function parseX12_835(text: string): ParsedX12Claim_Cron[] {
         patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
         payerClaimControlNumber: String(fields[7] ?? '').trim(),
         cas: [],
+        remarks: [],
       }
     } else if (tag === 'CAS' && current) {
       const group = String(fields[1] ?? '').trim()
@@ -556,11 +559,24 @@ function parseX12_835(text: string): ParsedX12Claim_Cron[] {
         const amount = parseFloat(String(fields[i + 1] ?? '0')) || 0
         if (reason && amount !== 0) current.cas.push({ group, reason, amount })
       }
+    } else if (tag === 'LQ' && current) {
+      const codeType = String(fields[1] ?? '').trim()
+      const code = String(fields[2] ?? '').trim() || codeType
+      if (code && looksLikeRarc(code) && !current.remarks.includes(code)) current.remarks.push(code)
+    } else if ((tag === 'MOA' || tag === 'MIA') && current) {
+      for (let i = 3; i <= 7; i++) {
+        const code = String(fields[i] ?? '').trim()
+        if (code && looksLikeRarc(code) && !current.remarks.includes(code)) current.remarks.push(code)
+      }
     }
   }
   if (current) claims.push(current)
   return claims
 }
+// Only these CO codes are truly contractual write-downs. Everything else
+// in the CO group is a denial/rejection — must NOT be silently bucketed
+// as contractual (that hid Aetna's CO-252 $495 on Carson Yates 2026-09-16).
+const CONTRACTUAL_CO_CODES = new Set(['45', '97', '24', '131', '137'])
 function bucketCasFromX12(cas: X12CasEntry_Cron[]) {
   const totals = {
     patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
@@ -575,7 +591,7 @@ function bucketCasFromX12(cas: X12CasEntry_Cron[]) {
         case '96': totals.patient_non_covered += c.amount; break
         default:   totals.patient_non_covered += c.amount; break
       }
-    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+    } else if (c.group === 'CO' && CONTRACTUAL_CO_CODES.has(c.reason)) {
       totals.contractual_adjustment += c.amount
     }
   }
@@ -727,6 +743,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                                                   totalPaid: pc.totalPaid,
                                                   patientResponsibility: pc.patientResponsibility,
                                                   cas: pc.cas,
+                                                  remarks: pc.remarks,
                                                 })}::jsonb,
                   amount_billed_era          = ${pc.totalCharge},
                   insurance_payment_era      = ${pc.totalPaid},
@@ -741,6 +758,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const denialCodes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
               if (denialCodes.length > 0) {
                 await sql`UPDATE claims SET denial_codes = ${JSON.stringify(denialCodes)}::jsonb WHERE id = ${claimId}::uuid`
+              }
+              try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb` } catch {}
+              if (pc.remarks && pc.remarks.length > 0) {
+                await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
               }
               if (pc.payerClaimControlNumber) {
                 await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
