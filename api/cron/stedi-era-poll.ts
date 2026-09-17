@@ -467,6 +467,62 @@ function pollLookBackIso(): string {
 // EDI from /eras/{id}/x12 (the CAS-inclusive endpoint) and pulls out
 // CLP claim headers + subsequent CAS adjustment segments.
 type X12CasEntry_Cron = { group: string; reason: string; amount: number }
+// ── Ensure a draft patient_statement exists for a claim (2026-09-17) ───────
+// Duplicated from api/webhooks/stedi-transaction.ts + api/admin/refetch-known-eras.ts.
+async function ensureStatementForClaim(
+  sql: any,
+  claimId: string,
+  cas: { patient_deductible: number; patient_coinsurance: number; patient_copay: number; patient_non_covered: number; contractual_adjustment: number },
+  amountBilled: number | null,
+  insurancePayment: number | null,
+): Promise<{ created: boolean; statementId?: string }> {
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  if (existing) return { created: false, statementId: existing.id as string }
+
+  const [claim] = await sql`
+    SELECT
+      cl.id, cl.practice_id, cl.child_id, cl.appointment_id, cl.service_date,
+      cl.cpt_codes, cl.patient_first_name, cl.patient_last_name, cl.patient_dob,
+      ch.parent_email, ch.parent_phone,
+      fp.email AS family_email, fp.phone AS family_phone
+    FROM claims cl
+    LEFT JOIN children ch ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))
+    LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+    WHERE cl.id = ${claimId}::uuid
+    LIMIT 1
+  `
+  if (!claim) return { created: false }
+
+  const patientResp = +((cas.patient_copay ?? 0) + (cas.patient_deductible ?? 0) + (cas.patient_coinsurance ?? 0) + (cas.patient_non_covered ?? 0)).toFixed(2)
+  const remaining = +((amountBilled ?? 0) - (insurancePayment ?? 0) - (cas.contractual_adjustment ?? 0)).toFixed(2)
+  const email = claim.parent_email ?? claim.family_email ?? null
+  const phone = claim.parent_phone ?? claim.family_phone ?? null
+
+  const [row] = await sql`
+    INSERT INTO patient_statements (
+      practice_id, claim_id,
+      patient_first_name, patient_last_name, patient_dob,
+      date_of_service, cpt_codes,
+      patient_email, patient_phone,
+      amount_billed, insurance_payment, contractual_adjustment,
+      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+      status, created_at, updated_at
+    ) VALUES (
+      ${claim.practice_id}::uuid, ${claim.id},
+      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+      ${email}, ${phone},
+      ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
+      ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
+      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+      'draft', NOW(), NOW()
+    )
+    RETURNING id
+  `
+  return { created: true, statementId: row?.id as string }
+}
+
 type ParsedX12Claim_Cron = {
   pcn: string
   payerClaimControlNumber: string
@@ -688,6 +744,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
               if (pc.payerClaimControlNumber) {
                 await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
+              }
+              try {
+                await ensureStatementForClaim(sql, claimId, cas, pc.totalCharge, pc.totalPaid)
+              } catch (stmtErr: any) {
+                summary.errors.push(`stmt ${claimId}: ${String(stmtErr?.message ?? stmtErr).slice(0, 200)}`)
               }
               summary.cas.claimsUpdated += 1
             }

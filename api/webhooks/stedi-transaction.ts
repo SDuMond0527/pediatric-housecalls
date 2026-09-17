@@ -117,6 +117,72 @@ function bucketCasFromX12(cas: Array<{ group: string; reason: string; amount: nu
   return totals
 }
 
+// ── Ensure a draft patient_statement exists for a claim (2026-09-17) ───────
+// Every ERA (even one that resolves to $0 patient responsibility) creates
+// a draft statement so the biller has to actively review + confirm.
+// Prevents Stedi CAS misreads from silently closing out a claim that
+// actually needs medical records or has denial reasons the payer hasn't
+// finalized. Duplicated verbatim into api/admin/refetch-known-eras.ts
+// and api/cron/stedi-era-poll.ts (Vercel forbids api/lib helpers).
+async function ensureStatementForClaim(
+  sql: any,
+  claimId: string,
+  cas: CasBreakdown,
+  amountBilled: number | null,
+  insurancePayment: number | null,
+): Promise<{ created: boolean; statementId?: string }> {
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  if (existing) return { created: false, statementId: existing.id as string }
+
+  const [claim] = await sql`
+    SELECT
+      cl.id, cl.practice_id, cl.child_id, cl.appointment_id, cl.service_date,
+      cl.cpt_codes, cl.patient_first_name, cl.patient_last_name, cl.patient_dob,
+      ch.parent_email, ch.parent_phone,
+      fp.email AS family_email, fp.phone AS family_phone
+    FROM claims cl
+    LEFT JOIN children ch ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))
+    LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+    WHERE cl.id = ${claimId}::uuid
+    LIMIT 1
+  `
+  if (!claim) return { created: false }
+
+  const patientResp = +(
+    (cas.patient_copay ?? 0) +
+    (cas.patient_deductible ?? 0) +
+    (cas.patient_coinsurance ?? 0) +
+    (cas.patient_non_covered ?? 0)
+  ).toFixed(2)
+  const remaining = +((amountBilled ?? 0) - (insurancePayment ?? 0) - (cas.contractual_adjustment ?? 0)).toFixed(2)
+  const email = claim.parent_email ?? claim.family_email ?? null
+  const phone = claim.parent_phone ?? claim.family_phone ?? null
+
+  const [row] = await sql`
+    INSERT INTO patient_statements (
+      practice_id, claim_id,
+      patient_first_name, patient_last_name, patient_dob,
+      date_of_service, cpt_codes,
+      patient_email, patient_phone,
+      amount_billed, insurance_payment, contractual_adjustment,
+      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+      status, created_at, updated_at
+    ) VALUES (
+      ${claim.practice_id}::uuid, ${claim.id},
+      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+      ${email}, ${phone},
+      ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
+      ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
+      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+      'draft', NOW(), NOW()
+    )
+    RETURNING id
+  `
+  return { created: true, statementId: row?.id as string }
+}
+
 // ── ADDITIVE denial-code extractor (2026-09-16) ────────────────────────────
 // Duplicated verbatim from api/stedi/era.ts, api/cron/stedi-era-poll.ts,
 // api/admin/backfill-stedi-cas.ts, api/admin/backfill-denial-codes.ts.
@@ -562,6 +628,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
               if (pc.payerClaimControlNumber) {
                 await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
+              }
+              // Auto-create a draft statement so the biller MUST review
+              // every ERA outcome — even $0 patient responsibility. Prevents
+              // Stedi CAS misreads (denial coded as contractual) from
+              // silently closing out a claim.
+              try {
+                await ensureStatementForClaim(sql, claimId, cas, pc.totalCharge, pc.totalPaid)
+              } catch (stmtErr: any) {
+                x12Errors.push(`stmt ${claimId}: ${String(stmtErr?.message ?? stmtErr).slice(0, 200)}`)
               }
               x12Enriched += 1
             }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { ChevronDown, Receipt, FileText, ExternalLink, DollarSign } from 'lucide-react'
+import { ChevronDown, Receipt, ExternalLink, DollarSign, Pencil } from 'lucide-react'
 
 /** One row in the billing log — a claim plus its linked statement (if any). */
 export type BillingLogEntry = {
@@ -355,7 +355,7 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
             <button
               onClick={() => onOpenClaim(e)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
-              {e.statement_id ? (<><FileText size={12} /> Open statement</>) : (<><DollarSign size={12} /> Generate statement</>)}
+              {e.statement_id ? (<><Pencil size={12} /> Edit statement</>) : (<><DollarSign size={12} /> Generate statement</>)}
             </button>
           </div>
         </div>

@@ -59,8 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { amount_paid, paid_at, payment_method, payment_note } = req.body ?? {}
 
     const dollars = parseFloat(String(amount_paid ?? ''))
-    if (!isFinite(dollars) || dollars <= 0) {
-      return res.status(400).json({ error: 'amount_paid must be a positive number.' })
+    // $0 is legal — used by the "No patient responsibility" flow when
+    // ERA fully covers the claim or the whole thing is a contractual
+    // adjustment. Negative amounts are not.
+    if (!isFinite(dollars) || dollars < 0) {
+      return res.status(400).json({ error: 'amount_paid must be a non-negative number.' })
     }
     const cents = Math.round(dollars * 100)
 

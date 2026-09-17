@@ -83,6 +83,32 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [writeOffNote, setWriteOffNote] = useState('')
   const [savingWriteOff, setSavingWriteOff] = useState(false)
 
+  // One-click "No patient responsibility" — for cases where the ERA came
+  // back showing the payer covers everything (either fully paid by
+  // insurance or 100% contractual write-off), so the family owes $0.
+  // Flips the statement to paid at $0 without needing to enter amounts.
+  const [markingNoResp, setMarkingNoResp] = useState(false)
+  async function markNoPatientResponsibility() {
+    if (!statement) return
+    if (!window.confirm('Mark this statement as $0 owed by the patient? This flips it to paid. Use this when the payer covers the full amount or the whole claim is a contractual adjustment.')) return
+    setMarkingNoResp(true)
+    setError(null)
+    try {
+      const saved = await markPatientStatementPaid(statement.id, {
+        amount_paid: 0,
+        payment_method: 'No patient responsibility',
+        payment_note: 'Insurance covered fully or contractual adjustment — nothing owed by patient.',
+      })
+      setStatement(saved)
+      populateFromStatement(saved)
+      onSent()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to mark as no patient responsibility')
+    } finally {
+      setMarkingNoResp(false)
+    }
+  }
+
   async function submitWriteOff() {
     if (!statement) return
     setSavingWriteOff(true)
@@ -644,6 +670,22 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                 title={!canSend ? 'Add an email or phone number to send' : undefined}
               >
                 Generate &amp; Send Statement
+              </Button>
+            )}
+
+            {/* "No patient responsibility" — one click, marks paid at $0.
+                Visible for any statement that isn't already paid, so the
+                biller can flip a draft (ERA came back showing family owes
+                nothing) OR a sent statement (later discovered nothing was
+                owed) with a single confirm dialog. */}
+            {statement && statement.status !== 'paid' && !editing && !recordingPayment && !writingOff && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={markingNoResp}
+                onClick={markNoPatientResponsibility}
+              >
+                No patient responsibility
               </Button>
             )}
 
