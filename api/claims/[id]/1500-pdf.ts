@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawBody = await stediRes.text()
 
     if (!stediRes.ok) {
-      return res.status(502).json({ error: `Stedi PDF fetch failed (HTTP ${stediRes.status}). ${rawBody.slice(0, 400)}` })
+      return res.status(502).send(`ERR: Stedi HTTP ${stediRes.status}. ${rawBody.slice(0, 400)}`)
     }
 
     // Stedi Business Identifier variant returns JSON: { pdfs: [{ data: base64 }] }
@@ -83,25 +83,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { body = JSON.parse(rawBody) } catch {}
     const b64 = body?.pdfs?.[0]?.data
     if (!b64) {
-      return res.status(502).json({ error: 'Stedi returned no PDF for this claim.', stedi_errors: body?.errors ?? null, stedi_body_preview: rawBody.slice(0, 400) })
+      return res.status(502).send(`ERR: Stedi returned no PDF. Errors: ${JSON.stringify(body?.errors ?? null)}. Preview: ${rawBody.slice(0, 400)}`)
     }
 
-    // Validate the decoded bytes on the server so we never hand the
-    // client a fake "PDF" that Chrome then chokes on.
     const magic = Buffer.from(b64.slice(0, 12), 'base64').slice(0, 5).toString('utf8')
     if (magic !== '%PDF-') {
-      return res.status(502).json({ error: `Stedi's base64 didn't decode to a PDF (leading bytes: "${magic}"). Full stedi_body: ${rawBody.slice(0, 400)}` })
+      return res.status(502).send(`ERR: Decoded bytes are not a PDF (magic="${magic}"). Preview: ${rawBody.slice(0, 400)}`)
     }
 
+    // Return base64 as plain text — no JSON wrapper (nothing to
+    // misparse), no binary (nothing for Vercel to mangle). Client just
+    // reads response as text, atob() decodes, blob renders.
     const first = String(claim.patient_first_name ?? '').replace(/[^A-Za-z0-9]/g, '')
     const last  = String(claim.patient_last_name  ?? '').replace(/[^A-Za-z0-9]/g, '')
     const dos   = String(claim.service_date ?? '').slice(0, 10) || 'undated'
     const filename = `1500-${first || 'patient'}-${last || 'unknown'}-${dos}.pdf`
 
-    // Return the base64 as JSON, not binary. The browser decodes it
-    // locally so nothing in the Vercel serverless response pipeline
-    // can mangle Buffer bytes (which is the current symptom).
-    return res.status(200).json({ pdf_base64: b64, filename, size: Math.round(b64.length * 0.75) })
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('X-Pdf-Filename', filename)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    return res.status(200).send(b64)
   } catch (e: any) {
     console.error('claims/[id]/1500-pdf error:', e)
     return res.status(500).json({ error: e?.message ?? 'Internal server error' })

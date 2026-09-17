@@ -709,23 +709,27 @@ export const markClaimDenialHandled = (id: string, notes: string) =>
 async function openClaimPdf(url: string, fallbackFilename: string) {
   const headers = await authHeaders()
   const res = await fetch(url, { headers })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
-  }
-  const json: any = await res.json()
-  const b64 = String(json?.pdf_base64 ?? '')
-  const filename = String(json?.filename ?? fallbackFilename)
-  if (!b64) throw new Error('Server returned no PDF base64.')
+  const text = (await res.text()).trim()
 
-  // atob → binary string → Uint8Array
-  const bin = atob(b64)
+  // The server now returns the base64 PDF as plain text on 200, or a
+  // plain-text error string starting with "ERR: " on 4xx/5xx. Anything
+  // else (HTML from SPA fallback, misrouted request, etc.) surfaces
+  // as an actionable error message instead of silently downloading
+  // garbage.
+  if (!res.ok || text.startsWith('ERR:') || text.startsWith('<')) {
+    throw new Error(text.slice(0, 400) || `HTTP ${res.status}`)
+  }
+
+  // Decode base64 → PDF bytes → Blob.
+  const bin = atob(text)
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   const blob = new Blob([bytes], { type: 'application/pdf' })
   const objectUrl = URL.createObjectURL(blob)
 
-  // Real download — universally reliable.
+  const filename = res.headers.get('x-pdf-filename') || fallbackFilename
+
+  // Real download — universally reliable path.
   const a = document.createElement('a')
   a.href = objectUrl
   a.download = filename
