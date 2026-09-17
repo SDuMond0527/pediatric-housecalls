@@ -26,6 +26,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { status } = req.query as { status?: string }
 
+    // Idempotent bootstrap — these columns are also created by
+    // /api/claims/[id]/mark-denial-handled, but this endpoint's SELECT
+    // references them so preview / fresh envs would 500 before the
+    // mark-handled endpoint was ever hit. Sara 2026-09-17.
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handled_at timestamptz` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handled_by_name text` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_handling_notes text` } catch {}
+
     const rows = await sql`
       SELECT
         ps.id,
