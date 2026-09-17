@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-09-11-visittype-rename
+// Service worker — deliberate passthrough. Version: 2026-09-17-provider-photos
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
