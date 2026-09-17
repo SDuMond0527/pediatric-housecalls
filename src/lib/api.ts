@@ -734,6 +734,9 @@ export const refetchKnownEras = () =>
     sample_detail_shape: string
     sample_top_level_keys: string[]
     payer_ids_queried: string[]
+    x12_http?: number
+    x12_sample?: string
+    x12_error?: string
     errors: string[]
   }>('/api/admin/refetch-known-eras', { method: 'POST' })
 

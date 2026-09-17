@@ -719,6 +719,20 @@ export function AdminClaims() {
               </details>
             </div>
           )}
+          {(refetchResult.x12_http != null || refetchResult.x12_error) && (
+            <div className="text-[11px] mt-2 opacity-90 border-t border-[#A9DFBF] pt-2">
+              <div className="opacity-70">
+                /eras/{'{'}id{'}'}/x12 endpoint — HTTP {refetchResult.x12_http ?? 'error'}
+                {refetchResult.x12_error && <span className="text-[#991B1B]"> · {refetchResult.x12_error}</span>}
+              </div>
+              {refetchResult.x12_sample && (
+                <details className="mt-1">
+                  <summary className="opacity-70 cursor-pointer">Show X12 sample (first 3000 chars)</summary>
+                  <pre className="mt-1 whitespace-pre-wrap text-[10px] max-h-96 overflow-y-auto bg-white border border-[#A9DFBF] rounded p-2">{refetchResult.x12_sample}</pre>
+                </details>
+              )}
+            </div>
+          )}
         </div>
       )}
 

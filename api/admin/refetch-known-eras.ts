@@ -273,11 +273,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         result.remittances_fetched += 1
         const detail = await detailRes.json()
 
-        // Save the SHAPE of the first successful detail response so I
-        // can see what the /eras/{id} response actually looks like.
+        // Save the SHAPE of the first successful detail response.
+        // Also fetch /eras/{id}/x12 for the first remittance — that
+        // endpoint returned 401 (URL exists, needs auth) when probed
+        // unauth'd while all other sub-resources returned 403
+        // (subscription forbidden). Suggests /x12 is the CAS-inclusive
+        // endpoint.
         if (!result.sample_top_level_keys.length) {
           result.sample_top_level_keys = Object.keys(detail ?? {}).slice(0, 40)
           result.sample_detail_shape = JSON.stringify(detail, null, 2).slice(0, 3000)
+          try {
+            const x12Res = await fetch(`https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}/x12`, {
+              headers: { Authorization: `Key ${STEDI_API_KEY}`, Accept: 'application/edi-x12, text/plain' },
+            })
+            const x12Body = await x12Res.text().catch(() => '')
+            ;(result as any).x12_http = x12Res.status
+            ;(result as any).x12_sample = x12Body.slice(0, 3000)
+          } catch (x12Err: any) {
+            ;(result as any).x12_error = x12Err?.message ?? String(x12Err)
+          }
         }
 
         const cps = extractClaimPayments(detail)
