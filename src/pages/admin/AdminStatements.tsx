@@ -153,6 +153,15 @@ export function AdminStatements() {
                         {(() => {
                           const outcome = detectErraOutcome(stmt.denial_codes)
                           if (outcome.status === 'clean') return null
+                          if (stmt.denial_handled_at) {
+                            return (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
+                                title={`Handled by ${stmt.denial_handled_by_name ?? 'biller'}${stmt.denial_handling_notes ? ' — ' + String(stmt.denial_handling_notes).slice(0, 200) : ''}`}>
+                                ✓ {outcomeLabel(outcome.status).toUpperCase()} — HANDLED
+                              </span>
+                            )
+                          }
                           const isDoc = outcome.status === 'documentation_needed'
                           const cls = isDoc
                             ? 'bg-[#FEF3C7] text-[#78350F]'
@@ -210,6 +219,9 @@ export function AdminStatements() {
                               cpt_codes: stmt.cpt_codes ?? [],
                               denial_codes: stmt.denial_codes,
                               remark_codes: stmt.remark_codes,
+                              denial_handled_at: stmt.denial_handled_at,
+                              denial_handled_by_name: stmt.denial_handled_by_name,
+                              denial_handling_notes: stmt.denial_handling_notes,
                               chart_number: stmt.chart_number,
                             })}
                             className="text-[11px] text-[#666] border border-[#E8E8E4] px-2 py-1 rounded hover:bg-[#F1EFE8] transition-colors">

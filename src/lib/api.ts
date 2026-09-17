@@ -693,6 +693,12 @@ export const writeOffPatientStatement = (id: string, body: { reason: WriteOffRea
 export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?: string }) =>
   apiFetch<{ action: 'committed' | 'pending'; claim: any }>(`/api/claims/${id}/write-off`, { method: 'POST', body: JSON.stringify(body) })
 
+// Biller acknowledges an ERA rejection + records what she did about it.
+// Server stamps denial_handled_at + denial_handled_by_name, saves notes,
+// and the UI swaps the flashing banner for a compact "handled" strip.
+export const markClaimDenialHandled = (id: string, notes: string) =>
+  apiFetch<any>(`/api/claims/${id}/mark-denial-handled`, { method: 'POST', body: JSON.stringify({ notes }) })
+
 // Approval workflow — owner (super_admin) reviews pending requests.
 export const getPendingWriteOffs = () =>
   apiFetch<{ statements: any[]; claims: any[]; total: number }>('/api/admin/pending-write-offs')

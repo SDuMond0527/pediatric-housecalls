@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { X, Download, AlertOctagon } from 'lucide-react'
+import { X, Download, AlertOctagon, CheckCircle2, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import {
   getPatientStatement,
@@ -10,6 +10,7 @@ import {
   pullStediEra,
   markPatientStatementPaid,
   writeOffPatientStatement,
+  markClaimDenialHandled,
   type WriteOffReason,
 } from '../../lib/api'
 import { CARC_CODES, RARC_CODES, detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
@@ -84,6 +85,38 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [writeOffReason, setWriteOffReason] = useState<WriteOffReason>('bad_debt')
   const [writeOffNote, setWriteOffNote] = useState('')
   const [savingWriteOff, setSavingWriteOff] = useState(false)
+
+  // Denial-handling state — after Pam clicks "Mark as being handled by
+  // biller" and saves a note, we stamp locally so the UI flips from
+  // flashing alert → compact "handled" strip without a round-trip
+  // refetch. Notes editable so she can update as she works the
+  // resolution (fax records, call payer, etc.). Sara 2026-09-17.
+  const [handledAt, setHandledAt] = useState<string | null>(claim.denial_handled_at ?? null)
+  const [handledByName, setHandledByName] = useState<string | null>(claim.denial_handled_by_name ?? null)
+  const [handlingNotesSaved, setHandlingNotesSaved] = useState<string>(claim.denial_handling_notes ?? '')
+  const [handlingOpen, setHandlingOpen] = useState(false)  // inline notes form
+  const [handlingNotes, setHandlingNotes] = useState('')   // draft in form
+  const [handlingSaving, setHandlingSaving] = useState(false)
+  const [handledExpanded, setHandledExpanded] = useState(false)  // strip open/collapsed
+
+  async function submitHandling() {
+    if (!handlingNotes.trim()) return
+    setHandlingSaving(true)
+    setError(null)
+    try {
+      const updated = await markClaimDenialHandled(claim.id, handlingNotes.trim())
+      setHandledAt(updated.denial_handled_at)
+      setHandledByName(updated.denial_handled_by_name)
+      setHandlingNotesSaved(updated.denial_handling_notes)
+      setHandlingOpen(false)
+      setHandlingNotes('')
+      onSent()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save handling note')
+    } finally {
+      setHandlingSaving(false)
+    }
+  }
 
   // One-click "No patient responsibility" — for cases where the ERA came
   // back showing the payer covers everything (either fully paid by
@@ -371,12 +404,104 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
           {(() => {
             const outcome = detectErraOutcome(claim.denial_codes)
             if (outcome.status === 'clean') return null
+            const cas: Array<{ group_code: string; reason_code: string; amount: number }> = claim.denial_codes ?? []
+            const remarks: string[] = claim.remark_codes ?? []
+
+            // Handled state — flashing alert is replaced by a compact
+            // green strip once biller acknowledges + records what she did.
+            // Notes stay visible for anyone to expand and read.
+            if (handledAt) {
+              return (
+                <div className="rounded-xl border-2 border-[#059669] bg-[#ECFDF5] px-4 py-3">
+                  <button
+                    onClick={() => setHandledExpanded(v => !v)}
+                    className="w-full flex items-center gap-2 text-left">
+                    <CheckCircle2 size={16} className="text-[#065F46] flex-shrink-0" />
+                    <div className="flex-1 min-w-0 text-[12px] text-[#065F46]">
+                      <span className="font-bold uppercase tracking-wide">Being handled by biller</span>
+                      {handledByName && <span className="ml-2 font-medium">· {handledByName}</span>}
+                      {handledAt && <span className="ml-2 opacity-75">· {format(new Date(handledAt), 'MMM d, yyyy h:mm a')}</span>}
+                    </div>
+                    {handledExpanded
+                      ? <ChevronUp size={14} className="text-[#065F46]" />
+                      : <ChevronDown size={14} className="text-[#065F46]" />}
+                  </button>
+                  {handledExpanded && (
+                    <div className="mt-3 pt-3 border-t border-[#A7F3D0]">
+                      <div className="text-[11px] font-semibold text-[#065F46] uppercase tracking-wider mb-1">Notes</div>
+                      <div className="text-[13px] text-[#064E3B] whitespace-pre-wrap leading-relaxed">
+                        {handlingNotesSaved || '(no notes recorded)'}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-[#A7F3D0] text-[11px] text-[#065F46] opacity-75">
+                        Original payer response:
+                        <div className="mt-1 space-y-0.5 text-[11px]">
+                          {cas.filter(c => {
+                            if (c.group_code === 'PR') return false
+                            if (c.group_code === 'CO' && new Set(['45','97','24','131','137']).has(c.reason_code)) return false
+                            return true
+                          }).map((c, i) => (
+                            <div key={`${c.group_code}-${c.reason_code}-${i}`}>
+                              <span className="font-mono font-semibold">{c.group_code}-{c.reason_code}</span>
+                              <span className="ml-2">{CARC_CODES[c.reason_code]?.description ?? '(unknown code)'}</span>
+                            </div>
+                          ))}
+                          {remarks.map(code => (
+                            <div key={code}>
+                              <span className="font-mono font-semibold">{code}</span>
+                              <span className="ml-2">{RARC_CODES[code] ?? '(unknown remark code)'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setHandlingNotes(handlingNotesSaved)
+                          setHandlingOpen(true)
+                        }}
+                        className="mt-3 inline-flex items-center gap-1 text-[11px] text-[#065F46] font-semibold hover:underline">
+                        <Pencil size={11} /> Edit / update notes
+                      </button>
+                    </div>
+                  )}
+                  {/* Edit form — same textarea style as the initial "mark as
+                      handled" flow, just pre-populated with saved notes. */}
+                  {handlingOpen && (
+                    <div className="mt-3 pt-3 border-t border-[#A7F3D0]">
+                      <label className="text-[11px] font-semibold text-[#065F46] uppercase tracking-wider block mb-1">
+                        Update notes
+                      </label>
+                      <textarea
+                        value={handlingNotes}
+                        onChange={e => setHandlingNotes(e.target.value)}
+                        rows={4}
+                        placeholder="What did you do next?"
+                        className="w-full px-2.5 py-2 border border-[#065F46] rounded-lg text-[13px] outline-none focus:ring-2 focus:ring-[#059669]/30 bg-white"
+                      />
+                      <div className="mt-2 flex gap-2 justify-end">
+                        <button
+                          onClick={() => { setHandlingOpen(false); setHandlingNotes('') }}
+                          disabled={handlingSaving}
+                          className="px-3 py-1.5 text-[12px] text-[#065F46] border border-[#065F46] rounded-lg hover:bg-white transition-colors disabled:opacity-50">
+                          Cancel
+                        </button>
+                        <button
+                          onClick={submitHandling}
+                          disabled={handlingSaving || !handlingNotes.trim()}
+                          className="px-3 py-1.5 text-[12px] text-white bg-[#065F46] rounded-lg hover:bg-[#064E3B] transition-colors disabled:opacity-50">
+                          {handlingSaving ? 'Saving…' : 'Save notes'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            // Not yet handled — flashing red / amber alert.
             const isDoc = outcome.status === 'documentation_needed'
             const bannerBg = isDoc ? 'bg-[#FEF3C7] border-[#F59E0B]' : 'bg-[#FEE2E2] border-[#DC2626]'
             const bannerText = isDoc ? 'text-[#78350F]' : 'text-[#7F1D1D]'
             const pulseColor = isDoc ? 'bg-[#F59E0B]' : 'bg-[#DC2626]'
-            const cas: Array<{ group_code: string; reason_code: string; amount: number }> = claim.denial_codes ?? []
-            const remarks: string[] = claim.remark_codes ?? []
             return (
               <div className={`rounded-xl border-2 p-4 ${bannerBg} ${bannerText}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -429,6 +554,55 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                     ))}
                   </div>
                 )}
+
+                {/* Mark-as-handled control — either the button OR the inline
+                    notes textarea, never both. Extracted here so it's the
+                    last thing the biller sees inside the alert. */}
+                <div className="mt-4 pt-3 border-t border-current opacity-100">
+                  {handlingOpen ? (
+                    <div>
+                      <label className={`text-[11px] font-semibold uppercase tracking-wider block mb-1 ${bannerText}`}>
+                        What are you doing / have you done about this?
+                      </label>
+                      <textarea
+                        value={handlingNotes}
+                        onChange={e => setHandlingNotes(e.target.value)}
+                        rows={4}
+                        placeholder={`e.g. "Faxed patient medical records to Aetna 9/17. Awaiting reprocessing."`}
+                        className={`w-full px-2.5 py-2 border-2 rounded-lg text-[13px] outline-none focus:ring-2 bg-white ${
+                          isDoc ? 'border-[#F59E0B] focus:ring-[#F59E0B]/30' : 'border-[#DC2626] focus:ring-[#DC2626]/30'
+                        }`}
+                        autoFocus
+                      />
+                      <div className="mt-2 flex gap-2 justify-end">
+                        <button
+                          onClick={() => { setHandlingOpen(false); setHandlingNotes('') }}
+                          disabled={handlingSaving}
+                          className={`px-3 py-1.5 text-[12px] font-medium border-2 rounded-lg hover:bg-white transition-colors disabled:opacity-50 ${
+                            isDoc ? 'border-[#B45309] text-[#78350F]' : 'border-[#B91C1C] text-[#7F1D1D]'
+                          }`}>
+                          Cancel
+                        </button>
+                        <button
+                          onClick={submitHandling}
+                          disabled={handlingSaving || !handlingNotes.trim()}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded-lg transition-colors disabled:opacity-50 ${
+                            isDoc ? 'bg-[#B45309] hover:bg-[#78350F]' : 'bg-[#B91C1C] hover:bg-[#7F1D1D]'
+                          }`}>
+                          {handlingSaving ? 'Saving…' : <><CheckCircle2 size={12} /> Save + mark handled</>}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setHandlingOpen(true); setHandlingNotes('') }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded-lg transition-colors ${
+                        isDoc ? 'bg-[#B45309] hover:bg-[#78350F]' : 'bg-[#B91C1C] hover:bg-[#7F1D1D]'
+                      }`}>
+                      <CheckCircle2 size={12} /> Mark as being handled by biller
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })()}

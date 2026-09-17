@@ -1465,6 +1465,20 @@ export function AdminClaims() {
                             {(() => {
                               const outcome = detectErraOutcome(c.denial_codes)
                               if (outcome.status === 'clean') return null
+                              // Biller has acknowledged + noted what she did →
+                              // swap the flashing alert badge for a muted
+                              // "handled" tag so the row is still spottable
+                              // but not screaming at everyone.
+                              if (c.denial_handled_at) {
+                                return (
+                                  <span
+                                    className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
+                                    title={`Handled by ${c.denial_handled_by_name ?? 'biller'}${c.denial_handling_notes ? ' — ' + c.denial_handling_notes.slice(0, 200) : ''}`}
+                                  >
+                                    ✓ {outcomeLabel(outcome.status).toUpperCase()} — HANDLED
+                                  </span>
+                                )
+                              }
                               const isDoc = outcome.status === 'documentation_needed'
                               const cls = isDoc
                                 ? 'bg-[#FEF3C7] text-[#78350F]'
