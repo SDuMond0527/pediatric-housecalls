@@ -397,6 +397,13 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+export const familySubmitSchoolExcuseRequest = (body: {
+  appointment_id: string
+  excuse_dates: string
+  additional_notes?: string
+}) =>
+  familyApiFetch<{ ok: true }>('/api/family/school-excuse-request', { method: 'POST', body: JSON.stringify(body) })
+
 // Fetches a signed encounter note as HTML (scoped to the family's own
 // children — server enforces child ownership) and opens it in a new tab
 // so the parent can print/save-as-PDF from the browser.

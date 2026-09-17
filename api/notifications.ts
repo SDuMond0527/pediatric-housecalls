@@ -337,6 +337,7 @@ function postVisitEmail(data: {
   providerName: string
   dateFormatted: string
   instructions: string | null
+  appointmentId?: string | null
 }) {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const childPhrase = data.childName ? `${data.childName}'s` : "your child's"
@@ -364,6 +365,16 @@ function postVisitEmail(data: {
     <div style="background:#F0FAF6;border:1px solid #9FDECA;border-radius:10px;padding:18px 20px;margin-bottom:24px;">
       <div style="font-size:11px;font-weight:600;color:#0F6E56;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">After-visit instructions from ${data.providerName}</div>
       <p style="font-size:15px;margin:0;line-height:1.65;color:#1A1A2E;white-space:pre-wrap;">${data.instructions}</p>
+    </div>` : ''}
+
+    ${data.appointmentId ? `
+    <!-- School excuse hook -->
+    <div style="background:#FFF8E6;border:1px solid #F5D89A;border-radius:10px;padding:18px 20px;margin-bottom:24px;">
+      <div style="font-size:15px;font-weight:600;color:#78350F;margin-bottom:6px;">Need a school excuse? Let us know!</div>
+      <p style="font-size:14px;margin:0 0 12px;line-height:1.6;color:#78350F;">Tell us the dates you need excused and we'll email your school note within 24 hours.</p>
+      <a href="${PORTAL_URL}/family/school-excuse-request?appointment=${data.appointmentId}" style="display:inline-block;background:#B45309;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;">
+        Request a school note
+      </a>
     </div>` : ''}
 
     <p style="font-size:15px;margin:0 0 24px;line-height:1.65;">If you have a moment, we would be so grateful if you could share your experience with a Google review. It helps other families in your community find us — and it means the world to our team.</p>
@@ -1673,6 +1684,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           providerName: prov?.name || 'Your provider',
           dateFormatted,
           instructions: instructions || null,
+          appointmentId,
         })
       ).catch(e => console.error('Post-visit email failed:', e))
 

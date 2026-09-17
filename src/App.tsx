@@ -40,6 +40,7 @@ import { FamilyProfile } from './pages/family/FamilyProfile'
 import { FamilyForgotPassword } from './pages/family/FamilyForgotPassword'
 import { FamilyResetPassword } from './pages/family/FamilyResetPassword'
 import { FamilyVisitHistory } from './pages/family/FamilyVisitHistory'
+import { FamilySchoolExcuseRequest } from './pages/family/FamilySchoolExcuseRequest'
 import { FamilyVaccines } from './pages/family/FamilyVaccines'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
@@ -80,6 +81,7 @@ export default function App() {
                 <Route path="profile"   element={<FamilyProfile />} />
                 <Route path="visits"    element={<FamilyVisitHistory />} />
                 <Route path="vaccines"  element={<FamilyVaccines />} />
+                <Route path="school-excuse-request" element={<FamilySchoolExcuseRequest />} />
               </Route>
             </Routes>
           </FamilyAuthProvider>
