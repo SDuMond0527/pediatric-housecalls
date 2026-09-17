@@ -990,8 +990,12 @@ export function Today() {
                                 </Button>
                               )
                             )}
-                            {appt.visit_type === 'Video telemedicine' && appt.status !== 'cancelled' && (
-                              <Button variant="secondary" size="sm" onClick={() => window.open('https://doxy.me/v2/account/dashboard', '_blank')}>
+                            {(
+                              appt.visit_type === 'Video telemedicine'
+                              || appt.visit_type === 'CMA + telemedicine'
+                              || appt.visit_type === 'Video telemedicine screening for IV fluids'
+                            ) && appt.status !== 'cancelled' && (
+                              <Button variant="secondary" size="sm" onClick={() => window.open('https://doxy.me/pediatrichousecalls/account/dashboard', '_blank', 'noopener,noreferrer')}>
                                 <Video size={13} /> Start video visit
                               </Button>
                             )}
