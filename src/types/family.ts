@@ -50,6 +50,7 @@ export interface SlotOffer {
   waitlist_entry_id: string
   provider_id: string
   provider_name: string
+  provider_photo_url?: string | null
   visit_type: string | null
   offered_date: string
   offered_time: string

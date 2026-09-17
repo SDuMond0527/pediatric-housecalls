@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck } from 'lucide-react'
-import { getProviders, updateProvider, apiFetch, getPracticeZones } from '../../lib/api'
+import { getProviders, updateProvider, apiFetch, getPracticeZones, uploadProviderPhoto } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { ProviderAvatar } from '../../components/ProviderAvatar'
 import type { Provider } from '../../types'
 
 type ProviderWithContact = Provider & { phone?: string | null; email?: string | null; home_address?: string | null }
@@ -272,6 +273,52 @@ export function AdminProviders() {
 
                     {isExpanded && (
                       <div className="px-4 pb-4 border-t border-[#E8E8E4] pt-3 space-y-3">
+                        {/* Photo — shows on family portal booking flow. Family
+                            can see who they're booking with. Sara 2026-09-17. */}
+                        <div>
+                          <label className="text-[11px] text-[#555] block mb-1.5">Photo (shown to families on the booking portal)</label>
+                          <div className="flex items-center gap-4">
+                            <ProviderAvatar photoUrl={p.photo_url} name={p.name} size="md" />
+                            <div className="flex-1 min-w-0">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={async e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  if (file.size > 5 * 1024 * 1024) {
+                                    alert('Photo must be under 5 MB. Please resize and try again.')
+                                    return
+                                  }
+                                  try {
+                                    const reader = new FileReader()
+                                    const data = await new Promise<string>((resolve, reject) => {
+                                      reader.onload = () => resolve(String(reader.result))
+                                      reader.onerror = reject
+                                      reader.readAsDataURL(file)
+                                    })
+                                    const { url } = await uploadProviderPhoto({
+                                      provider_id: p.id,
+                                      data,
+                                      filename: file.name.replace(/[^A-Za-z0-9._-]/g, '_'),
+                                    })
+                                    // Update local list so the new photo shows without a full reload.
+                                    setProviders(prev => prev.map(x => x.id === p.id ? { ...x, photo_url: url } as any : x))
+                                  } catch (err: any) {
+                                    alert(err?.message ?? 'Photo upload failed')
+                                  } finally {
+                                    e.target.value = ''
+                                  }
+                                }}
+                                className="block text-[13px] file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[12px] file:font-semibold file:bg-[#EEEDFE] file:text-[#3C3489] hover:file:bg-[#DFD9FA] cursor-pointer"
+                              />
+                              <div className="text-[11px] text-[#777] mt-1">
+                                JPG or PNG, square looks best. Max 5 MB.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <Input label="Phone number" placeholder="+1 (555) 000-0000"
                           value={edit.phone} onChange={e => setField(p.id, 'phone', e.target.value)} />
                         <Input label="Email address" placeholder="provider@example.com"

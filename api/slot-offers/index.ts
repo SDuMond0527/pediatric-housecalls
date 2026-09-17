@@ -49,12 +49,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const ids = waitlist_entry_ids.split(',')
   const now = new Date().toISOString()
+
+  // Idempotent bootstrap — photo_url is set by /api/upload-provider-photo
+  // but this SELECT references it whether or not the upload has run.
+  try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS photo_url text` } catch {}
+
   const rows = await sql`
-    SELECT * FROM slot_offers
-    WHERE waitlist_entry_id = ANY(${ids}::uuid[])
-      AND practice_id = ${practiceId}::uuid
-      AND status = 'pending'
-      AND expires_at > ${now}::timestamptz
-    ORDER BY created_at DESC`
+    SELECT so.*, p.photo_url AS provider_photo_url
+    FROM slot_offers so
+    LEFT JOIN providers p ON p.name = so.provider_name AND p.practice_id = so.practice_id
+    WHERE so.waitlist_entry_id = ANY(${ids}::uuid[])
+      AND so.practice_id = ${practiceId}::uuid
+      AND so.status = 'pending'
+      AND so.expires_at > ${now}::timestamptz
+    ORDER BY so.created_at DESC`
   res.json(rows)
 }

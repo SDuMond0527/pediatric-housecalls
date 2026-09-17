@@ -7,6 +7,7 @@ import { PatientBillingList, type BillingStatement } from '../../components/Pati
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
+import { ProviderAvatar } from '../../components/ProviderAvatar'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import type { BookingRequest, SlotOffer } from '../../types/family'
@@ -288,7 +289,8 @@ export function FamilyDashboard() {
           <div className="space-y-3">
             {offers.map(offer => (
               <div key={offer.id} className="bg-white border-2 border-[#1D9E75] rounded-xl p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-4">
+                  <ProviderAvatar photoUrl={offer.provider_photo_url} name={offer.provider_name} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">
                       {offer.visit_type || 'In-home visit'} with {offer.provider_name}

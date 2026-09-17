@@ -723,6 +723,12 @@ export const writeOffClaim = (id: string, body: { reason: WriteOffReason; note?:
 export const markClaimDenialHandled = (id: string, notes: string) =>
   apiFetch<any>(`/api/claims/${id}/mark-denial-handled`, { method: 'POST', body: JSON.stringify({ notes }) })
 
+export const uploadProviderPhoto = (body: { provider_id: string; data: string; filename: string }) =>
+  apiFetch<{ url: string; provider: { id: string; photo_url: string } }>(
+    '/api/upload-provider-photo',
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
 // Fetches a Stedi-generated PDF. Server now returns
 //   { pdf_base64, filename, size }
 // rather than streaming binary — decoded in the browser so nothing in

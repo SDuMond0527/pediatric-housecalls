@@ -12,6 +12,7 @@ export interface Provider {
   is_active: boolean
   is_admin: boolean
   is_super_admin?: boolean
+  photo_url?: string | null
   created_at: string
 }
 
