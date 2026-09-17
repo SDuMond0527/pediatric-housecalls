@@ -203,16 +203,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pcnToClaim.set(pcn, { id: c.id as string, payer_id: c.payer_id ?? null, payer_name: c.payer_name ?? null })
     }
 
-    // Fetch remittances. Not filtering by tradingPartnerId — we'll walk
-    // every remittance and match by PCN. Small practice, small volume.
-    const listParams = new URLSearchParams()
-    listParams.set('limit', '100')
-    const listRes = await fetch(STEDI_ERAS_LIST_URL(listParams.toString()), {
-      headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
-    })
+    // Group our claims by tradingPartnerId (payer_id). Stedi's /eras
+    // list requires a tradingPartnerId filter to scope results — without
+    // it we get every remittance in Stedi's account, most of which won't
+    // contain our claims.
+    const payerIds = new Set<string>()
+    for (const c of pcnToClaim.values()) if (c.payer_id) payerIds.add(c.payer_id)
 
     const result = {
-      list_http: listRes.status,
+      list_http: 0,
       remittances_seen: 0,
       remittances_fetched: 0,
       claim_payments_seen: 0,
@@ -223,20 +222,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         claim_payments_seen: number
         matched: Array<{ claim_id: string; pcn: string; cas: any; denial_codes_count: number }>
       }>,
+      // First remittance detail dumped in full so we can inspect the
+      // response shape. Truncated to 3000 chars.
+      sample_detail_shape: '' as string,
+      sample_top_level_keys: [] as string[],
+      payer_ids_queried: Array.from(payerIds),
       errors: [] as string[],
     }
 
-    if (!listRes.ok) {
-      const err = await listRes.text().catch(() => '')
-      result.errors.push(`list HTTP ${listRes.status}: ${err.slice(0, 300)}`)
-      return res.status(200).json(result)
+    let allRemittances: any[] = []
+    for (const payerId of payerIds) {
+      const listParams = new URLSearchParams()
+      listParams.set('tradingPartnerId', payerId)
+      listParams.set('limit', '100')
+      const listRes = await fetch(STEDI_ERAS_LIST_URL(listParams.toString()), {
+        headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
+      })
+      result.list_http = listRes.status
+      if (!listRes.ok) {
+        const err = await listRes.text().catch(() => '')
+        result.errors.push(`list ${payerId} HTTP ${listRes.status}: ${err.slice(0, 200)}`)
+        continue
+      }
+      const listBody = await listRes.json() as any
+      const rems: any[] = listBody?.remittances ?? listBody?.items ?? []
+      allRemittances.push(...rems)
     }
+    result.remittances_seen = allRemittances.length
 
-    const listBody = await listRes.json() as any
-    const remittances: any[] = listBody?.remittances ?? listBody?.items ?? []
-    result.remittances_seen = remittances.length
-
-    for (const rem of remittances) {
+    for (const rem of allRemittances) {
       const remId = rem?.id ?? rem?.remittanceId
       if (!remId) continue
       const perRem = {
@@ -258,6 +272,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         result.remittances_fetched += 1
         const detail = await detailRes.json()
+
+        // Save the SHAPE of the first successful detail response so I
+        // can see what the /eras/{id} response actually looks like.
+        if (!result.sample_top_level_keys.length) {
+          result.sample_top_level_keys = Object.keys(detail ?? {}).slice(0, 40)
+          result.sample_detail_shape = JSON.stringify(detail, null, 2).slice(0, 3000)
+        }
 
         const cps = extractClaimPayments(detail)
         perRem.claim_payments_seen = cps.length

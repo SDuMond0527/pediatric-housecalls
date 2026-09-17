@@ -706,6 +706,19 @@ export function AdminClaims() {
           {refetchResult.errors.length > 0 && (
             <div className="text-[11px] mt-2 text-[#991B1B]">Errors: {refetchResult.errors.slice(0, 3).join(' · ')}</div>
           )}
+          {refetchResult.payer_ids_queried.length > 0 && (
+            <div className="text-[11px] mt-2 opacity-70">Payer IDs queried: {refetchResult.payer_ids_queried.join(', ')}</div>
+          )}
+          {refetchResult.sample_top_level_keys.length > 0 && (
+            <div className="text-[11px] mt-2 opacity-90">
+              <div className="opacity-70">First remittance response shape:</div>
+              <div className="mt-1 font-mono">keys = [{refetchResult.sample_top_level_keys.join(', ')}]</div>
+              <details className="mt-1">
+                <summary className="opacity-70 cursor-pointer">Show full JSON (first 3000 chars)</summary>
+                <pre className="mt-1 whitespace-pre-wrap text-[10px] max-h-96 overflow-y-auto bg-white border border-[#A9DFBF] rounded p-2">{refetchResult.sample_detail_shape}</pre>
+              </details>
+            </div>
+          )}
         </div>
       )}
 

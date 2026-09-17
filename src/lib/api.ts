@@ -731,6 +731,9 @@ export const refetchKnownEras = () =>
       claim_payments_seen: number
       matched: Array<{ claim_id: string; pcn: string; cas: any; denial_codes_count: number }>
     }>
+    sample_detail_shape: string
+    sample_top_level_keys: string[]
+    payer_ids_queried: string[]
     errors: string[]
   }>('/api/admin/refetch-known-eras', { method: 'POST' })
 
