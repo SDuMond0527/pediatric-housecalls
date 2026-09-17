@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, type WriteOffReason } from '../../lib/api'
 import { Ban } from 'lucide-react'
 
 const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
@@ -92,6 +92,8 @@ export function AdminClaims() {
   const [eraTestResult, setEraTestResult] = useState<Awaited<ReturnType<typeof testStediEraSync>> | null>(null)
   const [backfillRunning, setBackfillRunning] = useState(false)
   const [backfillResult, setBackfillResult] = useState<Awaited<ReturnType<typeof backfillStediCas>> | null>(null)
+  const [refetchRunning, setRefetchRunning] = useState(false)
+  const [refetchResult, setRefetchResult] = useState<Awaited<ReturnType<typeof refetchKnownEras>> | null>(null)
 
   const { provider: currentProvider } = useAuth()
   const [providerList, setProviderList] = useState<any[]>([])
@@ -588,6 +590,28 @@ export function AdminClaims() {
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#B45309] text-[#B45309] hover:bg-[#FFF7ED] transition-colors disabled:opacity-50">
             <Zap size={12} /> {backfillRunning ? 'Backfilling…' : 'FORCE re-backfill (60d)'}
           </button>
+          <button
+            onClick={async () => {
+              setRefetchRunning(true)
+              setRefetchResult(null)
+              try {
+                const r = await refetchKnownEras()
+                setRefetchResult(r)
+              } catch (e: any) {
+                setRefetchResult({
+                  transactions_found_in_db: 0,
+                  per_transaction: [],
+                  totals: { stedi_fetched: 0, claims_saved: 0, errors: 1 },
+                } as any)
+                alert(e?.message ?? String(e))
+              } finally {
+                setRefetchRunning(false)
+              }
+            }}
+            disabled={refetchRunning}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E6F6F2] transition-colors disabled:opacity-50">
+            <Zap size={12} /> {refetchRunning ? 'Refetching…' : 'Refetch known ERAs by ID'}
+          </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
           </button>
@@ -648,6 +672,34 @@ export function AdminClaims() {
           </div>
           {backfillResult.errors.length > 0 && (
             <div className="text-[11px] mt-1 opacity-80">Errors: {backfillResult.errors.slice(0, 3).join(' · ')}</div>
+          )}
+        </div>
+      )}
+
+      {refetchResult && (
+        <div className="mb-4 border rounded-xl px-4 py-3 bg-[#F0FDF4] border-[#A9DFBF] text-[#0F5F44]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-[13px] font-medium">
+              Refetch known ERAs — {refetchResult.totals.stedi_fetched} fetched from Stedi, {refetchResult.totals.claims_saved} claim{refetchResult.totals.claims_saved === 1 ? '' : 's'} saved with raw 835.
+            </div>
+            <button onClick={() => setRefetchResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
+          </div>
+          <div className="text-[11px] mt-2 grid grid-cols-3 gap-x-4 gap-y-1 opacity-90">
+            <div><span className="opacity-70">Transactions in DB:</span> {refetchResult.transactions_found_in_db}</div>
+            <div><span className="opacity-70">Stedi fetched:</span> {refetchResult.totals.stedi_fetched}</div>
+            <div><span className="opacity-70">Errors:</span> {refetchResult.totals.errors}</div>
+          </div>
+          {refetchResult.per_transaction.length > 0 && (
+            <div className="mt-2 space-y-1 text-[11px] font-mono opacity-90">
+              {refetchResult.per_transaction.map(t => (
+                <div key={t.transaction_id} className="border-t border-[#A9DFBF] pt-1">
+                  <div><span className="opacity-70">tx=</span>{t.transaction_id.slice(0, 12)}…  <span className="opacity-70">http=</span>{t.stedi_status ?? '—'}  <span className="opacity-70">payments_seen=</span>{t.claim_payments_seen}  <span className="opacity-70">claims_saved=</span>{t.claims_saved}</div>
+                  {t.errors.length > 0 && (
+                    <div className="text-[#991B1B]">errors: {t.errors.join(' · ')}</div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

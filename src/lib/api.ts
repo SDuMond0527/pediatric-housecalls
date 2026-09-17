@@ -718,6 +718,19 @@ export const sendBillerQuestion = (body: { claimId: string; providerId: string; 
     { method: 'POST', body: JSON.stringify({ type: 'biller_question_to_provider', ...body }) })
 
 // Admin-only: backfill CAS breakdown from historical 835s.
+export const refetchKnownEras = () =>
+  apiFetch<{
+    transactions_found_in_db: number
+    per_transaction: Array<{
+      transaction_id: string
+      stedi_status: number | null
+      claim_payments_seen: number
+      claims_saved: number
+      errors: string[]
+    }>
+    totals: { stedi_fetched: number; claims_saved: number; errors: number }
+  }>('/api/admin/refetch-known-eras', { method: 'POST' })
+
 export const backfillStediCasForce = (days = 60) =>
   apiFetch<{
     ok: boolean
