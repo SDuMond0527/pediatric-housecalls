@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, Stethoscope } from 'lucide-react'
+import { ChevronDown, Stethoscope, Download } from 'lucide-react'
 import { format } from 'date-fns'
-import { familyGetEncounterNotes } from '../../lib/api'
+import { familyGetEncounterNotes, familyDownloadEncounterNoteHtml } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { formatApiDate } from '../../lib/dateUtils'
 
@@ -96,12 +96,32 @@ export function FamilyVisitHistory() {
                     </div>
                   )}
                 </div>
-                {hasContent && (
-                  <ChevronDown
-                    size={14}
-                    className={`text-[#1A1A2E] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                  />
-                )}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={e => {
+                      e.stopPropagation()
+                      familyDownloadEncounterNoteHtml(note.id).catch(err => alert(err?.message ?? 'Download failed'))
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        familyDownloadEncounterNoteHtml(note.id).catch(err => alert(err?.message ?? 'Download failed'))
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:underline cursor-pointer select-none"
+                    title="Opens the visit note in a new tab. Use ⌘P → Save as PDF to save.">
+                    <Download size={12} /> Download
+                  </span>
+                  {hasContent && (
+                    <ChevronDown
+                      size={14}
+                      className={`text-[#1A1A2E] flex-shrink-0 mt-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  )}
+                </div>
               </button>
 
               {isOpen && hasContent && (

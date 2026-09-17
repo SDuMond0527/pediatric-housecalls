@@ -397,6 +397,23 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+// Fetches a signed encounter note as HTML (scoped to the family's own
+// children — server enforces child ownership) and opens it in a new tab
+// so the parent can print/save-as-PDF from the browser.
+export async function familyDownloadEncounterNoteHtml(id: string) {
+  const headers = await familyAuthHeaders()
+  const res = await fetch(`/api/family/encounter-notes?id=${encodeURIComponent(id)}&format=html`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || res.statusText || `HTTP ${res.status}`)
+  }
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener,noreferrer')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 export const familyGetPatientStatements = () =>
   familyApiFetch<any[]>('/api/family/patient-statements')
 
