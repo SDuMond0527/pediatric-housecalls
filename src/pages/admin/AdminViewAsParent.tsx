@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ArrowLeft, Eye, Clock, User, Stethoscope, Syringe, Home } from 'lucide-react'
-import { getFamilyPortalView } from '../../lib/api'
+import { ArrowLeft, Eye, Clock, User, Stethoscope, Syringe, Home, Download } from 'lucide-react'
+import { getFamilyPortalView, downloadEncounterNoteHtml } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { PatientBillingList, type BillingStatement } from '../../components/PatientBillingList'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
@@ -308,9 +308,17 @@ function VisitsTab({ notes }: { notes: any[] }) {
     <div className="space-y-3">
       {signedNotes.map(n => (
         <div key={n.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="font-display text-[15px] font-medium text-[#1A1A2E]">{n.child_name}</span>
-            <span className="text-[12px] text-[#555]">· {n.visit_type || n.note_type}</span>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-display text-[15px] font-medium text-[#1A1A2E]">{n.child_name}</span>
+              <span className="text-[12px] text-[#555]">· {n.visit_type || n.note_type}</span>
+            </div>
+            <button
+              onClick={() => downloadEncounterNoteHtml(n.id).catch(e => alert(e?.message ?? 'Download failed'))}
+              className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:underline font-medium flex-shrink-0"
+              title="Opens the visit note in a new tab. Use ⌘P / Ctrl+P → Save as PDF.">
+              <Download size={12} /> Download
+            </button>
           </div>
           <div className="text-[12px] text-[#1A1A2E]/70 mb-2">
             {safeFormat(n.scheduled_date, 'EEE, MMM d, yyyy')}
