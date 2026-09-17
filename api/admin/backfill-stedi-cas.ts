@@ -20,8 +20,11 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 const STEDI_API_KEY = process.env.STEDI_API_KEY || ''
 
+// Polling endpoint lives on Stedi's "core" API host, not healthcare.
+// See note in api/cron/stedi-era-poll.ts. Previous URL
+// healthcare.us.stedi.com/2024-04-01/polling/transactions was 404.
 const STEDI_POLL_TRANSACTIONS_URL =
-  'https://healthcare.us.stedi.com/2024-04-01/polling/transactions'
+  'https://core.us.stedi.com/2026-06-01/polling/transactions'
 const STEDI_835_REPORT_URL = (transactionId: string) =>
   `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/835`
 

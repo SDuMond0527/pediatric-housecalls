@@ -100,8 +100,12 @@ function extractDenialCodes(era835: any): DenialCodeEntry[] {
   return entries
 }
 
+// Polling endpoint lives on Stedi's "core" API host, not the healthcare
+// subdomain. Confirmed 2026-09-16 by checking Stedi docs (spec: core,
+// path: /polling/transactions). Previous URL healthcare.us.stedi.com
+// returned 404. See docs: stedi.com/docs/healthcare/api-reference/polling-transactions
 const STEDI_POLL_TRANSACTIONS_URL =
-  'https://healthcare.us.stedi.com/2024-04-01/polling/transactions'
+  'https://core.us.stedi.com/2026-06-01/polling/transactions'
 const STEDI_835_REPORT_URL = (transactionId: string) =>
   `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/835`
 
