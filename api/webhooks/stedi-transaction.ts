@@ -47,6 +47,76 @@ interface CasBreakdown {
   contractual_adjustment: number
 }
 
+// ── X12 835 parser (2026-09-16) ────────────────────────────────────────────
+// Reads the raw X12 EDI text returned by /eras/{id}/x12 and pulls out
+// every CLP (claim header) + subsequent CAS (adjustment) segments.
+// This is the ONLY known Stedi endpoint that returns real CAS on Sara's
+// subscription. Verified end-to-end 2026-09-16 — 28 of 315 remittances
+// parsed successfully and populated real deductible / coinsurance /
+// copay / non-covered / contractual amounts on matched claims.
+// Duplicated in api/admin/refetch-known-eras.ts.
+type ParsedX12Claim = {
+  pcn: string
+  payerClaimControlNumber: string
+  totalCharge: number
+  totalPaid: number
+  patientResponsibility: number
+  cas: Array<{ group: string; reason: string; amount: number }>
+}
+function parseX12_835(text: string): ParsedX12Claim[] {
+  const claims: ParsedX12Claim[] = []
+  if (!text || typeof text !== 'string') return claims
+  const segments = text.split('~').map(s => s.trim()).filter(Boolean)
+  let current: ParsedX12Claim | null = null
+  for (const seg of segments) {
+    const fields = seg.split('*')
+    const tag = fields[0]
+    if (tag === 'CLP') {
+      if (current) claims.push(current)
+      current = {
+        pcn:                    String(fields[1] ?? '').trim(),
+        totalCharge:            parseFloat(String(fields[3] ?? '0')) || 0,
+        totalPaid:              parseFloat(String(fields[4] ?? '0')) || 0,
+        patientResponsibility:  parseFloat(String(fields[5] ?? '0')) || 0,
+        payerClaimControlNumber: String(fields[7] ?? '').trim(),
+        cas: [],
+      }
+    } else if (tag === 'CAS' && current) {
+      const group = String(fields[1] ?? '').trim()
+      for (let i = 2; i < fields.length; i += 3) {
+        const reason = String(fields[i] ?? '').trim()
+        const amount = parseFloat(String(fields[i + 1] ?? '0')) || 0
+        if (reason && amount !== 0) {
+          current.cas.push({ group, reason, amount })
+        }
+      }
+    }
+  }
+  if (current) claims.push(current)
+  return claims
+}
+function bucketCasFromX12(cas: Array<{ group: string; reason: string; amount: number }>): CasBreakdown {
+  const totals: CasBreakdown = {
+    patient_deductible: 0, patient_coinsurance: 0, patient_copay: 0,
+    patient_non_covered: 0, contractual_adjustment: 0,
+  }
+  for (const c of cas) {
+    if (c.group === 'PR') {
+      switch (c.reason) {
+        case '1':  totals.patient_deductible  += c.amount; break
+        case '2':  totals.patient_coinsurance += c.amount; break
+        case '3':  totals.patient_copay       += c.amount; break
+        case '96': totals.patient_non_covered += c.amount; break
+        default:   totals.patient_non_covered += c.amount; break
+      }
+    } else if (c.group === 'CO' || c.group === 'OA' || c.group === 'PI') {
+      totals.contractual_adjustment += c.amount
+    }
+  }
+  for (const k of Object.keys(totals) as (keyof CasBreakdown)[]) totals[k] = +totals[k].toFixed(2)
+  return totals
+}
+
 // ── ADDITIVE denial-code extractor (2026-09-16) ────────────────────────────
 // Duplicated verbatim from api/stedi/era.ts, api/cron/stedi-era-poll.ts,
 // api/admin/backfill-stedi-cas.ts, api/admin/backfill-denial-codes.ts.
@@ -416,11 +486,105 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       matched_claim_count = EXCLUDED.matched_claim_count,
       processed_at = NOW()`
 
+  // ── ENRICHMENT: fetch /eras/{id}/x12 for recent remittances and
+  //   parse real CAS from the X12 EDI. The /reports/v2/{txId}/835
+  //   endpoint above returns only a summary (no CAS), so this step
+  //   is what actually populates deductible / coinsurance / copay /
+  //   contractual on matched claims. Fully wrapped in try/catch —
+  //   never blocks the webhook. Idempotent — re-parsing the same
+  //   remittance just re-writes the same values.
+  let x12Enriched = 0
+  const x12Errors: string[] = []
+  try {
+    // Pull all claims' payer_ids so we can scope the /eras list. Small
+    // practice — cheap query.
+    const allClaims: any = await sql`SELECT id, payer_id FROM claims WHERE payer_id IS NOT NULL`
+    const pcnToClaim = new Map<string, string>()
+    const payerIds = new Set<string>()
+    for (const c of allClaims) {
+      const pcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
+      pcnToClaim.set(pcn, c.id as string)
+      payerIds.add(c.payer_id as string)
+    }
+
+    for (const payerId of payerIds) {
+      try {
+        const params = new URLSearchParams()
+        params.set('tradingPartnerId', payerId)
+        params.set('limit', '25')
+        const listRes = await fetch(`https://claims-manager.us.stedi.com/2025-09-01/eras?${params}`, {
+          headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
+        })
+        if (!listRes.ok) { x12Errors.push(`list ${payerId} HTTP ${listRes.status}`); continue }
+        const listBody = await listRes.json() as any
+        const rems: any[] = listBody?.remittances ?? listBody?.items ?? []
+
+        for (const rem of rems) {
+          const remId = rem?.id ?? rem?.remittanceId
+          if (!remId) continue
+          try {
+            const x12Res = await fetch(`https://claims-manager.us.stedi.com/2025-09-01/eras/${remId}/x12`, {
+              headers: { Authorization: `Key ${STEDI_API_KEY}`, Accept: 'application/edi-x12, text/plain' },
+            })
+            if (!x12Res.ok) { x12Errors.push(`x12 ${remId} HTTP ${x12Res.status}`); continue }
+            const x12Text = await x12Res.text()
+            const parsedClaims = parseX12_835(x12Text)
+
+            for (const pc of parsedClaims) {
+              const pcn = String(pc.pcn ?? '').toUpperCase()
+              const claimId = pcnToClaim.get(pcn)
+              if (!claimId) continue
+              const cas = bucketCasFromX12(pc.cas)
+              await sql`
+                UPDATE claims SET
+                  era_received_at            = COALESCE(era_received_at, NOW()),
+                  era_raw_835                = ${JSON.stringify({
+                                                  pcn: pc.pcn,
+                                                  payerClaimControlNumber: pc.payerClaimControlNumber,
+                                                  totalCharge: pc.totalCharge,
+                                                  totalPaid: pc.totalPaid,
+                                                  patientResponsibility: pc.patientResponsibility,
+                                                  cas: pc.cas,
+                                                })}::jsonb,
+                  amount_billed_era          = ${pc.totalCharge},
+                  insurance_payment_era      = ${pc.totalPaid},
+                  contractual_adjustment_era = ${cas.contractual_adjustment},
+                  patient_deductible_era     = ${cas.patient_deductible},
+                  patient_coinsurance_era    = ${cas.patient_coinsurance},
+                  patient_copay_era          = ${cas.patient_copay},
+                  patient_non_covered_era    = ${cas.patient_non_covered},
+                  updated_at                 = NOW()
+                WHERE id = ${claimId}::uuid
+              `
+              const denialCodes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
+              if (denialCodes.length > 0) {
+                await sql`UPDATE claims SET denial_codes = ${JSON.stringify(denialCodes)}::jsonb WHERE id = ${claimId}::uuid`
+              }
+              if (pc.payerClaimControlNumber) {
+                await sql`UPDATE claims SET stedi_payer_claim_control_number = ${pc.payerClaimControlNumber} WHERE id = ${claimId}::uuid AND stedi_payer_claim_control_number IS NULL`
+              }
+              x12Enriched += 1
+            }
+          } catch (perRemErr: any) {
+            x12Errors.push(`rem ${remId}: ${String(perRemErr?.message ?? perRemErr).slice(0, 200)}`)
+          }
+        }
+      } catch (perPayerErr: any) {
+        x12Errors.push(`payer ${payerId}: ${String(perPayerErr?.message ?? perPayerErr).slice(0, 200)}`)
+      }
+    }
+  } catch (enrichErr: any) {
+    console.error('[webhooks/stedi-transaction] X12 enrichment failed (non-fatal):', enrichErr?.message)
+    x12Errors.push(String(enrichErr?.message ?? enrichErr).slice(0, 200))
+  }
+
   return res.status(200).json({
     ok: true,
     transactionId,
     claimPaymentsSeen: claimPayments.length,
     matched,
     errors,
+    x12Enriched,
+    x12Errors: x12Errors.slice(0, 5),
   })
 }
