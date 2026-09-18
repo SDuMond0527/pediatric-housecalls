@@ -50,7 +50,7 @@ function extractStediErrorSummary(details: any): string | null {
   return details?.message ?? null
 }
 
-type Tab = 'review' | 'submitted'
+type Tab = 'review' | 'submitted' | 'completed'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
   pending_review: { label: 'Pending Review', cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
@@ -229,13 +229,16 @@ export function AdminClaims() {
     try {
       // Fetch draft too — belt-and-suspenders so no claim can ever be
       // in a status that this page doesn't render, even accidentally.
-      const [review, errored, submitted, draft] = await Promise.all([
+      // Fetch written_off so the Completed tab has somewhere to render
+      // closed-via-write-off workflows (not just closed-via-payment).
+      const [review, errored, submitted, draft, writtenOff] = await Promise.all([
         getClaims('pending_review'),
         getClaims('error'),
         getClaims('submitted'),
         getClaims('draft'),
+        getClaims('written_off'),
       ])
-      setClaims([...review, ...errored, ...submitted, ...draft])
+      setClaims([...review, ...errored, ...submitted, ...draft, ...writtenOff])
     } catch (e: any) {
       alert('Failed to load claims: ' + (e.message ?? 'Unknown error'))
     } finally {
@@ -258,7 +261,9 @@ export function AdminClaims() {
     const target = claims.find(c => c.id === targetId)
     if (!target) return
     const isReviewTab = target.status === 'pending_review' || target.status === 'error' || target.status === 'draft'
-    setTab(isReviewTab ? 'review' : 'submitted')
+    const isCompletedTab =
+      (target.status === 'submitted' && !!target.era_received_at) || target.status === 'written_off'
+    setTab(isReviewTab ? 'review' : isCompletedTab ? 'completed' : 'submitted')
     setExpanded(targetId)
     // Clear the param so a back-nav or refresh doesn't re-fire this.
     const next = new URLSearchParams(searchParams)
@@ -471,7 +476,17 @@ export function AdminClaims() {
   const baseVisibleClaims = claims.filter(c => !isSelfPayWithSentStatement(c))
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
   const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')
-  const submittedClaims = visibleClaims.filter(c => c.status !== 'pending_review' && c.status !== 'error' && c.status !== 'draft')
+  // "Submitted" now means truly waiting on the payer — sent to Stedi
+  // but no ERA back yet. Once an ERA arrives (paid / partial / denied
+  // / no-patient-responsibility), the claim moves to "Completed" so
+  // the biller's Submitted queue only surfaces claims where the ball
+  // is still in the payer's court. Written-off claims also live in
+  // Completed — a closed workflow, just closed via write-off rather
+  // than payment. (Andrea's ask 2026-09-18.)
+  const submittedClaims = visibleClaims.filter(c => c.status === 'submitted' && !c.era_received_at)
+  const completedClaims = visibleClaims.filter(c =>
+    (c.status === 'submitted' && !!c.era_received_at) || c.status === 'written_off'
+  )
   // Only count claims she still has to act on — same status filter as
   // reviewClaims. Once she submits a claim, ready_for_biller_at stays
   // set on the row (biller attribution), but for the counter it's
@@ -795,6 +810,9 @@ export function AdminClaims() {
           </button>
           <button className={tabCls('submitted')} onClick={() => setTab('submitted')}>
             Submitted ({submittedClaims.length})
+          </button>
+          <button className={tabCls('completed')} onClick={() => setTab('completed')}>
+            Completed ({completedClaims.length})
           </button>
         </div>
         <label className="flex items-center gap-1.5 text-[12px] text-[#555] pr-2 pb-2 cursor-pointer">
@@ -1468,13 +1486,20 @@ export function AdminClaims() {
             </div>
           )}
 
-          {/* SUBMITTED TAB */}
-          {tab === 'submitted' && (
+          {/* SUBMITTED + COMPLETED TABS — same card layout. Submitted =
+              still waiting on payer (no ERA yet). Completed = ERA back
+              (paid / partial / denied / no-pt-resp) OR written off. */}
+          {(tab === 'submitted' || tab === 'completed') && (() => {
+            const list = tab === 'completed' ? completedClaims : submittedClaims
+            const emptyMsg = tab === 'completed'
+              ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
+              : 'No submitted claims yet.'
+            return (
             <div className="space-y-2">
-              {submittedClaims.length === 0 && (
-                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">No submitted claims yet.</div>
+              {list.length === 0 && (
+                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">{emptyMsg}</div>
               )}
-              {submittedClaims.map(c => {
+              {list.map(c => {
                 const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.submitted
                 const Icon = badge.icon
                 const isOpen = expanded === c.id
@@ -1688,7 +1713,8 @@ export function AdminClaims() {
                 )
               })}
             </div>
-          )}
+            )
+          })()}
         </>
       )}
 
