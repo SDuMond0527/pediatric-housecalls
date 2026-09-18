@@ -2030,7 +2030,19 @@ export function BookVisit() {
                     {format(new Date(booking.date + 'T12:00:00'), 'EEE, MMM d')}
                   </span>
                   <button className="text-[12px] text-[#7F77DD] underline"
-                    onClick={() => { setBooking(b => ({ ...b, date: '', time: '', provider: '' })); setShowDatePicker(false) }}>
+                    onClick={() => {
+                      // Keep booking.date so the <input type="date"> below
+                      // renders with a valid, non-empty value — critical for
+                      // mobile Safari + Chrome, which mishandle controlled
+                      // date inputs whose value is an empty string (the
+                      // native picker refuses to commit new selections
+                      // reliably in that state). Just flip showDatePicker
+                      // so the input branch takes over; the input's
+                      // onChange handler already sets showDatePicker=false
+                      // once the user picks a new date. Sara 2026-09-17.
+                      setShowDatePicker(true)
+                      setBooking(b => ({ ...b, time: '', provider: '' }))
+                    }}>
                     Change
                   </button>
                 </div>
