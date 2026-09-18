@@ -6,6 +6,7 @@ import { getFinancialReports, type ArBucket } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
 import { PatientStatementModal } from './PatientStatementModal'
+import { ClaimReviewModal } from './ClaimReviewModal'
 
 type DrillTarget = {
   type: 'insurance' | 'patient'
@@ -54,6 +55,12 @@ export function AdminFinancialReports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
+  // When the biller clicks a claim in the insurance drill, we open a
+  // lightweight review modal INLINE on this page — Sara / Andrea want
+  // to stay on financials rather than get bounced to /admin/claims for
+  // a "why hasn't this paid" glance. The modal has a "Open full editor"
+  // link for the rare case where actual editing is needed.
+  const [reviewClaimId, setReviewClaimId] = useState<string | null>(null)
   // When the biller clicks a statement in the patient AR drill, we open
   // the shared PatientStatementModal inline — it expects a claim-shaped
   // object (id + snapshot fields), which the drill row already carries.
@@ -157,7 +164,7 @@ export function AdminFinancialReports() {
           onClose={() => setDrill(null)}
           onOpenClaim={(claimId) => {
             setDrill(null)
-            navigate(`/admin/claims?claim=${encodeURIComponent(claimId)}`)
+            setReviewClaimId(claimId)
           }}
           onOpenStatement={(row) => {
             setDrill(null)
@@ -181,6 +188,17 @@ export function AdminFinancialReports() {
           claim={statementTarget}
           onClose={() => setStatementTarget(null)}
           onSent={() => { load() }}
+        />
+      )}
+
+      {reviewClaimId && (
+        <ClaimReviewModal
+          claimId={reviewClaimId}
+          onClose={() => setReviewClaimId(null)}
+          onOpenFullEditor={(id) => {
+            setReviewClaimId(null)
+            navigate(`/admin/claims?claim=${encodeURIComponent(id)}`)
+          }}
         />
       )}
     </div>
@@ -217,8 +235,13 @@ function ArAgingSection({
   // Every dollar cell (and the # count) drills into the underlying
   // rows. $0 cells are still clickable per Sara's ask — an empty
   // list is a valid answer ("nothing in 31-60 for BCBS yet").
-  const cellCls = 'px-3 py-2 text-right tabular-nums cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]'
-  const groupCellCls = 'px-3 py-2 text-[#1A1A2E] cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]'
+  // Persistent link-styling (purple text + underline on hover) so the
+  // biller can see at a glance that every cell is interactive without
+  // having to hover to discover it. Color is applied per-cell (below)
+  // so the 120+ red override wins deterministically.
+  const cellCls = 'px-3 py-2 text-right tabular-nums cursor-pointer hover:bg-[#F0EEFA] hover:underline'
+  const groupCellCls = 'px-3 py-2 cursor-pointer hover:bg-[#F0EEFA] hover:underline text-[#7F77DD]'
+  const linkCls = 'text-[#7F77DD]'
 
   return (
     <ReportShell title={title} icon={Icon} plainEnglish={plainEnglish} onExport={() => {
@@ -267,24 +290,24 @@ function ArAgingSection({
                       <ChartNumberPill value={r.chart_number} size="xs" />
                     </span>
                   </td>
-                  <td className={cellCls} onClick={() => drill('0_30',     '0-30 days',   parseFloat(r.b_0_30     ?? 0))}>{fmtMoney(r.b_0_30)}</td>
-                  <td className={cellCls} onClick={() => drill('31_60',    '31-60 days',  parseFloat(r.b_31_60    ?? 0))}>{fmtMoney(r.b_31_60)}</td>
-                  <td className={cellCls} onClick={() => drill('61_90',    '61-90 days',  parseFloat(r.b_61_90    ?? 0))}>{fmtMoney(r.b_61_90)}</td>
-                  <td className={cellCls} onClick={() => drill('91_120',   '91-120 days', parseFloat(r.b_91_120   ?? 0))}>{fmtMoney(r.b_91_120)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drill('0_30',     '0-30 days',   parseFloat(r.b_0_30     ?? 0))}>{fmtMoney(r.b_0_30)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drill('31_60',    '31-60 days',  parseFloat(r.b_31_60    ?? 0))}>{fmtMoney(r.b_31_60)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drill('61_90',    '61-90 days',  parseFloat(r.b_61_90    ?? 0))}>{fmtMoney(r.b_61_90)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drill('91_120',   '91-120 days', parseFloat(r.b_91_120   ?? 0))}>{fmtMoney(r.b_91_120)}</td>
                   <td
-                    className={`${cellCls} ${parseFloat(r.b_120_plus) > 0 ? 'text-[#991B1B] font-semibold' : ''}`}
+                    className={`${cellCls} ${parseFloat(r.b_120_plus) > 0 ? 'text-[#991B1B] font-semibold' : linkCls}`}
                     onClick={() => drill('120_plus', '120+ days', parseFloat(r.b_120_plus ?? 0))}
                   >
                     {fmtMoney(r.b_120_plus)}
                   </td>
                   <td
-                    className={`${cellCls} font-semibold text-[#1A1A2E]`}
+                    className={`${cellCls} ${linkCls} font-semibold`}
                     onClick={() => drill('all', 'All ages', parseFloat(r.total ?? 0))}
                   >
                     {fmtMoney(r.total)}
                   </td>
                   <td
-                    className={`${cellCls} text-[#1A1A2E]/60`}
+                    className={`${cellCls} ${linkCls}`}
                     onClick={() => drill('all', 'All ages', parseFloat(r.total ?? 0))}
                   >
                     {r[countKey]}
@@ -298,23 +321,23 @@ function ArAgingSection({
               return (
                 <tr className="border-t-2 border-[#E8E8E4] bg-[#FAFAF8] font-semibold">
                   <td
-                    className="px-3 py-2 text-[#1A1A2E] cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]"
+                    className="px-3 py-2 cursor-pointer hover:bg-[#F0EEFA] hover:underline text-[#7F77DD]"
                     onClick={() => drillAll('all', 'All ages', totals.total)}
                   >
                     Total
                   </td>
-                  <td className={cellCls} onClick={() => drillAll('0_30',     '0-30 days',   totals.b_0_30)}>{fmtMoney(totals.b_0_30)}</td>
-                  <td className={cellCls} onClick={() => drillAll('31_60',    '31-60 days',  totals.b_31_60)}>{fmtMoney(totals.b_31_60)}</td>
-                  <td className={cellCls} onClick={() => drillAll('61_90',    '61-90 days',  totals.b_61_90)}>{fmtMoney(totals.b_61_90)}</td>
-                  <td className={cellCls} onClick={() => drillAll('91_120',   '91-120 days', totals.b_91_120)}>{fmtMoney(totals.b_91_120)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('0_30',     '0-30 days',   totals.b_0_30)}>{fmtMoney(totals.b_0_30)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('31_60',    '31-60 days',  totals.b_31_60)}>{fmtMoney(totals.b_31_60)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('61_90',    '61-90 days',  totals.b_61_90)}>{fmtMoney(totals.b_61_90)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('91_120',   '91-120 days', totals.b_91_120)}>{fmtMoney(totals.b_91_120)}</td>
                   <td
-                    className={`${cellCls} ${totals.b_120_plus > 0 ? 'text-[#991B1B]' : ''}`}
+                    className={`${cellCls} ${totals.b_120_plus > 0 ? 'text-[#991B1B]' : linkCls}`}
                     onClick={() => drillAll('120_plus', '120+ days', totals.b_120_plus)}
                   >
                     {fmtMoney(totals.b_120_plus)}
                   </td>
-                  <td className={cellCls} onClick={() => drillAll('all', 'All ages', totals.total)}>{fmtMoney(totals.total)}</td>
-                  <td className={`${cellCls} text-[#1A1A2E]/60`} onClick={() => drillAll('all', 'All ages', totals.total)}>{totals.count}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('all', 'All ages', totals.total)}>{fmtMoney(totals.total)}</td>
+                  <td className={`${cellCls} ${linkCls}`} onClick={() => drillAll('all', 'All ages', totals.total)}>{totals.count}</td>
                 </tr>
               )
             })()}

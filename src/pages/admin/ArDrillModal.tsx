@@ -194,7 +194,7 @@ export function ArDrillModal({
 
         <div className="px-5 py-3 border-t border-[#E8E8E4] bg-[#FAFAF8] text-[12px] text-[#1A1A2E]/70">
           {type === 'insurance'
-            ? 'Click a claim to open it in the Claims page and review why it hasn’t paid.'
+            ? 'Click a claim to open a review modal — see status, ERA outcome, denial reason, and open the full editor if you need to make changes.'
             : 'Click a statement to open it and review or record a payment.'}
         </div>
       </div>
