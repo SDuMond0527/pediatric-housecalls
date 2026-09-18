@@ -485,7 +485,23 @@ export function BookVisit() {
     }
   }, [booking.date, booking.zone, regularZoneProviders.length, booking.visitType])
 
-  // Proactive 3-day look-ahead: fires when zone providers load for in-home visit types
+  // Reset date/time/provider only when the USER actually changes zone or
+  // visit type. Previously this was combined with the "provider list
+  // arrived, reload the look-ahead" effect below, which meant any transient
+  // change to regularZoneProviders.length also wiped the user's picked
+  // date — the exact symptom Sara hit on mobile for zones with < 3 MD/PNPs
+  // (Huntersville/Mooresville/University 2026-09-17). Splitting the two
+  // responsibilities so provider-list churn no longer clears user input.
+  useEffect(() => {
+    const isInHome = !isCpr && !isTelemedicine(booking.visitType) &&
+      !isCmaTelePair(booking.visitType) && !isIvFluidsPair(booking.visitType)
+    if (!isInHome) return
+    setShowDatePicker(false)
+    setBooking(b => ({ ...b, date: '', time: '', provider: '' }))
+  }, [booking.zone, booking.visitType])
+
+  // Proactive 3-day look-ahead: fires when zone providers load. No longer
+  // touches booking.date — that's the sibling effect above.
   useEffect(() => {
     const isInHome = !isCpr && !isTelemedicine(booking.visitType) &&
       !isCmaTelePair(booking.visitType) && !isIvFluidsPair(booking.visitType)
@@ -495,8 +511,6 @@ export function BookVisit() {
       return
     }
     setZoneLookahead([])
-    setShowDatePicker(false)
-    setBooking(b => ({ ...b, date: '', time: '', provider: '' }))
     loadZoneLookahead(regularZoneProviders, booking.visitType)
   }, [regularZoneProviders.length, booking.visitType, booking.zone])
 
