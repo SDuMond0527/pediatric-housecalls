@@ -2049,7 +2049,13 @@ export function BookVisit() {
               ) : (
                 <div>
                   <input type="date" value={booking.date} min={localDateStr()}
-                    onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '' })); if (booking.provider) loadBookedTimes(booking.provider, e.target.value) }}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (!v) return
+                      setBooking(b => ({ ...b, date: v, time: '' }))
+                      setShowDatePicker(false)
+                      if (booking.provider) loadBookedTimes(booking.provider, v)
+                    }}
                     className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
                   {zoneLookahead.length === 0 && !zoneLookaheadLoading && (
                     <p className="text-[12px] text-[#1A1A2E] mt-1.5">No openings in the next 3 days — choose any date below.</p>
