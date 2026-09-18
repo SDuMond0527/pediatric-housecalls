@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
-import { getFinancialReports } from '../../lib/api'
+import { getFinancialReports, type ArBucket } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
+import { ArDrillModal } from './ArDrillModal'
+import { PatientStatementModal } from './PatientStatementModal'
+
+type DrillTarget = {
+  type: 'insurance' | 'patient'
+  group: string
+  groupLabel: string
+  bucket: ArBucket
+  bucketLabel: string
+  cellValue: number
+}
 
 type ReportsData = Awaited<ReturnType<typeof getFinancialReports>>
 
@@ -35,11 +47,17 @@ function downloadCsv(filename: string, csv: string) {
 
 export function AdminFinancialReports() {
   const today = new Date()
+  const navigate = useNavigate()
   const [start, setStart] = useState(format(startOfMonth(subMonths(today, 2)), 'yyyy-MM-dd'))
   const [end, setEnd]     = useState(format(today, 'yyyy-MM-dd'))
   const [data, setData]   = useState<ReportsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
+  // When the biller clicks a statement in the patient AR drill, we open
+  // the shared PatientStatementModal inline — it expects a claim-shaped
+  // object (id + snapshot fields), which the drill row already carries.
+  const [statementTarget, setStatementTarget] = useState<any | null>(null)
 
   async function load() {
     setLoading(true); setError(null)
@@ -90,6 +108,8 @@ export function AdminFinancialReports() {
             groupKey="payer_name"
             countKey="claim_count"
             filenameStem="ar-aging-insurance"
+            drillType="insurance"
+            onDrill={setDrill}
           />
 
           <ArAgingSection
@@ -101,6 +121,8 @@ export function AdminFinancialReports() {
             groupKey="patient_name"
             countKey="statement_count"
             filenameStem="ar-aging-patient"
+            drillType="patient"
+            onDrill={setDrill}
           />
 
           <CashCollectionsSection data={data} start={start} end={end} />
@@ -122,6 +144,45 @@ export function AdminFinancialReports() {
           <DenialsByPayerSection data={data} />
         </div>
       )}
+
+      {drill && (
+        <ArDrillModal
+          open
+          type={drill.type}
+          group={drill.group}
+          groupLabel={drill.groupLabel}
+          bucket={drill.bucket}
+          bucketLabel={drill.bucketLabel}
+          cellValue={drill.cellValue}
+          onClose={() => setDrill(null)}
+          onOpenClaim={(claimId) => {
+            setDrill(null)
+            navigate(`/admin/claims?claim=${encodeURIComponent(claimId)}`)
+          }}
+          onOpenStatement={(row) => {
+            setDrill(null)
+            // PatientStatementModal expects a claim-shaped object. The
+            // drill row already carries patient snapshot + claim_id; the
+            // modal fetches the full statement via claim.id (which is
+            // actually claim_id in this context).
+            setStatementTarget({
+              id: row.claim_id,
+              patient_first_name: row.patient_first_name,
+              patient_last_name:  row.patient_last_name,
+              service_date:       row.date_of_service,
+              chart_number:       row.chart_number,
+            })
+          }}
+        />
+      )}
+
+      {statementTarget && (
+        <PatientStatementModal
+          claim={statementTarget}
+          onClose={() => setStatementTarget(null)}
+          onSent={() => { load() }}
+        />
+      )}
     </div>
   )
 }
@@ -130,6 +191,7 @@ export function AdminFinancialReports() {
 
 function ArAgingSection({
   title, icon: Icon, plainEnglish, rows, groupLabel, groupKey, countKey, filenameStem,
+  drillType, onDrill,
 }: {
   title: string
   icon: any
@@ -139,6 +201,8 @@ function ArAgingSection({
   groupKey: string
   countKey: string
   filenameStem: string
+  drillType: 'insurance' | 'patient'
+  onDrill: (t: DrillTarget) => void
 }) {
   const totals = rows.reduce((acc, r) => ({
     b_0_30: acc.b_0_30 + parseFloat(r.b_0_30 ?? 0),
@@ -149,6 +213,12 @@ function ArAgingSection({
     total: acc.total + parseFloat(r.total ?? 0),
     count: acc.count + parseInt(r[countKey] ?? 0, 10),
   }), { b_0_30: 0, b_31_60: 0, b_61_90: 0, b_91_120: 0, b_120_plus: 0, total: 0, count: 0 })
+
+  // Every dollar cell (and the # count) drills into the underlying
+  // rows. $0 cells are still clickable per Sara's ask — an empty
+  // list is a valid answer ("nothing in 31-60 for BCBS yet").
+  const cellCls = 'px-3 py-2 text-right tabular-nums cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]'
+  const groupCellCls = 'px-3 py-2 text-[#1A1A2E] cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]'
 
   return (
     <ReportShell title={title} icon={Icon} plainEnglish={plainEnglish} onExport={() => {
@@ -181,33 +251,73 @@ function ArAgingSection({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F1EFE8]">
-            {rows.map((r, i) => (
-              <tr key={i} className="hover:bg-[#FAFAF8]">
-                <td className="px-3 py-2 text-[#1A1A2E]">
-                  <span className="inline-flex items-center gap-2 flex-wrap">
-                    <span>{r[groupKey]}</span>
-                    <ChartNumberPill value={r.chart_number} size="xs" />
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_0_30)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_31_60)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_61_90)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.b_91_120)}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${parseFloat(r.b_120_plus) > 0 ? 'text-[#991B1B] font-semibold' : ''}`}>{fmtMoney(r.b_120_plus)}</td>
-                <td className="px-3 py-2 text-right font-semibold text-[#1A1A2E] tabular-nums">{fmtMoney(r.total)}</td>
-                <td className="px-3 py-2 text-right text-[#1A1A2E]/60 tabular-nums">{r[countKey]}</td>
-              </tr>
-            ))}
-            <tr className="border-t-2 border-[#E8E8E4] bg-[#FAFAF8] font-semibold">
-              <td className="px-3 py-2 text-[#1A1A2E]">Total</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(totals.b_0_30)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(totals.b_31_60)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(totals.b_61_90)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(totals.b_91_120)}</td>
-              <td className={`px-3 py-2 text-right tabular-nums ${totals.b_120_plus > 0 ? 'text-[#991B1B]' : ''}`}>{fmtMoney(totals.b_120_plus)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(totals.total)}</td>
-              <td className="px-3 py-2 text-right text-[#1A1A2E]/60 tabular-nums">{totals.count}</td>
-            </tr>
+            {rows.map((r, i) => {
+              const groupVal = r[groupKey]
+              const drill = (bucket: ArBucket, bucketLabel: string, cellValue: number) =>
+                onDrill({ type: drillType, group: groupVal, groupLabel: groupVal, bucket, bucketLabel, cellValue })
+              return (
+                <tr key={i} className="hover:bg-[#FAFAF8]">
+                  <td
+                    className={groupCellCls}
+                    title={`See all ${drillType === 'insurance' ? 'claims' : 'statements'} for ${groupVal}`}
+                    onClick={() => drill('all', 'All ages', parseFloat(r.total ?? 0))}
+                  >
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      <span>{groupVal}</span>
+                      <ChartNumberPill value={r.chart_number} size="xs" />
+                    </span>
+                  </td>
+                  <td className={cellCls} onClick={() => drill('0_30',     '0-30 days',   parseFloat(r.b_0_30     ?? 0))}>{fmtMoney(r.b_0_30)}</td>
+                  <td className={cellCls} onClick={() => drill('31_60',    '31-60 days',  parseFloat(r.b_31_60    ?? 0))}>{fmtMoney(r.b_31_60)}</td>
+                  <td className={cellCls} onClick={() => drill('61_90',    '61-90 days',  parseFloat(r.b_61_90    ?? 0))}>{fmtMoney(r.b_61_90)}</td>
+                  <td className={cellCls} onClick={() => drill('91_120',   '91-120 days', parseFloat(r.b_91_120   ?? 0))}>{fmtMoney(r.b_91_120)}</td>
+                  <td
+                    className={`${cellCls} ${parseFloat(r.b_120_plus) > 0 ? 'text-[#991B1B] font-semibold' : ''}`}
+                    onClick={() => drill('120_plus', '120+ days', parseFloat(r.b_120_plus ?? 0))}
+                  >
+                    {fmtMoney(r.b_120_plus)}
+                  </td>
+                  <td
+                    className={`${cellCls} font-semibold text-[#1A1A2E]`}
+                    onClick={() => drill('all', 'All ages', parseFloat(r.total ?? 0))}
+                  >
+                    {fmtMoney(r.total)}
+                  </td>
+                  <td
+                    className={`${cellCls} text-[#1A1A2E]/60`}
+                    onClick={() => drill('all', 'All ages', parseFloat(r.total ?? 0))}
+                  >
+                    {r[countKey]}
+                  </td>
+                </tr>
+              )
+            })}
+            {(() => {
+              const drillAll = (bucket: ArBucket, bucketLabel: string, cellValue: number) =>
+                onDrill({ type: drillType, group: '__all__', groupLabel: 'All ' + (drillType === 'insurance' ? 'payers' : 'patients'), bucket, bucketLabel, cellValue })
+              return (
+                <tr className="border-t-2 border-[#E8E8E4] bg-[#FAFAF8] font-semibold">
+                  <td
+                    className="px-3 py-2 text-[#1A1A2E] cursor-pointer hover:bg-[#F0EEFA] hover:text-[#7F77DD]"
+                    onClick={() => drillAll('all', 'All ages', totals.total)}
+                  >
+                    Total
+                  </td>
+                  <td className={cellCls} onClick={() => drillAll('0_30',     '0-30 days',   totals.b_0_30)}>{fmtMoney(totals.b_0_30)}</td>
+                  <td className={cellCls} onClick={() => drillAll('31_60',    '31-60 days',  totals.b_31_60)}>{fmtMoney(totals.b_31_60)}</td>
+                  <td className={cellCls} onClick={() => drillAll('61_90',    '61-90 days',  totals.b_61_90)}>{fmtMoney(totals.b_61_90)}</td>
+                  <td className={cellCls} onClick={() => drillAll('91_120',   '91-120 days', totals.b_91_120)}>{fmtMoney(totals.b_91_120)}</td>
+                  <td
+                    className={`${cellCls} ${totals.b_120_plus > 0 ? 'text-[#991B1B]' : ''}`}
+                    onClick={() => drillAll('120_plus', '120+ days', totals.b_120_plus)}
+                  >
+                    {fmtMoney(totals.b_120_plus)}
+                  </td>
+                  <td className={cellCls} onClick={() => drillAll('all', 'All ages', totals.total)}>{fmtMoney(totals.total)}</td>
+                  <td className={`${cellCls} text-[#1A1A2E]/60`} onClick={() => drillAll('all', 'All ages', totals.total)}>{totals.count}</td>
+                </tr>
+              )
+            })()}
           </tbody>
         </table>
       )}

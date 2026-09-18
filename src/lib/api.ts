@@ -688,6 +688,17 @@ export const getFinancialReports = (start: string, end: string) =>
     denials_by_payer: any[]
   }>(`/api/admin/financial-reports?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
 
+export type ArBucket = '0_30' | '31_60' | '61_90' | '91_120' | '120_plus' | 'all'
+
+export const getArDrill = (params: {
+  type: 'insurance' | 'patient'
+  group: string
+  bucket: ArBucket
+}) =>
+  apiFetch<{ rows: any[] }>(
+    `/api/admin/ar-drill?type=${encodeURIComponent(params.type)}&group=${encodeURIComponent(params.group)}&bucket=${encodeURIComponent(params.bucket)}`,
+  )
+
 export const createPatientStatement = (data: any) =>
   apiFetch<any>('/api/patient-statements', { method: 'POST', body: JSON.stringify(data) })
 

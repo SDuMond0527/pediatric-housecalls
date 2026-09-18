@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
@@ -247,6 +247,29 @@ export function AdminClaims() {
     load()
     getFeeSchedule().then(data => setFeeSchedule(data ?? [])).catch(() => {})
   }, [])
+
+  // Deep-link: /admin/claims?claim=<id> auto-switches to the correct tab
+  // and expands the claim so the biller lands on it. Used by the AR
+  // aging drill-down on the Financial Reports page.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const targetId = searchParams.get('claim')
+    if (!targetId || loading || claims.length === 0) return
+    const target = claims.find(c => c.id === targetId)
+    if (!target) return
+    const isReviewTab = target.status === 'pending_review' || target.status === 'error' || target.status === 'draft'
+    setTab(isReviewTab ? 'review' : 'submitted')
+    setExpanded(targetId)
+    // Clear the param so a back-nav or refresh doesn't re-fire this.
+    const next = new URLSearchParams(searchParams)
+    next.delete('claim')
+    setSearchParams(next, { replace: true })
+    // Wait a tick for the tab switch + expand to render, then scroll.
+    setTimeout(() => {
+      document.getElementById(`claim-card-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, claims, searchParams])
 
   function onDxQueryChange(claimId: string, q: string) {
     setDxQuery(prev => ({ ...prev, [claimId]: q }))
@@ -819,7 +842,7 @@ export function AdminClaims() {
                   } catch { return c.submission_error }
                 })()
                 return (
-                  <div key={c.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+                  <div key={c.id} id={`claim-card-${c.id}`} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
                     <button className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-[#FAFAF8] transition-colors"
                       onClick={() => setExpanded(isOpen ? null : c.id)}>
                       <div className="flex items-center gap-3 min-w-0">
@@ -1458,7 +1481,7 @@ export function AdminClaims() {
                 const patientBalance = [c.patient_deductible_era, c.patient_coinsurance_era, c.patient_copay_era, c.patient_non_covered_era]
                   .reduce((s, v) => s + (parseFloat(v ?? 0) || 0), 0)
                 return (
-                  <div key={c.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+                  <div key={c.id} id={`claim-card-${c.id}`} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
                     <button className="w-full p-4 flex items-center justify-between gap-4 text-left"
                       onClick={() => setExpanded(isOpen ? null : c.id)}>
                       <div className="flex items-center gap-3 min-w-0">
