@@ -32,6 +32,7 @@ import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { getFamilyAccessToken } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { ProviderAvatar } from '../../components/ProviderAvatar'
 import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { getProvidersByZone, getProvidersByState } from '../../lib/api'
@@ -353,9 +354,9 @@ export function BookVisit() {
   const [firstAvailResult, setFirstAvailResult] = useState<{ provider: string; time: string } | null>(null)
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
-  const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
-  const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
-  const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string }[]>([])
+  const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
+  const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
+  const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
 
   const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
@@ -378,6 +379,7 @@ export function BookVisit() {
           providers.map((p: any) => ({
             name: p.name, role: p.role, initials: p.initials,
             color: p.avatar_color, textColor: p.avatar_text_color,
+            photo_url: p.photo_url ?? null,
           }))
         ))
         .catch(() => setRegularZoneProviders([]))
@@ -398,6 +400,7 @@ export function BookVisit() {
             initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
             color: r.avatar_color || '#EEEDFE',
             textColor: r.avatar_text_color || '#3C3489',
+            photo_url: r.photo_url ?? null,
           }))))
           .catch(() => {})
       )
@@ -411,6 +414,7 @@ export function BookVisit() {
               .map((p: any) => ({
                 name: p.name, role: p.role, initials: p.initials,
                 color: p.avatar_color, textColor: p.avatar_text_color,
+                photo_url: p.photo_url ?? null,
               }))
           ))
           .catch(() => setRegularZoneProviders([]))
@@ -425,6 +429,7 @@ export function BookVisit() {
             initials: r.initials || r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2),
             color: r.avatar_color || '#EEEDFE',
             textColor: r.avatar_text_color || '#3C3489',
+            photo_url: r.photo_url ?? null,
           }))))
           .catch(() => {})
       )
@@ -434,6 +439,7 @@ export function BookVisit() {
         .then(providers => setIvZoneProviders(providers.map((p: any) => ({
           name: p.name, role: p.role, initials: p.initials,
           color: p.avatar_color || '#E1F5EE', textColor: p.avatar_text_color || '#085041',
+          photo_url: p.photo_url ?? null,
         }))))
         .catch(() => setIvZoneProviders([]))
     )
@@ -2135,8 +2141,7 @@ export function BookVisit() {
                 {zoneProviders.map(p => (
                   <button key={p.name} onClick={() => { setFirstAvailResult(null); setBooking(b => ({ ...b, provider: p.name, time: '' })); if (booking.date) loadBookedTimes(p.name, booking.date) }}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${booking.provider === p.name ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-medium flex-shrink-0"
-                      style={{ background: p.color, color: p.textColor }}>{p.initials}</div>
+                    <ProviderAvatar photoUrl={p.photo_url} name={p.name} size="sm" />
                     <div className="flex-1">
                       <div className="font-display text-[14px] font-medium text-[#1A1A2E]">{p.name}</div>
                       <div className="text-[12px] text-[#555]">{p.role}</div>
