@@ -4,7 +4,7 @@ import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
@@ -475,6 +475,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [saving, setSaving] = useState(false)
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState<string | null>(null)
+  // Supervising-physician co-signature (optional). Shown only for
+  // notes whose rendering provider is a nurse practitioner (PNP).
+  // Only providers with role='MD' can add or clear it.
+  const [providerRole, setProviderRole] = useState<string | null>(null)
+  const [coSignedAt, setCoSignedAt] = useState<string | null>(null)
+  const [coSignedByName, setCoSignedByName] = useState<string | null>(null)
+  const [coSigning, setCoSigning] = useState(false)
+  const [coSignError, setCoSignError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -862,6 +870,9 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       if (note) {
         setNoteId(note.id)
         setIsSigned(note.is_signed)
+        setProviderRole(note.provider_role ?? null)
+        setCoSignedAt(note.co_signed_at ?? null)
+        setCoSignedByName(note.co_signed_by_name ?? null)
         // Medical history: signed notes lock to the snapshot taken at
         // sign time; drafts and new notes pre-fill from the child's
         // current chart value returned by the JOIN.
@@ -1096,6 +1107,35 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     }
   }
 
+  async function handleCoSign() {
+    if (!noteId) return
+    setCoSigning(true); setCoSignError(null)
+    try {
+      const updated = await coSignEncounterNote(noteId)
+      setCoSignedAt(updated.co_signed_at ?? null)
+      setCoSignedByName(updated.co_signed_by_name ?? null)
+    } catch (e: any) {
+      setCoSignError(e?.message ?? 'Failed to co-sign note')
+    } finally {
+      setCoSigning(false)
+    }
+  }
+
+  async function handleUndoCoSign() {
+    if (!noteId) return
+    if (!window.confirm('Remove your co-signature from this note?')) return
+    setCoSigning(true); setCoSignError(null)
+    try {
+      const updated = await undoCoSignEncounterNote(noteId)
+      setCoSignedAt(updated.co_signed_at ?? null)
+      setCoSignedByName(updated.co_signed_by_name ?? null)
+    } catch (e: any) {
+      setCoSignError(e?.message ?? 'Failed to remove co-signature')
+    } finally {
+      setCoSigning(false)
+    }
+  }
+
   const readOnly = isSigned
 
   const inputCls = `w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] font-sans bg-white disabled:bg-[#F8F8F6] disabled:text-[#1A1A2E] disabled:cursor-not-allowed`
@@ -1127,7 +1167,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {isSigned && (
               <>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#E1F5EE] text-[#085041]">
@@ -1137,6 +1177,27 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   Unlock note
                 </Button>
               </>
+            )}
+            {/* Supervising-physician co-signature. Optional per Sara's
+                ask 2026-09-19 — visible for MDs on NP-signed notes. */}
+            {isSigned && coSignedAt && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#EEF1F8] text-[#31447A]"
+                    title={`Co-signed by ${coSignedByName ?? 'supervising physician'} on ${new Date(coSignedAt).toLocaleString()}`}>
+                Co-signed{coSignedByName ? ` · ${coSignedByName}` : ''}
+              </span>
+            )}
+            {isSigned && providerRole === 'PNP' && currentProvider?.role === 'MD' && !coSignedAt && (
+              <Button variant="secondary" size="sm" onClick={handleCoSign} loading={coSigning}>
+                Co-sign as supervising physician
+              </Button>
+            )}
+            {isSigned && coSignedAt && currentProvider?.role === 'MD' && (
+              <Button variant="secondary" size="sm" onClick={handleUndoCoSign} loading={coSigning}>
+                Remove co-signature
+              </Button>
+            )}
+            {coSignError && (
+              <span className="text-[11px] text-[#991B1B]">{coSignError}</span>
             )}
             {!readOnly && (
               <>

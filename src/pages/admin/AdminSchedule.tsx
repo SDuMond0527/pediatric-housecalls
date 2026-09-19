@@ -915,6 +915,14 @@ export function AdminSchedule() {
                               {notes[appt.id]?.is_signed && (
                                 <span className="text-[10px] font-semibold text-[#085041] bg-[#E1F5EE] px-2 py-0.5 rounded-full">Signed</span>
                               )}
+                              {notes[appt.id]?.co_signed_at && (
+                                <span
+                                  className="text-[10px] font-semibold text-[#31447A] bg-[#EEF1F8] px-2 py-0.5 rounded-full"
+                                  title={`Co-signed by ${notes[appt.id]?.co_signed_by_name ?? 'supervising physician'}`}
+                                >
+                                  Co-signed
+                                </span>
+                              )}
                               {notes[appt.id] && (
                                 <button
                                   onClick={() => unlockNote(appt.id)}

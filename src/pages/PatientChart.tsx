@@ -41,6 +41,8 @@ interface NoteWithVisit {
   cpt_codes?: { code: string; description: string; category?: string; charge_amount: number; modifier?: string; units?: number }[]
   is_signed: boolean
   signed_at: string | null
+  co_signed_at?: string | null
+  co_signed_by_name?: string | null
   pcp_faxed_at: string | null
   pcp_fax_name: string | null
   visit_type: string
@@ -1495,6 +1497,11 @@ export function PatientChart() {
                                 </span>
                                 <Badge variant="purple">{note.visit_type}</Badge>
                                 {note.is_signed && <Badge variant="teal">Signed</Badge>}
+                                {note.co_signed_at && (
+                                  <Badge variant="blue">
+                                    Co-signed{note.co_signed_by_name ? ` · ${note.co_signed_by_name}` : ''}
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-[12px] text-[#1A1A2E] mb-1.5">
                                 {note.provider_name && <span>{note.provider_name} · </span>}

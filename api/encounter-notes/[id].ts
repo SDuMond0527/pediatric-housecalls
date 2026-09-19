@@ -354,6 +354,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Idempotent column bootstrap for the freeze-at-sign medical
   // history snapshot. Safe on every request.
   try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS medical_history_snapshot text` } catch {}
+  // Supervising-physician co-signature (2026-09-19). Optional on any
+  // NP-signed note. Bootstrap here so every GET/PUT surfaces the
+  // columns even before the first co-sign is recorded.
+  try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by uuid REFERENCES providers(id)` } catch {}
+  try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by_name text` } catch {}
+  try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_at timestamptz` } catch {}
 
   if (req.method === 'GET') {
     // ?format=html → return the note as a printable HTML document
@@ -406,9 +412,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const rows = await sql`
-      SELECT en.*, ch.medical_history AS child_medical_history
+      SELECT en.*,
+             ch.medical_history AS child_medical_history,
+             p.role AS provider_role,
+             p.name AS provider_name
       FROM encounter_notes en
       LEFT JOIN children ch ON ch.id = en.child_id
+      LEFT JOIN providers p ON p.id = en.provider_id
       WHERE en.id = ${id}::uuid AND en.practice_id = ${practiceId}::uuid
       LIMIT 1`
     return res.json(rows[0] ?? null)

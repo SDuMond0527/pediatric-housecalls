@@ -450,6 +450,14 @@ export const createEncounterNote = (body: Record<string, unknown>) =>
 export const updateEncounterNote = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PUT', body: JSON.stringify(body) })
 
+// Supervising physician (role='MD') endorses an NP-signed note.
+// Optional — not required on every NP note; Sara opts in per-note.
+export const coSignEncounterNote = (id: string) =>
+  apiFetch<any>(`/api/encounter-notes/${id}/co-sign`, { method: 'POST' })
+
+export const undoCoSignEncounterNote = (id: string) =>
+  apiFetch<any>(`/api/encounter-notes/${id}/co-sign`, { method: 'DELETE' })
+
 // Download an encounter note as HTML in a new browser tab. The biller
 // then hits Cmd+P → Save as PDF for payer-portal uploads. Requires a
 // Bearer token so we can't use a plain <a href> — we fetch the HTML
