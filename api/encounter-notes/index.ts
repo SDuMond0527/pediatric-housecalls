@@ -30,15 +30,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const { appointment_id, child_id } = req.query as Record<string, string>
 
+    // Bootstrap co-sign columns idempotently — the modal loads notes
+    // through this list endpoint (by appointment_id) so the provider_role
+    // + co_signed_* fields have to surface here, not just from /[id].
+    try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by uuid REFERENCES providers(id)` } catch {}
+    try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by_name text` } catch {}
+    try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_at timestamptz` } catch {}
+
     if (appointment_id) {
       // Include child.medical_history so the modal can auto-populate
       // the Medical History section on a fresh draft (uses the current
       // chart value) and know what to display for signed notes (uses
       // en.medical_history_snapshot frozen at signing time).
+      // provider_role is what gates the "Co-sign as supervising physician"
+      // button in EncounterNoteModal — the modal loads notes through this
+      // branch, not through /api/encounter-notes/[id].
       const rows = await sql`
-        SELECT en.*, ch.medical_history AS child_medical_history
+        SELECT en.*,
+               ch.medical_history AS child_medical_history,
+               p.role AS provider_role,
+               p.name AS provider_name
         FROM encounter_notes en
         LEFT JOIN children ch ON ch.id = en.child_id
+        LEFT JOIN providers p ON p.id = en.provider_id
         WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
         LIMIT 1`
       return res.json(rows[0] ?? null)
@@ -48,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = await sql`
         SELECT en.*, a.visit_type, a.scheduled_date, a.scheduled_time, a.zone,
                p.name as provider_name,
+               p.role as provider_role,
                COALESCE(en.pcp_faxed_to_name, pc.name) as pcp_fax_name
         FROM encounter_notes en
         JOIN appointments a ON a.id = en.appointment_id
