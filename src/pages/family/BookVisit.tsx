@@ -2562,8 +2562,11 @@ export function BookVisit() {
             )
           })()}
 
-          {/* 6. No-availability / waitlist / CMA cards */}
-          {booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
+          {/* 6. No-availability / waitlist / CMA cards. Never shown for
+              CPR — those bookings route to Melissa's approval queue and
+              she decides feasibility, so falling back to a CMA visit
+              would be nonsensical (Sara 2026-09-20). */}
+          {!isCpr && booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
            ((booking.date && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked)) || (cmaOnlyZone && cmaProvidersForZone.length > 0)) && (
             <div className="mb-4 space-y-2">
               {!cmaOnlyZone && (
