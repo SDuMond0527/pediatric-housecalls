@@ -350,6 +350,17 @@ export const getSchedulingData = (providerId: string, params: Record<string, str
 export const getProviderByName = (name: string) =>
   publicFetch<any | null>(`/api/providers?name=${encodeURIComponent(name)}`)
 
+// 14-day day-by-day availability for the CPR class booking grid.
+// Public endpoint — family portal usage — scoped to VITE_PRACTICE_ID
+// on the server so it can't leak other practices' scheduling data.
+export const getCprAvailability = (providerId: string, startDate?: string) =>
+  publicFetch<{
+    days: { date: string; day_of_week: number; working: boolean; hasConflict: boolean }[]
+    start_date: string
+  }>(
+    `/api/providers/${providerId}/cpr-availability${startDate ? `?start=${encodeURIComponent(startDate)}` : ''}`,
+  )
+
 export const getProvidersByRole = (params: Record<string, string>) =>
   publicFetch<any[]>(`/api/providers?${new URLSearchParams(params)}`)
 

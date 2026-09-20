@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, Plus, User, Upload, X, Camera } from 'lucide-react'
 import {
   getProviderByName,
+  getCprAvailability,
   getProvidersByRole,
   getProvidersByNamesWithSecureText,
   getSchedulingData,
@@ -384,6 +385,13 @@ export function BookVisit() {
   // helper text under the date picker. Populated in the CPR branch of the
   // provider-load useEffect below. Empty when not CPR / not loaded yet.
   const [melissaAvailability, setMelissaAvailability] = useState<{ day_of_week: number; start_time: string; end_time: string }[]>([])
+  // Melissa's day-by-day availability for the next 14 days — powers the
+  // CPR class 2-week visual grid (Sara 2026-09-20). Includes both her
+  // weekly working days AND real appointment conflicts on those dates,
+  // so families see "already booked" vs "likely available" before
+  // submitting a request. Melissa still has the final say on approval.
+  const [melissaCprGrid, setMelissaCprGrid] = useState<{ date: string; day_of_week: number; working: boolean; hasConflict: boolean }[]>([])
+  const [melissaId, setMelissaId] = useState<string | null>(null)
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
 
@@ -419,12 +427,14 @@ export function BookVisit() {
               photo_url: mel.photo_url ?? null,
             }])
             setMelissaAvailability(Array.isArray(mel.availability_days) ? mel.availability_days : [])
+            setMelissaId(mel.id ?? null)
           } else {
             setRegularZoneProviders([])
             setMelissaAvailability([])
+            setMelissaId(null)
           }
         })
-        .catch(() => { setRegularZoneProviders([]); setMelissaAvailability([]) })
+        .catch(() => { setRegularZoneProviders([]); setMelissaAvailability([]); setMelissaId(null) })
         .finally(() => setProvidersLoading(false))
       return
     }
@@ -511,6 +521,19 @@ export function BookVisit() {
       setBooking(b => ({ ...b, zone, state: st }))
     }
   }, [zipToZone])
+
+  // Fetch Melissa's next 14 days of availability whenever we know her
+  // provider id and we're on a CPR flow. Refreshes on visitType change
+  // (family switching between Heartsaver and BLS keeps the same grid).
+  const isCprForGrid = booking.visitType.toLowerCase().includes('cpr class')
+  useEffect(() => {
+    if (!isCprForGrid || !melissaId) { setMelissaCprGrid([]); return }
+    let cancelled = false
+    getCprAvailability(melissaId)
+      .then(res => { if (!cancelled) setMelissaCprGrid(res.days ?? []) })
+      .catch(() => { if (!cancelled) setMelissaCprGrid([]) })
+    return () => { cancelled = true }
+  }, [isCprForGrid, melissaId])
 
   useEffect(() => {
     setAllSlotsBooked(false)
@@ -2175,6 +2198,61 @@ export function BookVisit() {
                     </p>
                   )}
                 </div>
+
+                {/* 2-week visual grid — Melissa's next 14 days, marked
+                    by weekly schedule + real appointment conflicts.
+                    Click a day to fill the date input. Fuzzy: Melissa
+                    still confirms on approval. Sara 2026-09-20. */}
+                {melissaCprGrid.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
+                      Melissa's next 2 weeks
+                    </p>
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {melissaCprGrid.map(d => {
+                        const dt = new Date(d.date + 'T12:00:00')
+                        const dayLabel = dt.toLocaleDateString(undefined, { weekday: 'short' })
+                        const dateLabel = dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })
+                        const isSelected = booking.date === d.date
+                        // Three visual states:
+                        //   working + no conflict  → highlighted "likely"
+                        //   working + conflict     → dimmed "busy"
+                        //   not working            → muted "not scheduled"
+                        const state = !d.working ? 'off' : d.hasConflict ? 'busy' : 'open'
+                        const stateCls =
+                          isSelected
+                            ? 'bg-[#E74C3C] border-[#E74C3C] text-white'
+                            : state === 'open'
+                              ? 'bg-[#E1F5EE] border-[#5DCAA5] text-[#085041] hover:bg-[#C7EEDD]'
+                              : state === 'busy'
+                                ? 'bg-[#FFF4E5] border-[#F5D5A6] text-[#8A4B00] hover:bg-[#FFE9C7]'
+                                : 'bg-white border-[#E8E8E4] text-[#1A1A2E]/60 hover:bg-[#FAFAF8]'
+                        const title =
+                          isSelected ? 'Selected'
+                            : state === 'open' ? 'Likely available — matches Melissa\'s usual schedule'
+                            : state === 'busy' ? 'Melissa already has bookings this day'
+                            : 'Not usually scheduled — Melissa will decide on approval'
+                        return (
+                          <button
+                            key={d.date}
+                            type="button"
+                            title={title}
+                            onClick={() => setBooking(b => ({ ...b, date: d.date, provider: 'Melissa Jesse' }))}
+                            className={`px-1 py-2 rounded-lg border-2 text-center transition-all ${stateCls}`}
+                          >
+                            <div className="text-[10px] uppercase tracking-wide">{dayLabel}</div>
+                            <div className="text-[13px] font-semibold">{dateLabel}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-[#555] flex-wrap">
+                      <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#E1F5EE] border border-[#5DCAA5]"></span> Likely available</span>
+                      <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#FFF4E5] border border-[#F5D5A6]"></span> Already has bookings</span>
+                      <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border border-[#E8E8E4]"></span> Not usually scheduled</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mb-5">
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
