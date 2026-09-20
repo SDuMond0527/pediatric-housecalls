@@ -1,10 +1,40 @@
 import { useEffect, useState } from 'react'
-import { XCircle, Clock, ChevronDown } from 'lucide-react'
+import { XCircle, Clock, ChevronDown, Check } from 'lucide-react'
 import { format } from 'date-fns'
-import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds, invokeNotifications } from '../../lib/api'
+import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds, invokeNotifications, createAppointmentWithOverlapRetry } from '../../lib/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import type { BookingRequest, FamilyProfile } from '../../types/family'
+
+// Parses the pipe-delimited notes serialized by BookVisit for CPR
+// (and other) bookings so the admin can see structured fields (age
+// range, prior training, class location, etc.) at a glance.
+function parseBookingNotes(notes: string | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!notes) return out
+  for (const part of String(notes).split('|')) {
+    const idx = part.indexOf(':')
+    if (idx <= 0) continue
+    const key = part.slice(0, idx).trim()
+    const val = part.slice(idx + 1).trim()
+    if (key) out[key] = val
+  }
+  return out
+}
+
+const CPR_DURATION_MINUTES = 180
+
+// booking_requests.preferred_time is 12-hour ("9:00 AM"), but
+// appointments.scheduled_time is 24-hour ("09:00"). Every other
+// caller in the codebase converts before insert; keep the same
+// convention here.
+function to24hr(time: string): string {
+  const [t, ampm] = time.split(' ')
+  let [h, m] = t.split(':').map(Number)
+  if (ampm === 'PM' && h !== 12) h += 12
+  if (ampm === 'AM' && h === 12) h = 0
+  return `${h.toString().padStart(2, '0')}:${(m || 0).toString().padStart(2, '0')}`
+}
 
 interface EnrichedBooking extends BookingRequest {
   family?: FamilyProfile
@@ -15,7 +45,11 @@ export function AdminBookings() {
   const [bookings, setBookings] = useState<EnrichedBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'confirmed' | 'cancelled' | 'all'>('confirmed')
+  // Default to 'pending' so CPR requests awaiting Melissa's approval are
+  // the first thing an admin/instructor sees when they land on this page.
+  const [filter, setFilter] = useState<'pending' | 'confirmed' | 'cancelled' | 'all'>('pending')
+  const [actioning, setActioning] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   async function fetchBookings() {
     setLoading(true)
@@ -43,6 +77,76 @@ export function AdminBookings() {
   }
 
   useEffect(() => { fetchBookings() }, [filter])
+
+  // Approve a pending CPR request → create the appointment for Melissa,
+  // flip the request to 'confirmed', notify the family. Currently only
+  // CPR requests land in 'pending' status, so no per-visit-type branching
+  // is needed yet — the appointment is always Melissa, 180 min, zone
+  // 'CPR Class'. If more pending-approval flows are added, factor this
+  // out per visit type. Sara 2026-09-20.
+  async function approveBooking(b: EnrichedBooking) {
+    if (!b.confirmed_provider_id) {
+      setActionError('This request has no provider on record — cannot create appointment. Contact support.')
+      return
+    }
+    if (!window.confirm(`Approve this CPR class booking for ${format(new Date(b.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at ${b.preferred_time}?`)) return
+    setActioning(b.id); setActionError(null)
+    try {
+      await createAppointmentWithOverlapRetry({
+        provider_id: b.confirmed_provider_id,
+        visit_type: b.visit_type,
+        zone: b.zone || 'CPR Class',
+        scheduled_time: to24hr(b.preferred_time),
+        scheduled_date: b.preferred_date,
+        status: 'upcoming',
+        notes: b.notes ?? undefined,
+        duration_minutes: CPR_DURATION_MINUTES,
+      }, msg => window.confirm(msg + '\n\nApprove anyway?'))
+      await updateBookingRequest(b.id, { status: 'confirmed' })
+      invokeNotifications({
+        type: 'cpr_booking_approved',
+        bookingRequestId: b.id,
+        familyName: b.family?.display_name || b.family?.email || 'A family',
+        parentEmail: b.family?.email || null,
+        parentPhone: b.family?.phone || null,
+        visitType: b.visit_type,
+        date: b.preferred_date,
+        time: b.preferred_time,
+      }).catch(() => {})
+      await fetchBookings()
+    } catch (e: any) {
+      setActionError(e?.message ?? 'Failed to approve booking')
+    } finally {
+      setActioning(null)
+    }
+  }
+
+  async function declineBooking(b: EnrichedBooking) {
+    const reason = window.prompt('Why are you declining this booking? (Optional — the family will see this)')
+    if (reason === null) return  // user hit Cancel
+    setActioning(b.id); setActionError(null)
+    try {
+      const declineNote = reason.trim() ? `DECLINE_REASON:${reason.trim()}` : ''
+      const combinedNotes = [b.notes, declineNote].filter(Boolean).join('|')
+      await updateBookingRequest(b.id, { status: 'cancelled', notes: combinedNotes })
+      invokeNotifications({
+        type: 'cpr_booking_declined',
+        bookingRequestId: b.id,
+        familyName: b.family?.display_name || b.family?.email || 'A family',
+        parentEmail: b.family?.email || null,
+        parentPhone: b.family?.phone || null,
+        visitType: b.visit_type,
+        date: b.preferred_date,
+        time: b.preferred_time,
+        declineReason: reason.trim() || null,
+      }).catch(() => {})
+      await fetchBookings()
+    } catch (e: any) {
+      setActionError(e?.message ?? 'Failed to decline booking')
+    } finally {
+      setActioning(null)
+    }
+  }
 
   async function cancelBooking(id: string) {
     await updateBookingRequest(id, { status: 'cancelled' })
@@ -82,11 +186,11 @@ export function AdminBookings() {
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div>
-          <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Booking history</div>
-          <div className="text-[12px] text-[#1A1A2E] mt-0.5">Appointments are confirmed automatically when families book</div>
+          <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Booking requests</div>
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">Most bookings auto-confirm; CPR class requests wait here for Melissa to approve.</div>
         </div>
         <div className="flex gap-1 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-0.5">
-          {(['confirmed', 'cancelled', 'all'] as const).map(f => (
+          {(['pending', 'confirmed', 'cancelled', 'all'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-md text-[12px] font-medium capitalize transition-colors ${filter === f ? 'bg-white shadow-sm text-[#1A1A2E]' : 'text-[#1A1A2E] hover:text-[#555]'}`}>
               {f}
@@ -94,6 +198,10 @@ export function AdminBookings() {
           ))}
         </div>
       </div>
+
+      {actionError && (
+        <div className="mx-6 mt-3 text-[13px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg">{actionError}</div>
+      )}
 
       <div className="p-6 space-y-3 max-w-3xl">
         {!loading && bookings.length === 0 && (
@@ -121,26 +229,65 @@ export function AdminBookings() {
               <ChevronDown size={14} className={`text-[#1A1A2E] transition-transform flex-shrink-0 ${expanded === b.id ? 'rotate-180' : ''}`} />
             </div>
 
-            {expanded === b.id && (
+            {expanded === b.id && (() => {
+              const noteFields = parseBookingNotes(b.notes)
+              const isCprRequest = b.visit_type.toLowerCase().includes('cpr class')
+              return (
               <div className="px-5 pb-5 border-t border-[#E8E8E4] pt-4">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] mb-4">
                   <div><span className="text-[#1A1A2E]">Contact: </span><span className="font-medium">{b.family?.email}</span></div>
                   <div><span className="text-[#1A1A2E]">Provider: </span><span className="font-medium">{b.preferred_provider || 'Any'}</span></div>
                   <div><span className="text-[#1A1A2E]">Zone: </span><span className="font-medium">{b.zone || '—'}</span></div>
                   <div><span className="text-[#1A1A2E]">State: </span><span className="font-medium">{b.state || '—'}</span></div>
+                  {noteFields.PARENTPHONE && (
+                    <div><span className="text-[#1A1A2E]">Phone: </span><span className="font-medium">{noteFields.PARENTPHONE}</span></div>
+                  )}
+                  {noteFields.ADDR && (
+                    <div className="col-span-2"><span className="text-[#1A1A2E]">Address: </span><span className="font-medium">{noteFields.ADDR}</span></div>
+                  )}
                   {b.charm_appointment_id && (
                     <div className="col-span-2"><span className="text-[#1A1A2E]">Charm ID: </span><span className="font-mono text-[11px]">{b.charm_appointment_id}</span></div>
                   )}
                   <div className="col-span-2 text-[11px] text-[#aeaeb2]">Ref: {b.reference_code} · Submitted {format(new Date(b.created_at), 'MMM d, h:mm a')}</div>
                 </div>
 
-                {b.status !== 'cancelled' && (
-                  <Button variant="danger" size="xs" onClick={() => cancelBooking(b.id)}>
-                    <XCircle size={12} /> Cancel booking
-                  </Button>
+                {/* CPR-class intake details — surfaces the participant
+                    count / attendees / age range / prior training /
+                    class location / instructor notes that BookVisit
+                    collects on the CPR intake step. */}
+                {isCprRequest && (
+                  <div className="mb-4 border border-[#F5B7B1] bg-[#FDEDEC] rounded-lg p-3 text-[13px] space-y-1.5">
+                    <div className="text-[11px] font-semibold text-[#922B21] uppercase tracking-wider mb-1">CPR class intake</div>
+                    {noteFields.PARTICIPANTS && <div><span className="text-[#555]">Participants: </span><span className="font-medium">{noteFields.PARTICIPANTS}</span></div>}
+                    {noteFields.ATTENDEES && <div><span className="text-[#555]">Attendees: </span><span className="font-medium whitespace-pre-wrap">{noteFields.ATTENDEES}</span></div>}
+                    {noteFields.AGE_RANGE && <div><span className="text-[#555]">Age range: </span><span className="font-medium">{noteFields.AGE_RANGE}</span></div>}
+                    {noteFields.PRIOR_TRAINING && <div><span className="text-[#555]">Prior training: </span><span className="font-medium capitalize">{noteFields.PRIOR_TRAINING}</span></div>}
+                    {noteFields.CLASS_LOCATION && <div><span className="text-[#555]">Class location: </span><span className="font-medium">{noteFields.CLASS_LOCATION}</span></div>}
+                    {noteFields.INSTRUCTOR_NOTES && <div><span className="text-[#555]">Notes for instructor: </span><span className="font-medium whitespace-pre-wrap">{noteFields.INSTRUCTOR_NOTES}</span></div>}
+                    {noteFields.DECLINE_REASON && <div className="mt-2 pt-2 border-t border-[#F5B7B1]"><span className="text-[#555]">Decline reason: </span><span className="font-medium italic">{noteFields.DECLINE_REASON}</span></div>}
+                  </div>
                 )}
+
+                <div className="flex flex-wrap gap-2">
+                  {b.status === 'pending' && (
+                    <>
+                      <Button variant="teal" size="xs" loading={actioning === b.id} onClick={() => approveBooking(b)}>
+                        <Check size={12} /> Approve &amp; create appointment
+                      </Button>
+                      <Button variant="secondary" size="xs" loading={actioning === b.id} onClick={() => declineBooking(b)}>
+                        <XCircle size={12} /> Decline
+                      </Button>
+                    </>
+                  )}
+                  {b.status === 'confirmed' && (
+                    <Button variant="danger" size="xs" onClick={() => cancelBooking(b.id)}>
+                      <XCircle size={12} /> Cancel booking
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
+              )
+            })()}
           </div>
         ))}
       </div>

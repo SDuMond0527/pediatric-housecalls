@@ -74,5 +74,6 @@ export interface BookingRequest {
   confirmed_provider_id: string | null
   charm_appointment_id: string | null
   reference_code: string
+  notes: string | null
   created_at: string
 }

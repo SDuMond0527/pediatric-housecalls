@@ -169,6 +169,11 @@ interface BookingState {
   time: string
   participantCount: number
   participantNames: string
+  // CPR-class-only fields (Sara 2026-09-20)
+  cprAgeRange: string          // e.g. "18-65", "kids 10-14", etc.
+  cprPriorTraining: 'none' | 'expired' | 'current' | ''
+  cprClassLocation: string     // "living room", "outdoor patio", etc.
+  cprInstructorNotes: string   // freeform for Melissa
 }
 
 const RED_FLAGS = [
@@ -298,10 +303,19 @@ export function BookVisit() {
     zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '',
     phone: (family as any)?.phone || '', date: '', time: '',
     participantCount: 1, participantNames: '',
+    cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '',
   })
 
   const isIvFluids = isIvFluidsPair(booking.visitType)
-  const isCpr = byType[booking.visitType]?.is_cpr ?? false
+  // DB is source-of-truth for is_cpr, but fall back to a name heuristic
+  // for legacy setups where the practice_visit_types row is missing or
+  // misnamed. Verified 2026-09-20: prod only had a single legacy
+  // "In-home CPR class" row with is_cpr=true but the frontend uses two
+  // long-form descriptive names (Heartsaver + BLS) that never matched,
+  // so is_cpr fell through to false and the whole CPR-specific code
+  // path (Melissa hardcode, participants intake, etc.) was skipped.
+  const isCpr = (byType[booking.visitType]?.is_cpr ?? false)
+    || booking.visitType.toLowerCase().includes('cpr class')
   const STEPS = isIvFluids ? STEPS_IV : isCpr ? STEPS_CPR : STEPS_DEFAULT
 
   // Logical step indices adjust when IV fluids step is inserted
@@ -371,6 +385,27 @@ export function BookVisit() {
     const isIv = isIvFluidsPair(booking.visitType)
     const isCma = isCmaTelePair(booking.visitType)
     const isTele = isTelemedicine(booking.visitType)
+    const isCprHere = booking.visitType.toLowerCase().includes('cpr class')
+    // CPR classes: only Melissa Jesse offers them, and her CPR coverage
+    // area is wider than her sick-visit zones (all of Charlotte, not
+    // just the specific sick-visit zones). Bypass the zip→zone→provider
+    // lookup entirely and just load Melissa. Zone confirmation lives
+    // with Melissa when she approves the pending request.
+    if (isCprHere) {
+      setProvidersLoading(true)
+      setCmaProvidersForZone([])
+      setCmaAvailResult(null)
+      setIvZoneProviders([])
+      getProviderByName('Melissa Jesse')
+        .then(mel => setRegularZoneProviders(mel ? [{
+          name: mel.name, role: mel.role, initials: mel.initials || 'MJ',
+          color: mel.avatar_color || '#FDEDEC', textColor: mel.avatar_text_color || '#922B21',
+          photo_url: mel.photo_url ?? null,
+        }] : []))
+        .catch(() => setRegularZoneProviders([]))
+        .finally(() => setProvidersLoading(false))
+      return
+    }
     if (isTele) {
       if (!booking.state) { setRegularZoneProviders([]); return }
       setProvidersLoading(true)
@@ -1126,7 +1161,13 @@ export function BookVisit() {
     const ref = 'PUC-' + Math.floor(10000 + Math.random() * 90000)
 
     if (isCpr) {
-      // CPR class booking — simplified flow, always Melissa Jesse
+      // CPR class booking — pending-approval flow (Sara 2026-09-20).
+      // Melissa Jesse is the only CPR instructor; her CPR coverage is
+      // wider than her sick-visit zones but not unlimited. Instead of
+      // auto-confirming, we file the booking as PENDING and route it
+      // to Melissa for approval. She approves once she confirms the
+      // address is within her Charlotte-area range. No appointment is
+      // created here — approval flow (AdminBookings) creates it.
       const melissaRow = await getProviderByName('Melissa Jesse')
       const melissaUid = melissaRow?.id || null
 
@@ -1134,22 +1175,14 @@ export function BookVisit() {
         `Ref: ${ref}`,
         `ADDR:${booking.visitAddress}`,
         `PARENTEMAIL:${family!.email}`,
+        booking.phone ? `PARENTPHONE:${booking.phone}` : ((family as any)?.phone ? `PARENTPHONE:${(family as any).phone}` : ''),
         `PARTICIPANTS:${booking.participantCount}`,
         booking.participantNames ? `ATTENDEES:${booking.participantNames}` : '',
+        booking.cprAgeRange ? `AGE_RANGE:${booking.cprAgeRange}` : '',
+        booking.cprPriorTraining ? `PRIOR_TRAINING:${booking.cprPriorTraining}` : '',
+        booking.cprClassLocation ? `CLASS_LOCATION:${booking.cprClassLocation}` : '',
+        booking.cprInstructorNotes ? `INSTRUCTOR_NOTES:${booking.cprInstructorNotes}` : '',
       ].filter(Boolean).join('|')
-
-      if (melissaUid) {
-        await familyCreateAppointment({
-          provider_id: melissaUid,
-          visit_type: booking.visitType,
-          zone: 'CPR Class',
-          scheduled_time: to24hr(booking.time),
-          scheduled_date: booking.date,
-          status: 'upcoming',
-          notes: cprNotes,
-          duration_minutes: 180,
-        })
-      }
 
       const newBooking = await familyCreateBookingRequest({
         family_id: family!.id,
@@ -1160,7 +1193,7 @@ export function BookVisit() {
         state: 'NC',
         preferred_date: booking.date,
         preferred_time: booking.time,
-        status: 'confirmed',
+        status: 'pending',
         confirmed_provider_id: melissaUid,
         reference_code: ref,
         notes: cprNotes,
@@ -1442,9 +1475,13 @@ export function BookVisit() {
         <div className="w-14 h-14 rounded-full bg-[#EAF3DE] flex items-center justify-center mx-auto mb-4">
           <Check size={24} className="text-[#27500A]" strokeWidth={2.5} />
         </div>
-        <h2 className="font-display text-2xl font-medium text-[#1A1A2E] mb-2">You're confirmed!</h2>
+        <h2 className="font-display text-2xl font-medium text-[#1A1A2E] mb-2">
+          {isCpr ? 'Request sent!' : "You're confirmed!"}
+        </h2>
         <p className="text-[13px] text-[#555] mb-5 leading-relaxed max-w-sm mx-auto">
-          Your appointment is booked. You'll receive a reminder before your visit.
+          {isCpr
+            ? "Melissa will review your request and confirm within 24 hours. Watch your email for confirmation."
+            : "Your appointment is booked. You'll receive a reminder before your visit."}
         </p>
         <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-4 max-w-xs mx-auto text-left text-[13px] text-[#555] space-y-1 mb-4">
           <div><strong className="text-[#1A1A2E]">{booking.visitType}</strong></div>
@@ -1468,7 +1505,8 @@ export function BookVisit() {
         <div className="text-[11px] text-[#1A1A2E] font-mono mb-6">Reference: {confirmed}</div>
         {isCpr ? (
           <div className="bg-[#FDEDEC] border border-[#F5B7B1] rounded-lg p-3 max-w-sm mx-auto text-[13px] text-[#922B21] text-left mb-6 space-y-2">
-            <div><strong>Next steps:</strong></div>
+            <div><strong>Your request has been sent to Melissa Jesse.</strong> She'll review your date, time, and address and confirm within 24 hours. You'll get an email when she does.</div>
+            <div className="pt-1"><strong>Once confirmed:</strong></div>
             <div>1. Check your email for the e-learning link — all attendees must complete it before class.</div>
             <div>2. Send payment via Venmo <strong>@{VENMO_HANDLE}</strong> (${booking.participantCount * 80}).</div>
             <div>3. Email attendee names to <strong>deeringmel@me.com</strong>.</div>
@@ -1488,7 +1526,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '', cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '' })
           }}>Book another visit</Button>
         </div>
       </div>
@@ -1692,14 +1730,71 @@ export function BookVisit() {
               <p className="text-[11px] text-[#aeaeb2] mt-1">Melissa will arrive 30 minutes early to set up.</p>
             </div>
 
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Age range of participants <span className="text-[#E74C3C]">*</span>
+              </label>
+              <input value={booking.cprAgeRange}
+                onChange={e => setBooking(b => ({ ...b, cprAgeRange: e.target.value }))}
+                placeholder="e.g. 18–65, or 12–70 (mixed adults + one teen)"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#E74C3C] focus:ring-2 focus:ring-[#E74C3C]/10 outline-none" />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
+                Prior CPR training <span className="text-[#E74C3C]">*</span>
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { v: 'none',    label: 'None' },
+                  { v: 'expired', label: 'Expired' },
+                  { v: 'current', label: 'Current' },
+                ] as const).map(opt => (
+                  <button key={opt.v} type="button"
+                    onClick={() => setBooking(b => ({ ...b, cprPriorTraining: opt.v }))}
+                    className={`px-4 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${booking.cprPriorTraining === opt.v ? 'bg-[#E74C3C] border-[#E74C3C] text-white' : 'border-[#E8E8E4] bg-white text-[#1A1A2E] hover:border-[#E74C3C]'}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Where in the home will the class be held? <span className="text-[#E74C3C]">*</span>
+              </label>
+              <input value={booking.cprClassLocation}
+                onChange={e => setBooking(b => ({ ...b, cprClassLocation: e.target.value }))}
+                placeholder="e.g. living room, outdoor patio, basement rec room"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#E74C3C] focus:ring-2 focus:ring-[#E74C3C]/10 outline-none" />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">Melissa needs floor space for CPR practice on mannequins.</p>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Any other notes for the instructor?
+              </label>
+              <textarea value={booking.cprInstructorNotes}
+                onChange={e => setBooking(b => ({ ...b, cprInstructorNotes: e.target.value }))}
+                placeholder="Optional — pets, parking, accessibility notes, specific certification needed, etc."
+                rows={3}
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans resize-none outline-none focus:border-[#E74C3C] bg-white" />
+            </div>
+
             <div className="p-3.5 bg-[#FDEDEC] border border-[#F5B7B1] rounded-xl text-[13px] text-[#922B21]">
-              <strong>Before class day:</strong> All participants must complete the online e-learning module. You'll receive a link by email after booking.
+              <strong>Before class day:</strong> All participants must complete the online e-learning module. You'll receive a link by email after Melissa confirms your booking.
             </div>
           </div>
 
           <NavButtons
             onBack={() => setStep(0)}
-            nextDisabled={!booking.visitAddress || !booking.participantNames.trim()}
+            nextDisabled={
+              !booking.visitAddress
+              || !booking.participantNames.trim()
+              || !booking.cprAgeRange.trim()
+              || !booking.cprPriorTraining
+              || !booking.cprClassLocation.trim()
+            }
             onNext={() => {
               setBooking(b => ({ ...b, provider: 'Melissa Jesse' }))
               loadBookedTimes('Melissa Jesse', booking.date)
