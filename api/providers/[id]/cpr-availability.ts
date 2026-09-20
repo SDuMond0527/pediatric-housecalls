@@ -74,6 +74,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     day_of_week: number
     working: boolean
     hasConflict: boolean
+    start_time: string | null
+    end_time: string | null
   }[] = []
   const start = new Date(startDate + 'T12:00:00')
   for (let i = 0; i < 14; i++) {
@@ -82,19 +84,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const iso = d.toISOString().slice(0, 10)
     const dow = d.getDay()
     const weeklyRow = weeklyByDow[dow]
-    const override = overrideByDate[iso]
+    const override = overrideByDate[iso] as any
 
     // Overrides win: an explicit is_available=false on this date blocks
     // even a weekly-active day; an is_available=true opens even a day
-    // she doesn't normally work.
+    // she doesn't normally work. Times: prefer override's window (if
+    // set), fall back to the weekly row's window.
     let working = !!(weeklyRow && weeklyRow.is_active)
     if (override) working = override.is_available
+    const start_time = working ? (override?.start_time || weeklyRow?.start_time || null) : null
+    const end_time   = working ? (override?.end_time   || weeklyRow?.end_time   || null) : null
 
     days.push({
       date: iso,
       day_of_week: dow,
       working,
       hasConflict: busyDates.has(iso),
+      start_time,
+      end_time,
     })
   }
 

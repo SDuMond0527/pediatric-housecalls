@@ -381,16 +381,15 @@ export function BookVisit() {
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
   const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
-  // Melissa's weekly working schedule, for the CPR "typical availability"
-  // helper text under the date picker. Populated in the CPR branch of the
-  // provider-load useEffect below. Empty when not CPR / not loaded yet.
-  const [melissaAvailability, setMelissaAvailability] = useState<{ day_of_week: number; start_time: string; end_time: string }[]>([])
+  // Melissa's weekly working schedule was previously used for helper
+  // text under the date picker; superseded by the calendar grid below,
+  // which reads richer per-day data from getCprAvailability.
   // Melissa's day-by-day availability for the next 14 days — powers the
   // CPR class 2-week visual grid (Sara 2026-09-20). Includes both her
   // weekly working days AND real appointment conflicts on those dates,
   // so families see "already booked" vs "likely available" before
   // submitting a request. Melissa still has the final say on approval.
-  const [melissaCprGrid, setMelissaCprGrid] = useState<{ date: string; day_of_week: number; working: boolean; hasConflict: boolean }[]>([])
+  const [melissaCprGrid, setMelissaCprGrid] = useState<{ date: string; day_of_week: number; working: boolean; hasConflict: boolean; start_time: string | null; end_time: string | null }[]>([])
   const [melissaId, setMelissaId] = useState<string | null>(null)
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
@@ -426,15 +425,13 @@ export function BookVisit() {
               color: mel.avatar_color || '#FDEDEC', textColor: mel.avatar_text_color || '#922B21',
               photo_url: mel.photo_url ?? null,
             }])
-            setMelissaAvailability(Array.isArray(mel.availability_days) ? mel.availability_days : [])
             setMelissaId(mel.id ?? null)
           } else {
             setRegularZoneProviders([])
-            setMelissaAvailability([])
             setMelissaId(null)
           }
         })
-        .catch(() => { setRegularZoneProviders([]); setMelissaAvailability([]); setMelissaId(null) })
+        .catch(() => { setRegularZoneProviders([]); setMelissaId(null) })
         .finally(() => setProvidersLoading(false))
       return
     }
@@ -523,13 +520,21 @@ export function BookVisit() {
   }, [zipToZone])
 
   // Fetch Melissa's next 14 days of availability whenever we know her
-  // provider id and we're on a CPR flow. Refreshes on visitType change
-  // (family switching between Heartsaver and BLS keeps the same grid).
+  // provider id and we're on a CPR flow. Aligns the window to the
+  // current week's Sunday so the calendar grid always shows two full
+  // weeks (Sun..Sat rows) rather than a rolling 14 days that would
+  // start mid-week and look ragged.
   const isCprForGrid = booking.visitType.toLowerCase().includes('cpr class')
   useEffect(() => {
     if (!isCprForGrid || !melissaId) { setMelissaCprGrid([]); return }
     let cancelled = false
-    getCprAvailability(melissaId)
+    // Compute local Sunday of this week (day_of_week 0..6, Sunday=0).
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const sunday = new Date(now)
+    sunday.setDate(now.getDate() - now.getDay())
+    const startDate = `${sunday.getFullYear()}-${String(sunday.getMonth()+1).padStart(2,'0')}-${String(sunday.getDate()).padStart(2,'0')}`
+    getCprAvailability(melissaId, startDate)
       .then(res => { if (!cancelled) setMelissaCprGrid(res.days ?? []) })
       .catch(() => { if (!cancelled) setMelissaCprGrid([]) })
     return () => { cancelled = true }
@@ -2175,73 +2180,98 @@ export function BookVisit() {
               slot. Instructor is always Melissa so no provider list.
               Sara 2026-09-20. */}
           {isCpr && (() => {
-            const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-            const daysDescription = melissaAvailability.length > 0
-              ? melissaAvailability.map(d => DAY_NAMES[d.day_of_week]).join(', ')
-              : null
+            const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+
+            // Format "09:00" → "9am", "13:30" → "1:30pm"
+            const fmtTime = (t: string | null) => {
+              if (!t) return null
+              const [h, m] = t.split(':').map(Number)
+              const suffix = h >= 12 ? 'pm' : 'am'
+              const hour12 = ((h + 11) % 12) + 1
+              return m ? `${hour12}:${String(m).padStart(2,'0')}${suffix}` : `${hour12}${suffix}`
+            }
+
+            const monthLabel = melissaCprGrid.length > 0
+              ? (() => {
+                  const first = new Date(melissaCprGrid[0].date + 'T12:00:00')
+                  const last  = new Date(melissaCprGrid[melissaCprGrid.length-1].date + 'T12:00:00')
+                  const sameMonth = first.getMonth() === last.getMonth()
+                  return sameMonth
+                    ? first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+                    : `${first.toLocaleDateString(undefined, { month: 'short' })} – ${last.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`
+                })()
+              : ''
+
             return (
               <>
-                <div className="mb-5">
-                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
-                    Preferred date for your class <span className="text-[#ff3b30]">*</span>
-                  </label>
-                  <input type="date" value={booking.date} min={localDateStr()}
-                    onChange={e => { setBooking(b => ({ ...b, date: e.target.value, provider: 'Melissa Jesse' })) }}
-                    className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
-                  {daysDescription ? (
-                    <p className="text-[11px] text-[#aeaeb2] mt-1">
-                      Melissa typically teaches on <strong>{daysDescription}</strong>. She'll confirm your date based on her actual calendar. Class runs about 3 hours.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-[#aeaeb2] mt-1">
-                      Melissa will confirm this date based on her calendar. Class runs about 3 hours.
-                    </p>
-                  )}
-                </div>
-
-                {/* 2-week visual grid — Melissa's next 14 days, marked
-                    by weekly schedule + real appointment conflicts.
-                    Click a day to fill the date input. Fuzzy: Melissa
-                    still confirms on approval. Sara 2026-09-20. */}
+                {/* Calendar-style 2-week view — appears BEFORE the raw
+                    date input so families pick a day from Melissa's
+                    actual availability first, and only fall back to
+                    the text picker if they want a specific out-of-view
+                    date. Bigger cells so per-day time windows fit.
+                    Sara 2026-09-20 (Option A). */}
                 {melissaCprGrid.length > 0 && (
                   <div className="mb-5">
-                    <p className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
-                      Melissa's next 2 weeks
-                    </p>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider">
+                        Melissa's availability <span className="text-[#ff3b30]">*</span>
+                      </p>
+                      <span className="text-[12px] text-[#1A1A2E]/60">{monthLabel}</span>
+                    </div>
+                    {/* Day-of-week header row */}
+                    <div className="grid grid-cols-7 gap-1.5 mb-1">
+                      {DAY_HEADERS.map(h => (
+                        <div key={h} className="text-[10px] font-semibold text-[#555] uppercase tracking-wide text-center">{h}</div>
+                      ))}
+                    </div>
+                    {/* 2 rows of 7 day cells */}
                     <div className="grid grid-cols-7 gap-1.5">
                       {melissaCprGrid.map(d => {
                         const dt = new Date(d.date + 'T12:00:00')
-                        const dayLabel = dt.toLocaleDateString(undefined, { weekday: 'short' })
-                        const dateLabel = dt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })
+                        const dayNum = dt.getDate()
+                        const isPast = d.date < todayIso
                         const isSelected = booking.date === d.date
-                        // Three visual states:
-                        //   working + no conflict  → highlighted "likely"
-                        //   working + conflict     → dimmed "busy"
-                        //   not working            → muted "not scheduled"
-                        const state = !d.working ? 'off' : d.hasConflict ? 'busy' : 'open'
+                        // Four visual states:
+                        //   past                    → disabled, greyed
+                        //   working + no conflict   → "open" (green)
+                        //   working + conflict      → "busy" (amber)
+                        //   not working             → "off" (muted)
+                        const state = isPast ? 'past' : !d.working ? 'off' : d.hasConflict ? 'busy' : 'open'
                         const stateCls =
                           isSelected
                             ? 'bg-[#E74C3C] border-[#E74C3C] text-white'
-                            : state === 'open'
-                              ? 'bg-[#E1F5EE] border-[#5DCAA5] text-[#085041] hover:bg-[#C7EEDD]'
-                              : state === 'busy'
-                                ? 'bg-[#FFF4E5] border-[#F5D5A6] text-[#8A4B00] hover:bg-[#FFE9C7]'
-                                : 'bg-white border-[#E8E8E4] text-[#1A1A2E]/60 hover:bg-[#FAFAF8]'
+                            : state === 'past'
+                              ? 'bg-[#FAFAF8] border-[#E8E8E4] text-[#1A1A2E]/30 cursor-not-allowed'
+                              : state === 'open'
+                                ? 'bg-[#E1F5EE] border-[#5DCAA5] text-[#085041] hover:bg-[#C7EEDD]'
+                                : state === 'busy'
+                                  ? 'bg-[#FFF4E5] border-[#F5D5A6] text-[#8A4B00] hover:bg-[#FFE9C7]'
+                                  : 'bg-white border-[#E8E8E4] text-[#1A1A2E]/60 hover:bg-[#FAFAF8]'
                         const title =
                           isSelected ? 'Selected'
-                            : state === 'open' ? 'Likely available — matches Melissa\'s usual schedule'
+                            : state === 'past' ? 'In the past'
+                            : state === 'open' ? 'Likely available'
                             : state === 'busy' ? 'Melissa already has bookings this day'
                             : 'Not usually scheduled — Melissa will decide on approval'
+                        const timeLine = state === 'past' ? null
+                          : state === 'busy' ? 'Booked'
+                          : (d.start_time && d.end_time)
+                            ? `${fmtTime(d.start_time)}–${fmtTime(d.end_time)}`
+                            : null
                         return (
                           <button
                             key={d.date}
                             type="button"
                             title={title}
+                            disabled={state === 'past'}
                             onClick={() => setBooking(b => ({ ...b, date: d.date, provider: 'Melissa Jesse' }))}
-                            className={`px-1 py-2 rounded-lg border-2 text-center transition-all ${stateCls}`}
+                            className={`min-h-[64px] px-1 py-2 rounded-lg border-2 text-center transition-all flex flex-col justify-center gap-0.5 ${stateCls}`}
                           >
-                            <div className="text-[10px] uppercase tracking-wide">{dayLabel}</div>
-                            <div className="text-[13px] font-semibold">{dateLabel}</div>
+                            <div className="text-[16px] font-semibold leading-none">{dayNum}</div>
+                            {timeLine && <div className="text-[10px] leading-none">{timeLine}</div>}
                           </button>
                         )
                       })}
@@ -2253,6 +2283,23 @@ export function BookVisit() {
                     </div>
                   </div>
                 )}
+
+                {/* Native date input remains as a fallback for families
+                    who want a specific date outside the 2-week window
+                    (Melissa can decline if it doesn't work). */}
+                <div className="mb-5">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Preferred date for your class <span className="text-[#ff3b30]">*</span>
+                  </label>
+                  <input type="date" value={booking.date} min={localDateStr()}
+                    onChange={e => { setBooking(b => ({ ...b, date: e.target.value, provider: 'Melissa Jesse' })) }}
+                    className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+                  <p className="text-[11px] text-[#aeaeb2] mt-1">
+                    {melissaCprGrid.length > 0
+                      ? 'Or type any date beyond the 2 weeks above — Melissa will confirm. Class runs about 3 hours.'
+                      : 'Melissa will confirm this date based on her calendar. Class runs about 3 hours.'}
+                  </p>
+                </div>
 
                 <div className="mb-5">
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">

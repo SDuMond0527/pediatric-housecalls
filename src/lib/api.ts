@@ -355,7 +355,14 @@ export const getProviderByName = (name: string) =>
 // on the server so it can't leak other practices' scheduling data.
 export const getCprAvailability = (providerId: string, startDate?: string) =>
   publicFetch<{
-    days: { date: string; day_of_week: number; working: boolean; hasConflict: boolean }[]
+    days: {
+      date: string
+      day_of_week: number
+      working: boolean
+      hasConflict: boolean
+      start_time: string | null
+      end_time: string | null
+    }[]
     start_date: string
   }>(
     `/api/providers/${providerId}/cpr-availability${startDate ? `?start=${encodeURIComponent(startDate)}` : ''}`,
