@@ -1112,11 +1112,20 @@ export function BookVisit() {
   const isCmaVisit = isCmaTelePair(booking.visitType)
   const isTele = isTelemedicine(booking.visitType)
   const cmaOnlyZone = !!booking.zone && !waitlistZones.includes(booking.zone) && regularZoneProviders.length === 0 && !isCmaVisit
+  // Hardcoded Melissa fallback for CPR — the useEffect that loads her
+  // from getProviderByName can 401/500/return-null in edge cases (env
+  // misconfig, silent network failure), and if regularZoneProviders
+  // stays empty the whole date/time/provider UI is hidden and the
+  // family sees a page they can't advance from. Hardcoded fallback
+  // means CPR flow never gets stuck even when the fetch fails.
+  const CPR_MELISSA_FALLBACK = { name: 'Melissa Jesse', role: 'PNP', initials: 'MJ', color: '#FDEDEC', textColor: '#922B21', photo_url: null }
   const zoneProviders = isIvFluids
     ? ivZoneProviders
     : isCmaVisit && cmaProvidersForZone.length > 0
       ? cmaProvidersForZone
-      : regularZoneProviders
+      : isCpr && regularZoneProviders.length === 0
+        ? [CPR_MELISSA_FALLBACK]
+        : regularZoneProviders
   const noAvailableSlots = booking.date
     ? getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     : false
@@ -2068,6 +2077,43 @@ export function BookVisit() {
             </div>
           )}
 
+          {/* CPR: phone number — required for Melissa to confirm the
+              booking with the family. Not collected on the CPR intake
+              step (unlike sick visits, which collect it on the child
+              intake step), so we ask here. */}
+          {isCpr && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Contact phone number <span className="text-[#ff3b30]">*</span>
+              </label>
+              <input type="tel" value={booking.phone}
+                onChange={e => setBooking(b => ({ ...b, phone: e.target.value }))}
+                placeholder="(704) 555-0000"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#E74C3C] focus:ring-2 focus:ring-[#E74C3C]/10 outline-none" />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">Melissa will use this to confirm your booking.</p>
+            </div>
+          )}
+
+          {/* CPR: date picker — lives OUTSIDE the {!isCpr && <>} block
+              below (previously nested inside it, which meant the picker
+              never rendered for CPR and the family got stuck on this
+              step with no way to advance). Instructor is always Melissa
+              so no provider list is needed. Sara 2026-09-20. */}
+          {isCpr && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date <span className="text-[#ff3b30]">*</span></label>
+              <input type="date" value={booking.date} min={localDateStr()}
+                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '', provider: 'Melissa Jesse' })); loadBookedTimes('Melissa Jesse', e.target.value) }}
+                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">Class runs about 3 hours. Melissa arrives 30 min early to set up.</p>
+            </div>
+          )}
+          {isCpr && (
+            <div className="mb-5 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#1A1A2E]">
+              <span className="text-[#555]">Instructor: </span><span className="font-semibold">Melissa Jesse, PNP</span>
+            </div>
+          )}
+
           {/* 2. Zip / zone / provider selection — hidden for CPR */}
           {!isCpr && <>
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2192,8 +2238,9 @@ export function BookVisit() {
             </div>
           )}
 
-          {/* 3a-alt. Date picker for CPR and telemedicine — shown before the provider list */}
-          {(isCpr || isTelemedicine(booking.visitType)) && zoneProviders.length > 0 && (
+          {/* 3a-alt. Date picker for telemedicine only — CPR has its
+              own copy above (outside the {!isCpr} wrapper). */}
+          {isTelemedicine(booking.visitType) && zoneProviders.length > 0 && (
             <div className="mb-5">
               <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date</label>
               <input type="date" value={booking.date} min={localDateStr()}
