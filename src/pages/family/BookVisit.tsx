@@ -2702,7 +2702,12 @@ export function BookVisit() {
               ['Instructor', 'Melissa Jesse'],
               ['Participants', `${booking.participantCount} person${booking.participantCount > 1 ? 's' : ''}`],
               ['Date', format(new Date(booking.date + 'T12:00:00'), 'EEEE, MMMM d, yyyy')],
-              ['Time', booking.time],
+              // CPR: family picks a fuzzy time-of-day (Melissa sets the
+              // real start on approval), so show the preference here
+              // rather than booking.time which is empty on CPR.
+              ['Time', booking.cprTimeOfDay === 'morning' ? 'Morning (Melissa will confirm exact time)'
+                     : booking.cprTimeOfDay === 'afternoon' ? 'Afternoon (Melissa will confirm exact time)'
+                     : ''],
               ['Address', booking.visitAddress],
               ...(booking.participantNames ? [['Attendees', booking.participantNames]] : []),
             ] : [
@@ -2733,11 +2738,14 @@ export function BookVisit() {
 
           {isCpr ? (
             <div className="space-y-3 mb-5">
+              <div className="p-3.5 bg-[#FFF4E5] border border-[#F5D5A6] rounded-xl text-[13px] text-[#8A4B00]">
+                <strong>Next step:</strong> Melissa Jesse, PNP will review your request and confirm your booking within 24 hours. If she can't accommodate your preferred date or address, she'll reach out to you directly.
+              </div>
               <div className="p-3.5 bg-[#FDEDEC] border border-[#F5B7B1] rounded-xl text-[13px] text-[#922B21]">
-                <strong>E-learning required:</strong> After booking, you'll receive an e-learning link by email. All participants must complete it before class day.
+                <strong>After Melissa confirms:</strong> You'll receive an e-learning link by email. All participants must complete it before class day.
               </div>
               <div className="p-3.5 bg-[#E8F8F5] border border-[#A9DFBF] rounded-xl text-[13px] text-[#1E8449]">
-                <strong>Payment:</strong> Venmo <strong>@{VENMO_HANDLE}</strong> — ${booking.participantCount * 80} total (${booking.participantCount} × $80).
+                <strong>Payment (after confirmation):</strong> Venmo <strong>@{VENMO_HANDLE}</strong> — ${booking.participantCount * 80} total (${booking.participantCount} × $80). Don't send payment until Melissa confirms.
               </div>
               <div className="p-3.5 bg-[#EBF5FB] border border-[#AED6F1] rounded-xl text-[13px] text-[#1A5276]">
                 <strong>Attendee names:</strong> Please email the full names of all attendees to <strong>deeringmel@me.com</strong> so Melissa can prepare completion cards.
@@ -2826,7 +2834,7 @@ export function BookVisit() {
           )}
           <NavButtons
             onBack={() => setStep(STEP_LOCATION)}
-            nextLabel="Confirm appointment"
+            nextLabel={isCpr ? 'Submit request' : 'Confirm appointment'}
             loading={submitting}
             nextDisabled={(needsAgreements && !agreementsAccepted) || (needsPaymentPolicy && !paymentPolicyAccepted)}
             onNext={() => { setSubmitError(null); submit() }}
