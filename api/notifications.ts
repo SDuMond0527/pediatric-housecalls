@@ -479,7 +479,7 @@ function appointmentCancelledByProviderEmail(data: {
 </body></html>`
 }
 
-function cprConfirmationEmail(data: {
+function cprApprovedEmail(data: {
   displayName: string | null
   visitType: string
   date: string
@@ -637,6 +637,110 @@ function cprMelissaEmail(data: {
   <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
     Booking reference: <strong style="font-family:monospace;">${data.ref}</strong>
   </td></tr>
+</table>
+</td></tr></table>
+</body></html>`
+}
+
+// Family-facing acknowledgment when a CPR class booking is submitted.
+// Lightweight — the full confirmation with e-learning links + Venmo
+// details fires later from cprApprovedEmail once Melissa approves.
+function cprRequestReceivedEmail(data: {
+  displayName: string | null
+  date: string
+  time: string
+  address: string
+  participantCount: number
+  participantNames: string
+  ref: string
+}) {
+  const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+
+  <tr><td style="background:#1A1A2E;padding:28px 32px;">
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#E74C3C')}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">CPR class request received</div>
+  </td></tr>
+
+  <tr><td style="padding:32px;">
+    <p style="font-size:15px;margin:0 0 12px;line-height:1.7;">${greeting}</p>
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">Thanks for requesting an in-home CPR class. <strong>Melissa Jesse</strong> will review your date, time, and address and confirm your booking within 24 hours. You'll get a follow-up email once she does, with the e-learning link and payment details.</p>
+
+    <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;">
+      <tr><td style="padding:20px;">
+        ${row('📅', 'Requested date', data.date)}
+        ${row('🕐', 'Requested time', data.time)}
+        ${row('👩‍🏫', 'Instructor', 'Melissa Jesse')}
+        ${row('📍', 'Address', data.address)}
+        ${row('👥', 'Participants', `${data.participantCount} person${data.participantCount > 1 ? 's' : ''}`)}
+        ${data.participantNames ? row('📋', 'Attendees', data.participantNames) : ''}
+      </td></tr>
+    </table>
+
+    <div style="background:#FFF4E5;border-radius:10px;border:1px solid #F5D5A6;padding:14px 16px;font-size:13px;color:#8A4B00;margin-bottom:24px;">
+      <strong>What happens next:</strong> Melissa will confirm within 24 hours. If she can't accommodate this date, she'll email you to suggest alternatives.
+    </div>
+
+    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions? Reach Melissa at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+  </td></tr>
+
+  <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
+    Request reference: <strong style="font-family:monospace;">${data.ref}</strong>
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>`
+}
+
+// Family-facing decline. Melissa's decline reason (if she provided
+// one) is included so the family understands the "no" and can reach
+// out about alternate dates.
+function cprDeclinedEmail(data: {
+  displayName: string | null
+  date: string
+  time: string
+  declineReason: string | null
+  ref: string
+}) {
+  const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+
+  <tr><td style="background:#1A1A2E;padding:28px 32px;">
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo('#E74C3C')}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">CPR class request — can't accommodate</div>
+  </td></tr>
+
+  <tr><td style="padding:32px;">
+    <p style="font-size:15px;margin:0 0 16px;line-height:1.7;">${greeting}</p>
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">Unfortunately Melissa isn't able to take your CPR class request for <strong>${data.date} at ${data.time}</strong>.</p>
+
+    ${data.declineReason ? `
+    <div style="background:#FDEDEC;border-radius:10px;border:1px solid #F5B7B1;padding:14px 16px;font-size:13px;color:#922B21;margin-bottom:24px;">
+      <div style="font-weight:600;margin-bottom:4px;">Melissa's note:</div>
+      <div style="white-space:pre-wrap;">${data.declineReason}</div>
+    </div>
+    ` : ''}
+
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">Please reach out directly to Melissa if you'd like to try a different date, time, or location — she may be able to fit you in.</p>
+
+    <a href="mailto:deeringmel@me.com" style="display:inline-block;background:#E74C3C;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Email Melissa</a>
+  </td></tr>
+
+  <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
+    Request reference: <strong style="font-family:monospace;">${data.ref}</strong>
+  </td></tr>
+
 </table>
 </td></tr></table>
 </body></html>`
@@ -1709,13 +1813,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const addrMatch = notesStr.match(/ADDR:([^|]+)/)
       const address = addrMatch ? addrMatch[1].trim() : ''
 
+      // Family gets a lightweight acknowledgment — the full class-day
+      // email (e-learning + Venmo) fires from cpr_booking_approved once
+      // Melissa approves the request.
       if (family?.email) {
         await sendEmail(
           family.email,
-          `CPR class confirmed — ${dateFormatted} at ${booking.preferred_time}`,
-          cprConfirmationEmail({
+          `CPR class request received — awaiting Melissa's approval`,
+          cprRequestReceivedEmail({
             displayName: family.display_name,
-            visitType: booking.visit_type,
             date: dateFormatted,
             time: booking.preferred_time,
             address,
@@ -1723,12 +1829,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             participantNames,
             ref: booking.reference_code,
           })
-        ).catch(e => console.error('CPR family confirmation email failed:', e))
+        ).catch(e => console.error('CPR family request-received email failed:', e))
       }
 
       await sendEmail(
         'deeringmel@me.com',
-        `[CPR Class] New booking — ${dateFormatted} at ${booking.preferred_time}`,
+        `[CPR Class] REQUEST — needs your approval (${dateFormatted} at ${booking.preferred_time})`,
         cprMelissaEmail({
           visitType: booking.visit_type,
           date: dateFormatted,
@@ -1742,7 +1848,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       ).catch(e => console.error('CPR Melissa email failed:', e))
 
-      await notifyAdmins(sql, `${PRACTICE_NAME}: New CPR class booked. View: ${PORTAL_URL}/admin/schedule`, booking.practice_id ?? undefined)
+      await notifyAdmins(sql, `${PRACTICE_NAME}: New CPR class REQUEST — needs Melissa's approval. View: ${PORTAL_URL}/admin/bookings`, booking.practice_id ?? undefined)
+
+      return res.json({ ok: true })
+    }
+
+    // ── CPR class approved by Melissa ────────────────────────────────────────
+    // Fires from AdminBookings when Melissa clicks "Approve & create
+    // appointment". Sends the family the full detailed email with the
+    // e-learning course links + Venmo payment instructions — content
+    // that used to fire on submit before the approval flow existed.
+    if (body.type === 'cpr_booking_approved') {
+      const { bookingRequestId } = body
+      const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
+      if (!booking) throw new Error('Booking not found')
+
+      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+
+      const dateFormatted = formatDate(booking.preferred_date)
+      const notesStr: string = booking.notes || ''
+      const participantMatch = notesStr.match(/PARTICIPANTS:(\d+)/)
+      const participantCount = participantMatch ? parseInt(participantMatch[1]) : 1
+      const namesMatch = notesStr.match(/ATTENDEES:([^|]+)/)
+      const participantNames = namesMatch ? namesMatch[1].trim() : ''
+      const addrMatch = notesStr.match(/ADDR:([^|]+)/)
+      const address = addrMatch ? addrMatch[1].trim() : ''
+
+      if (family?.email) {
+        await sendEmail(
+          family.email,
+          `CPR class confirmed — ${dateFormatted} at ${booking.preferred_time}`,
+          cprApprovedEmail({
+            displayName: family.display_name,
+            visitType: booking.visit_type,
+            date: dateFormatted,
+            time: booking.preferred_time,
+            address,
+            participantCount,
+            participantNames,
+            ref: booking.reference_code,
+          })
+        ).catch(e => console.error('CPR family approval email failed:', e))
+      }
+
+      return res.json({ ok: true })
+    }
+
+    // ── CPR class declined by Melissa ────────────────────────────────────────
+    // Fires from AdminBookings when Melissa clicks "Decline" on a
+    // pending CPR request. The decline reason (if she entered one) is
+    // passed through from the client so the family sees it.
+    if (body.type === 'cpr_booking_declined') {
+      const { bookingRequestId, declineReason } = body
+      const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
+      if (!booking) throw new Error('Booking not found')
+
+      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+
+      const dateFormatted = formatDate(booking.preferred_date)
+
+      if (family?.email) {
+        await sendEmail(
+          family.email,
+          `CPR class request — can't accommodate this time`,
+          cprDeclinedEmail({
+            displayName: family.display_name,
+            date: dateFormatted,
+            time: booking.preferred_time,
+            declineReason: declineReason ? String(declineReason) : null,
+            ref: booking.reference_code,
+          })
+        ).catch(e => console.error('CPR family decline email failed:', e))
+      }
 
       return res.json({ ok: true })
     }
