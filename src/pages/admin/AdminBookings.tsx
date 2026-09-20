@@ -36,6 +36,30 @@ function to24hr(time: string): string {
   return `${h.toString().padStart(2, '0')}:${(m || 0).toString().padStart(2, '0')}`
 }
 
+// CPR bookings store the family's fuzzy time preference ("Morning" or
+// "Afternoon") in preferred_time — Melissa picks the real time on
+// approval. This detects those so the approve flow can prompt.
+function isFuzzyTimePreference(t: string | null | undefined): boolean {
+  if (!t) return true
+  const s = t.trim().toLowerCase()
+  return s === 'morning' || s === 'afternoon' || s === ''
+}
+
+// Convert "9:00 AM", "9:00AM", "9 AM", "9:30 pm" → "09:00" / "21:30".
+// Returns null if the string doesn't parse as a time.
+function parseTimeInput(raw: string): string | null {
+  const s = raw.trim().toUpperCase().replace(/\s+/g, ' ')
+  const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/)
+  if (!match) return null
+  let h = parseInt(match[1], 10)
+  const m = match[2] ? parseInt(match[2], 10) : 0
+  const ampm = match[3]
+  if (h < 1 || h > 12 || m < 0 || m > 59) return null
+  if (ampm === 'PM' && h !== 12) h += 12
+  if (ampm === 'AM' && h === 12) h = 0
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 interface EnrichedBooking extends BookingRequest {
   family?: FamilyProfile
   childNames?: string[]
@@ -89,20 +113,49 @@ export function AdminBookings() {
       setActionError('This request has no provider on record — cannot create appointment. Contact support.')
       return
     }
-    if (!window.confirm(`Approve this CPR class booking for ${format(new Date(b.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at ${b.preferred_time}?`)) return
+
+    // CPR requests come in with a fuzzy time-of-day preference
+    // (Morning / Afternoon), not an exact slot — prompt Melissa for
+    // the real time she wants to teach. Non-fuzzy times (existing
+    // sick-visit approvals, if any) go straight through.
+    let rawTime12h: string     // "9:00 AM" — for storing on booking_request + email display
+    let scheduledTime24h: string  // "09:00"   — for appointment.scheduled_time
+    if (isFuzzyTimePreference(b.preferred_time)) {
+      const hint = b.preferred_time?.trim() ? ` The family requested ${b.preferred_time}.` : ''
+      const raw = window.prompt(
+        `What time will you teach this class?${hint}\n\nEnter as "9:00 AM" or "2:30 PM":`,
+        b.preferred_time?.toLowerCase() === 'afternoon' ? '2:00 PM' : '9:00 AM',
+      )
+      if (raw === null) return  // user hit Cancel
+      const parsed = parseTimeInput(raw)
+      if (!parsed) {
+        setActionError(`"${raw}" isn't a valid time — enter something like "9:00 AM" or "2:30 PM".`)
+        return
+      }
+      rawTime12h = raw.trim()
+      scheduledTime24h = parsed
+    } else {
+      rawTime12h = b.preferred_time
+      scheduledTime24h = to24hr(b.preferred_time)
+    }
+
+    if (!window.confirm(`Approve this CPR class booking for ${format(new Date(b.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at ${rawTime12h}?`)) return
     setActioning(b.id); setActionError(null)
     try {
       await createAppointmentWithOverlapRetry({
         provider_id: b.confirmed_provider_id,
         visit_type: b.visit_type,
         zone: b.zone || 'CPR Class',
-        scheduled_time: to24hr(b.preferred_time),
+        scheduled_time: scheduledTime24h,
         scheduled_date: b.preferred_date,
         status: 'upcoming',
         notes: b.notes ?? undefined,
         duration_minutes: CPR_DURATION_MINUTES,
       }, msg => window.confirm(msg + '\n\nApprove anyway?'))
-      await updateBookingRequest(b.id, { status: 'confirmed' })
+      // Store the confirmed 12hr time back on the booking_request so
+      // the family email + reports show the actual class start, not
+      // the fuzzy preference.
+      await updateBookingRequest(b.id, { status: 'confirmed', preferred_time: rawTime12h })
       invokeNotifications({
         type: 'cpr_booking_approved',
         bookingRequestId: b.id,
@@ -111,7 +164,7 @@ export function AdminBookings() {
         parentPhone: b.family?.phone || null,
         visitType: b.visit_type,
         date: b.preferred_date,
-        time: b.preferred_time,
+        time: rawTime12h,
       }).catch(() => {})
       await fetchBookings()
     } catch (e: any) {

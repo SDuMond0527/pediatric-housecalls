@@ -178,6 +178,10 @@ interface BookingState {
                                // the booking party can route replies
                                // to a different address than the
                                // account owner (e.g. work email).
+  cprTimeOfDay: 'morning' | 'afternoon' | ''  // CPR uses a preference,
+                                              // not a specific slot;
+                                              // Melissa picks the real
+                                              // time on approval.
 }
 
 const RED_FLAGS = [
@@ -309,6 +313,7 @@ export function BookVisit() {
     participantCount: 1, participantNames: '',
     cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '',
     contactEmail: family?.email || '',
+    cprTimeOfDay: '',
   })
 
   const isIvFluids = isIvFluidsPair(booking.visitType)
@@ -375,6 +380,10 @@ export function BookVisit() {
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
   const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
+  // Melissa's weekly working schedule, for the CPR "typical availability"
+  // helper text under the date picker. Populated in the CPR branch of the
+  // provider-load useEffect below. Empty when not CPR / not loaded yet.
+  const [melissaAvailability, setMelissaAvailability] = useState<{ day_of_week: number; start_time: string; end_time: string }[]>([])
   const [ivZoneProviders, setIvZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
 
@@ -402,12 +411,20 @@ export function BookVisit() {
       setCmaAvailResult(null)
       setIvZoneProviders([])
       getProviderByName('Melissa Jesse')
-        .then(mel => setRegularZoneProviders(mel ? [{
-          name: mel.name, role: mel.role, initials: mel.initials || 'MJ',
-          color: mel.avatar_color || '#FDEDEC', textColor: mel.avatar_text_color || '#922B21',
-          photo_url: mel.photo_url ?? null,
-        }] : []))
-        .catch(() => setRegularZoneProviders([]))
+        .then(mel => {
+          if (mel) {
+            setRegularZoneProviders([{
+              name: mel.name, role: mel.role, initials: mel.initials || 'MJ',
+              color: mel.avatar_color || '#FDEDEC', textColor: mel.avatar_text_color || '#922B21',
+              photo_url: mel.photo_url ?? null,
+            }])
+            setMelissaAvailability(Array.isArray(mel.availability_days) ? mel.availability_days : [])
+          } else {
+            setRegularZoneProviders([])
+            setMelissaAvailability([])
+          }
+        })
+        .catch(() => { setRegularZoneProviders([]); setMelissaAvailability([]) })
         .finally(() => setProvidersLoading(false))
       return
     }
@@ -1199,7 +1216,18 @@ export function BookVisit() {
         booking.cprPriorTraining ? `PRIOR_TRAINING:${booking.cprPriorTraining}` : '',
         booking.cprClassLocation ? `CLASS_LOCATION:${booking.cprClassLocation}` : '',
         booking.cprInstructorNotes ? `INSTRUCTOR_NOTES:${booking.cprInstructorNotes}` : '',
+        booking.cprTimeOfDay ? `TIME_OF_DAY:${booking.cprTimeOfDay}` : '',
       ].filter(Boolean).join('|')
+
+      // preferred_time on booking_requests: stash the fuzzy time-of-day
+      // preference so it renders in AdminBookings and Melissa's email
+      // in a human-readable form. Melissa picks the real time on
+      // approval and it goes onto the appointment then.
+      const preferredTimeLabel = booking.cprTimeOfDay === 'morning'
+        ? 'Morning'
+        : booking.cprTimeOfDay === 'afternoon'
+          ? 'Afternoon'
+          : ''
 
       const newBooking = await familyCreateBookingRequest({
         family_id: family!.id,
@@ -1209,7 +1237,7 @@ export function BookVisit() {
         zone: 'CPR Class',
         state: 'NC',
         preferred_date: booking.date,
-        preferred_time: booking.time,
+        preferred_time: preferredTimeLabel,
         status: 'pending',
         confirmed_provider_id: melissaUid,
         reference_code: ref,
@@ -1516,7 +1544,11 @@ export function BookVisit() {
             </>
           )}
           <div>{format(new Date(booking.date + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}</div>
-          <div>{booking.time}</div>
+          <div>{isCpr
+            ? (booking.cprTimeOfDay === 'morning' ? 'Morning (Melissa will confirm time)'
+               : booking.cprTimeOfDay === 'afternoon' ? 'Afternoon (Melissa will confirm time)'
+               : '')
+            : booking.time}</div>
           {booking.visitAddress && <div>{booking.visitAddress}</div>}
         </div>
         <div className="text-[11px] text-[#1A1A2E] font-mono mb-6">Reference: {confirmed}</div>
@@ -1543,7 +1575,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '', cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '', contactEmail: family?.email || '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '', cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '', contactEmail: family?.email || '', cprTimeOfDay: '' })
           }}>Book another visit</Button>
         </div>
       </div>
@@ -2114,20 +2146,60 @@ export function BookVisit() {
             </div>
           )}
 
-          {/* CPR: date picker — lives OUTSIDE the {!isCpr && <>} block
-              below (previously nested inside it, which meant the picker
-              never rendered for CPR and the family got stuck on this
-              step with no way to advance). Instructor is always Melissa
-              so no provider list is needed. Sara 2026-09-20. */}
-          {isCpr && (
-            <div className="mb-5">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Visit date <span className="text-[#ff3b30]">*</span></label>
-              <input type="date" value={booking.date} min={localDateStr()}
-                onChange={e => { setBooking(b => ({ ...b, date: e.target.value, time: '', provider: 'Melissa Jesse' })); loadBookedTimes('Melissa Jesse', e.target.value) }}
-                className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
-              <p className="text-[11px] text-[#aeaeb2] mt-1">Class runs about 3 hours. Melissa arrives 30 min early to set up.</p>
-            </div>
-          )}
+          {/* CPR: date + time-of-day preference. Melissa reviews and
+              picks the exact time on approval, so we collect a fuzzy
+              "morning / afternoon" preference here, not a specific
+              slot. Instructor is always Melissa so no provider list.
+              Sara 2026-09-20. */}
+          {isCpr && (() => {
+            const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            const daysDescription = melissaAvailability.length > 0
+              ? melissaAvailability.map(d => DAY_NAMES[d.day_of_week]).join(', ')
+              : null
+            return (
+              <>
+                <div className="mb-5">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Preferred date for your class <span className="text-[#ff3b30]">*</span>
+                  </label>
+                  <input type="date" value={booking.date} min={localDateStr()}
+                    onChange={e => { setBooking(b => ({ ...b, date: e.target.value, provider: 'Melissa Jesse' })) }}
+                    className="px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans" />
+                  {daysDescription ? (
+                    <p className="text-[11px] text-[#aeaeb2] mt-1">
+                      Melissa typically teaches on <strong>{daysDescription}</strong>. She'll confirm your date based on her actual calendar. Class runs about 3 hours.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#aeaeb2] mt-1">
+                      Melissa will confirm this date based on her calendar. Class runs about 3 hours.
+                    </p>
+                  )}
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
+                    Preferred time of day <span className="text-[#ff3b30]">*</span>
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      { v: 'morning',   label: 'Morning' },
+                      { v: 'afternoon', label: 'Afternoon' },
+                    ] as const).map(opt => (
+                      <button key={opt.v} type="button"
+                        onClick={() => setBooking(b => ({ ...b, cprTimeOfDay: opt.v }))}
+                        className={`px-4 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${booking.cprTimeOfDay === opt.v ? 'bg-[#E74C3C] border-[#E74C3C] text-white' : 'border-[#E8E8E4] bg-white text-[#1A1A2E] hover:border-[#E74C3C]'}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-[#aeaeb2] mt-2">
+                    Melissa will pick the exact start time when she confirms your booking.
+                  </p>
+                </div>
+              </>
+            )
+          })()}
+
           {isCpr && (
             <div className="mb-5 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[13px] text-[#1A1A2E]">
               <span className="text-[#555]">Instructor: </span><span className="font-semibold">Melissa Jesse, PNP</span>
@@ -2481,7 +2553,7 @@ export function BookVisit() {
             onBack={() => setStep(isCpr ? STEP_INTAKE : isIvFluids ? STEP_IV : STEP_INTAKE)}
             nextDisabled={
               isCpr
-                ? (!booking.date || !booking.time || !booking.phone || !booking.contactEmail.trim())
+                ? (!booking.date || !booking.cprTimeOfDay || !booking.phone || !booking.contactEmail.trim())
                 : (!booking.date || !booking.time || !booking.phone || !booking.zone ||
                    waitlistZones.includes(booking.zone) ||
                    zoneProviders.length === 0 ||

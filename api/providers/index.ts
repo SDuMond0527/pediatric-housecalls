@@ -52,7 +52,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (name) {
     const [row] = await sql`SELECT * FROM providers WHERE name = ${name} AND practice_id = ${practiceId}::uuid LIMIT 1`
-    return res.json(row ?? null)
+    if (!row) return res.json(null)
+    // Attach weekly availability so family-portal callers (e.g. the
+    // CPR booking flow) can render "Melissa typically teaches on
+    // Sat / Sun" without needing a separate authenticated call to
+    // /api/availability/[id]. Days are 0..6 (Sun..Sat).
+    const availability_days = await sql`
+      SELECT day_of_week, start_time, end_time
+      FROM availability
+      WHERE provider_id = ${row.id}::uuid AND is_active = true
+      ORDER BY day_of_week
+    `
+    return res.json({ ...row, availability_days })
   }
 
   if (role && is_active && zone) {

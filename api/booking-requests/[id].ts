@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { id } = req.query as { id: string }
-  const { status, after_visit_instructions, charm_appointment_id, notes } = req.body
+  const { status, after_visit_instructions, charm_appointment_id, notes, preferred_time } = req.body
 
   let row: unknown
   if (after_visit_instructions !== undefined && charm_appointment_id !== undefined) {
@@ -53,14 +53,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } else if (after_visit_instructions !== undefined) {
     ;[row] = await sql`UPDATE booking_requests SET after_visit_instructions=${after_visit_instructions} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
   } else if (status !== undefined) {
-    // Allow a single PATCH to update status + notes together — used by
-    // CPR decline flow so the biller's decline reason lands on the same
-    // record in one call. COALESCE-null means "leave alone" when the
-    // caller doesn't send notes.
+    // Allow a single PATCH to update status + notes + preferred_time
+    // together — used by CPR decline flow (status + reason in notes)
+    // and CPR approve flow (Melissa's confirmed time overwrites the
+    // fuzzy "Morning"/"Afternoon" preference on preferred_time).
+    // COALESCE-null means "leave alone" when the caller doesn't send.
     ;[row] = await sql`
       UPDATE booking_requests
-      SET status = ${status},
-          notes  = COALESCE(${notes ?? null}, notes)
+      SET status         = ${status},
+          notes          = COALESCE(${notes ?? null}, notes),
+          preferred_time = COALESCE(${preferred_time ?? null}, preferred_time)
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *
     `
