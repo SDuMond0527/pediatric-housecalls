@@ -604,9 +604,12 @@ function cprMelissaEmail(data: {
   participantNames: string
   familyName: string
   familyEmail: string
+  familyPhone?: string | null
   ref: string
+  bookingId: string  // for the deep-link CTA
 }) {
   const totalCost = data.participantCount * 80
+  const reviewUrl = `${PORTAL_URL}/admin/bookings?booking=${encodeURIComponent(data.bookingId)}`
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -615,27 +618,41 @@ function cprMelissaEmail(data: {
 <table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
   <tr><td style="background:#1A1A2E;padding:28px 32px;">
     <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#E74C3C')}</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">New CPR class booked</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">CPR class request — needs your approval</div>
   </td></tr>
   <tr><td style="padding:32px;">
     <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">Hi Melissa,<br><br>
-    A new ${data.visitType} has been booked!</p>
+    A new <strong>${data.visitType}</strong> has been <strong>requested</strong>. Please review the details below and approve or decline it — the family is waiting on your confirmation.</p>
     <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;">
       <tr><td style="padding:20px;">
-        ${row('📅', 'Date', data.date)}
-        ${row('🕐', 'Time', data.time)}
+        ${row('📅', 'Requested date', data.date)}
+        ${row('🕐', 'Requested time', data.time)}
         ${row('📍', 'Address', data.address)}
         ${row('👥', 'Participants', `${data.participantCount} person${data.participantCount > 1 ? 's' : ''} · $${totalCost} total`)}
         ${data.participantNames ? row('📋', 'Attendee names', data.participantNames) : ''}
-        ${row('👤', 'Booked by', `${data.familyName} (${data.familyEmail})`)}
+        ${row('👤', 'Requested by', `${data.familyName} (${data.familyEmail})`)}
+        ${data.familyPhone ? row('📞', 'Contact phone', data.familyPhone) : ''}
       </td></tr>
     </table>
-    <div style="background:#FDEDEC;border-radius:10px;padding:14px 16px;font-size:13px;color:#922B21;">
-      Reminder: Arrive <strong>30 minutes early</strong> to set up. The family has been instructed to send attendee names to your email.
+
+    <!-- CTA: review + take action from the admin dashboard.
+         Single button deep-links to the booking, expanded and
+         highlighted, where Melissa clicks Approve or Decline. -->
+    <div style="text-align:center;margin-bottom:20px;">
+      <a href="${reviewUrl}" style="display:inline-block;background:#E74C3C;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:600;">
+        Review &amp; respond →
+      </a>
+      <p style="font-size:12px;color:#666;margin:10px 0 0;line-height:1.5;">
+        Click to open this request in your dashboard, where you can approve (and set the exact class start time) or decline with a note back to the family.
+      </p>
+    </div>
+
+    <div style="background:#FFF4E5;border-radius:10px;padding:14px 16px;font-size:13px;color:#8A4B00;">
+      If you approve: the family gets the e-learning link + Venmo payment details in a follow-up email. If you decline: they get a short "can't accommodate" note with any reason you add.
     </div>
   </td></tr>
   <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
-    Booking reference: <strong style="font-family:monospace;">${data.ref}</strong>
+    Request reference: <strong style="font-family:monospace;">${data.ref}</strong>
   </td></tr>
 </table>
 </td></tr></table>
@@ -1837,6 +1854,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ).catch(e => console.error('CPR family request-received email failed:', e))
       }
 
+      const phoneMatch = notesStr.match(/PARENTPHONE:([^|]+)/)
+      const contactPhone = phoneMatch ? phoneMatch[1].trim() : null
       await sendEmail(
         'deeringmel@me.com',
         `[CPR Class] REQUEST — needs your approval (${dateFormatted} at ${booking.preferred_time})`,
@@ -1849,7 +1868,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           participantNames,
           familyName: family?.display_name || 'Unknown',
           familyEmail: contactEmail || '',
+          familyPhone: contactPhone,
           ref: booking.reference_code,
+          bookingId: booking.id,
         })
       ).catch(e => console.error('CPR Melissa email failed:', e))
 

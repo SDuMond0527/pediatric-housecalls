@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { XCircle, Clock, ChevronDown, Check } from 'lucide-react'
 import { format } from 'date-fns'
 import { getBookingRequests, updateBookingRequest, getFamiliesByIds, getChildrenByIds, invokeNotifications, createAppointmentWithOverlapRetry } from '../../lib/api'
@@ -101,6 +102,33 @@ export function AdminBookings() {
   }
 
   useEffect(() => { fetchBookings() }, [filter])
+
+  // Deep-link support: /admin/bookings?booking=<id> auto-selects the
+  // right status filter (so the row is in the current view), expands
+  // the card, and scrolls it into view. Used by Melissa's "Review &
+  // respond" button in the CPR request email — she lands here with
+  // the exact booking already open and ready to Approve or Decline.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const targetId = searchParams.get('booking')
+    if (!targetId || loading || bookings.length === 0) return
+    const target = bookings.find(b => b.id === targetId)
+    if (!target) {
+      // The email link came in but this booking isn't in the current
+      // filter's result set — switch to 'all' so the next fetchBookings
+      // grabs it, then this effect re-runs and expands it.
+      if (filter !== 'all') setFilter('all')
+      return
+    }
+    setExpanded(targetId)
+    const next = new URLSearchParams(searchParams)
+    next.delete('booking')
+    setSearchParams(next, { replace: true })
+    setTimeout(() => {
+      document.getElementById(`booking-card-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, bookings, searchParams])
 
   // Approve a pending CPR request → create the appointment for Melissa,
   // flip the request to 'confirmed', notify the family. Currently only
@@ -262,7 +290,7 @@ export function AdminBookings() {
         )}
 
         {bookings.map(b => (
-          <div key={b.id} className={`border rounded-xl overflow-hidden bg-white shadow-sm ${b.status === 'pending' ? 'border-[#FAC775]' : 'border-[#E8E8E4]'}`}>
+          <div key={b.id} id={`booking-card-${b.id}`} className={`border rounded-xl overflow-hidden bg-white shadow-sm ${b.status === 'pending' ? 'border-[#FAC775]' : 'border-[#E8E8E4]'}`}>
             <div className="flex items-center gap-3 px-5 py-4 cursor-pointer" onClick={() => setExpanded(expanded === b.id ? null : b.id)}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
