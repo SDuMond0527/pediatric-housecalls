@@ -1812,16 +1812,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const participantNames = namesMatch ? namesMatch[1].trim() : ''
       const addrMatch = notesStr.match(/ADDR:([^|]+)/)
       const address = addrMatch ? addrMatch[1].trim() : ''
+      // The booking flow lets the family override the notification
+      // email at STEP_LOCATION (Sara 2026-09-20) — prefer that over
+      // the account email so replies land where they asked.
+      const emailMatch = notesStr.match(/PARENTEMAIL:([^|]+)/)
+      const contactEmail = emailMatch ? emailMatch[1].trim() : (family?.email ?? null)
 
       // Family gets a lightweight acknowledgment — the full class-day
       // email (e-learning + Venmo) fires from cpr_booking_approved once
       // Melissa approves the request.
-      if (family?.email) {
+      if (contactEmail) {
         await sendEmail(
-          family.email,
+          contactEmail,
           `CPR class request received — awaiting Melissa's approval`,
           cprRequestReceivedEmail({
-            displayName: family.display_name,
+            displayName: family?.display_name ?? null,
             date: dateFormatted,
             time: booking.preferred_time,
             address,
@@ -1843,7 +1848,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           participantCount,
           participantNames,
           familyName: family?.display_name || 'Unknown',
-          familyEmail: family?.email || '',
+          familyEmail: contactEmail || '',
           ref: booking.reference_code,
         })
       ).catch(e => console.error('CPR Melissa email failed:', e))
@@ -1873,13 +1878,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const participantNames = namesMatch ? namesMatch[1].trim() : ''
       const addrMatch = notesStr.match(/ADDR:([^|]+)/)
       const address = addrMatch ? addrMatch[1].trim() : ''
+      // Prefer the contact email the family chose on STEP_LOCATION.
+      const emailMatch = notesStr.match(/PARENTEMAIL:([^|]+)/)
+      const contactEmail = emailMatch ? emailMatch[1].trim() : (family?.email ?? null)
 
-      if (family?.email) {
+      if (contactEmail) {
         await sendEmail(
-          family.email,
+          contactEmail,
           `CPR class confirmed — ${dateFormatted} at ${booking.preferred_time}`,
           cprApprovedEmail({
-            displayName: family.display_name,
+            displayName: family?.display_name ?? null,
             visitType: booking.visit_type,
             date: dateFormatted,
             time: booking.preferred_time,
@@ -1906,13 +1914,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
 
       const dateFormatted = formatDate(booking.preferred_date)
+      const notesStr: string = booking.notes || ''
+      const emailMatch = notesStr.match(/PARENTEMAIL:([^|]+)/)
+      const contactEmail = emailMatch ? emailMatch[1].trim() : (family?.email ?? null)
 
-      if (family?.email) {
+      if (contactEmail) {
         await sendEmail(
-          family.email,
+          contactEmail,
           `CPR class request — can't accommodate this time`,
           cprDeclinedEmail({
-            displayName: family.display_name,
+            displayName: family?.display_name ?? null,
             date: dateFormatted,
             time: booking.preferred_time,
             declineReason: declineReason ? String(declineReason) : null,

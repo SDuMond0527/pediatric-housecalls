@@ -174,6 +174,10 @@ interface BookingState {
   cprPriorTraining: 'none' | 'expired' | 'current' | ''
   cprClassLocation: string     // "living room", "outdoor patio", etc.
   cprInstructorNotes: string   // freeform for Melissa
+  contactEmail: string         // defaults to family.email; editable so
+                               // the booking party can route replies
+                               // to a different address than the
+                               // account owner (e.g. work email).
 }
 
 const RED_FLAGS = [
@@ -304,6 +308,7 @@ export function BookVisit() {
     phone: (family as any)?.phone || '', date: '', time: '',
     participantCount: 1, participantNames: '',
     cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '',
+    contactEmail: family?.email || '',
   })
 
   const isIvFluids = isIvFluidsPair(booking.visitType)
@@ -1183,7 +1188,10 @@ export function BookVisit() {
       const cprNotes = [
         `Ref: ${ref}`,
         `ADDR:${booking.visitAddress}`,
-        `PARENTEMAIL:${family!.email}`,
+        // Use the user-provided contact email if they entered one on
+        // STEP_LOCATION; fall back to the account email. Melissa's
+        // approval/decline notifications will fire to this address.
+        `PARENTEMAIL:${(booking.contactEmail || family!.email).trim()}`,
         booking.phone ? `PARENTPHONE:${booking.phone}` : ((family as any)?.phone ? `PARENTPHONE:${(family as any).phone}` : ''),
         `PARTICIPANTS:${booking.participantCount}`,
         booking.participantNames ? `ATTENDEES:${booking.participantNames}` : '',
@@ -1535,7 +1543,7 @@ export function BookVisit() {
           <Button variant="secondary" onClick={() => navigate('/family/dashboard')}>Back to dashboard</Button>
           <Button onClick={() => {
             setConfirmed(null); setStep(0)
-            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '', cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '' })
+            setBooking({ visitType: '', selectedChildIds: [], childIntakes: {}, activeChildTab: '', ivFluidsIntake: emptyIvFluids(), zip: family?.zip || '', state: family?.state || zipToState[family?.zip || ''] || '', zone: zipToZone[family?.zip || ''] || '', provider: '', visitAddress: family?.address_line1 || '', city: family?.city || '', phone: (family as any)?.phone || '', date: '', time: '', participantCount: 1, participantNames: '', cprAgeRange: '', cprPriorTraining: '', cprClassLocation: '', cprInstructorNotes: '', contactEmail: family?.email || '' })
           }}>Book another visit</Button>
         </div>
       </div>
@@ -2093,6 +2101,18 @@ export function BookVisit() {
               <p className="text-[11px] text-[#aeaeb2] mt-1">Melissa will use this to confirm your booking.</p>
             </div>
           )}
+          {isCpr && (
+            <div className="mb-5">
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                Contact email <span className="text-[#ff3b30]">*</span>
+              </label>
+              <input type="email" value={booking.contactEmail}
+                onChange={e => setBooking(b => ({ ...b, contactEmail: e.target.value }))}
+                placeholder="you@example.com"
+                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans focus:border-[#E74C3C] focus:ring-2 focus:ring-[#E74C3C]/10 outline-none" />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">We'll send confirmation and the e-learning link here. Defaults to your account email — change it if you'd rather use another address.</p>
+            </div>
+          )}
 
           {/* CPR: date picker — lives OUTSIDE the {!isCpr && <>} block
               below (previously nested inside it, which meant the picker
@@ -2461,7 +2481,7 @@ export function BookVisit() {
             onBack={() => setStep(isCpr ? STEP_INTAKE : isIvFluids ? STEP_IV : STEP_INTAKE)}
             nextDisabled={
               isCpr
-                ? (!booking.date || !booking.time || !booking.phone)
+                ? (!booking.date || !booking.time || !booking.phone || !booking.contactEmail.trim())
                 : (!booking.date || !booking.time || !booking.phone || !booking.zone ||
                    waitlistZones.includes(booking.zone) ||
                    zoneProviders.length === 0 ||
