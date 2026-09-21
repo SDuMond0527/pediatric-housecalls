@@ -40,7 +40,14 @@ function buildReferralHtml(data: {
   child: any
   specialist: { name: string; specialty?: string | null; fax_number?: string | null; address?: string | null }
   provider: { name?: string | null; role?: string | null; npi?: string | null }
-  practice: { name: string; phone?: string | null; fax?: string | null }
+  practice: {
+    name: string
+    phone?: string | null
+    fax?: string | null
+    referral_contact_name?: string | null
+    referral_contact_phone?: string | null
+    referral_contact_email?: string | null
+  }
   reason: string
   urgency: string
   clinical_summary: string
@@ -204,6 +211,17 @@ ${data.clinical_summary ? `
   ${esc(data.practice.name)}${data.practice.phone ? ' · ' + esc(data.practice.phone) : ''}
 </div>
 
+${(data.practice.referral_contact_name || data.practice.referral_contact_phone || data.practice.referral_contact_email) ? `
+<div class="section" style="margin-top: 18px; padding: 12px 14px; background: #EEEDFE; border: 1px solid #AFA9EC; border-radius: 6px;">
+  <div style="font-size: 12px; font-weight: 600; color: #3C3489; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+    Need more information?
+  </div>
+  <div style="font-size: 13px; color: #1A1A2E; line-height: 1.6;">
+    Contact${data.practice.referral_contact_name ? ' <strong>' + esc(data.practice.referral_contact_name) + '</strong>' : ' our office'} at ${esc(data.practice.name)}${data.practice.referral_contact_phone ? ' — ' + esc(data.practice.referral_contact_phone) : ''}${data.practice.referral_contact_email ? ' · ' + esc(data.practice.referral_contact_email) : ''}
+  </div>
+</div>
+` : ''}
+
 ${(data.attachments.demographics || data.attachments.insurance || data.attachments.notes.length > 0) ? `
 <div class="section" style="margin-top: 24px;">
   <h2>Attachments included</h2>
@@ -303,7 +321,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!child) return res.status(404).json({ error: 'Patient not found' })
   const [specialist] = await sql`SELECT * FROM specialists WHERE id = ${specialist_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
   if (!specialist) return res.status(404).json({ error: 'Specialist not found' })
-  const [practice] = await sql`SELECT name, phone, fax FROM practices WHERE id = ${practiceId}::uuid LIMIT 1`
+  // Practice-level referral contact — the "call/email us if you need
+  // more" line on every referral cover sheet. Sara set Pam as the
+  // point of contact 2026-09-21. Bootstrap columns idempotently so
+  // fresh preview branches don't break.
+  try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_name text` } catch {}
+  try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_phone text` } catch {}
+  try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_email text` } catch {}
+
+  const [practice] = await sql`
+    SELECT name, phone, fax,
+           referral_contact_name, referral_contact_phone, referral_contact_email
+    FROM practices WHERE id = ${practiceId}::uuid LIMIT 1
+  `
   if (!practice) return res.status(500).json({ error: 'Practice not found' })
 
   // Persist the referral first with fax_status='pending' so we don't
@@ -384,7 +414,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     child,
     specialist: { name: specialist.name, specialty: specialist.specialty, fax_number: specialist.fax_number, address: specialist.address },
     provider: { name: prov.name, role: prov.role },
-    practice: { name: practice.name, phone: practice.phone, fax: practice.fax },
+    practice: {
+      name: practice.name,
+      phone: practice.phone,
+      fax: practice.fax,
+      referral_contact_name:  practice.referral_contact_name,
+      referral_contact_phone: practice.referral_contact_phone,
+      referral_contact_email: practice.referral_contact_email,
+    },
     reason: reason.trim(),
     clinical_summary: clinical_summary ?? '',
     urgency: urg,
