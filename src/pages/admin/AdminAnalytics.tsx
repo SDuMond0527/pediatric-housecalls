@@ -4,7 +4,13 @@ import { getAnalytics } from '../../lib/api'
 
 interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null; zone: string | null }
 interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string; family_id: string }
-interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null; removal_reason: string | null }
+interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null; removal_reason: string | null; parent_response: string | null }
+
+// Label for family self-removals — entries where the parent hit
+// "remove me" from the 2-hour reminder email (parent_response =
+// 'remove') rather than an admin marking them lost with a specific
+// reason. Sara asked 2026-09-21 that these count as losses too.
+const FAMILY_SELF_REMOVED_LABEL = 'Family removed themselves (2-hour email)'
 interface ProviderRow { id: string; name: string; role: string }
 interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_urgent: boolean }
 interface OnCallRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
@@ -205,10 +211,17 @@ export function AdminAnalytics() {
     if (w.status === 'converted') wByState[s].converted++
   })
 
-  // Waitlist losses (admin-removed with a reason)
-  const lostEntries = waitlist.filter(w => w.status === 'removed' && w.removal_reason)
+  // Waitlist losses — either admin-removed with a reason, OR family
+  // self-removed via the 2-hour reminder email (parent_response =
+  // 'remove'). Both are lost patients we didn't get to. Sara 2026-09-21.
+  const lostEntries = waitlist.filter(w =>
+    w.status === 'removed' && (!!w.removal_reason || w.parent_response === 'remove')
+  )
   const lossByReason: Record<string, number> = {}
-  lostEntries.forEach(w => { lossByReason[w.removal_reason!] = (lossByReason[w.removal_reason!] ?? 0) + 1 })
+  lostEntries.forEach(w => {
+    const reason = w.removal_reason ?? (w.parent_response === 'remove' ? FAMILY_SELF_REMOVED_LABEL : 'Removed (no reason recorded)')
+    lossByReason[reason] = (lossByReason[reason] ?? 0) + 1
+  })
   const lossByState: Record<string, number> = {}
   lostEntries.forEach(w => { const s = w.state ?? 'Other'; lossByState[s] = (lossByState[s] ?? 0) + 1 })
   const maxLossByState = Math.max(...Object.values(lossByState), 1)
@@ -530,7 +543,7 @@ export function AdminAnalytics() {
         <div className="grid lg:grid-cols-2 gap-5">
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-4">Patients removed by admin without a provider pickup</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Patients we didn't get to — admin-removed with a reason, OR families who opted out via the 2-hour reminder email.</p>
             {lostEntries.length === 0 ? (
               <p className="text-[13px] text-[#1A1A2E]">No waitlist losses recorded yet.</p>
             ) : (
