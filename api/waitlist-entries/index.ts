@@ -167,6 +167,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isAdmin = !!(providerRows[0].is_admin)
 
   if (req.method === 'GET') {
+    // Same fix as /api/appointments — the sub-select below references
+    // children.previously_seen_by_phc; bootstrap the column here so
+    // reads work on a prod that hasn't yet triggered the /api/children
+    // POST bootstrap. Sara 2026-09-21.
+    try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
     const { status, family_id } = req.query as Record<string, string>
     let rows: unknown[]
     if (family_id) {

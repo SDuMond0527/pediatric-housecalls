@@ -310,6 +310,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'GET') {
+    // Ensure the previously_seen_by_phc column exists on children before
+    // the LEFT JOIN below references it. Bootstrap idempotently here so
+    // reads work even on a prod that hasn't POSTed to /api/children
+    // since the column was added (Sentry 07f6c0904cf54b7a97e7df2227d34904,
+    // Sara 2026-09-21 — Today.tsx was HTTP 500-ing all day for this).
+    try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
     const { provider_id, date: _date, scheduled_date, date_gte, date_lte, child_id } = req.query as Record<string, string>
     const date = _date || scheduled_date
     let rows: unknown[]
