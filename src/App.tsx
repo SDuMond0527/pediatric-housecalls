@@ -137,6 +137,7 @@ export default function App() {
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
                 <Route path="pending-write-offs" element={<AdminPendingWriteOffs />} />
                 <Route path="reports-schedule" element={<AdminReportsSchedule />} />
+                <Route path="handbook"           element={<Handbook />} />
               </Route>
             </Routes>
           </AuthProvider>
