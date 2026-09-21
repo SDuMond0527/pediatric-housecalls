@@ -445,6 +445,31 @@ export const familyGetPatientStatements = () =>
 export const familyUpdateWaitlistEntry = (id: string, body: Record<string, unknown>) =>
   familyApiFetch<any>(`/api/waitlist-entries/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
+// ── Handbook ("All things PHC") ───────────────────────────────
+export interface HandbookSection { id: string; title: string; sort_order: number }
+export interface HandbookEntry { id: string; section_id: string; title: string; body: string; sort_order: number; updated_at: string }
+
+export const getHandbook = () =>
+  apiFetch<{ sections: HandbookSection[]; entries: HandbookEntry[] }>('/api/handbook')
+
+export const createHandbookSection = (title: string, sort_order = 0) =>
+  apiFetch<HandbookSection>('/api/handbook', { method: 'POST', body: JSON.stringify({ kind: 'section', title, sort_order }) })
+
+export const updateHandbookSection = (id: string, patch: { title?: string; sort_order?: number }) =>
+  apiFetch<HandbookSection>('/api/handbook', { method: 'PATCH', body: JSON.stringify({ kind: 'section', id, ...patch }) })
+
+export const deleteHandbookSection = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/handbook?kind=section&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const createHandbookEntry = (section_id: string, title: string, body = '', sort_order = 0) =>
+  apiFetch<HandbookEntry>('/api/handbook', { method: 'POST', body: JSON.stringify({ kind: 'entry', section_id, title, body, sort_order }) })
+
+export const updateHandbookEntry = (id: string, patch: { title?: string; body?: string; sort_order?: number }) =>
+  apiFetch<HandbookEntry>('/api/handbook', { method: 'PATCH', body: JSON.stringify({ kind: 'entry', id, ...patch }) })
+
+export const deleteHandbookEntry = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/handbook?kind=entry&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>
   apiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })

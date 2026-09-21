@@ -21,6 +21,7 @@ import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminReports } from './pages/admin/AdminReports'
 import { AdminBookings } from './pages/admin/AdminBookings'
 import { CprRequests } from './pages/CprRequests'
+import { Handbook } from './pages/Handbook'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
@@ -112,6 +113,7 @@ export default function App() {
                 <Route path="shifts"         element={<Shifts />} />
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<CprRequests />} />
+                <Route path="handbook"       element={<Handbook />} />
               </Route>
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Navigate to="/admin/analytics" replace />} />
