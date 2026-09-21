@@ -39,6 +39,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_requested_at timestamptz` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_requested_by uuid` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_requested_at timestamptz` } catch {}
+    // The SELECT below references ps.void_note. That column is
+    // bootstrapped in /api/patient-statements/[id]/write-off but if
+    // no one has hit that endpoint on prod yet, this read 500s with
+    // "column ps.void_note does not exist" — same pattern as the
+    // previously_seen_by_phc bug earlier today. Bootstrap here too.
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_note text` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_reason text` } catch {}
 
     const { count } = req.query as { count?: string }
 

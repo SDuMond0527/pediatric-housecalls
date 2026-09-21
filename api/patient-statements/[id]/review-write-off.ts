@@ -44,6 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_denied_at timestamptz` } catch {}
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_denied_by uuid` } catch {}
     try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_denied_note text` } catch {}
+    // These are read in the SELECT below; bootstrap so a review that
+    // arrives before the first write-off (which normally bootstraps
+    // them) doesn't 500.
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_note text` } catch {}
+    try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_reason text` } catch {}
 
     const { approved, review_note } = req.body ?? {}
     if (typeof approved !== 'boolean') return res.status(400).json({ error: 'approved (boolean) required' })
