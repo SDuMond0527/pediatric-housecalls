@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react'
-import { X, Send, AlertCircle, CheckCircle2, Clock, Plus } from 'lucide-react'
+import { X, Send, AlertCircle, CheckCircle2, Clock, Plus, Paperclip } from 'lucide-react'
 import { Button } from './ui/Button'
 import {
-  getSpecialists, createSpecialist, sendReferral, getReferralsForChild,
+  getSpecialists, createSpecialist, sendReferral, getReferralsForChild, getEncounterNotes,
   type Specialist, type Referral,
 } from '../lib/api'
+
+// Shape of the encounter notes we need for the attachment checklist.
+// We only render + send the fields we need; API returns more.
+interface AttachableNote {
+  id: string
+  scheduled_date: string | null
+  visit_type: string | null
+  is_signed: boolean
+}
 
 // "New referral" flow from a patient chart. Sara 2026-09-21.
 // Loads the specialist directory, lets the biller pick one (or add
@@ -23,6 +32,7 @@ export function ReferralModal({
 }) {
   const [specialists, setSpecialists] = useState<Specialist[]>([])
   const [history, setHistory]         = useState<Referral[]>([])
+  const [notes, setNotes]             = useState<AttachableNote[]>([])
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
 
@@ -33,6 +43,12 @@ export function ReferralModal({
   const [sending, setSending]                   = useState(false)
   const [justSent, setJustSent]                 = useState<Referral | null>(null)
 
+  // Attachment selections. Demographics + insurance default ON since
+  // most referrals want them; individual note checkboxes default OFF.
+  const [includeDemographics, setIncludeDemographics] = useState(true)
+  const [includeInsurance, setIncludeInsurance]       = useState(true)
+  const [selectedNoteIds, setSelectedNoteIds]         = useState<Set<string>>(new Set())
+
   // Inline "add specialist" — for the case where the biller realizes
   // mid-referral that this specialist isn't in the directory yet.
   const [addingSpecialist, setAddingSpecialist] = useState(false)
@@ -41,16 +57,34 @@ export function ReferralModal({
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getSpecialists(), getReferralsForChild(childId)])
-      .then(([s, h]) => {
+    Promise.all([
+      getSpecialists(),
+      getReferralsForChild(childId),
+      getEncounterNotes({ child_id: childId }),
+    ])
+      .then(([s, h, n]) => {
         if (cancelled) return
         setSpecialists(s ?? [])
         setHistory(h ?? [])
+        setNotes((n ?? []).map((row: any) => ({
+          id: row.id,
+          scheduled_date: row.scheduled_date ? String(row.scheduled_date).split('T')[0] : null,
+          visit_type: row.visit_type,
+          is_signed: !!row.is_signed,
+        })))
         setLoading(false)
       })
       .catch(e => { if (!cancelled) { setError(e?.message ?? 'Failed to load'); setLoading(false) } })
     return () => { cancelled = true }
   }, [childId])
+
+  function toggleNote(id: string) {
+    setSelectedNoteIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   const activeSpecialists = specialists.filter(s => s.is_active)
   const selectedSpec = activeSpecialists.find(s => s.id === specialistId)
@@ -85,6 +119,11 @@ export function ReferralModal({
         reason: reason.trim(),
         clinical_summary: clinicalSummary.trim(),
         urgency,
+        attachments: {
+          include_demographics: includeDemographics,
+          include_insurance: includeInsurance,
+          encounter_note_ids: Array.from(selectedNoteIds),
+        },
       })
       setJustSent(created)
       setHistory(prev => [created, ...prev])
@@ -207,6 +246,49 @@ export function ReferralModal({
               </div>
 
               <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2 flex items-center gap-1">
+                  <Paperclip size={11} /> Attachments to include with the fax
+                </label>
+                <div className="border border-[#E8E8E4] rounded-lg p-3 bg-[#FAFAF8] space-y-2">
+                  <label className="flex items-start gap-2 text-[13px] cursor-pointer">
+                    <input type="checkbox" checked={includeDemographics}
+                      onChange={e => setIncludeDemographics(e.target.checked)}
+                      className="mt-0.5" />
+                    <span><strong>Demographics</strong> <span className="text-[#1A1A2E]/60">— address, parent phone, parent email</span></span>
+                  </label>
+                  <label className="flex items-start gap-2 text-[13px] cursor-pointer">
+                    <input type="checkbox" checked={includeInsurance}
+                      onChange={e => setIncludeInsurance(e.target.checked)}
+                      className="mt-0.5" />
+                    <span><strong>Insurance information</strong> <span className="text-[#1A1A2E]/60">— provider, member/group, subscriber</span></span>
+                  </label>
+                  <div className="pt-2 mt-1 border-t border-[#E8E8E4]">
+                    <div className="text-[11px] text-[#555] font-medium mb-1.5">Encounter notes</div>
+                    {notes.length === 0 ? (
+                      <p className="text-[12px] text-[#1A1A2E]/60 italic">No encounter notes on this chart yet.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-40 overflow-auto">
+                        {notes.map(n => (
+                          <label key={n.id} className="flex items-start gap-2 text-[13px] cursor-pointer">
+                            <input type="checkbox" checked={selectedNoteIds.has(n.id)}
+                              onChange={() => toggleNote(n.id)}
+                              className="mt-0.5" />
+                            <span>
+                              {n.scheduled_date
+                                ? new Date(n.scheduled_date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                                : '(no date)'}
+                              {n.visit_type ? ` — ${n.visit_type}` : ''}
+                              {!n.is_signed && <span className="text-[11px] text-[#8A4B00] ml-1">(draft)</span>}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">Urgency</label>
                 <div className="flex gap-2">
                   {([
@@ -233,7 +315,7 @@ export function ReferralModal({
 
         {!justSent && !loading && (
           <div className="px-5 py-3 border-t border-[#E8E8E4] bg-[#FAFAF8] flex items-center justify-between">
-            <span className="text-[11px] text-[#1A1A2E]/60">Fax sent from your practice number; patient snapshot (allergies, meds, PMH, insurance) is auto-included.</span>
+            <span className="text-[11px] text-[#1A1A2E]/60">Fax sent from your practice number. Patient identity + allergies + meds + PMH always on the cover page.</span>
             <Button variant="teal" size="sm" loading={sending}
               disabled={!specialistId || !reason.trim()} onClick={handleSend}>
               <Send size={12} /> Send referral

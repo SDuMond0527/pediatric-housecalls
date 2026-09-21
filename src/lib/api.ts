@@ -507,6 +507,11 @@ export const sendReferral = (body: {
   reason: string
   clinical_summary?: string
   urgency?: 'routine' | 'urgent' | 'stat'
+  attachments?: {
+    include_demographics?: boolean
+    include_insurance?: boolean
+    encounter_note_ids?: string[]
+  }
 }) =>
   apiFetch<Referral>('/api/referrals', { method: 'POST', body: JSON.stringify(body) })
 

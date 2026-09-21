@@ -45,6 +45,27 @@ function buildReferralHtml(data: {
   urgency: string
   clinical_summary: string
   createdAt: Date
+  // Attachment toggles (Sara 2026-09-21). Cover page always has
+  // patient identity + allergies; these opt-in sections extend it
+  // and become extra pages of the fax.
+  attachments: {
+    demographics: boolean
+    insurance: boolean
+    notes: Array<{
+      id: string
+      scheduled_date: string | null
+      visit_type: string | null
+      is_signed: boolean
+      chief_complaint: string | null
+      subjective: string | null
+      objective: string | null
+      assessment: string | null
+      plan: string | null
+      diagnoses: any
+      cpt_codes: any
+      provider_name?: string | null
+    }>
+  }
 }): string {
   const c = data.child
   const childName = [c?.first_name, c?.last_name].filter(Boolean).join(' ') || c?.display_label || 'Unknown patient'
@@ -52,9 +73,58 @@ function buildReferralHtml(data: {
   const urgencyLabel = data.urgency === 'stat' ? 'STAT / Same day' : data.urgency === 'urgent' ? 'Urgent (within 1 week)' : 'Routine'
   const urgencyColor = data.urgency === 'stat' ? '#991B1B' : data.urgency === 'urgent' ? '#8A4B00' : '#31447A'
   const address = [c?.parent_address, c?.parent_city, c?.parent_state, c?.parent_zip].filter(Boolean).join(', ')
-  const insurance = c?.insurance_provider
-    ? `${c.insurance_provider}${c.insurance_member_id ? ' · Member ID ' + c.insurance_member_id : ''}`
-    : 'Not on file'
+
+  const dxList = Array.isArray(c?.diagnoses) ? c.diagnoses : []
+
+  const demographicsSection = data.attachments.demographics ? `
+<div class="attachment page-break">
+  <h1>Attachment: Demographics</h1>
+  <div class="subtitle">${esc(childName)} · DOB ${esc(dob)}</div>
+  <table class="kv">
+    <tr><td>Address</td><td>${esc(address || 'Not on file')}</td></tr>
+    <tr><td>Parent phone</td><td>${esc(c?.parent_phone || 'Not on file')}</td></tr>
+    <tr><td>Parent email</td><td>${esc(c?.parent_email || 'Not on file')}</td></tr>
+    ${c?.pcp ? `<tr><td>Primary care</td><td>${esc(c.pcp)}</td></tr>` : ''}
+    ${c?.preferred_pharmacy ? `<tr><td>Preferred pharmacy</td><td>${esc(c.preferred_pharmacy)}</td></tr>` : ''}
+  </table>
+</div>
+` : ''
+
+  const insuranceSection = data.attachments.insurance ? `
+<div class="attachment page-break">
+  <h1>Attachment: Insurance</h1>
+  <div class="subtitle">${esc(childName)} · DOB ${esc(dob)}</div>
+  <table class="kv">
+    <tr><td>Provider</td><td>${esc(c?.insurance_provider || 'Not on file')}</td></tr>
+    ${c?.insurance_member_id ? `<tr><td>Member ID</td><td>${esc(c.insurance_member_id)}</td></tr>` : ''}
+    ${c?.insurance_group_number ? `<tr><td>Group #</td><td>${esc(c.insurance_group_number)}</td></tr>` : ''}
+    ${c?.insurance_subscriber_name ? `<tr><td>Subscriber</td><td>${esc(c.insurance_subscriber_name)}</td></tr>` : ''}
+    ${c?.insurance_subscriber_dob ? `<tr><td>Subscriber DOB</td><td>${esc(fmtDate(String(c.insurance_subscriber_dob).split('T')[0]))}</td></tr>` : ''}
+    ${c?.insurance_subscriber_relationship ? `<tr><td>Relationship</td><td>${esc(c.insurance_subscriber_relationship)}</td></tr>` : ''}
+  </table>
+</div>
+` : ''
+
+  const notesSections = data.attachments.notes.map(n => {
+    const dxs = Array.isArray(n.diagnoses) ? n.diagnoses : []
+    const cpts = Array.isArray(n.cpt_codes) ? n.cpt_codes : []
+    return `
+<div class="attachment page-break">
+  <h1>Attachment: Encounter note</h1>
+  <div class="subtitle">
+    ${esc(childName)} · DOB ${esc(dob)}<br>
+    ${esc(fmtDate(n.scheduled_date))}${n.visit_type ? ' · ' + esc(n.visit_type) : ''}${n.provider_name ? ' · ' + esc(n.provider_name) : ''}${n.is_signed ? ' · Signed' : ' · Draft (unsigned)'}
+  </div>
+  ${n.chief_complaint ? `<div class="section"><h2>Chief complaint</h2><div class="body-text">${esc(n.chief_complaint)}</div></div>` : ''}
+  ${n.subjective ? `<div class="section"><h2>Subjective</h2><div class="body-text">${esc(n.subjective)}</div></div>` : ''}
+  ${n.objective ? `<div class="section"><h2>Objective</h2><div class="body-text">${esc(n.objective)}</div></div>` : ''}
+  ${n.assessment ? `<div class="section"><h2>Assessment</h2><div class="body-text">${esc(n.assessment)}</div></div>` : ''}
+  ${n.plan ? `<div class="section"><h2>Plan</h2><div class="body-text">${esc(n.plan)}</div></div>` : ''}
+  ${dxs.length ? `<div class="section"><h2>Diagnoses</h2><ul>${dxs.map((d: any) => `<li>${esc((d.code ?? '') + ' — ' + (d.name ?? d.description ?? ''))}</li>`).join('')}</ul></div>` : ''}
+  ${cpts.length ? `<div class="section"><h2>CPT codes</h2><ul>${cpts.map((cp: any) => `<li>${esc((cp.code ?? '') + ' — ' + (cp.description ?? ''))}</li>`).join('')}</ul></div>` : ''}
+</div>
+`
+  }).join('')
 
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
@@ -74,6 +144,9 @@ function buildReferralHtml(data: {
   .signature { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E8E8E4; font-size: 12px; }
   .signature strong { display: block; font-size: 14px; }
   .footer { margin-top: 24px; font-size: 10px; color: #999; text-align: center; }
+  .attachment { margin-top: 40px; padding-top: 24px; border-top: 3px double #1A1A2E; }
+  .page-break { page-break-before: always; }
+  ul { margin: 4px 0; padding-left: 20px; }
 </style></head><body>
 
 <div class="practice-header">
@@ -106,13 +179,10 @@ function buildReferralHtml(data: {
     <tr><td>Name</td><td><strong>${esc(childName)}</strong></td></tr>
     <tr><td>DOB</td><td>${esc(dob)}</td></tr>
     ${c?.gender ? `<tr><td>Sex</td><td>${esc(c.gender)}</td></tr>` : ''}
-    ${address ? `<tr><td>Address</td><td>${esc(address)}</td></tr>` : ''}
-    ${c?.parent_phone ? `<tr><td>Parent phone</td><td>${esc(c.parent_phone)}</td></tr>` : ''}
-    ${c?.parent_email ? `<tr><td>Parent email</td><td>${esc(c.parent_email)}</td></tr>` : ''}
-    <tr><td>Insurance</td><td>${esc(insurance)}</td></tr>
-    ${c?.allergies ? `<tr><td>Allergies</td><td>${esc(c.allergies)}</td></tr>` : ''}
+    ${c?.allergies ? `<tr><td>Allergies</td><td><strong style="color:#991B1B;">${esc(c.allergies)}</strong></td></tr>` : ''}
     ${c?.current_medications ? `<tr><td>Medications</td><td>${esc(c.current_medications)}</td></tr>` : ''}
     ${c?.medical_history ? `<tr><td>PMH</td><td>${esc(c.medical_history)}</td></tr>` : ''}
+    ${dxList.length ? `<tr><td>Diagnoses</td><td>${esc(dxList.map((d: any) => (d.code ?? '') + ' ' + (d.name ?? d.description ?? '')).join(', '))}</td></tr>` : ''}
   </table>
 </div>
 
@@ -134,9 +204,24 @@ ${data.clinical_summary ? `
   ${esc(data.practice.name)}${data.practice.phone ? ' · ' + esc(data.practice.phone) : ''}
 </div>
 
+${(data.attachments.demographics || data.attachments.insurance || data.attachments.notes.length > 0) ? `
+<div class="section" style="margin-top: 24px;">
+  <h2>Attachments included</h2>
+  <ul>
+    ${data.attachments.demographics ? '<li>Demographics</li>' : ''}
+    ${data.attachments.insurance ? '<li>Insurance information</li>' : ''}
+    ${data.attachments.notes.map(n => `<li>Encounter note — ${esc(fmtDate(n.scheduled_date))}${n.visit_type ? ` (${esc(n.visit_type)})` : ''}</li>`).join('')}
+  </ul>
+</div>
+` : ''}
+
 <div class="footer">
   Confidential medical referral — for the intended recipient only.
 </div>
+
+${demographicsSection}
+${insuranceSection}
+${notesSections}
 
 </body></html>`
 }
@@ -202,11 +287,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { child_id, specialist_id, reason, clinical_summary, urgency } = req.body ?? {}
+  const { child_id, specialist_id, reason, clinical_summary, urgency, attachments } = req.body ?? {}
   if (!child_id)       return res.status(400).json({ error: 'child_id required' })
   if (!specialist_id)  return res.status(400).json({ error: 'specialist_id required' })
   if (!reason?.trim()) return res.status(400).json({ error: 'reason required' })
   const urg = ['routine', 'urgent', 'stat'].includes(urgency) ? urgency : 'routine'
+  const includeDemographics = !!attachments?.include_demographics
+  const includeInsurance    = !!attachments?.include_insurance
+  const noteIds = Array.isArray(attachments?.encounter_note_ids)
+    ? (attachments.encounter_note_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+    : []
 
   // Resolve everything we need for the fax.
   const [child] = await sql`SELECT * FROM children WHERE id = ${child_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
@@ -256,6 +346,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(updated)
   }
 
+  // Fetch the encounter notes the user selected to attach. Verifies
+  // each belongs to this patient's chart in this practice — we won't
+  // fax notes for a different child even if a bad id is sent.
+  let attachedNotes: any[] = []
+  if (noteIds.length > 0) {
+    attachedNotes = await sql`
+      SELECT en.id, en.scheduled_date, en.visit_type, en.is_signed,
+             en.chief_complaint, en.subjective, en.objective, en.assessment, en.plan,
+             en.diagnoses, en.cpt_codes,
+             p.name AS provider_name
+      FROM encounter_notes en
+      LEFT JOIN providers p ON p.id = en.provider_id
+      LEFT JOIN appointments a ON a.id = en.appointment_id
+      WHERE en.id = ANY(${noteIds}::uuid[])
+        AND en.practice_id = ${practiceId}::uuid
+        AND en.child_id = ${child_id}::uuid
+      ORDER BY COALESCE(en.scheduled_date, a.scheduled_date, en.created_at::date) DESC
+    ` as any[]
+    // Fill in scheduled_date from the joined appointment if the note
+    // row doesn't have one directly.
+    for (const n of attachedNotes) {
+      if (!n.scheduled_date) {
+        const [appt] = await sql`
+          SELECT scheduled_date, visit_type FROM appointments
+          WHERE id = (SELECT appointment_id FROM encounter_notes WHERE id = ${n.id}::uuid)
+        `
+        if (appt) {
+          n.scheduled_date = appt.scheduled_date
+          if (!n.visit_type) n.visit_type = appt.visit_type
+        }
+      }
+    }
+  }
+
   const html = buildReferralHtml({
     child,
     specialist: { name: specialist.name, specialty: specialist.specialty, fax_number: specialist.fax_number, address: specialist.address },
@@ -265,6 +389,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     clinical_summary: clinical_summary ?? '',
     urgency: urg,
     createdAt: new Date(ref.created_at),
+    attachments: {
+      demographics: includeDemographics,
+      insurance: includeInsurance,
+      notes: attachedNotes.map(n => ({
+        id: n.id,
+        scheduled_date: n.scheduled_date ? String(n.scheduled_date).split('T')[0] : null,
+        visit_type: n.visit_type,
+        is_signed: !!n.is_signed,
+        chief_complaint: n.chief_complaint,
+        subjective: n.subjective,
+        objective: n.objective,
+        assessment: n.assessment,
+        plan: n.plan,
+        diagnoses: n.diagnoses,
+        cpt_codes: n.cpt_codes,
+        provider_name: n.provider_name,
+      })),
+    },
   })
 
   try {
