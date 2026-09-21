@@ -677,6 +677,15 @@ export function PatientChart() {
                     ⚠ Allergies
                   </span>
                 )}
+                {/* Prior-visit status — inline editable in case the
+                    auto-backfill mislabels a legacy chart, or Sara
+                    wants to flip a "new" to "established" after their
+                    first visit is done. Saves on change; no explicit
+                    Save button needed. Sara 2026-09-21. */}
+                <PriorVisitStatus
+                  child={child}
+                  onSaved={(next) => setChild((prev: any) => ({ ...prev, previously_seen_by_phc: next }))}
+                />
               </div>
             )}
           </div>
@@ -2562,5 +2571,57 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
         </div>
       </div>
     </div>
+  )
+}
+
+// Inline editable badge for child.previously_seen_by_phc. Shows the
+// current state as a colored pill; clicking opens a select that lets
+// any provider flip between Established / New patient / Not set.
+// Saves immediately on change via the existing PATCH endpoint.
+function PriorVisitStatus({ child, onSaved }: { child: any; onSaved: (next: boolean | null) => void }) {
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const value = child.previously_seen_by_phc
+  const label = value === true ? 'Established' : value === false ? 'New patient' : 'Prior visit: not set'
+  const pillCls = value === true
+    ? 'bg-[#F1EFE8] text-[#1A1A2E]'
+    : value === false
+      ? 'bg-[#FFF4E5] text-[#8A4B00]'
+      : 'bg-[#FAFAF8] text-[#1A1A2E]/60 border border-dashed border-[#E8E8E4]'
+
+  async function handleChange(raw: string) {
+    const next: boolean | null = raw === 'true' ? true : raw === 'false' ? false : null
+    if (next === value) return
+    setSaving(true); setErr(null)
+    try {
+      await apiFetch<any>(`/api/children/${child.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ previously_seen_by_phc: next }),
+      })
+      onSaved(next)
+    } catch (e: any) {
+      setErr(e?.message ?? 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${pillCls}`}>{label}</span>
+      <select
+        value={value === true ? 'true' : value === false ? 'false' : ''}
+        onChange={e => handleChange(e.target.value)}
+        disabled={saving}
+        aria-label="Set prior-visit status"
+        className="text-[11px] bg-transparent text-[#7F77DD] hover:underline cursor-pointer border-0 outline-none px-0 py-0"
+      >
+        <option value="">— set —</option>
+        <option value="true">Established</option>
+        <option value="false">New patient</option>
+      </select>
+      {saving && <span className="text-[10px] text-[#1A1A2E]/50">Saving…</span>}
+      {err && <span className="text-[10px] text-[#991B1B]">{err}</span>}
+    </span>
   )
 }
