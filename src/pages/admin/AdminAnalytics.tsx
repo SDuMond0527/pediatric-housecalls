@@ -75,6 +75,8 @@ export function AdminAnalytics() {
   const [lossEnd,     setLossEnd]     = useState(_today)
   const [pickupStart, setPickupStart] = useState(_monthStart)
   const [pickupEnd,   setPickupEnd]   = useState(_today)
+  const [onCallStart, setOnCallStart] = useState(_monthStart)
+  const [onCallEnd,   setOnCallEnd]   = useState(_today)
 
   useEffect(() => {
     async function load() {
@@ -280,13 +282,17 @@ export function AdminAnalytics() {
     return Math.max(0, (eh + em / 60) - (sh + sm / 60))
   }
 
-  // On-call hours by provider (all time)
+  // On-call hours by provider — filtered by the on-call date range
+  // (uses on_call_schedule.date). Default view is this month; Sara
+  // can widen or slice by month/quarter/year via the pickers below.
   const onCallByProvider: Record<string, number> = {}
-  onCallShifts.forEach(s => {
-    const provider = providers.find(p => p.id === s.provider_id)
-    const key = provider?.name ?? 'Unknown'
-    onCallByProvider[key] = (onCallByProvider[key] ?? 0) + shiftHours(s)
-  })
+  onCallShifts
+    .filter(s => s.date >= onCallStart && s.date <= onCallEnd)
+    .forEach(s => {
+      const provider = providers.find(p => p.id === s.provider_id)
+      const key = provider?.name ?? 'Unknown'
+      onCallByProvider[key] = (onCallByProvider[key] ?? 0) + shiftHours(s)
+    })
   const onCallSorted = Object.entries(onCallByProvider)
     .map(([name, hrs]) => [name, Math.round(hrs * 10) / 10] as [string, number])
     .sort((a, b) => b[1] - a[1])
@@ -738,14 +744,35 @@ export function AdminAnalytics() {
               </div>
             ))}
           </div>
+          <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
+            <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">On-call hours by provider</div>
+            <div className="flex items-end gap-2 mb-3 flex-wrap">
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">Start</label>
+                <input type="date" value={onCallStart} onChange={e => setOnCallStart(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">End</label>
+                <input type="date" value={onCallEnd} onChange={e => setOnCallEnd(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <button onClick={() => { setOnCallStart(_monthStart); setOnCallEnd(_today) }}
+                className="text-[11px] text-[#7F77DD] hover:underline pb-1">This month</button>
+            </div>
+          </div>
           {onCallSorted.length === 0 ? (
-            <p className="text-[13px] text-[#1A1A2E]">No on-call shifts recorded yet.</p>
+            <p className="text-[13px] text-[#1A1A2E]">No on-call shifts in this date range.</p>
           ) : (
             <div className="space-y-2.5">
               {onCallSorted.map(([name, count]) => {
                 const isExpanded = expandedProvider === name
                 const providerShifts = onCallShifts
-                  .filter(s => (providers.find(p => p.id === s.provider_id)?.name ?? 'Unknown') === name)
+                  .filter(s =>
+                    (providers.find(p => p.id === s.provider_id)?.name ?? 'Unknown') === name
+                    && s.date >= onCallStart
+                    && s.date <= onCallEnd
+                  )
                   .sort((a, b) => b.date.localeCompare(a.date))
                 return (
                   <div key={name}>
