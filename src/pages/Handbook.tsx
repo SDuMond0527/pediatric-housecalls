@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle, HelpCircle } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import {
@@ -8,6 +10,20 @@ import {
   createHandbookEntry,   updateHandbookEntry,   deleteHandbookEntry,
   type HandbookSection, type HandbookEntry,
 } from '../lib/api'
+
+// Auto-linkify US-style phone numbers so raw text like "704-555-1234"
+// becomes a tap-to-call link on mobile. remark-gfm's autolinker
+// handles emails + URLs but not phones. Runs BEFORE markdown parsing,
+// so it wraps phone patterns in [text](tel:...) syntax which then
+// renders as a normal link.
+const PHONE_RE = /(?<![\d./])(\+?1[-.\s]?)?\(?([2-9]\d{2})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})(?!\d)/g
+function linkifyPhones(md: string): string {
+  return md.replace(PHONE_RE, (match) => {
+    const digits = match.replace(/\D/g, '')
+    // Skip if already inside a markdown link (rough check).
+    return `[${match}](tel:${digits})`
+  })
+}
 
 // "All things PHC" — provider-facing in-app handbook (Sara 2026-09-21).
 // Two-column layout: section list on the left, entries on the right.
@@ -37,6 +53,7 @@ export function Handbook() {
   const [editingEntryTitle, setEditingEntryTitle] = useState('')
   const [editingEntryBody, setEditingEntryBody] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showFormatHelp, setShowFormatHelp] = useState(false)
 
   async function load() {
     setLoading(true); setError(null)
@@ -254,10 +271,11 @@ export function Handbook() {
                 <textarea
                   value={newEntryBody}
                   onChange={e => setNewEntryBody(e.target.value)}
-                  placeholder="Content (answer, contact details, whatever fits)"
-                  rows={4}
-                  className={`${inputCls} resize-y`}
+                  placeholder="Content — supports formatting (see tips below)"
+                  rows={5}
+                  className={`${inputCls} resize-y font-mono text-[13px]`}
                 />
+                <FormattingTips open={showFormatHelp} onToggle={() => setShowFormatHelp(!showFormatHelp)} />
                 <div className="flex gap-2">
                   <Button size="sm" variant="teal" loading={busy} disabled={!newEntryTitle.trim()} onClick={handleAddEntry}>
                     <Check size={12} /> Save
@@ -281,7 +299,8 @@ export function Handbook() {
                 return (
                   <div key={entry.id} className="p-4 border-2 border-[#7F77DD] rounded-lg bg-white space-y-2">
                     <input value={editingEntryTitle} onChange={e => setEditingEntryTitle(e.target.value)} className={inputCls} />
-                    <textarea value={editingEntryBody} onChange={e => setEditingEntryBody(e.target.value)} rows={5} className={`${inputCls} resize-y`} />
+                    <textarea value={editingEntryBody} onChange={e => setEditingEntryBody(e.target.value)} rows={6} className={`${inputCls} resize-y font-mono text-[13px]`} />
+                    <FormattingTips open={showFormatHelp} onToggle={() => setShowFormatHelp(!showFormatHelp)} />
                     <div className="flex gap-2">
                       <Button size="sm" variant="teal" loading={busy} disabled={!editingEntryTitle.trim()} onClick={handleSaveEntry}>
                         <Check size={12} /> Save
@@ -317,12 +336,88 @@ export function Handbook() {
                     )}
                   </div>
                   {entry.body && (
-                    <div className="text-[13px] text-[#1A1A2E]/85 whitespace-pre-wrap leading-relaxed">{entry.body}</div>
+                    <div className="handbook-prose text-[13px] text-[#1A1A2E]/85 leading-relaxed">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          // Open external links in a new tab so a hallway
+                          // reference doesn't yank the user out of the app.
+                          a: ({ href, children, ...rest }) => {
+                            const isExternal = href && !href.startsWith('tel:') && !href.startsWith('mailto:') && !href.startsWith('/')
+                            return (
+                              <a
+                                href={href}
+                                {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                                className="text-[#7F77DD] underline hover:text-[#5F58B8]"
+                                {...rest}
+                              >
+                                {children}
+                              </a>
+                            )
+                          },
+                        }}
+                      >
+                        {linkifyPhones(entry.body)}
+                      </ReactMarkdown>
+                    </div>
                   )}
                 </div>
               )
             })}
           </main>
+        </div>
+      )}
+
+      {/* Prose styles for markdown output — lists, headings, links,
+          strong/em, code, tables. Kept minimal to blend with the rest
+          of the app. Scoped to .handbook-prose so the styles don't
+          leak. */}
+      <style>{`
+        .handbook-prose ul { list-style: disc; padding-left: 1.5em; margin: 0.35em 0; }
+        .handbook-prose ol { list-style: decimal; padding-left: 1.5em; margin: 0.35em 0; }
+        .handbook-prose li { margin: 0.15em 0; }
+        .handbook-prose h1, .handbook-prose h2, .handbook-prose h3 { font-weight: 600; color: #1A1A2E; margin: 0.6em 0 0.25em; line-height: 1.3; }
+        .handbook-prose h1 { font-size: 1.15em; }
+        .handbook-prose h2 { font-size: 1.05em; }
+        .handbook-prose h3 { font-size: 1em; }
+        .handbook-prose p  { margin: 0.4em 0; }
+        .handbook-prose strong { font-weight: 600; color: #1A1A2E; }
+        .handbook-prose em { font-style: italic; }
+        .handbook-prose code { font-family: ui-monospace, SFMono-Regular, monospace; background: #F1EFE8; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+        .handbook-prose pre { background: #F1EFE8; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
+        .handbook-prose pre code { background: none; padding: 0; }
+        .handbook-prose blockquote { border-left: 3px solid #7F77DD; padding-left: 12px; color: #555; margin: 0.5em 0; }
+        .handbook-prose table { border-collapse: collapse; margin: 0.5em 0; }
+        .handbook-prose th, .handbook-prose td { border: 1px solid #E8E8E4; padding: 4px 8px; }
+        .handbook-prose th { background: #FAFAF8; font-weight: 600; }
+        .handbook-prose hr { border: 0; border-top: 1px solid #E8E8E4; margin: 0.6em 0; }
+      `}</style>
+    </div>
+  )
+}
+
+// Collapsible "Formatting tips" panel — shown next to the entry-edit
+// textareas so Sara doesn't need to memorize markdown syntax.
+// Toggle state lives in the parent so both the add-entry and
+// edit-entry forms share the same "show/hide tips" preference.
+function FormattingTips({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <div className="text-[12px]">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1 text-[#7F77DD] hover:text-[#5F58B8] font-medium"
+      >
+        <HelpCircle size={12} /> {open ? 'Hide formatting tips' : 'Formatting tips'}
+      </button>
+      {open && (
+        <div className="mt-2 p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg text-[12px] text-[#1A1A2E]/85 space-y-1.5">
+          <div><code className="bg-[#F1EFE8] px-1 rounded">**bold**</code> for <strong>bold</strong>, <code className="bg-[#F1EFE8] px-1 rounded">*italic*</code> for <em>italic</em></div>
+          <div><code className="bg-[#F1EFE8] px-1 rounded"># Big heading</code>, <code className="bg-[#F1EFE8] px-1 rounded">## Medium</code>, <code className="bg-[#F1EFE8] px-1 rounded">### Small</code></div>
+          <div><code className="bg-[#F1EFE8] px-1 rounded">- item</code> at the start of a line for bullets, <code className="bg-[#F1EFE8] px-1 rounded">1. item</code> for numbered lists</div>
+          <div><code className="bg-[#F1EFE8] px-1 rounded">[text](https://example.com)</code> for a link</div>
+          <div>Emails and phone numbers auto-link — just paste them normally (e.g. <code className="bg-[#F1EFE8] px-1 rounded">deeringmel@me.com</code>, <code className="bg-[#F1EFE8] px-1 rounded">704-555-1234</code>).</div>
+          <div>Blank line between paragraphs to break lines.</div>
         </div>
       )}
     </div>
