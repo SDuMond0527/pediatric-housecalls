@@ -316,6 +316,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // since the column was added (Sentry 07f6c0904cf54b7a97e7df2227d34904,
     // Sara 2026-09-21 — Today.tsx was HTTP 500-ing all day for this).
     try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
+    // Same one-time backfill as /api/children POST — any existing child
+    // with a signed encounter note is a returning patient. Runs against
+    // NULL rows only, so idempotent (no-op after first run). Placing it
+    // here too means Today loads = backfill runs = existing patients
+    // start showing the "Established" badge without waiting for a new
+    // child POST to trigger it.
+    try {
+      await sql`
+        UPDATE children c SET previously_seen_by_phc = true
+        WHERE previously_seen_by_phc IS NULL
+          AND EXISTS (SELECT 1 FROM encounter_notes e WHERE e.child_id = c.id AND e.is_signed = true)
+      `
+    } catch {}
     const { provider_id, date: _date, scheduled_date, date_gte, date_lte, child_id } = req.query as Record<string, string>
     const date = _date || scheduled_date
     let rows: unknown[]
