@@ -954,6 +954,7 @@ export function Today() {
                       <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
                     </div>
                     <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
+                    {(appt as any).previously_seen_by_phc === false && <Badge variant="amber">New patient</Badge>}
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
                     <ChevronDown size={14} className={`text-[#1A1A2E] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />

@@ -313,18 +313,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { provider_id, date: _date, scheduled_date, date_gte, date_lte, child_id } = req.query as Record<string, string>
     const date = _date || scheduled_date
     let rows: unknown[]
+    // Include the child's previously_seen_by_phc via LEFT JOIN so provider
+    // surfaces (Today, Week, AdminSchedule) can render a "New patient"
+    // badge on the appointment card summary without a per-appointment
+    // fetch. Sara 2026-09-21.
     if (child_id) {
-      rows = await sql`SELECT a.*, p.name as provider_name FROM appointments a LEFT JOIN providers p ON p.id = a.provider_id WHERE a.child_id = ${child_id}::uuid AND a.practice_id = ${practiceId}::uuid ORDER BY a.scheduled_date DESC, a.scheduled_time DESC`
+      rows = await sql`SELECT a.*, p.name as provider_name, c.previously_seen_by_phc FROM appointments a LEFT JOIN providers p ON p.id = a.provider_id LEFT JOIN children c ON c.id = a.child_id WHERE a.child_id = ${child_id}::uuid AND a.practice_id = ${practiceId}::uuid ORDER BY a.scheduled_date DESC, a.scheduled_time DESC`
     } else if (provider_id && date) {
-      rows = await sql`SELECT * FROM appointments WHERE provider_id = ${provider_id}::uuid AND scheduled_date = ${date}::date AND practice_id = ${practiceId}::uuid ORDER BY scheduled_time`
+      rows = await sql`SELECT a.*, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.provider_id = ${provider_id}::uuid AND a.scheduled_date = ${date}::date AND a.practice_id = ${practiceId}::uuid ORDER BY a.scheduled_time`
     } else if (provider_id && date_gte && date_lte) {
-      rows = await sql`SELECT * FROM appointments WHERE provider_id = ${provider_id}::uuid AND scheduled_date >= ${date_gte}::date AND scheduled_date <= ${date_lte}::date AND practice_id = ${practiceId}::uuid`
+      rows = await sql`SELECT a.*, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.provider_id = ${provider_id}::uuid AND a.scheduled_date >= ${date_gte}::date AND a.scheduled_date <= ${date_lte}::date AND a.practice_id = ${practiceId}::uuid`
     } else if (date) {
-      rows = await sql`SELECT * FROM appointments WHERE scheduled_date = ${date}::date AND practice_id = ${practiceId}::uuid ORDER BY scheduled_time`
+      rows = await sql`SELECT a.*, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.scheduled_date = ${date}::date AND a.practice_id = ${practiceId}::uuid ORDER BY a.scheduled_time`
     } else if (provider_id) {
-      rows = await sql`SELECT * FROM appointments WHERE provider_id = ${provider_id}::uuid AND practice_id = ${practiceId}::uuid ORDER BY scheduled_date, scheduled_time`
+      rows = await sql`SELECT a.*, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.provider_id = ${provider_id}::uuid AND a.practice_id = ${practiceId}::uuid ORDER BY a.scheduled_date, a.scheduled_time`
     } else {
-      rows = await sql`SELECT id, status, visit_type, scheduled_date, provider_id, notes FROM appointments WHERE practice_id = ${practiceId}::uuid`
+      rows = await sql`SELECT a.id, a.status, a.visit_type, a.scheduled_date, a.provider_id, a.notes, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.practice_id = ${practiceId}::uuid`
     }
     return res.json(rows)
   }

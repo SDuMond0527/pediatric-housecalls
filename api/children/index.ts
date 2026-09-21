@@ -119,6 +119,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // so SSO can skip its fuzzy match and go direct.
         try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
         try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
+        // Prior-visit self-report (Sara 2026-09-21). Nullable — existing
+        // children pre-dating this field stay null; new intakes populate
+        // it via the required question on the family portal.
+        try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
+        // One-time backfill for existing children — any child who already
+        // has a signed encounter note has "been seen" at PHC, so mark
+        // returning=true unless already set. Idempotent; no-op after the
+        // first run since the WHERE clause guards on IS NULL.
+        try {
+          await sql`
+            UPDATE children c SET previously_seen_by_phc = true
+            WHERE previously_seen_by_phc IS NULL
+              AND EXISTS (SELECT 1 FROM encounter_notes e WHERE e.child_id = c.id AND e.is_signed = true)
+          `
+        } catch {}
         const { display_label, first_name, last_name, date_of_birth } = b
         const familyId = rows[0].id as string
 
@@ -144,6 +159,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'allergies', 'current_medications', 'medical_history',
           'preferred_pharmacy', 'vaccination_status',
         ] as const
+        // Prior-visit self-report — must be present as a boolean (true/false),
+        // NOT just non-empty (a `null` value is invalid on first intake).
+        // Handled separately from REQUIRED_ALWAYS which uses non-empty check.
+        if (typeof b.previously_seen_by_phc !== 'boolean') {
+          return res.status(400).json({ error: 'Missing required fields: previously_seen_by_phc' })
+        }
         const REQUIRED_IF_INSURED = [
           'insurance_member_id', 'insurance_group_number',
           'insurance_subscriber_name', 'insurance_subscriber_dob',
@@ -273,6 +294,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             insurance_subscriber_name, insurance_subscriber_dob, insurance_subscriber_gender, insurance_subscriber_relationship,
             insurance_card_front_url, insurance_card_back_url,
             preferred_pharmacy, dosespot_pharmacy_id, pcp, pcp_id,
+            previously_seen_by_phc,
             chart_number
           )
           VALUES (
@@ -286,6 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${pick('insurance_subscriber_gender')}, ${pick('insurance_subscriber_relationship')},
             ${pick('insurance_card_front_url')}, ${pick('insurance_card_back_url')},
             ${pick('preferred_pharmacy')}, ${b.dosespot_pharmacy_id ?? null}, ${pick('pcp')}, ${pick('pcp_id') || null}::uuid,
+            ${b.previously_seen_by_phc},
             ${chartNumber}
           )
           RETURNING *`

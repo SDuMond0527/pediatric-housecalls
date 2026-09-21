@@ -764,6 +764,7 @@ export function AdminSchedule() {
                       <span className="font-display text-[14px] font-medium text-[#1A1A2E] flex-1">{displayVisitType(appt)}</span>
                       <span className="text-[12px] text-[#555] hidden sm:block">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</span>
                       <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
+                      {(appt as any).previously_seen_by_phc === false && <Badge variant="amber">New patient</Badge>}
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
                       <ChevronDown size={13} className={`text-[#1A1A2E] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>

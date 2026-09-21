@@ -22,6 +22,12 @@ export type ChildEntry = {
   last_name: string
   date_of_birth: string
   gender: string
+  // Self-reported: has this child previously been seen by Pediatric
+  // Housecalls? Required on first intake (Sara 2026-09-21) so providers
+  // see a "New patient" badge on the appointment card for a family who
+  // has never been to the practice. Persisted per-child; subsequent
+  // bookings pre-fill from the child record and don't re-ask.
+  previously_seen_by_phc: 'yes' | 'no' | ''
   allergies: string
   current_medications: string
   medical_history: string
@@ -51,7 +57,7 @@ export type ChildEntry = {
 export function emptyChild(): ChildEntry {
   return {
     first_name: '', last_name: '', date_of_birth: '',
-    gender: '', allergies: '', current_medications: '', medical_history: '',
+    gender: '', previously_seen_by_phc: '', allergies: '', current_medications: '', medical_history: '',
     preferred_pharmacy: '', dosespot_pharmacy_id: null, pcp: '', vaccination_status: '',
     self_pay: false,
     insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '',
@@ -84,6 +90,7 @@ export function emptyChildInheritingFrom(sibling: any): ChildEntry {
     last_name:   String(s.last_name ?? ''),
     date_of_birth: '',
     gender:      '',
+    previously_seen_by_phc: '',
     allergies:   '',
     current_medications: '',
     medical_history:     '',
@@ -112,6 +119,7 @@ export function childIsComplete(c: ChildEntry): string | null {
   if (!c.last_name.trim()) return 'Last name'
   if (!c.date_of_birth) return 'Date of birth'
   if (!c.gender) return 'Sex'
+  if (!c.previously_seen_by_phc) return 'Previously seen by Pediatric Housecalls?'
   if (!c.allergies.trim()) return 'Allergies (type "NKDA" if none)'
   if (!c.current_medications.trim()) return 'Current medications (type "None" if none)'
   if (!c.medical_history.trim()) return 'Medical history (type "None" if none)'
@@ -148,6 +156,7 @@ export function buildChildCreatePayload(
     parent_city:     parent.city,
     parent_state:    parent.state,
     parent_zip:      parent.zip,
+    previously_seen_by_phc:             child.previously_seen_by_phc === 'yes' ? true : child.previously_seen_by_phc === 'no' ? false : null,
     allergies:                          child.allergies.trim(),
     current_medications:                child.current_medications.trim(),
     medical_history:                    child.medical_history.trim(),
@@ -246,6 +255,31 @@ export function ChildIntakeForm({
             <option value="M">Male</option>
             <option value="F">Female</option>
           </select>
+        </div>
+      </div>
+
+      {/* Prior-visit self-report. Required on first intake so providers
+          see a "New patient" badge on the appointment card for a family
+          who has never been to the practice. Sara 2026-09-21. */}
+      <div>
+        <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-2">
+          Has this child previously been seen by Pediatric Housecalls? *
+        </label>
+        <div className="flex gap-2">
+          {(['yes', 'no'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onField('previously_seen_by_phc', v)}
+              className={`px-5 py-2 rounded-lg border-2 text-[13px] font-medium transition-all ${
+                child.previously_seen_by_phc === v
+                  ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                  : 'border-[#E8E8E4] bg-white text-[#1A1A2E] hover:border-[#AFA9EC]'
+              }`}
+            >
+              {v === 'yes' ? 'Yes' : 'No'}
+            </button>
+          ))}
         </div>
       </div>
 

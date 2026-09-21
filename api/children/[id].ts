@@ -240,7 +240,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           parent_state         = COALESCE(${b.parent_state         ?? null}, parent_state),
           parent_zip           = COALESCE(${b.parent_zip           ?? null}, parent_zip),
           nickname             = COALESCE(${b.nickname             ?? null}, nickname),
-          vaccination_status   = COALESCE(${b.vaccination_status   ?? null}, vaccination_status)
+          vaccination_status   = COALESCE(${b.vaccination_status   ?? null}, vaccination_status),
+          previously_seen_by_phc = COALESCE(${b.previously_seen_by_phc ?? null}, previously_seen_by_phc)
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
 
