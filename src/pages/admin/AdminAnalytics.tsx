@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { format, subWeeks, startOfWeek } from 'date-fns'
+import { format, subWeeks, startOfWeek, startOfMonth } from 'date-fns'
 import { getAnalytics } from '../../lib/api'
 
 interface ApptRow { id: string; status: string; visit_type: string; scheduled_date: string; provider_id: string; notes: string | null; zone: string | null }
 interface BookingRow { id: string; status: string; visit_type: string; state: string | null; created_at: string; family_id: string }
-interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null; removal_reason: string | null; parent_response: string | null }
+interface WaitlistRow { id: string; status: string; state: string | null; family_id: string; converted_provider_id: string | null; removal_reason: string | null; parent_response: string | null; created_at: string; parent_response_at: string | null }
 
 // Label for family self-removals — entries where the parent hit
 // "remove me" from the 2-hour reminder email (parent_response =
@@ -64,6 +64,17 @@ export function AdminAnalytics() {
   const [familyCount, setFamilyCount] = useState(0)
   const [loading, setLoading]       = useState(true)
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
+
+  // Date-range filters, per card. Default to this month so a common
+  // starting view answers "how are we doing this month?" Sara asked
+  // 2026-09-21 to be able to slice waitlist losses AND waitlist
+  // pickups by provider by date.
+  const _monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const _today      = format(new Date(), 'yyyy-MM-dd')
+  const [lossStart,   setLossStart]   = useState(_monthStart)
+  const [lossEnd,     setLossEnd]     = useState(_today)
+  const [pickupStart, setPickupStart] = useState(_monthStart)
+  const [pickupEnd,   setPickupEnd]   = useState(_today)
 
   useEffect(() => {
     async function load() {
@@ -165,13 +176,21 @@ export function AdminAnalytics() {
     .sort((a, b) => b.total - a.total)
 
   // Waitlist pickups by provider — appointments where the provider clicked Accept
-  // (acceptEntry() always writes "From waitlist" into the notes field)
+  // (acceptEntry() always writes "From waitlist" into the notes field).
+  // Filtered by the pickup date range (uses scheduled_date, i.e. when
+  // the visit actually happened, not when it was booked).
   const waitlistPickupsByProvider: Record<string, number> = {}
-  appts.filter(a => a.notes?.includes('From waitlist')).forEach(a => {
-    const provider = providers.find(p => p.id === a.provider_id)
-    const key = provider?.name ?? null
-    if (key) waitlistPickupsByProvider[key] = (waitlistPickupsByProvider[key] ?? 0) + 1
-  })
+  appts
+    .filter(a =>
+      a.notes?.includes('From waitlist')
+      && a.scheduled_date >= pickupStart
+      && a.scheduled_date <= pickupEnd
+    )
+    .forEach(a => {
+      const provider = providers.find(p => p.id === a.provider_id)
+      const key = provider?.name ?? null
+      if (key) waitlistPickupsByProvider[key] = (waitlistPickupsByProvider[key] ?? 0) + 1
+    })
   const pickupsSorted = Object.entries(waitlistPickupsByProvider).sort((a, b) => b[1] - a[1])
   const maxPickups = pickupsSorted[0]?.[1] ?? 1
 
@@ -216,8 +235,14 @@ export function AdminAnalytics() {
   // Bucketed by admin-picked reason if present, then family
   // self-removals via the 2-hour email, then a catch-all for the
   // ones with neither (typically admin cleanups without a reason or
-  // auto end-of-day removals). Sara 2026-09-21.
-  const lostEntries = waitlist.filter(w => w.status === 'removed')
+  // auto end-of-day removals). Filtered by the loss date range
+  // (uses created_at, i.e. when the family joined the waitlist).
+  // Sara 2026-09-21.
+  const lostEntries = waitlist.filter(w => {
+    if (w.status !== 'removed') return false
+    const d = String(w.created_at ?? '').slice(0, 10)
+    return d >= lossStart && d <= lossEnd
+  })
   const lossByReason: Record<string, number> = {}
   lostEntries.forEach(w => {
     const reason = w.removal_reason
@@ -484,9 +509,23 @@ export function AdminAnalytics() {
               </>
             )}
             <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
-              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Waitlist pickups by provider</div>
+              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Waitlist pickups by provider</div>
+              <div className="flex items-end gap-2 mb-3 flex-wrap">
+                <div>
+                  <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">Start</label>
+                  <input type="date" value={pickupStart} onChange={e => setPickupStart(e.target.value)}
+                    className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">End</label>
+                  <input type="date" value={pickupEnd} onChange={e => setPickupEnd(e.target.value)}
+                    className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+                </div>
+                <button onClick={() => { setPickupStart(_monthStart); setPickupEnd(_today) }}
+                  className="text-[11px] text-[#7F77DD] hover:underline pb-1">This month</button>
+              </div>
               {pickupsSorted.length === 0 ? (
-                <p className="text-[13px] text-[#1A1A2E]">No waitlist pickups recorded yet.</p>
+                <p className="text-[13px] text-[#1A1A2E]">No waitlist pickups in this date range.</p>
               ) : (
                 <div className="space-y-2.5">
                   {pickupsSorted.map(([name, count]) => (
@@ -545,7 +584,21 @@ export function AdminAnalytics() {
         <div className="grid lg:grid-cols-2 gap-5">
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-4">Every waitlist entry removed without a provider pickup — grouped by reason when one was recorded.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-3">Every waitlist entry removed without a provider pickup — grouped by reason when one was recorded.</p>
+            <div className="flex items-end gap-2 mb-4 flex-wrap">
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">Start</label>
+                <input type="date" value={lossStart} onChange={e => setLossStart(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">End</label>
+                <input type="date" value={lossEnd} onChange={e => setLossEnd(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <button onClick={() => { setLossStart(_monthStart); setLossEnd(_today) }}
+                className="text-[11px] text-[#7F77DD] hover:underline pb-1">This month</button>
+            </div>
             {lostEntries.length === 0 ? (
               <p className="text-[13px] text-[#1A1A2E]">No waitlist losses recorded yet.</p>
             ) : (
