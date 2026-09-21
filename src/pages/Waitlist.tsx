@@ -787,6 +787,8 @@ export function Waitlist() {
                     <Badge variant={STATUS_COLORS[entry.status].variant}>{STATUS_COLORS[entry.status].label}</Badge>
                   )}
                   {entry.visit_type && <Badge variant="gray">{entry.visit_type}</Badge>}
+                  {(entryChildren[entry.id]?.previously_seen_by_phc === false || (entry as any).previously_seen_by_phc === false) && <Badge variant="amber">New patient</Badge>}
+                  {(entryChildren[entry.id]?.previously_seen_by_phc === true  || (entry as any).previously_seen_by_phc === true)  && <Badge variant="gray">Established</Badge>}
                 </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#1A1A2E] mb-2">

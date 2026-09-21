@@ -312,6 +312,8 @@ export function AdminWaitlist() {
                   </span>
                   <Badge variant={STATUS_COLORS[e.status].variant}>{STATUS_COLORS[e.status].label}</Badge>
                   {e.visit_type && <Badge variant="gray">{e.visit_type}</Badge>}
+                  {(e as any).previously_seen_by_phc === false && <Badge variant="amber">New patient</Badge>}
+                  {(e as any).previously_seen_by_phc === true  && <Badge variant="gray">Established</Badge>}
                 </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#1A1A2E] mb-2">
