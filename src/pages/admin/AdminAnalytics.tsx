@@ -77,6 +77,8 @@ export function AdminAnalytics() {
   const [pickupEnd,   setPickupEnd]   = useState(_today)
   const [onCallStart, setOnCallStart] = useState(_monthStart)
   const [onCallEnd,   setOnCallEnd]   = useState(_today)
+  const [vtStart,     setVtStart]     = useState(_monthStart)
+  const [vtEnd,       setVtEnd]       = useState(_today)
 
   useEffect(() => {
     async function load() {
@@ -130,8 +132,12 @@ export function AdminAnalytics() {
   // what was actually delivered (matches the "Completed visits" tile).
   // Counting every appointment regardless of status pulled in cancels,
   // no-shows, upcoming bookings, and test rows and made the chart useless.
+  // Filtered by the "Completed visits by type" date range (uses
+  // scheduled_date). Sara 2026-09-21.
   const vtMap: Record<string, number> = {}
-  appts.filter(a => a.status === 'done').forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
+  appts
+    .filter(a => a.status === 'done' && a.scheduled_date >= vtStart && a.scheduled_date <= vtEnd)
+    .forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
 
   // Completed visits by month × visit type — matrix table showing which
   // service mix Sara actually delivered each month. Uses scheduled_date
@@ -342,14 +348,28 @@ export function AdminAnalytics() {
           {/* By visit type */}
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by type</h3>
-            <p className="text-[11px] text-[#555] mb-4">Only visits marked done — cancels, no-shows, and upcoming appointments excluded.</p>
+            <p className="text-[11px] text-[#555] mb-3">Only visits marked done — cancels, no-shows, and upcoming appointments excluded.</p>
+            <div className="flex items-end gap-2 mb-4 flex-wrap">
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">Start</label>
+                <input type="date" value={vtStart} onChange={e => setVtStart(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <div>
+                <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">End</label>
+                <input type="date" value={vtEnd} onChange={e => setVtEnd(e.target.value)}
+                  className="px-2 py-1 border border-[#E8E8E4] rounded-lg text-[12px] bg-white" />
+              </div>
+              <button onClick={() => { setVtStart(_monthStart); setVtEnd(_today) }}
+                className="text-[11px] text-[#7F77DD] hover:underline pb-1">This month</button>
+            </div>
             {vtSorted.length > 0 ? (
               <div className="space-y-3">
                 {vtSorted.map(([type, count]) => (
                   <HBar key={type} label={type} count={count} max={maxVt} color={VT_COLOR[type] ?? '#AFA9EC'} />
                 ))}
               </div>
-            ) : <p className="text-[13px] text-[#1A1A2E]">No appointments recorded yet.</p>}
+            ) : <p className="text-[13px] text-[#1A1A2E]">No completed visits in this date range.</p>}
           </div>
 
           {/* Status distribution */}

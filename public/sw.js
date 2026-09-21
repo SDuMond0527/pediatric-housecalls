@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-09-21-pickups-from-waitlist-rows
+// Service worker — deliberate passthrough. Version: 2026-09-21-completed-vt-date-range
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
