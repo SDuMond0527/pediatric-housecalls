@@ -470,6 +470,46 @@ export const updateHandbookEntry = (id: string, patch: { title?: string; body?: 
 export const deleteHandbookEntry = (id: string) =>
   apiFetch<{ ok: true }>(`/api/handbook?kind=entry&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
 
+// ── Specialists + referrals ───────────────────────────────────
+export interface Specialist {
+  id: string; name: string; specialty: string | null; phone: string | null;
+  fax_number: string | null; address: string | null; notes: string | null;
+  is_active: boolean; created_at: string; updated_at: string
+}
+export interface Referral {
+  id: string; child_id: string; specialist_id: string | null;
+  specialist_name_snapshot: string; specialist_fax_snapshot: string | null;
+  specialist_specialty?: string | null;
+  sent_by_provider_name: string | null;
+  reason: string; clinical_summary: string | null; urgency: 'routine' | 'urgent' | 'stat';
+  faxed_at: string | null; fax_id: string | null; fax_status: 'pending' | 'sent' | 'failed'; fax_error: string | null;
+  created_at: string
+}
+
+export const getSpecialists = (opts?: { includeInactive?: boolean }) =>
+  apiFetch<Specialist[]>(`/api/specialists${opts?.includeInactive ? '?all=true' : ''}`)
+
+export const createSpecialist = (body: Partial<Specialist>) =>
+  apiFetch<Specialist>('/api/specialists', { method: 'POST', body: JSON.stringify(body) })
+
+export const updateSpecialist = (id: string, body: Partial<Specialist>) =>
+  apiFetch<Specialist>(`/api/specialists?id=${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const archiveSpecialist = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/specialists?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const getReferralsForChild = (childId: string) =>
+  apiFetch<Referral[]>(`/api/referrals?child_id=${encodeURIComponent(childId)}`)
+
+export const sendReferral = (body: {
+  child_id: string
+  specialist_id: string
+  reason: string
+  clinical_summary?: string
+  urgency?: 'routine' | 'urgent' | 'stat'
+}) =>
+  apiFetch<Referral>('/api/referrals', { method: 'POST', body: JSON.stringify(body) })
+
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>
   apiFetch<void>('/api/notifications', { method: 'POST', body: JSON.stringify(body) })

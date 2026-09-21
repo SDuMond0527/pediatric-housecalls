@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye, Send } from 'lucide-react'
+import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml } from '../lib/api'
@@ -225,6 +226,8 @@ export function PatientChart() {
 
   // Book appointment
   const [bookOpen, setBookOpen] = useState(false)
+  // Referral modal — Sara 2026-09-21
+  const [referralOpen, setReferralOpen] = useState(false)
 
   // Labs
   const [labOrders, setLabOrders] = useState<any[]>([])
@@ -700,6 +703,11 @@ export function PatientChart() {
                 onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '', allergies: '', current_medications: '', medical_history: '', vaccination_status: '' }) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
                 <UserPlus size={13} /> Add sibling
+              </button>
+              <button
+                onClick={() => setReferralOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E8E8E4] text-[#1A1A2E] text-[12px] font-medium rounded-lg hover:bg-[#FAFAF8] transition-colors">
+                <Send size={13} /> New referral
               </button>
               {/* Admin-only "View as parent" — opens a read-only mirror of
                   this family's parent portal (dashboard, visits, vaccines,
@@ -2490,6 +2498,14 @@ export function PatientChart() {
             <X size={20} />
           </button>
         </div>
+      )}
+
+      {referralOpen && child && (
+        <ReferralModal
+          childId={child.id}
+          childName={[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label || 'this patient'}
+          onClose={() => setReferralOpen(false)}
+        />
       )}
     </div>
   )

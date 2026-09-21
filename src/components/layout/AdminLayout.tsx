@@ -23,6 +23,7 @@ const NAV = [
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },
   { to: '/admin/settings',      icon: Settings,      label: 'Settings' },
   { to: '/admin/pcps',          icon: BookOpen,      label: 'PCP Directory' },
+  { to: '/admin/specialists',   icon: Building2,     label: 'Specialists' },
   { to: '/admin/handbook',      icon: Library,       label: 'All things PHC' },
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
 ]

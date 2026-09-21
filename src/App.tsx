@@ -22,6 +22,7 @@ import { AdminReports } from './pages/admin/AdminReports'
 import { AdminBookings } from './pages/admin/AdminBookings'
 import { CprRequests } from './pages/CprRequests'
 import { Handbook } from './pages/Handbook'
+import { AdminSpecialists } from './pages/admin/AdminSpecialists'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
@@ -138,6 +139,7 @@ export default function App() {
                 <Route path="pending-write-offs" element={<AdminPendingWriteOffs />} />
                 <Route path="reports-schedule" element={<AdminReportsSchedule />} />
                 <Route path="handbook"           element={<Handbook />} />
+                <Route path="specialists"        element={<AdminSpecialists />} />
               </Route>
             </Routes>
           </AuthProvider>
