@@ -25,6 +25,18 @@ function parseBookingNotes(notes: string | null | undefined): Record<string, str
 
 const CPR_DURATION_MINUTES = 180
 
+// Safe wrapper around date-fns format(). A single row with a null or
+// malformed preferred_date used to throw RangeError('Invalid time
+// value') and take down the whole page (Sentry
+// 14df41465e49479a836321bc536313c1, Sara 2026-09-21). Fallback returns
+// the raw value or an em-dash so the render survives.
+function safeFormat(input: string | Date | null | undefined, fmt: string, fallback = '—'): string {
+  if (input === null || input === undefined || input === '') return fallback
+  const d = input instanceof Date ? input : new Date(input)
+  if (isNaN(d.getTime())) return typeof input === 'string' ? input : fallback
+  try { return format(d, fmt) } catch { return typeof input === 'string' ? input : fallback }
+}
+
 // booking_requests.preferred_time is 12-hour ("9:00 AM"), but
 // appointments.scheduled_time is 24-hour ("09:00"). Every other
 // caller in the codebase converts before insert; keep the same
@@ -167,7 +179,7 @@ export function AdminBookings() {
       scheduledTime24h = to24hr(b.preferred_time)
     }
 
-    if (!window.confirm(`Approve this CPR class booking for ${format(new Date(b.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at ${rawTime12h}?`)) return
+    if (!window.confirm(`Approve this CPR class booking for ${safeFormat(b.preferred_date + 'T12:00:00', 'EEE, MMM d')} at ${rawTime12h}?`)) return
     setActioning(b.id); setActionError(null)
     try {
       await createAppointmentWithOverlapRetry({
@@ -302,7 +314,7 @@ export function AdminBookings() {
                   </Badge>
                 </div>
                 <div className="text-[12px] text-[#1A1A2E] mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span className="flex items-center gap-1"><Clock size={11} />{format(new Date(b.preferred_date + 'T12:00:00'), 'EEE, MMM d')} at {b.preferred_time}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} />{safeFormat(b.preferred_date + 'T12:00:00', 'EEE, MMM d')} at {b.preferred_time || '—'}</span>
                   <span>· {b.visit_type}</span>
                   {b.zone && <span>· {b.zone}</span>}
                 </div>
@@ -329,7 +341,7 @@ export function AdminBookings() {
                   {b.charm_appointment_id && (
                     <div className="col-span-2"><span className="text-[#1A1A2E]">Charm ID: </span><span className="font-mono text-[11px]">{b.charm_appointment_id}</span></div>
                   )}
-                  <div className="col-span-2 text-[11px] text-[#aeaeb2]">Ref: {b.reference_code} · Submitted {format(new Date(b.created_at), 'MMM d, h:mm a')}</div>
+                  <div className="col-span-2 text-[11px] text-[#aeaeb2]">Ref: {b.reference_code} · Submitted {safeFormat(b.created_at, 'MMM d, h:mm a')}</div>
                 </div>
 
                 {/* CPR-class intake details — surfaces the participant

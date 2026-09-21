@@ -609,7 +609,10 @@ function cprMelissaEmail(data: {
   bookingId: string  // for the deep-link CTA
 }) {
   const totalCost = data.participantCount * 80
-  const reviewUrl = `${PORTAL_URL}/admin/bookings?booking=${encodeURIComponent(data.bookingId)}`
+  // Provider-facing page, NOT /admin/bookings. Melissa is a PNP; her
+  // approval workflow lives in her own AppLayout, not the admin
+  // dashboard. Admins can still find requests at /admin/bookings.
+  const reviewUrl = `${PORTAL_URL}/cpr-requests?booking=${encodeURIComponent(data.bookingId)}`
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
