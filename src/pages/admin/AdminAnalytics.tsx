@@ -177,19 +177,26 @@ export function AdminAnalytics() {
     .filter(p => p.total > 0)
     .sort((a, b) => b.total - a.total)
 
-  // Waitlist pickups by provider — appointments where the provider clicked Accept
-  // (acceptEntry() always writes "From waitlist" into the notes field).
-  // Filtered by the pickup date range (uses scheduled_date, i.e. when
-  // the visit actually happened, not when it was booked).
+  // Waitlist pickups by provider — count from waitlist_entries directly
+  // (status='converted' with a converted_provider_id). The old approach
+  // grepped appointment notes for "From waitlist", but the accept flow
+  // only writes that string when there are no other note fields, so it
+  // missed nearly every real pickup — Sara saw 0 pickups despite 8
+  // converted entries on 2026-09-21.
+  //
+  // Date filter uses waitlist_entries.created_at as a proxy for pickup
+  // date (there's no converted_at column). For month-to-date views
+  // this is close enough — waitlist entries usually get picked up (or
+  // dropped) within days of creation.
   const waitlistPickupsByProvider: Record<string, number> = {}
-  appts
-    .filter(a =>
-      a.notes?.includes('From waitlist')
-      && a.scheduled_date >= pickupStart
-      && a.scheduled_date <= pickupEnd
-    )
-    .forEach(a => {
-      const provider = providers.find(p => p.id === a.provider_id)
+  waitlist
+    .filter(w => {
+      if (w.status !== 'converted' || !w.converted_provider_id) return false
+      const d = String(w.created_at ?? '').slice(0, 10)
+      return d >= pickupStart && d <= pickupEnd
+    })
+    .forEach(w => {
+      const provider = providers.find(p => p.id === w.converted_provider_id)
       const key = provider?.name ?? null
       if (key) waitlistPickupsByProvider[key] = (waitlistPickupsByProvider[key] ?? 0) + 1
     })
