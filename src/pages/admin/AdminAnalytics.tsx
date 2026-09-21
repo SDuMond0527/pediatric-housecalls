@@ -16,6 +16,7 @@ interface BroadcastRow { id: string; is_open: boolean; created_at: string; is_ur
 interface OnCallRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
 
 import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from '../../lib/dualVisitTypes'
+import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -64,6 +65,12 @@ export function AdminAnalytics() {
   const [familyCount, setFamilyCount] = useState(0)
   const [loading, setLoading]       = useState(true)
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
+  // Full list of visit types the practice offers — used to give the
+  // "Completed visits by month" matrix a stable, complete column set
+  // rather than one that shrinks/grows based on which types happen to
+  // have completed visits in the window. Sara asked 2026-09-21 for
+  // video visits, sports physicals, and IV fluids to always show up.
+  const { visitTypes: allVisitTypes } = usePracticeVisitTypes()
 
   // Date-range filters, per card. Default to this month so a common
   // starting view answers "how are we doing this month?" Sara asked
@@ -152,6 +159,31 @@ export function AdminAnalytics() {
   const monthList = Object.keys(monthVtMap).sort().reverse().slice(0, 12) // most recent 12 months
   const vtSorted = Object.entries(vtMap).sort((a, b) => b[1] - a[1])
   const maxVt = vtSorted[0]?.[1] ?? 1
+
+  // Columns for the "Completed visits by month" matrix. Start from
+  // the practice's full visit-type list so services with zero
+  // completed visits in the window (e.g. a new sports physical
+  // offering that hasn't landed a booking yet) still show up as a
+  // column, then append any historical visit types that aren't in
+  // the current list but have real completed data (defense against
+  // renamed/removed types leaving orphan data).
+  const historicalTypes = Object.keys(monthVtMap).reduce<Set<string>>((acc, m) => {
+    for (const t of Object.keys(monthVtMap[m] ?? {})) acc.add(t)
+    return acc
+  }, new Set())
+  const matrixColumns = (() => {
+    const seen = new Set<string>()
+    const cols: string[] = []
+    for (const vt of allVisitTypes ?? []) {
+      if (!seen.has(vt.visit_type)) { cols.push(vt.visit_type); seen.add(vt.visit_type) }
+    }
+    for (const t of historicalTypes) {
+      if (!seen.has(t)) { cols.push(t); seen.add(t) }
+    }
+    return cols
+  })()
+  const matrixColumnTotal: Record<string, number> = {}
+  for (const t of matrixColumns) matrixColumnTotal[t] = vtMap[t] ?? 0
 
   // Provider breakdown — apply the same today-cutoff rule as the top
   // "Appointment status" chart so a provider's "Upcoming" only counts
@@ -408,15 +440,15 @@ export function AdminAnalytics() {
         </div>
 
         {/* Completed visits by type × month */}
-        {monthList.length > 0 && (
+        {matrixColumns.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm overflow-x-auto">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by month</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-5">Only visits marked done, broken out by type and month. Last 12 months.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-5">Only visits marked done, broken out by type and month. Last 12 months. Every service the practice offers shows as a column even if it has no completed visits yet.</p>
             <table className="w-full text-[13px] min-w-[520px]">
               <thead>
                 <tr className="border-b border-[#E8E8E4]">
                   <th className="text-left py-2 pr-3 font-medium text-[#555]">Month</th>
-                  {vtSorted.map(([type]) => (
+                  {matrixColumns.map(type => (
                     <th key={type} className="text-right py-2 px-2 font-medium text-[#555] whitespace-nowrap">{type}</th>
                   ))}
                   <th className="text-right py-2 pl-3 font-semibold text-[#1A1A2E]">Total</th>
@@ -427,11 +459,11 @@ export function AdminAnalytics() {
                   const [y, m] = month.split('-').map(Number)
                   const label = format(new Date(y, m - 1, 1), 'MMM yyyy')
                   const row = monthVtMap[month] ?? {}
-                  const rowTotal = vtSorted.reduce((s, [type]) => s + (row[type] ?? 0), 0)
+                  const rowTotal = matrixColumns.reduce((s, type) => s + (row[type] ?? 0), 0)
                   return (
                     <tr key={month} className="border-b border-[#F1EFE8] last:border-0">
                       <td className="py-2 pr-3 text-[#1A1A2E]">{label}</td>
-                      {vtSorted.map(([type]) => (
+                      {matrixColumns.map(type => (
                         <td key={type} className="text-right py-2 px-2 tabular-nums text-[#1A1A2E]">
                           {row[type] ?? 0}
                         </td>
@@ -444,8 +476,8 @@ export function AdminAnalytics() {
               <tfoot>
                 <tr className="border-t-2 border-[#E8E8E4]">
                   <td className="pt-3 pr-3 font-semibold text-[#1A1A2E]">All months</td>
-                  {vtSorted.map(([type, count]) => (
-                    <td key={type} className="text-right pt-3 px-2 font-semibold tabular-nums text-[#1A1A2E]">{count}</td>
+                  {matrixColumns.map(type => (
+                    <td key={type} className="text-right pt-3 px-2 font-semibold tabular-nums text-[#1A1A2E]">{matrixColumnTotal[type]}</td>
                   ))}
                   <td className="text-right pt-3 pl-3 font-semibold tabular-nums text-[#1D9E75]">{totalDone}</td>
                 </tr>
