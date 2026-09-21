@@ -211,15 +211,17 @@ export function AdminAnalytics() {
     if (w.status === 'converted') wByState[s].converted++
   })
 
-  // Waitlist losses — either admin-removed with a reason, OR family
-  // self-removed via the 2-hour reminder email (parent_response =
-  // 'remove'). Both are lost patients we didn't get to. Sara 2026-09-21.
-  const lostEntries = waitlist.filter(w =>
-    w.status === 'removed' && (!!w.removal_reason || w.parent_response === 'remove')
-  )
+  // Waitlist losses — every entry with status='removed' counts as
+  // lost, regardless of whether the removal has a recorded reason.
+  // Bucketed by admin-picked reason if present, then family
+  // self-removals via the 2-hour email, then a catch-all for the
+  // ones with neither (typically admin cleanups without a reason or
+  // auto end-of-day removals). Sara 2026-09-21.
+  const lostEntries = waitlist.filter(w => w.status === 'removed')
   const lossByReason: Record<string, number> = {}
   lostEntries.forEach(w => {
-    const reason = w.removal_reason ?? (w.parent_response === 'remove' ? FAMILY_SELF_REMOVED_LABEL : 'Removed (no reason recorded)')
+    const reason = w.removal_reason
+      ?? (w.parent_response === 'remove' ? FAMILY_SELF_REMOVED_LABEL : 'No reason recorded')
     lossByReason[reason] = (lossByReason[reason] ?? 0) + 1
   })
   const lossByState: Record<string, number> = {}
@@ -543,7 +545,7 @@ export function AdminAnalytics() {
         <div className="grid lg:grid-cols-2 gap-5">
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-4">Patients we didn't get to — admin-removed with a reason, OR families who opted out via the 2-hour reminder email.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">Every waitlist entry removed without a provider pickup — grouped by reason when one was recorded.</p>
             {lostEntries.length === 0 ? (
               <p className="text-[13px] text-[#1A1A2E]">No waitlist losses recorded yet.</p>
             ) : (
