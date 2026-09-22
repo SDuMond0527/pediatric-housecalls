@@ -167,41 +167,13 @@ Remove us from the waitlist: ${removeUrl}`
     }
   }
 
-  // ── 2. End-of-day auto-remove ───────────────────────────────────────────────
-  // Once it's past 6pm ET, remove any still-waiting entries created today
-  // (matches the promise made in the reminder message).
-  let autoRemoved = 0
-  try {
-    const hourNowEt = easternHour(now)
-    if (hourNowEt >= BIZ_END_HOUR || hourNowEt < BIZ_START_HOUR) {
-      // "Today" in ET
-      const ymdParts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
-      }).formatToParts(now)
-      const y = ymdParts.find(p => p.type === 'year')?.value
-      const m = ymdParts.find(p => p.type === 'month')?.value
-      const d = ymdParts.find(p => p.type === 'day')?.value
-      const etTodayISO = `${y}-${m}-${d}`
-      // Auto-remove waiting entries whose created_at falls on today (ET)
-      // — only after 6pm ET. Do NOT auto-remove entries created after 6pm
-      // (those are for tomorrow's waitlist).
-      const rows = await sql`
-        UPDATE waitlist_entries
-        SET status = 'removed',
-            parent_response = COALESCE(parent_response, 'auto_eod'),
-            parent_response_at = COALESCE(parent_response_at, NOW())
-        WHERE status = 'waiting'
-          AND (created_at AT TIME ZONE 'America/New_York')::date = ${etTodayISO}::date
-          AND EXTRACT(HOUR FROM (created_at AT TIME ZONE 'America/New_York')) < ${BIZ_END_HOUR}
-          AND created_at >= ${FEATURE_LAUNCH_AT}::timestamptz
-        RETURNING id
-      `
-      autoRemoved = rows.length
-      if (autoRemoved > 0) console.error('[waitlist-reminders] auto-removed', autoRemoved, 'entries at EOD')
-    }
-  } catch (e) {
-    console.error('[waitlist-reminders] eod err:', e)
-  }
+  // The auto-EOD "clean up today's waiting entries after 6pm" block
+  // used to live here — removed 2026-09-22 at Sara's direction. She
+  // never asked for auto-cleanup; a prior session added it silently.
+  // Real harm: Viviana Opre's 3:52am entry got killed at 4:00am
+  // because the condition also fired overnight (hour < BIZ_START).
+  // Waitlist entries now stay until someone (admin, family via
+  // reminder link, or family via the portal) explicitly removes them.
 
-  return res.json({ ok: true, checked: entries.length, sent: remindersSent, autoRemoved })
+  return res.json({ ok: true, checked: entries.length, sent: remindersSent })
 }
