@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { RefreshCw, Check, X, Ban, FileText, Receipt } from 'lucide-react'
-import { getPendingWriteOffs, reviewPatientStatementWriteOff, reviewClaimWriteOff } from '../../lib/api'
+import { getPendingWriteOffs, reviewPatientStatementWriteOff, reviewClaimWriteOff, invokeNotifications } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 
 const REASON_LABEL: Record<string, string> = {
@@ -66,6 +66,10 @@ export function AdminPendingWriteOffs() {
     try {
       if (r.side === 'statement') await reviewPatientStatementWriteOff(r.id, { approved: true })
       else                        await reviewClaimWriteOff(r.id, { approved: true })
+      // Non-blocking: the requester gets a "your write-off was approved" email so
+      // they have a feedback loop; before this the request just vanished from the queue.
+      invokeNotifications({ type: 'write_off_reviewed', side: r.side, recordId: r.id, approved: true })
+        .catch(err => console.error('[write-off approved] notify failed:', err))
       await load()
     } catch (e: any) { alert(e?.message ?? 'Failed to approve') }
     finally { setReviewing(null) }
@@ -73,9 +77,12 @@ export function AdminPendingWriteOffs() {
 
   async function deny(r: Request) {
     setReviewing(r.id)
+    const noteToSend = denyNote
     try {
-      if (r.side === 'statement') await reviewPatientStatementWriteOff(r.id, { approved: false, review_note: denyNote })
-      else                        await reviewClaimWriteOff(r.id, { approved: false, review_note: denyNote })
+      if (r.side === 'statement') await reviewPatientStatementWriteOff(r.id, { approved: false, review_note: noteToSend })
+      else                        await reviewClaimWriteOff(r.id, { approved: false, review_note: noteToSend })
+      invokeNotifications({ type: 'write_off_reviewed', side: r.side, recordId: r.id, approved: false, reviewNote: noteToSend })
+        .catch(err => console.error('[write-off denied] notify failed:', err))
       setDenyNoteOpen(null)
       setDenyNote('')
       await load()

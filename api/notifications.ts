@@ -766,6 +766,85 @@ function cprDeclinedEmail(data: {
 </body></html>`
 }
 
+// Sent to the biller after Sara approves or denies their write-off request.
+// Requested via /api/notifications { type: 'write_off_reviewed', ... }.
+function writeOffReviewedEmail(data: {
+  approved: boolean
+  requesterFirstName: string | null
+  reviewerName: string
+  side: 'statement' | 'claim'
+  patientName: string
+  chartNumber: string | null
+  amount: string
+  serviceDate: string | null
+  reasonLabel: string | null
+  requestNote: string | null
+  reviewNote: string | null
+}) {
+  const greeting = data.requesterFirstName ? `Hi ${data.requesterFirstName},` : 'Hi,'
+  const sideLabel = data.side === 'statement' ? 'patient statement' : 'claim'
+  const accent = data.approved ? '#1D9E75' : '#E74C3C'
+  const headerLabel = data.approved
+    ? `Write-off approved`
+    : `Write-off denied`
+  const bodyLead = data.approved
+    ? `${data.reviewerName} approved your ${sideLabel} write-off request. The ${sideLabel} has been voided${data.side === 'statement' ? ' — the patient owes $0 and it has dropped off AR' : ' — the claim has been written off and dropped off AR'}.`
+    : `${data.reviewerName} denied your ${sideLabel} write-off request. The ${sideLabel} remains active — please review and re-submit if appropriate, or take a different action.`
+  const banner = data.approved
+    ? `<div style="background:#E1F5EE;border-radius:10px;border:1px solid #A6E0CC;padding:14px 16px;font-size:13px;color:#085041;margin-bottom:24px;">Voided by ${data.reviewerName} — no further action needed.</div>`
+    : `<div style="background:#FDEDEC;border-radius:10px;border:1px solid #F5B7B1;padding:14px 16px;font-size:13px;color:#922B21;margin-bottom:24px;">${data.reviewerName} left this ${sideLabel} active. Follow up as needed.</div>`
+  const noteBlock = data.reviewNote
+    ? `<div style="background:#FAFAF8;border-radius:10px;border:1px solid #E8E8E4;padding:14px 16px;font-size:13px;color:#1A1A2E;margin-bottom:24px;">
+        <div style="font-weight:600;margin-bottom:4px;">${data.reviewerName}'s note:</div>
+        <div style="white-space:pre-wrap;">${data.reviewNote}</div>
+      </div>`
+    : ''
+  const requestNoteBlock = data.requestNote
+    ? `<div style="font-size:12px;color:#666;margin-top:4px;font-style:italic;">Your original note: "${data.requestNote}"</div>`
+    : ''
+  const linkPath = data.side === 'statement' ? '/admin/statements' : '/admin/claims'
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#FAFAF8;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A2E;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="100%" style="max-width:520px;background:#fff;border-radius:16px;border:1px solid #E8E8E4;overflow:hidden;">
+
+  <tr><td style="background:#1A1A2E;padding:28px 32px;">
+    <div style="font-size:20px;font-weight:600;color:#fff;letter-spacing:-0.3px;">${logo(accent)}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">${headerLabel}</div>
+  </td></tr>
+
+  <tr><td style="padding:32px;">
+    <p style="font-size:15px;margin:0 0 16px;line-height:1.7;">${greeting}</p>
+    <p style="font-size:15px;margin:0 0 20px;line-height:1.7;">${bodyLead}</p>
+
+    ${banner}
+
+    <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;">
+      <tr><td style="padding:20px;">
+        ${row('👤', 'Patient', `${data.patientName}${data.chartNumber ? ` (${data.chartNumber})` : ''}`)}
+        ${row('💵', 'Amount', data.amount)}
+        ${data.serviceDate ? row('📅', 'Service date', data.serviceDate) : ''}
+        ${data.reasonLabel ? row('🏷️', 'Reason', data.reasonLabel) : ''}
+      </td></tr>
+    </table>
+
+    ${noteBlock}
+    ${requestNoteBlock}
+
+    <a href="${PORTAL_URL}${linkPath}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;margin-top:12px;">Open ${sideLabel}s</a>
+  </td></tr>
+
+  <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
+    You're getting this because you submitted the write-off request.
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>`
+}
+
 function pickupNotificationEmail(data: { recipientName: string; acceptedBy: string; description: string }) {
   const firstName = data.recipientName.split(' ').slice(-2)[0]
   return `<!DOCTYPE html>
@@ -1811,6 +1890,136 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           appointmentId,
         })
       ).catch(e => console.error('Post-visit email failed:', e))
+
+      return res.json({ ok: true })
+    }
+
+    // ── Write-off request reviewed by owner ──────────────────────────────────
+    // Fires from AdminPendingWriteOffs after Sara approves or denies a
+    // biller-submitted write-off request. Emails the requester so they
+    // have a feedback loop (before this, the request just disappeared
+    // from their queue with no confirmation).
+    if (body.type === 'write_off_reviewed') {
+      const { side, recordId, approved, reviewNote } = body as {
+        side: 'statement' | 'claim'
+        recordId: string
+        approved: boolean
+        reviewNote?: string | null
+      }
+
+      if (side !== 'statement' && side !== 'claim') return res.status(400).json({ ok: false, error: 'side must be statement|claim' })
+      if (!recordId) return res.status(400).json({ ok: false, error: 'recordId required' })
+      if (typeof approved !== 'boolean') return res.status(400).json({ ok: false, error: 'approved (boolean) required' })
+
+      // Bootstrap every column this handler SELECTs — the review endpoints
+      // that fire this notification already bootstrap these, but per the
+      // "bootstrap on every read path" rule (feedback memory 2026-09-21)
+      // any endpoint that references write-off columns re-declares them.
+      try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_note text` } catch {}
+      try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS void_reason text` } catch {}
+      try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_requested_by uuid` } catch {}
+      try { await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS write_off_denied_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_reason text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_note text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_requested_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS write_off_denied_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS written_off_by uuid` } catch {}
+
+      const REASON_LABEL: Record<string, string> = {
+        bad_debt:       'Bad debt',
+        small_balance:  'Small balance',
+        hardship:       'Courtesy / hardship',
+        billing_error:  'Billing error',
+        timely_filing:  'Timely filing exceeded',
+        other:          'Other',
+      }
+
+      let recordRow: any = null
+      if (side === 'statement') {
+        const [r] = await sql`
+          SELECT
+            ps.id,
+            ps.void_reason                                     AS reason,
+            ps.void_note                                       AS request_note,
+            ps.voided_by                                       AS reviewer_id,
+            ps.write_off_denied_by                             AS denier_id,
+            ps.write_off_requested_by                          AS requester_id,
+            COALESCE(ps.total_amount_due, 0)::numeric(12,2)    AS amount,
+            COALESCE(ps.patient_first_name, c.patient_first_name, ch.first_name) AS patient_first_name,
+            COALESCE(ps.patient_last_name,  c.patient_last_name,  ch.last_name)  AS patient_last_name,
+            ch.chart_number                                    AS chart_number,
+            COALESCE(ps.date_of_service::text, c.service_date::text) AS service_date
+          FROM patient_statements ps
+          LEFT JOIN claims c    ON c.id  = ps.claim_id
+          LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
+          WHERE ps.id = ${recordId}::uuid
+          LIMIT 1`
+        recordRow = r
+      } else {
+        const [r] = await sql`
+          SELECT
+            cl.id,
+            cl.write_off_reason                                AS reason,
+            cl.write_off_note                                  AS request_note,
+            cl.written_off_by                                  AS reviewer_id,
+            cl.write_off_denied_by                             AS denier_id,
+            cl.write_off_requested_by                          AS requester_id,
+            COALESCE(cl.total_charge, 0)::numeric(12,2)        AS amount,
+            COALESCE(cl.patient_first_name, ch.first_name)     AS patient_first_name,
+            COALESCE(cl.patient_last_name,  ch.last_name)      AS patient_last_name,
+            ch.chart_number                                    AS chart_number,
+            cl.service_date::text                              AS service_date
+          FROM claims cl
+          LEFT JOIN children ch  ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))
+          WHERE cl.id = ${recordId}::uuid
+          LIMIT 1`
+        recordRow = r
+      }
+      if (!recordRow) return res.status(404).json({ ok: false, error: `${side} not found` })
+
+      const requesterId = recordRow.requester_id as string | null
+      const reviewerId  = (approved ? recordRow.reviewer_id : recordRow.denier_id) as string | null
+      if (!requesterId) return res.json({ ok: true, skipped: 'no requester recorded' })
+
+      const [requester] = await sql`SELECT id, name, email FROM providers WHERE id = ${requesterId}::uuid LIMIT 1`
+      const [reviewer]  = reviewerId ? await sql`SELECT id, name FROM providers WHERE id = ${reviewerId}::uuid LIMIT 1` : [null]
+
+      // Skip self-notification (the reviewer approving their own request).
+      if (requester?.id && reviewer?.id && requester.id === reviewer.id) {
+        return res.json({ ok: true, skipped: 'reviewer is requester' })
+      }
+      if (!requester?.email) return res.json({ ok: true, skipped: 'requester has no email on file' })
+
+      const patientName = `${recordRow.patient_first_name ?? ''} ${recordRow.patient_last_name ?? ''}`.trim() || 'Unknown patient'
+      const amountStr = `$${Number(recordRow.amount ?? 0).toFixed(2)}`
+      const serviceDate = recordRow.service_date ? formatDate(recordRow.service_date as string) : null
+      const reasonLabel = recordRow.reason ? (REASON_LABEL[recordRow.reason as string] ?? String(recordRow.reason)) : null
+      const requestNote = recordRow.request_note ? String(recordRow.request_note) : null
+      const reviewNoteStr = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : null
+      const reviewerName = (reviewer?.name as string | undefined) || 'The practice owner'
+      const requesterFirst = requester.name ? String(requester.name).trim().split(/\s+/)[0] : null
+
+      const subject = approved
+        ? `Your write-off was approved — ${patientName} (${amountStr})`
+        : `Your write-off was denied — ${patientName} (${amountStr})`
+
+      await sendEmail(
+        requester.email as string,
+        subject,
+        writeOffReviewedEmail({
+          approved,
+          requesterFirstName: requesterFirst,
+          reviewerName,
+          side,
+          patientName,
+          chartNumber: recordRow.chart_number as string | null,
+          amount: amountStr,
+          serviceDate,
+          reasonLabel,
+          requestNote,
+          reviewNote: reviewNoteStr,
+        })
+      ).catch(e => console.error('[write_off_reviewed] email failed:', e))
 
       return res.json({ ok: true })
     }
