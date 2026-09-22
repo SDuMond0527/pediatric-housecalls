@@ -612,7 +612,24 @@ function cprMelissaEmail(data: {
   // Provider-facing page, NOT /admin/bookings. Melissa is a PNP; her
   // approval workflow lives in her own AppLayout, not the admin
   // dashboard. Admins can still find requests at /admin/bookings.
-  const reviewUrl = `${PORTAL_URL}/cpr-requests?booking=${encodeURIComponent(data.bookingId)}`
+  //
+  // The buttons live ABOVE the details table (previously below it,
+  // where Apple Mail's collapse-fold ate them for at least one recipient
+  // per Sara 2026-09-22) and use the bulletproof <table><td bgcolor>
+  // pattern instead of <a display:inline-block>, so Outlook / iCloud /
+  // any modern client renders them.
+  const approveUrl = `${PORTAL_URL}/cpr-requests?booking=${encodeURIComponent(data.bookingId)}&action=approve`
+  const declineUrl = `${PORTAL_URL}/cpr-requests?booking=${encodeURIComponent(data.bookingId)}&action=decline`
+  const bulletproofButton = (label: string, url: string, bg: string) => `
+    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 6px;">
+      <tr>
+        <td align="center" bgcolor="${bg}" style="border-radius:10px;">
+          <a href="${url}" target="_blank" style="display:inline-block;padding:14px 26px;font-family:'DM Sans',system-ui,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">
+            ${label}
+          </a>
+        </td>
+      </tr>
+    </table>`
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -623,9 +640,21 @@ function cprMelissaEmail(data: {
     <div style="font-size:20px;font-weight:600;color:#fff;">${logo('#E74C3C')}</div>
     <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;">CPR class request — needs your approval</div>
   </td></tr>
-  <tr><td style="padding:32px;">
+  <tr><td style="padding:28px 32px 20px;">
     <p style="font-size:15px;margin:0 0 20px;line-height:1.6;">Hi Melissa,<br><br>
-    A new <strong>${data.visitType}</strong> has been <strong>requested</strong>. Please review the details below and approve or decline it — the family is waiting on your confirmation.</p>
+    A new <strong>${data.visitType}</strong> has been <strong>requested</strong>. Approve or decline below — the family is waiting on your confirmation.</p>
+
+    <!-- Primary CTAs, above the fold. Two bulletproof-pattern buttons -->
+    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 22px auto;">
+      <tr>
+        <td>${bulletproofButton('✓ Approve request', approveUrl, '#1D9E75')}</td>
+        <td>${bulletproofButton('✕ Decline request', declineUrl, '#E74C3C')}</td>
+      </tr>
+    </table>
+    <p style="font-size:12px;color:#666;margin:0 0 24px;line-height:1.5;text-align:center;">
+      Both buttons open this request in your dashboard. Approve prompts you to enter the exact class start time; decline lets you add a note for the family.
+    </p>
+
     <table width="100%" style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;margin-bottom:24px;">
       <tr><td style="padding:20px;">
         ${row('📅', 'Requested date', data.date)}
@@ -638,21 +667,16 @@ function cprMelissaEmail(data: {
       </td></tr>
     </table>
 
-    <!-- CTA: review + take action from the admin dashboard.
-         Single button deep-links to the booking, expanded and
-         highlighted, where Melissa clicks Approve or Decline. -->
-    <div style="text-align:center;margin-bottom:20px;">
-      <a href="${reviewUrl}" style="display:inline-block;background:#E74C3C;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:600;">
-        Review &amp; respond →
-      </a>
-      <p style="font-size:12px;color:#666;margin:10px 0 0;line-height:1.5;">
-        Click to open this request in your dashboard, where you can approve (and set the exact class start time) or decline with a note back to the family.
-      </p>
-    </div>
-
-    <div style="background:#FFF4E5;border-radius:10px;padding:14px 16px;font-size:13px;color:#8A4B00;">
+    <div style="background:#FFF4E5;border-radius:10px;padding:14px 16px;font-size:13px;color:#8A4B00;margin-bottom:18px;">
       If you approve: the family gets the e-learning link + Venmo payment details in a follow-up email. If you decline: they get a short "can't accommodate" note with any reason you add.
     </div>
+
+    <!-- Fallback text link, in case the styled buttons are stripped
+         by an unusual email client. Ensures Melissa can always click through. -->
+    <p style="font-size:12px;color:#888;text-align:center;margin:0;line-height:1.6;">
+      Buttons not working? Open this link:<br>
+      <a href="${approveUrl.replace('&action=approve','')}" style="color:#555;word-break:break-all;">${PORTAL_URL}/cpr-requests?booking=${data.bookingId}</a>
+    </p>
   </td></tr>
   <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
     Request reference: <strong style="font-family:monospace;">${data.ref}</strong>

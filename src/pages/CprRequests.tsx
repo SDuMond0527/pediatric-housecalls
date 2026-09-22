@@ -93,12 +93,15 @@ export function CprRequests() {
   useEffect(() => { fetchBookings() }, [filter])
 
   // Deep-link support — /cpr-requests?booking=<id> from the request
-  // email auto-expands the row and scrolls to it. If the id isn't in
-  // the current filter's results, fall back to 'all' so the next fetch
-  // grabs it (this effect re-runs on bookings change and then expands).
+  // email auto-expands the row and scrolls to it. If ?action=approve
+  // or ?action=decline is also present (Melissa clicked one of the two
+  // email buttons directly), auto-fire that flow after expanding.
+  // If the id isn't in the current filter's results, fall back to 'all'
+  // so the next fetch grabs it (this effect re-runs on bookings change).
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
     const targetId = searchParams.get('booking')
+    const action = searchParams.get('action')  // 'approve' | 'decline' | null
     if (!targetId || loading || bookings.length === 0) return
     const target = bookings.find(b => b.id === targetId)
     if (!target) {
@@ -108,10 +111,21 @@ export function CprRequests() {
     setExpanded(targetId)
     const next = new URLSearchParams(searchParams)
     next.delete('booking')
+    next.delete('action')
     setSearchParams(next, { replace: true })
     setTimeout(() => {
       document.getElementById(`cpr-card-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 100)
+    // Only auto-fire from a pending booking; approved/cancelled don't need action.
+    if (target.status === 'pending' && (action === 'approve' || action === 'decline')) {
+      // Small delay lets the row expand and scroll first, so the
+      // window.prompt / window.confirm dialogs don't appear before
+      // Melissa can see the context underneath.
+      setTimeout(() => {
+        if (action === 'approve') approveBooking(target)
+        else declineBooking(target)
+      }, 250)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, bookings, searchParams])
 
