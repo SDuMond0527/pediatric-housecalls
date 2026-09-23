@@ -64,6 +64,7 @@
     { "src": "/api/claims/([^/]+)/mark-denial-handled", "dest": "/api/claims/[id]/mark-denial-handled?id=$1" },
     { "src": "/api/claims/([^/]+)/write-off",           "dest": "/api/claims/[id]/write-off?id=$1" },
     { "src": "/api/claims/([^/]+)/review-write-off",    "dest": "/api/claims/[id]/review-write-off?id=$1" },
+    { "src": "/api/claims/([^/]+)/reopen",              "dest": "/api/claims/[id]/reopen?id=$1" },
     { "src": "/api/claims/([^/]+)", "dest": "/api/claims/[id]?id=$1" },
     { "src": "/api/labs/([^/]+)/email", "dest": "/api/labs/[id]/email?id=$1" },
     { "src": "/api/patient-statements/([^/]+)/send",              "dest": "/api/patient-statements/[id]/send?id=$1" },

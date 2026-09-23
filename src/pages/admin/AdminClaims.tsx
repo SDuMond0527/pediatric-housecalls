@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -17,6 +17,17 @@ const CLAIM_WRITE_OFF_LABELS: Record<WriteOffReason, string> = {
   timely_filing:  'Timely filing exceeded',
   other:          'Other',
 }
+
+// Must stay in sync with REOPEN_REASONS on the server
+// (api/claims/[id]/reopen.ts). If you add a reason here, add it there
+// too or the server rejects with a 400.
+const REOPEN_REASON_LABELS: Record<string, string> = {
+  payer_denied_cpt_dx:       'Payer denied — CPT or diagnosis fix',
+  payer_denied_member_info:  'Payer denied — member or insurance info fix',
+  payer_denied_other:        'Payer denied — other rework',
+  other_correction:          'Other correction needed',
+}
+const REOPEN_NOTE_MIN = 20
 import { useAuth } from '../../contexts/AuthContext'
 import { PatientStatementModal } from './PatientStatementModal'
 
@@ -192,8 +203,14 @@ export function AdminClaims() {
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, any>>({})
-  // reopening state removed with the Reopen button — see comment on
-  // handleReopen removal above.
+  // Reopen modal — replaces the old one-click Reopen. Requires a
+  // categorized reason + a note (min 20 chars server-enforced) so a
+  // reopen is always a deliberate act with an audit trail.
+  const [reopenTarget, setReopenTarget]   = useState<any | null>(null)
+  const [reopenReason, setReopenReason]   = useState<string>('payer_denied_cpt_dx')
+  const [reopenNote, setReopenNote]       = useState<string>('')
+  const [reopenError, setReopenError]     = useState<string | null>(null)
+  const [reopenSubmitting, setReopenSubmitting] = useState<boolean>(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [markingReady, setMarkingReady] = useState<string | null>(null)
@@ -397,14 +414,40 @@ export function AdminClaims() {
     }
   }
 
-  // handleReopen (the button that flipped a submitted claim's status
-  // back to 'pending_review') was removed 2026-09-23. Andrea was
-  // clicking it to VIEW submitted claims, which silently mutated their
-  // state and caused Olive Dings / Rhett Richmond / Carson Yates to
-  // disappear from the Submitted tab. The read-only "What was
-  // submitted" panel now lives in the expanded card so viewing is
-  // always non-destructive. A deliberate rework/resubmit flow can be
-  // designed later if needed.
+  // Old handleReopen (single click → status flip → tab switch) was
+  // removed 2026-09-23. The read-only "What was submitted" panel now
+  // lives in the expanded card so viewing is non-destructive.
+  //
+  // If Andrea genuinely needs to rework + resubmit, she opens the modal
+  // below (setReopenTarget), picks a categorized reason, and writes a
+  // note of at least REOPEN_NOTE_MIN characters. The server also
+  // enforces both — reason must be in REOPEN_REASONS, note must clear
+  // the min-length gate — so nothing bypasses the audit trail.
+  async function confirmReopen() {
+    if (!reopenTarget) return
+    if (!REOPEN_REASON_LABELS[reopenReason]) {
+      setReopenError('Please select a reason.')
+      return
+    }
+    if (reopenNote.trim().length < REOPEN_NOTE_MIN) {
+      setReopenError(`Note must be at least ${REOPEN_NOTE_MIN} characters. Describe the correction you're making.`)
+      return
+    }
+    setReopenSubmitting(true)
+    setReopenError(null)
+    try {
+      await reopenClaim(reopenTarget.id, { reason: reopenReason, note: reopenNote.trim() })
+      await load()
+      setReopenTarget(null)
+      setReopenReason('payer_denied_cpt_dx')
+      setReopenNote('')
+      setTab('review')
+    } catch (e: any) {
+      setReopenError(e?.message ?? 'Failed to reopen claim')
+    } finally {
+      setReopenSubmitting(false)
+    }
+  }
 
   async function handlePayerSave(claimId: string) {
     const p = editPayer[claimId]
@@ -868,9 +911,20 @@ export function AdminClaims() {
                             </span>
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                            {/* Reopened badge — claim was submitted, then a biller reopened
+                                for correction. Distinct from brand-new pending claims so
+                                rework doesn't drown in the queue. Hover for reason + note. */}
+                            {c.reopened_at && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#EEEDFE] text-[#4C1D95]"
+                                title={`${REOPEN_REASON_LABELS[c.reopen_reason] ?? c.reopen_reason ?? 'Reopened'}${c.reopen_note ? ' — ' + String(c.reopen_note).slice(0, 240) : ''}`}
+                              >
+                                ↻ REOPENED{c.reopen_reason ? ` — ${(REOPEN_REASON_LABELS[c.reopen_reason] ?? c.reopen_reason).toUpperCase()}` : ''}
+                              </span>
+                            )}
                             {/* Same denial badge already used in Submitted+Completed. Rendered
                                 here too because reworked claims (submitted → denied → reopened)
-                                live in the Rework tab, which reuses this same card component. */}
+                                still show their denial context inline. */}
                             {(() => {
                               const outcome = detectErraOutcome(c.denial_codes)
                               if (outcome.status === 'clean') return null
@@ -1759,6 +1813,16 @@ export function AdminClaims() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-3">
+                          <Button size="sm" variant="secondary"
+                            onClick={() => {
+                              setReopenTarget(c)
+                              setReopenReason('payer_denied_cpt_dx')
+                              setReopenNote('')
+                              setReopenError(null)
+                            }}
+                            title="Reopen this claim for correction + resubmission. Requires a reason and a note; logged for audit.">
+                            Reopen for correction
+                          </Button>
                           <a href="https://portal.stedi.com/app/healthcare/claims" target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
                             View in Stedi <ExternalLink size={10} />
@@ -1883,6 +1947,71 @@ export function AdminClaims() {
             <div className="flex justify-end gap-2 mt-5">
               <Button variant="secondary" size="sm" onClick={() => setWriteOffTarget(null)}>Cancel</Button>
               <Button variant="danger" size="sm" loading={writingOff} onClick={confirmWriteOff}>Write off</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reopen modal — categorized reason + required note. Replaces
+          the old one-click Reopen that was silently mutating state. */}
+      {reopenTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !reopenSubmitting && setReopenTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw size={18} className="text-[#4C1D95]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Reopen claim for correction</h2>
+              </div>
+              <button onClick={() => !reopenSubmitting && setReopenTarget(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            </div>
+            <div className="text-[12px] text-[#1A1A2E] mb-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-2.5">
+              <div className="font-medium">
+                {[(reopenTarget.child_first_name ?? reopenTarget.patient_first_name), (reopenTarget.child_last_name ?? reopenTarget.patient_last_name)].filter(Boolean).join(' ')}
+              </div>
+              <div className="text-[#555] mt-0.5">
+                {reopenTarget.payer_name} · {fmtDate(reopenTarget.service_date)} · {fmtMoney(reopenTarget.total_charge)}
+              </div>
+            </div>
+            <p className="text-[12px] text-[#4C1D95] mb-3 leading-relaxed">
+              Moves this claim back to <strong>Pending Review</strong> so you can correct the fields and resubmit it. The claim's submitted_at and Stedi response stay on record for audit — resubmitting later stamps a new submission on top.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-[#555] block mb-1">Reason</label>
+                <select
+                  className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                  value={reopenReason}
+                  onChange={e => setReopenReason(e.target.value)}
+                  disabled={reopenSubmitting}>
+                  {Object.entries(REOPEN_REASON_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-[#555] block mb-1">Note (required — minimum {REOPEN_NOTE_MIN} characters)</label>
+                <textarea
+                  className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[70px]"
+                  value={reopenNote}
+                  onChange={e => setReopenNote(e.target.value)}
+                  disabled={reopenSubmitting}
+                  placeholder="e.g. UHC denial CO-16 M62 — wrong dx pointer on 99213; fixing pointer + resubmitting" />
+                <div className="text-[10px] text-[#555] mt-1 text-right">{reopenNote.trim().length} / {REOPEN_NOTE_MIN}</div>
+              </div>
+              {reopenError && (
+                <div className="text-[12px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-2.5 py-1.5 rounded-lg">{reopenError}</div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <Button variant="secondary" size="sm" onClick={() => setReopenTarget(null)} disabled={reopenSubmitting}>Cancel</Button>
+              <Button
+                variant="teal"
+                size="sm"
+                loading={reopenSubmitting}
+                disabled={reopenNote.trim().length < REOPEN_NOTE_MIN}
+                onClick={confirmReopen}>
+                Reopen &amp; move to Pending Review
+              </Button>
             </div>
           </div>
         </div>

@@ -905,6 +905,13 @@ export const reviewPatientStatementWriteOff = (id: string, body: { approved: boo
 export const reviewClaimWriteOff = (id: string, body: { approved: boolean; review_note?: string }) =>
   apiFetch<any>(`/api/claims/${id}/review-write-off`, { method: 'POST', body: JSON.stringify(body) })
 
+// Reopen a submitted claim for correction + resubmission. Both fields
+// required — the server enforces reason ∈ REOPEN_REASONS and a min
+// note length so accidental reopens (which used to silently mutate
+// status via a single click) can't happen anymore.
+export const reopenClaim = (id: string, body: { reason: string; note: string }) =>
+  apiFetch<any>(`/api/claims/${id}/reopen`, { method: 'POST', body: JSON.stringify(body) })
+
 // Reports schedule (checklist of monthly + quarterly reports)
 export const getReportsSchedule = () =>
   apiFetch<{ reviews: { report_key: string; reviewed_at: string; reviewed_by_name: string | null }[] }>('/api/admin/reports-schedule')

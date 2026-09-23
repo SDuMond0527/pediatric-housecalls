@@ -139,6 +139,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET — list claims
   if (req.method === 'GET') {
     try {
+      // Bootstrap reopen columns on the read path — the rendered card
+      // reads reopened_at / reopen_reason to badge rework claims, so
+      // the columns must exist before the first reopen ever happens,
+      // per the "bootstrap on every read path" rule.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopened_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopened_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopen_reason text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopen_note text` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
       // Lightweight count of claims with unreviewed ERA payments
