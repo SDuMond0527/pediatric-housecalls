@@ -158,6 +158,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_at timestamptz` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_by_name text` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handling_notes text` } catch {}
+      // Rework resolve columns — biller manual "I'm done" signal
+      // that pulls the claim out of Rework tab into Completed.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by_name text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_note text` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
       // Lightweight count of claims with unreviewed ERA payments

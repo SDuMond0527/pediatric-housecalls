@@ -1014,6 +1014,12 @@ export const getClaimActivity = (id: string) =>
 export const addClaimActivity = (id: string, body: string) =>
   apiFetch<{ entry: ClaimActivityEntry }>(`/api/claims/${id}/activity`, { method: 'POST', body: JSON.stringify({ body }) })
 
+// Biller says "I'm done with this rework claim" — moves it out of the
+// Rework tab into Completed. If a new denial/rejection lands later,
+// the filter re-enters it into Rework automatically.
+export const resolveRework = (id: string, body: { note?: string } = {}) =>
+  apiFetch<any>(`/api/claims/${id}/resolve-rework`, { method: 'POST', body: JSON.stringify(body) })
+
 export const refetchKnownEras = () =>
   apiFetch<{
     list_http: number

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -274,6 +274,25 @@ export function AdminClaims() {
         {isCopied ? '✓ Copied' : `PCN: ${pcn}`}
       </button>
     )
+  }
+
+  // Rework-tab "Mark as worked → Completed" — biller signals she's
+  // done with a claim (typically after working it in Stedi portal
+  // outside GoRoam). Sets rework_resolved_at, adds an activity log
+  // entry, moves claim to Completed via filter. If a fresh trigger
+  // arrives after, isInRework re-picks it up automatically.
+  const [resolvingReworkId, setResolvingReworkId] = useState<string | null>(null)
+  async function markReworkResolved(claim: any) {
+    if (!window.confirm(`Mark "${[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ')}" as worked and move to Completed?\n\nIf a new denial or rejection lands later, it will move back to Rework automatically.`)) return
+    setResolvingReworkId(claim.id)
+    try {
+      await resolveRework(claim.id)
+      await load()
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to mark as worked')
+    } finally {
+      setResolvingReworkId(null)
+    }
   }
 
   async function saveActivityNote(claimId: string) {
@@ -624,20 +643,48 @@ export function AdminClaims() {
   const isInRework = (c: any): boolean => {
     if (!c) return false
     if (c.status === 'written_off') return false
-    if ((c.status === 'pending_review' || c.status === 'error') && c.submitted_at) return true
-    if (c.status === 'submitted' && c.claim_rejection_at) return true
-    if (c.status === 'submitted' && hasActionableDenial(c)) return true
-    return false
+
+    // Collect timestamps of active rework triggers. If a trigger is
+    // active AND (biller hasn't marked resolved OR trigger arrived
+    // AFTER she marked resolved), the claim belongs in Rework.
+    const triggers: (string | null | undefined)[] = []
+    if ((c.status === 'pending_review' || c.status === 'error') && c.submitted_at) {
+      triggers.push(c.reopened_at ?? c.updated_at ?? c.submitted_at)
+    }
+    if (c.status === 'submitted' && c.claim_rejection_at) {
+      triggers.push(c.claim_rejection_at)
+    }
+    if (c.status === 'submitted' && hasActionableDenial(c)) {
+      triggers.push(c.era_received_at ?? c.updated_at ?? null)
+    }
+    const activeTriggerTs = triggers.filter(Boolean) as string[]
+    if (activeTriggerTs.length === 0) return false
+
+    // Biller has explicitly marked this rework resolved — stay out of
+    // Rework unless a NEW trigger has fired since.
+    if (c.rework_resolved_at) {
+      const resolvedMs = new Date(c.rework_resolved_at).getTime()
+      return activeTriggerTs.some(t => new Date(t).getTime() > resolvedMs)
+    }
+
+    return true
   }
 
   // Pending Review = brand-new (or drafts) that aren't in Rework. Every
   // filter excludes Rework so a claim only ever appears in one tab.
   const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft'))
   const reworkClaims    = visibleClaims.filter(isInRework)
-  // Submitted = still waiting on payer (no ERA), not in Rework.
-  const submittedClaims = visibleClaims.filter(c => !isInRework(c) && c.status === 'submitted' && !c.era_received_at)
-  // Completed = ERA back OR written off, not in Rework.
-  const completedClaims = visibleClaims.filter(c => !isInRework(c) && ((c.status === 'submitted' && !!c.era_received_at) || c.status === 'written_off'))
+  // Submitted = still waiting on payer (no ERA), not in Rework, not
+  // explicitly resolved by the biller (resolved claims land in Completed).
+  const submittedClaims = visibleClaims.filter(c =>
+    !isInRework(c) && !c.rework_resolved_at &&
+    c.status === 'submitted' && !c.era_received_at)
+  // Completed = ERA back OR written off OR biller marked rework resolved, not in Rework.
+  const completedClaims = visibleClaims.filter(c => !isInRework(c) && (
+    (c.status === 'submitted' && !!c.era_received_at) ||
+    c.status === 'written_off' ||
+    !!c.rework_resolved_at
+  ))
 
   // "Ready for biller" counter spans truly-new Review + Rework (both
   // are Andrea's active work). Excludes submitted/completed rows where
@@ -2105,6 +2152,17 @@ export function AdminClaims() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-3 flex-wrap">
+                          {/* Rework-only: biller says "I'm done working this,
+                              move it to Completed." Only shows on Rework tab —
+                              nowhere else. Sara + Andrea 2026-09-23. */}
+                          {tab === 'rework' && (
+                            <Button size="sm" variant="teal"
+                              loading={resolvingReworkId === c.id}
+                              onClick={() => markReworkResolved(c)}
+                              title="Marks this claim as worked and moves it to the Completed tab. If a new denial or rejection lands later, it moves back to Rework automatically.">
+                              Mark as worked → Completed
+                            </Button>
+                          )}
                           <Button size="sm" variant="secondary"
                             onClick={() => {
                               setReopenTarget(c)
