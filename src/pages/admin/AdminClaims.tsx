@@ -496,7 +496,7 @@ export function AdminClaims() {
       setReopenTarget(null)
       setReopenReason('payer_denied_cpt_dx')
       setReopenNote('')
-      setTab('review')
+      setTab('rework')
     } catch (e: any) {
       setReopenError(e?.message ?? 'Failed to reopen claim')
     } finally {
@@ -2256,7 +2256,7 @@ export function AdminClaims() {
               </div>
             </div>
             <p className="text-[12px] text-[#4C1D95] mb-3 leading-relaxed">
-              Moves this claim back to <strong>Pending Review</strong> so you can correct the fields and resubmit it. The claim's submitted_at and Stedi response stay on record for audit — resubmitting later stamps a new submission on top.
+              Moves this claim to the <strong>Rework</strong> tab so you can correct the fields and resubmit it. The claim's submitted_at and Stedi response stay on record for audit — resubmitting later stamps a new submission on top.
             </p>
             <div className="space-y-3">
               <div>
@@ -2293,7 +2293,7 @@ export function AdminClaims() {
                 loading={reopenSubmitting}
                 disabled={reopenNote.trim().length < REOPEN_NOTE_MIN}
                 onClick={confirmReopen}>
-                Reopen &amp; move to Pending Review
+                Reopen &amp; move to Rework
               </Button>
             </div>
           </div>
