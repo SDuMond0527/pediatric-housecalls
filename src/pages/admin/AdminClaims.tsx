@@ -2417,7 +2417,15 @@ function DxLineButton({ claim, cpIndex: _cpIndex, pointers, onSave }: {
   const diagnoses: any[] = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
 
   const openPopover = () => {
-    setDraft(pointers)
+    // If no pointers have been explicitly saved yet, default the draft
+    // to "all diagnoses checked" (up to the X12 max of 4). Sara asked
+    // for this on 2026-09-23 — previously the popover opened empty and
+    // the biller had to check them all manually. Once she saves an
+    // explicit set, re-opening shows those saved picks unchanged.
+    const initialDraft = pointers.length > 0
+      ? pointers
+      : Array.from({ length: Math.min(diagnoses.length, 4) }, (_, i) => i + 1)
+    setDraft(initialDraft)
     // Fixed-position the popover using the button's rect so ancestor
     // overflow: hidden can't clip it. Also choose direction (below/
     // above the button) and horizontal offset based on available
