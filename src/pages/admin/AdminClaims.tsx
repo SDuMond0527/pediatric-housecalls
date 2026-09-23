@@ -4,8 +4,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, markRejectionHandled, download277X12, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
-import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { detectErraOutcome } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
 
@@ -221,12 +221,42 @@ export function AdminClaims() {
   const [attach277Error, setAttach277Error]       = useState<string | null>(null)
   const [attach277Submitting, setAttach277Submitting] = useState(false)
 
-  // Mark rejection handled — biller acknowledges a 277 rejection banner
-  // and records what she did about it. Same shape as the existing
-  // mark-denial-handled flow.
-  const [rejectionHandledOpen, setRejectionHandledOpen] = useState<string | null>(null)
-  const [rejectionHandledNotes, setRejectionHandledNotes] = useState('')
-  const [rejectionHandledSaving, setRejectionHandledSaving] = useState(false)
+  // Claim activity log — running thread of biller/provider notes.
+  // Replaces the old "Mark denial handled" / "Mark rejection handled"
+  // flows (which conflated "acknowledged" with "resolved"). Auto-loads
+  // the first time a claim card is expanded and caches per-claim so
+  // switching tabs or scrolling doesn't re-fetch. Sara 2026-09-23.
+  const [activityByClaim, setActivityByClaim]       = useState<Record<string, ClaimActivityEntry[]>>({})
+  const [activityLoading, setActivityLoading]       = useState<Record<string, boolean>>({})
+  const [activityDraftByClaim, setActivityDraftByClaim] = useState<Record<string, string>>({})
+  const [activitySaving, setActivitySaving]         = useState<Record<string, boolean>>({})
+
+  // Fetch activity the first time a card is expanded.
+  useEffect(() => {
+    if (!expanded) return
+    if (activityByClaim[expanded] !== undefined) return
+    setActivityLoading(s => ({ ...s, [expanded]: true }))
+    getClaimActivity(expanded)
+      .then(r => setActivityByClaim(s => ({ ...s, [expanded]: r.entries ?? [] })))
+      .catch(e => console.error('[AdminClaims] activity load failed:', e))
+      .finally(() => setActivityLoading(s => ({ ...s, [expanded]: false })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
+  async function saveActivityNote(claimId: string) {
+    const draft = (activityDraftByClaim[claimId] ?? '').trim()
+    if (!draft) return
+    setActivitySaving(s => ({ ...s, [claimId]: true }))
+    try {
+      const { entry } = await addClaimActivity(claimId, draft)
+      setActivityByClaim(s => ({ ...s, [claimId]: [entry, ...(s[claimId] ?? [])] }))
+      setActivityDraftByClaim(s => ({ ...s, [claimId]: '' }))
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to save note')
+    } finally {
+      setActivitySaving(s => ({ ...s, [claimId]: false }))
+    }
+  }
 
   // Reopen modal — replaces the old one-click Reopen. Requires a
   // categorized reason + a note (min 20 chars server-enforced) so a
@@ -539,33 +569,125 @@ export function AdminClaims() {
   const isReady = (c: any) => !!c.ready_for_biller_at
   const baseVisibleClaims = claims.filter(c => !isSelfPayWithSentStatement(c))
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
-  const reviewClaims    = visibleClaims.filter(c => c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')
-  // "Submitted" now means truly waiting on the payer — sent to Stedi
-  // but no ERA back yet. Once an ERA arrives (paid / partial / denied
-  // / no-patient-responsibility), the claim moves to "Completed" so
-  // the biller's Submitted queue only surfaces claims where the ball
-  // is still in the payer's court. Written-off claims also live in
-  // Completed — a closed workflow, just closed via write-off rather
-  // than payment. (Andrea's ask 2026-09-18.)
-  const submittedClaims = visibleClaims.filter(c => c.status === 'submitted' && !c.era_received_at)
-  const completedClaims = visibleClaims.filter(c =>
-    (c.status === 'submitted' && !!c.era_received_at) || c.status === 'written_off'
-  )
-  // Only count claims she still has to act on — same status filter as
-  // reviewClaims. Once she submits a claim, ready_for_biller_at stays
-  // set on the row (biller attribution), but for the counter it's
-  // stale — she's already handled that one.
-  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')).length
+
+  // Rework tab — "everything in flight" per Sara 2026-09-23. Enters
+  // when any of these triggers apply and hasn't been resolved:
+  //   * 277 rejection landed (claim_rejection_at set)
+  //   * 835 came back with an actionable denial (denial_codes populated
+  //     with something detectErraOutcome doesn't call 'clean')
+  //   * Stedi outbound submission errored (status = 'error')
+  //   * Biller reopened for correction (submitted_at set AND status
+  //     back to pending_review — the only way this happens is via the
+  //     Reopen modal)
+  // Exits when the claim is written off (terminal) OR when the biller
+  // resubmits successfully (status flips to 'submitted' with no fresh
+  // rejection/denial). The tab is the source of truth for state —
+  // we killed the "handled" badge because it was ambiguous about
+  // acknowledged vs. resolved.
+  const hasActionableDenial = (c: any): boolean => {
+    const outcome = detectErraOutcome(c.denial_codes)
+    return outcome.status !== 'clean'
+  }
+  const isInRework = (c: any): boolean => {
+    if (!c) return false
+    if (c.status === 'written_off') return false
+    if ((c.status === 'pending_review' || c.status === 'error') && c.submitted_at) return true
+    if (c.status === 'submitted' && c.claim_rejection_at) return true
+    if (c.status === 'submitted' && hasActionableDenial(c)) return true
+    return false
+  }
+
+  // Pending Review = brand-new (or drafts) that aren't in Rework. Every
+  // filter excludes Rework so a claim only ever appears in one tab.
+  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft'))
+  const reworkClaims    = visibleClaims.filter(isInRework)
+  // Submitted = still waiting on payer (no ERA), not in Rework.
+  const submittedClaims = visibleClaims.filter(c => !isInRework(c) && c.status === 'submitted' && !c.era_received_at)
+  // Completed = ERA back OR written off, not in Rework.
+  const completedClaims = visibleClaims.filter(c => !isInRework(c) && ((c.status === 'submitted' && !!c.era_received_at) || c.status === 'written_off'))
+
+  // "Ready for biller" counter spans truly-new Review + Rework (both
+  // are Andrea's active work). Excludes submitted/completed rows where
+  // the biller has already handed the claim off.
+  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (isInRework(c) || (!isInRework(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')))).length
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
-  // 277 rejections needing biller attention — payer rejected the claim at
-  // intake and no one has acknowledged the rejection banner yet. Cleared
-  // per-claim by clicking "Mark rejection handled" in the expanded card.
-  const unhandledRejectionCount = baseVisibleClaims.filter((c: any) => c.claim_rejection_at && !c.claim_rejection_handled_at).length
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`
+
+  // Activity log — renders on every expanded claim card. Textarea for
+  // a new note + reverse-chronological list of prior notes. Also
+  // surfaces legacy notes from the retired "Mark handled" flows so
+  // nothing gets lost in the migration. Closure over component state
+  // for the same reason renderNotifySection is a closure.
+  function renderActivitySection(claim: any) {
+    const entries = activityByClaim[claim.id]
+    const loading = !!activityLoading[claim.id]
+    const draft = activityDraftByClaim[claim.id] ?? ''
+    const saving = !!activitySaving[claim.id]
+    const canSave = !saving && draft.trim().length > 0
+
+    const fmtEntryTime = (iso: string) => {
+      try {
+        const d = new Date(iso)
+        const today = new Date()
+        const sameDay = d.toDateString() === today.toDateString()
+        if (sameDay) return `Today ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+        return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+      } catch { return iso }
+    }
+
+    return (
+      <div className="bg-[#F9F9F7] border border-[#E8E8E4] rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Activity</div>
+          <div className="text-[10px] text-[#555]">{(entries ?? []).length} entr{(entries ?? []).length === 1 ? 'y' : 'ies'}</div>
+        </div>
+        <div className="space-y-2">
+          <textarea
+            value={draft}
+            onChange={e => setActivityDraftByClaim(s => ({ ...s, [claim.id]: e.target.value }))}
+            disabled={saving}
+            placeholder="Add a note — what did you do, who did you talk to, what's the next step?"
+            className="w-full px-2.5 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[52px]" />
+          <div className="flex justify-end">
+            <Button size="xs" variant="teal" loading={saving} disabled={!canSave} onClick={() => saveActivityNote(claim.id)}>
+              Add note
+            </Button>
+          </div>
+        </div>
+        {loading ? (
+          <div className="text-[12px] text-[#1A1A2E] py-2">Loading activity…</div>
+        ) : (entries ?? []).length === 0 ? (
+          <div className="text-[12px] text-[#1A1A2E] italic py-2">No activity yet. Notes you add show up here in order.</div>
+        ) : (
+          <ul className="space-y-2">
+            {(entries ?? []).map(e => {
+              const isLegacy = e.kind === 'legacy_denial_handled' || e.kind === 'legacy_rejection_handled'
+              const legacyLabel = e.kind === 'legacy_denial_handled' ? 'denial handled' : 'rejection handled'
+              return (
+                <li key={e.id} className="bg-white border border-[#E8E8E4] rounded-lg p-2.5">
+                  <div className="flex items-center gap-2 text-[11px] text-[#555]">
+                    <span className="font-medium text-[#1A1A2E]">{e.created_by_name || 'Unknown'}</span>
+                    <span>·</span>
+                    <span>{fmtEntryTime(e.created_at)}</span>
+                    {isLegacy && (
+                      <span className="ml-1 inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-semibold bg-[#FEF3C7] text-[#78350F]">
+                        legacy · {legacyLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[13px] text-[#1A1A2E] mt-1 whitespace-pre-wrap">{e.body}</div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    )
+  }
 
   // "Notify provider" collapsible per-claim. Same JSX in both tabs, so
   // pulled into a local closure over component state. The button lives
@@ -862,16 +984,16 @@ export function AdminClaims() {
         </div>
       )}
 
-      {unhandledRejectionCount > 0 && (
+      {reworkClaims.length > 0 && tab !== 'rework' && (
         <div className="mb-4 flex items-center gap-2 bg-[#FEE2E2] border border-[#FECACA] text-[#7F1D1D] px-4 py-2.5 rounded-xl">
           <AlertOctagon size={14} />
           <div className="text-[13px] font-medium">
-            {unhandledRejectionCount} claim{unhandledRejectionCount === 1 ? '' : 's'} rejected at intake by the payer — needs rework. Look for the pulsing <span className="mx-1 inline-flex items-center gap-0.5 bg-[#FEE2E2] text-[#7F1D1D] px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-[#FECACA]">REJECTED AT INTAKE</span> badge on the Submitted tab.
+            {reworkClaims.length} claim{reworkClaims.length === 1 ? '' : 's'} in rework — needs attention (payer rejections, denials, submission errors, or biller-reopened for correction).
           </div>
           <button
-            onClick={() => setTab('submitted')}
+            onClick={() => setTab('rework')}
             className="ml-auto text-[12px] font-medium px-3 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] transition-colors">
-            Go to Submitted
+            Go to Rework
           </button>
         </div>
       )}
@@ -907,6 +1029,9 @@ export function AdminClaims() {
         <div className="flex">
           <button className={tabCls('review')} onClick={() => setTab('review')}>
             Pending Review ({reviewClaims.length})
+          </button>
+          <button className={tabCls('rework')} onClick={() => setTab('rework')}>
+            Rework {reworkClaims.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#7F1D1D]">{reworkClaims.length}</span>}
           </button>
           <button className={tabCls('submitted')} onClick={() => setTab('submitted')}>
             Submitted ({submittedClaims.length})
@@ -983,48 +1108,12 @@ export function AdminClaims() {
                                 ↻ REOPENED{c.reopen_reason ? ` — ${(REOPEN_REASON_LABELS[c.reopen_reason] ?? c.reopen_reason).toUpperCase()}` : ''}
                               </span>
                             )}
-                            {/* Same denial badge already used in Submitted+Completed. Rendered
-                                here too because reworked claims (submitted → denied → reopened)
-                                still show their denial context inline. */}
-                            {(() => {
-                              const outcome = detectErraOutcome(c.denial_codes)
-                              if (outcome.status === 'clean') return null
-                              if (c.denial_handled_at) {
-                                return (
-                                  <span
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
-                                    title={`Handled by ${c.denial_handled_by_name ?? 'biller'}${c.denial_handling_notes ? ' — ' + c.denial_handling_notes.slice(0, 200) : ''}`}
-                                  >
-                                    ✓ {outcomeLabel(outcome.status).toUpperCase()} — HANDLED
-                                  </span>
-                                )
-                              }
-                              const isDoc = outcome.status === 'documentation_needed'
-                              const cls = isDoc
-                                ? 'bg-[#FEF3C7] text-[#78350F]'
-                                : 'bg-[#FEE2E2] text-[#7F1D1D]'
-                              return (
-                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse ${cls}`} title={outcome.codes.join(', ')}>
-                                  <AlertOctagon size={9} /> {outcomeLabel(outcome.status).toUpperCase()}
-                                </span>
-                              )
-                            })()}
-                            {/* 277 rejection badge on Pending Review too (Olive Dings
-                                was reopened after her 277 rejection, so she lives here). */}
-                            {c.claim_rejection_at && !c.claim_rejection_handled_at && (
-                              <span
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse bg-[#FEE2E2] text-[#7F1D1D]"
-                                title={(c.claim_rejection_reasons ?? []).map((r: any) => `[${r.category}/${r.code}] ${r.message}`).join(' · ')}>
-                                <AlertOctagon size={9} /> REJECTED AT INTAKE
-                              </span>
-                            )}
-                            {c.claim_rejection_at && c.claim_rejection_handled_at && (
-                              <span
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
-                                title={`Handled by ${c.claim_rejection_handled_by_name ?? 'biller'}${c.claim_rejection_handling_notes ? ' — ' + String(c.claim_rejection_handling_notes).slice(0, 200) : ''}`}>
-                                ✓ REJECTED — HANDLED
-                              </span>
-                            )}
+                            {/* Denial + 277 REJECTED badges were removed 2026-09-23
+                                when the Rework tab shipped. A claim in Rework
+                                lives on that tab; the badge became redundant
+                                once the tab expressed state. Handled/unhandled
+                                distinction was also removed — the tab a claim
+                                sits in IS its status. */}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (
@@ -1070,26 +1159,21 @@ export function AdminClaims() {
                             <span className="font-semibold">Stedi rejection: </span>{stediError}
                           </div>
                         )}
-                        {/* 277 rejection banner on Pending Review — appears on
-                            reopened claims that were previously rejected at
-                            intake (Olive Dings pattern). Same structure and
-                            handler as the banner on Submitted+Completed. */}
+                        {/* 277 rejection banner (informational). "Mark handled"
+                            flow was removed 2026-09-23 — see the Activity
+                            section below to record what the biller did. */}
                         {c.claim_rejection_at && (() => {
                           const reasons: any[] = Array.isArray(c.claim_rejection_reasons) ? c.claim_rejection_reasons : []
-                          const isHandled = !!c.claim_rejection_handled_at
-                          const isOpenForm = rejectionHandledOpen === c.id
-                          const borderCls = isHandled ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-[#FECACA] bg-[#FEE2E2]'
-                          const textCls   = isHandled ? 'text-[#065F46]' : 'text-[#7F1D1D]'
                           return (
-                            <div className={`rounded-xl border-2 ${borderCls} px-4 py-3`}>
-                              <div className={`flex items-start gap-3 ${textCls}`}>
+                            <div className="rounded-xl border-2 border-[#FECACA] bg-[#FEE2E2] px-4 py-3">
+                              <div className="flex items-start gap-3 text-[#7F1D1D]">
                                 <AlertOctagon size={18} className="flex-shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-[13px] font-semibold uppercase tracking-wide">
-                                    {isHandled ? 'Rejected at intake — handled' : `Rejected by ${c.payer_name || 'payer'} at intake`}
+                                    Rejected by {c.payer_name || 'payer'} at intake
                                   </div>
                                   <div className="text-[12px] mt-0.5 opacity-90">
-                                    Received {fmtDate(c.claim_rejection_at)}. This claim never entered adjudication; correct + resubmit to get paid.
+                                    Received {fmtDate(c.claim_rejection_at)}. Claim never entered adjudication; correct + resubmit to get paid.
                                   </div>
                                   {reasons.length > 0 && (
                                     <ul className="mt-2 space-y-1.5 text-[12px]">
@@ -1102,11 +1186,6 @@ export function AdminClaims() {
                                         </li>
                                       ))}
                                     </ul>
-                                  )}
-                                  {isHandled && (
-                                    <div className="mt-2 text-[12px] italic">
-                                      Handled by {c.claim_rejection_handled_by_name ?? 'biller'} · {fmtDate(c.claim_rejection_handled_at)}{c.claim_rejection_handling_notes ? ` — ${c.claim_rejection_handling_notes}` : ''}
-                                    </div>
                                   )}
                                   <div className="mt-3 flex gap-2 flex-wrap">
                                     <button
@@ -1124,51 +1203,6 @@ export function AdminClaims() {
                                   </div>
                                 </div>
                               </div>
-                              {!isHandled && !isOpenForm && (
-                                <div className="mt-3 flex gap-2">
-                                  <button
-                                    onClick={() => { setRejectionHandledOpen(c.id); setRejectionHandledNotes('') }}
-                                    className="text-[12px] px-2.5 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] font-medium">
-                                    Mark rejection handled
-                                  </button>
-                                </div>
-                              )}
-                              {!isHandled && isOpenForm && (
-                                <div className="mt-3 space-y-2">
-                                  <label className="text-[11px] text-[#555] block">What did you do about this rejection? (required)</label>
-                                  <textarea
-                                    className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[60px]"
-                                    value={rejectionHandledNotes}
-                                    onChange={e => setRejectionHandledNotes(e.target.value)}
-                                    disabled={rejectionHandledSaving}
-                                    placeholder="e.g. Added modifier 59 to 99345 line, resubmitting" />
-                                  <div className="flex gap-2 justify-end">
-                                    <button
-                                      onClick={() => setRejectionHandledOpen(null)}
-                                      disabled={rejectionHandledSaving}
-                                      className="text-[12px] px-2.5 py-1 rounded-lg border border-[#E8E8E4] text-[#1A1A2E] hover:bg-[#FAFAF8]">Cancel</button>
-                                    <button
-                                      onClick={async () => {
-                                        if (!rejectionHandledNotes.trim()) { alert('Please describe what you did.'); return }
-                                        setRejectionHandledSaving(true)
-                                        try {
-                                          await markRejectionHandled(c.id, { notes: rejectionHandledNotes.trim() })
-                                          await load()
-                                          setRejectionHandledOpen(null)
-                                          setRejectionHandledNotes('')
-                                        } catch (err: any) {
-                                          alert(err?.message ?? 'Failed to save')
-                                        } finally {
-                                          setRejectionHandledSaving(false)
-                                        }
-                                      }}
-                                      disabled={rejectionHandledSaving || !rejectionHandledNotes.trim()}
-                                      className="text-[12px] px-2.5 py-1 rounded-lg bg-[#DC2626] text-white hover:bg-[#B91C1C] disabled:opacity-50">
-                                      {rejectionHandledSaving ? 'Saving…' : 'Save & mark handled'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )
                         })()}
@@ -1709,6 +1743,7 @@ export function AdminClaims() {
                               </span>
                             )}
                           </div>
+                          {renderActivitySection(c)}
                           {renderNotifySection(c)}
                           <div className="flex flex-wrap gap-2">
                             {showStatementButton && (
@@ -1757,11 +1792,17 @@ export function AdminClaims() {
           {/* SUBMITTED + COMPLETED TABS — same card layout. Submitted =
               still waiting on payer (no ERA yet). Completed = ERA back
               (paid / partial / denied / no-pt-resp) OR written off. */}
-          {(tab === 'submitted' || tab === 'completed') && (() => {
-            const list = tab === 'completed' ? completedClaims : submittedClaims
+          {(tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
+            const list = tab === 'completed'
+              ? completedClaims
+              : tab === 'rework'
+                ? reworkClaims
+                : submittedClaims
             const emptyMsg = tab === 'completed'
               ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
-              : 'No submitted claims yet.'
+              : tab === 'rework'
+                ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
+                : 'No submitted claims yet.'
             return (
             <div className="space-y-2">
               {list.length === 0 && (
@@ -1796,51 +1837,11 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
-                            {(() => {
-                              const outcome = detectErraOutcome(c.denial_codes)
-                              if (outcome.status === 'clean') return null
-                              // Biller has acknowledged + noted what she did →
-                              // swap the flashing alert badge for a muted
-                              // "handled" tag so the row is still spottable
-                              // but not screaming at everyone.
-                              if (c.denial_handled_at) {
-                                return (
-                                  <span
-                                    className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
-                                    title={`Handled by ${c.denial_handled_by_name ?? 'biller'}${c.denial_handling_notes ? ' — ' + c.denial_handling_notes.slice(0, 200) : ''}`}
-                                  >
-                                    ✓ {outcomeLabel(outcome.status).toUpperCase()} — HANDLED
-                                  </span>
-                                )
-                              }
-                              const isDoc = outcome.status === 'documentation_needed'
-                              const cls = isDoc
-                                ? 'bg-[#FEF3C7] text-[#78350F]'
-                                : 'bg-[#FEE2E2] text-[#7F1D1D]'
-                              return (
-                                <span className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse ${cls}`} title={outcome.codes.join(', ')}>
-                                  <AlertOctagon size={9} /> {outcomeLabel(outcome.status).toUpperCase()}
-                                </span>
-                              )
-                            })()}
-                            {/* 277 rejection badge — payer rejected at intake (before
-                                adjudication), never entered the payment workflow.
-                                Distinct from 835 denial (which reaches adjudication
-                                and generates CAS). Flashing red until biller acks. */}
-                            {c.claim_rejection_at && !c.claim_rejection_handled_at && (
-                              <span
-                                className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse bg-[#FEE2E2] text-[#7F1D1D]"
-                                title={(c.claim_rejection_reasons ?? []).map((r: any) => `[${r.category}/${r.code}] ${r.message}`).join(' · ')}>
-                                <AlertOctagon size={9} /> REJECTED AT INTAKE
-                              </span>
-                            )}
-                            {c.claim_rejection_at && c.claim_rejection_handled_at && (
-                              <span
-                                className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
-                                title={`Handled by ${c.claim_rejection_handled_by_name ?? 'biller'}${c.claim_rejection_handling_notes ? ' — ' + String(c.claim_rejection_handling_notes).slice(0, 200) : ''}`}>
-                                ✓ REJECTED — HANDLED
-                              </span>
-                            )}
+                            {/* Denial + 277 REJECTED badges were removed 2026-09-23.
+                                A claim in Rework lives on the Rework tab — the
+                                badge became redundant once the tab expressed
+                                state. Handled/unhandled distinction also went
+                                away for the same reason. */}
                           </div>
                           <div className="text-[12px] text-[#1A1A2E] mt-0.5">
                             {c.payer_name} · {fmtMoney(c.total_charge)}
@@ -1875,30 +1876,21 @@ export function AdminClaims() {
                           )
                         })()}
 
-                        {/* 277 rejection banner — payer rejected the claim before
-                            adjudication (bundling, missing modifiers, invalid
-                            member ID, etc.). Shows the full reason list Stedi
-                            captured. "Mark handled" swaps the flashing red badge
-                            for the muted "REJECTED — HANDLED" tag; details stay
-                            visible for audit. */}
+                        {/* 277 rejection banner (informational). "Mark handled"
+                            flow was removed 2026-09-23 — see the Activity
+                            section below to record what the biller did. */}
                         {c.claim_rejection_at && (() => {
                           const reasons: any[] = Array.isArray(c.claim_rejection_reasons) ? c.claim_rejection_reasons : []
-                          const isHandled = !!c.claim_rejection_handled_at
-                          const isOpenForm = rejectionHandledOpen === c.id
-                          const borderCls = isHandled ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-[#FECACA] bg-[#FEE2E2]'
-                          const textCls   = isHandled ? 'text-[#065F46]' : 'text-[#7F1D1D]'
                           return (
-                            <div className={`rounded-xl border-2 ${borderCls} px-4 py-3`}>
-                              <div className={`flex items-start gap-3 ${textCls}`}>
+                            <div className="rounded-xl border-2 border-[#FECACA] bg-[#FEE2E2] px-4 py-3">
+                              <div className="flex items-start gap-3 text-[#7F1D1D]">
                                 <AlertOctagon size={18} className="flex-shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-[13px] font-semibold uppercase tracking-wide">
-                                    {isHandled ? 'Rejected at intake — handled' : `Rejected by ${c.payer_name || 'payer'} at intake`}
+                                    Rejected by {c.payer_name || 'payer'} at intake
                                   </div>
                                   <div className="text-[12px] mt-0.5 opacity-90">
-                                    {isHandled
-                                      ? `Received ${fmtDate(c.claim_rejection_at)}. This claim never entered adjudication; you'll need to correct + resubmit to get paid.`
-                                      : `Received ${fmtDate(c.claim_rejection_at)}. This claim never entered adjudication.`}
+                                    Received {fmtDate(c.claim_rejection_at)}. Claim never entered adjudication.
                                   </div>
                                   {reasons.length > 0 && (
                                     <ul className="mt-2 space-y-1.5 text-[12px]">
@@ -1912,58 +1904,8 @@ export function AdminClaims() {
                                       ))}
                                     </ul>
                                   )}
-                                  {isHandled && (
-                                    <div className="mt-2 text-[12px] italic">
-                                      Handled by {c.claim_rejection_handled_by_name ?? 'biller'} · {fmtDate(c.claim_rejection_handled_at)}{c.claim_rejection_handling_notes ? ` — ${c.claim_rejection_handling_notes}` : ''}
-                                    </div>
-                                  )}
                                 </div>
                               </div>
-                              {!isHandled && !isOpenForm && (
-                                <div className="mt-3 flex gap-2">
-                                  <button
-                                    onClick={() => { setRejectionHandledOpen(c.id); setRejectionHandledNotes('') }}
-                                    className="text-[12px] px-2.5 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] font-medium">
-                                    Mark rejection handled
-                                  </button>
-                                </div>
-                              )}
-                              {!isHandled && isOpenForm && (
-                                <div className="mt-3 space-y-2">
-                                  <label className="text-[11px] text-[#555] block">What did you do about this rejection? (required)</label>
-                                  <textarea
-                                    className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[60px]"
-                                    value={rejectionHandledNotes}
-                                    onChange={e => setRejectionHandledNotes(e.target.value)}
-                                    disabled={rejectionHandledSaving}
-                                    placeholder="e.g. Added modifier 59 to 99345 line, resubmitting" />
-                                  <div className="flex gap-2 justify-end">
-                                    <button
-                                      onClick={() => setRejectionHandledOpen(null)}
-                                      disabled={rejectionHandledSaving}
-                                      className="text-[12px] px-2.5 py-1 rounded-lg border border-[#E8E8E4] text-[#1A1A2E] hover:bg-[#FAFAF8]">Cancel</button>
-                                    <button
-                                      onClick={async () => {
-                                        if (!rejectionHandledNotes.trim()) { alert('Please describe what you did.'); return }
-                                        setRejectionHandledSaving(true)
-                                        try {
-                                          await markRejectionHandled(c.id, { notes: rejectionHandledNotes.trim() })
-                                          await load()
-                                          setRejectionHandledOpen(null)
-                                          setRejectionHandledNotes('')
-                                        } catch (err: any) {
-                                          alert(err?.message ?? 'Failed to save')
-                                        } finally {
-                                          setRejectionHandledSaving(false)
-                                        }
-                                      }}
-                                      disabled={rejectionHandledSaving || !rejectionHandledNotes.trim()}
-                                      className="text-[12px] px-2.5 py-1 rounded-lg bg-[#DC2626] text-white hover:bg-[#B91C1C] disabled:opacity-50">
-                                      {rejectionHandledSaving ? 'Saving…' : 'Save & mark handled'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )
                         })()}
@@ -2214,6 +2156,7 @@ export function AdminClaims() {
                             <Ban size={11} /> Write off
                           </button>
                         </div>
+                        {renderActivitySection(c)}
                         {renderNotifySection(c)}
                       </div>
                     )}

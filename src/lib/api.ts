@@ -993,10 +993,26 @@ export const attach277X12 = (body: { claim_id: string; x12_text: string }) =>
   )
 
 // Mark a 277 rejection as handled — biller has read + acted on it.
-// Muted "handled" badge replaces the flashing red one but the rejection
-// details stay visible for audit.
+// DEPRECATED 2026-09-23 — the whole "handled" concept was replaced by
+// the Rework tab + activity log. Helper stays for a beat in case any
+// stale bookmarks or scripts hit it; UI no longer calls it.
 export const markRejectionHandled = (id: string, body: { notes: string }) =>
   apiFetch<any>(`/api/claims/${id}/mark-rejection-handled`, { method: 'POST', body: JSON.stringify(body) })
+
+// Claim activity log — running thread of biller/provider notes on a
+// specific claim. Replaces the previous "Mark handled" flows.
+export type ClaimActivityEntry = {
+  id: string
+  created_at: string
+  created_by: string | null
+  created_by_name: string | null
+  kind: string   // 'note' | 'legacy_denial_handled' | 'legacy_rejection_handled'
+  body: string
+}
+export const getClaimActivity = (id: string) =>
+  apiFetch<{ entries: ClaimActivityEntry[] }>(`/api/claims/${id}/activity`)
+export const addClaimActivity = (id: string, body: string) =>
+  apiFetch<{ entry: ClaimActivityEntry }>(`/api/claims/${id}/activity`, { method: 'POST', body: JSON.stringify({ body }) })
 
 export const refetchKnownEras = () =>
   apiFetch<{
