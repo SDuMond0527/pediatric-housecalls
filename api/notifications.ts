@@ -207,6 +207,19 @@ function to12h(time24: string): string {
   return `${h}:${m} ${ampm}`
 }
 
+// Standardized "text Pam for booking help" block, appended to every
+// parent-facing booking confirmation email (main appointments, CPR
+// requests + approvals, waitlist confirmations, slot offer acceptances,
+// broadcast pickups). Sara asked 2026-09-23 that parents always have
+// a direct human contact for booking questions, distinct from any
+// clinical / instructor contact in the email body.
+function pamBookingContactBlock(): string {
+  return `<div style="margin-top:20px;padding:14px 16px;background:#FAFAF8;border:1px solid #E8E8E4;border-radius:10px;text-align:center;font-size:13px;color:#1A1A2E;line-height:1.6;">
+    Have questions about this appointment booking or need help with something?<br>
+    <strong>Text Pam at <a href="sms:+17045777615" style="color:#7F77DD;text-decoration:none;">704-577-7615</a></strong>
+  </div>`
+}
+
 function parentConfirmationEmail(data: {
   visitType: string, date: string, time: string,
   provider: string, zone: string, ref: string,
@@ -272,12 +285,13 @@ function parentConfirmationEmail(data: {
     </div>` : ''}
 
     <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
+
+    ${pamBookingContactBlock()}
   </td></tr>
 
   <!-- Footer -->
   <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
-    Booking reference: <strong style="font-family:monospace;">${data.ref}</strong><br><br>
-    Questions? Reply to this email or call/text us directly.
+    Booking reference: <strong style="font-family:monospace;">${data.ref}</strong>
   </td></tr>
 
 </table>
@@ -582,7 +596,9 @@ function cprApprovedEmail(data: {
     <p style="font-size:15px;font-weight:600;margin:0 0 2px;">Melissa Jesse</p>
     <p style="font-size:13px;color:#666;margin:0 0 24px;line-height:1.6;">Pediatric Nurse Practitioner and Certified BLS and Heartsaver CPR Instructor</p>
 
-    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions? Reach Melissa directly at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions about the CPR class or content? Reach Melissa directly at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+
+    ${pamBookingContactBlock()}
   </td></tr>
 
   <!-- Footer -->
@@ -730,7 +746,9 @@ function cprRequestReceivedEmail(data: {
       <strong>What happens next:</strong> Melissa will confirm within 24 hours. If she can't accommodate this date, she'll email you to suggest alternatives.
     </div>
 
-    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions? Reach Melissa at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+    <p style="font-size:13px;color:#888;margin:0;line-height:1.6;">Questions about the CPR class or content? Reach Melissa at <a href="mailto:deeringmel@me.com" style="color:#555;">deeringmel@me.com</a></p>
+
+    ${pamBookingContactBlock()}
   </td></tr>
 
   <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
@@ -905,7 +923,8 @@ function ivFluidsEmailHtml(): string {
 <tr><td style="padding:32px;">
   <p style="font-size:15px;margin:0 0 16px;line-height:1.6;">Your request for in-home IV fluids has been received.</p>
   <p style="font-size:14px;margin:0 0 16px;line-height:1.7;color:#444;">One of our physicians or nurse practitioners will review the request and will schedule to consult with you via video telemedicine visit shortly. You will receive another email with the link to log into the ${PRACTICE_NAME} virtual visit room.</p>
-  <p style="font-size:14px;margin:0;line-height:1.7;color:#444;">Once you've had a chance to meet with the physician or nurse practitioner via video and they confirm and agree that IV fluids are medically appropriate and indicated, the IV fluids nurse will reach out to you to let you know what time she will be arriving at your home to administer the IV fluids.</p>
+  <p style="font-size:14px;margin:0 0 16px;line-height:1.7;color:#444;">Once you've had a chance to meet with the physician or nurse practitioner via video and they confirm and agree that IV fluids are medically appropriate and indicated, the IV fluids nurse will reach out to you to let you know what time she will be arriving at your home to administer the IV fluids.</p>
+  ${pamBookingContactBlock()}
 </td></tr>
 </table></td></tr></table></body></html>`
 }
@@ -1113,6 +1132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <div style="background:#FAEEDA;border-radius:10px;padding:14px 16px;font-size:13px;color:#633806;">
     You'll receive a text and email the moment a provider picks up your request. No action is needed from you in the meantime.
   </div>
+  ${pamBookingContactBlock()}
 </td></tr>
 </table></td></tr></table></body></html>`
         if (family?.email) await sendEmail(family.email, `You're on the ${PRACTICE_NAME} waitlist`, familyHtml).catch(e => console.error('Waitlist family confirmation email failed:', e))
@@ -1252,6 +1272,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     <strong>This offer expires in 24 hours.</strong> Log in to your portal to accept or decline. If you don't respond, the slot will be offered to the next family on the waitlist.
   </div>
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1D9E75;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">Claim this slot →</a>
+  ${pamBookingContactBlock()}
 </td></tr>
 </table></td></tr></table></body></html>`
 
@@ -1334,6 +1355,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     Your provider will be in touch before the visit. Please make sure you're available at the visit address with your child ready.
   </div>
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
+  ${pamBookingContactBlock()}
 </td></tr>
 <tr><td style="padding:20px 32px;border-top:1px solid #E8E8E4;font-size:11px;color:#999;text-align:center;">
   Booking reference: <strong style="font-family:monospace;">${offer.id.slice(0, 8).toUpperCase()}</strong>
@@ -1555,6 +1577,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ${timeStr ? `<div><span style="font-size:12px;color:#999;text-transform:uppercase;">New Time</span><br><span style="font-size:14px;font-weight:500;">${timeStr}</span></div>` : ''}
   </td></tr></table>
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1D9E75;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
+  ${pamBookingContactBlock()}
 </td></tr>
 </table></td></tr></table></body></html>`
 
@@ -1765,6 +1788,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <p>${acceptedBy} will evaluate your child by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>At that time, please log into the ${PRACTICE_NAME} virtual waiting room and the provider will begin your video visit from there:</p>
           <p><a href="${TELEMEDICINE_URL}" style="color:#7F77DD;font-weight:600;">${TELEMEDICINE_URL}</a></p>
+          ${pamBookingContactBlock()}
         </div>`
         if (familyPhone) await sendSMS(familyPhone, parentSms).catch(e => console.error('Broadcast accepted family SMS failed:', e))
         if (familyEmail) await sendEmail(familyEmail, `Your telemedicine visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml).catch(e => console.error('Broadcast accepted family email failed:', e))
@@ -1773,6 +1797,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will come to your home for a house call visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>Please have your child ready at that time.</p>
+          ${pamBookingContactBlock()}
         </div>`
         if (familyPhone) await sendSMS(familyPhone, parentSms).catch(e => console.error('Broadcast accepted family SMS failed:', e))
         if (familyEmail) await sendEmail(familyEmail, `Your house call visit is confirmed — ${timeFormatted} ${whenStr}`, parentEmailHtml).catch(e => console.error('Broadcast accepted family email failed:', e))
