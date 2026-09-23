@@ -935,27 +935,39 @@ export function AdminClaims() {
         </div>
       )}
 
-      {backfillResult && (
-        <div className={`mb-4 border rounded-xl px-4 py-3 ${backfillResult.ok ? 'bg-[#F5F4FE] border-[#AFA9EC] text-[#3C3489]' : 'bg-[#FCEBEB] border-[#F4B4B4] text-[#791F1F]'}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="text-[13px] font-medium">
-              CAS backfill ({backfillResult.days}d) — {backfillResult.claimsUpdated} claim{backfillResult.claimsUpdated === 1 ? '' : 's'} updated from {backfillResult.transactionsProcessed} ERA{backfillResult.transactionsProcessed === 1 ? '' : 's'}.
+      {backfillResult && (() => {
+        const r: any = backfillResult
+        const r277Seen     = r.rejections277Seen ?? 0
+        const r277Attached = r.rejections277Attached ?? 0
+        const r277Unmatched = r.rejections277Unmatched ?? 0
+        const r277Ack      = r.rejections277SkippedAck ?? 0
+        return (
+          <div className={`mb-4 border rounded-xl px-4 py-3 ${r.ok ? 'bg-[#F5F4FE] border-[#AFA9EC] text-[#3C3489]' : 'bg-[#FCEBEB] border-[#F4B4B4] text-[#791F1F]'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-[13px] font-medium">
+                Backfill ({r.days}d) — {r.claimsUpdated} claim{r.claimsUpdated === 1 ? '' : 's'} updated from {r.transactionsProcessed} ERA{r.transactionsProcessed === 1 ? '' : 's'}
+                {r277Seen > 0 && ` · ${r277Attached}/${r277Seen} rejection${r277Seen === 1 ? '' : 's'} attached from 277s`}
+              </div>
+              <button onClick={() => setBackfillResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
             </div>
-            <button onClick={() => setBackfillResult(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
+            <div className="text-[11px] mt-2 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1 opacity-90">
+              <div><span className="opacity-70">Transactions seen:</span> {r.transactionsSeen}</div>
+              <div><span className="opacity-70">Processed:</span> {r.transactionsProcessed}</div>
+              <div><span className="opacity-70">Claims updated:</span> {r.claimsUpdated}</div>
+              <div><span className="opacity-70">Already processed:</span> {r.skippedAlreadyProcessed}</div>
+              <div><span className="opacity-70">Non-835 skipped:</span> {r.skippedNotEra}</div>
+              <div><span className="opacity-70">Errors:</span> {(r.errors ?? []).length}</div>
+              <div><span className="opacity-70">277s seen:</span> {r277Seen}</div>
+              <div><span className="opacity-70">277 rejections attached:</span> {r277Attached}</div>
+              <div><span className="opacity-70">277 unmatched:</span> {r277Unmatched}</div>
+              <div><span className="opacity-70">277 acks (skipped):</span> {r277Ack}</div>
+            </div>
+            {(r.errors ?? []).length > 0 && (
+              <div className="text-[11px] mt-1 opacity-80">Errors: {(r.errors ?? []).slice(0, 5).join(' · ')}</div>
+            )}
           </div>
-          <div className="text-[11px] mt-2 grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1 opacity-90">
-            <div><span className="opacity-70">Transactions seen:</span> {backfillResult.transactionsSeen}</div>
-            <div><span className="opacity-70">Processed:</span> {backfillResult.transactionsProcessed}</div>
-            <div><span className="opacity-70">Claims updated:</span> {backfillResult.claimsUpdated}</div>
-            <div><span className="opacity-70">Already processed:</span> {backfillResult.skippedAlreadyProcessed}</div>
-            <div><span className="opacity-70">Non-835 skipped:</span> {backfillResult.skippedNotEra}</div>
-            <div><span className="opacity-70">Errors:</span> {backfillResult.errors.length}</div>
-          </div>
-          {backfillResult.errors.length > 0 && (
-            <div className="text-[11px] mt-1 opacity-80">Errors: {backfillResult.errors.slice(0, 3).join(' · ')}</div>
-          )}
-        </div>
-      )}
+        )
+      })()}
 
       {refetchResult && (
         <div className="mb-4 border rounded-xl px-4 py-3 bg-[#F0FDF4] border-[#A9DFBF] text-[#0F5F44]">
