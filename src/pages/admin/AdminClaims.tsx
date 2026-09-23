@@ -872,6 +872,32 @@ export function AdminClaims() {
                             </span>
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                            {/* Same denial badge used in Submitted+Completed tabs — surfaces
+                                on reopened / previously-denied claims so Andrea can tell rework
+                                from truly-new pending work at a glance. Sara 2026-09-23. */}
+                            {(() => {
+                              const outcome = detectErraOutcome(c.denial_codes)
+                              if (outcome.status === 'clean') return null
+                              if (c.denial_handled_at) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
+                                    title={`Handled by ${c.denial_handled_by_name ?? 'biller'}${c.denial_handling_notes ? ' — ' + c.denial_handling_notes.slice(0, 200) : ''}`}
+                                  >
+                                    ✓ {outcomeLabel(outcome.status).toUpperCase()} — HANDLED
+                                  </span>
+                                )
+                              }
+                              const isDoc = outcome.status === 'documentation_needed'
+                              const cls = isDoc
+                                ? 'bg-[#FEF3C7] text-[#78350F]'
+                                : 'bg-[#FEE2E2] text-[#7F1D1D]'
+                              return (
+                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse ${cls}`} title={outcome.codes.join(', ')}>
+                                  <AlertOctagon size={9} /> {outcomeLabel(outcome.status).toUpperCase()}
+                                </span>
+                              )
+                            })()}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (

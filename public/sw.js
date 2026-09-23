@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-09-22-melissa-buttons
+// Service worker — deliberate passthrough. Version: 2026-09-23-denial-badge-review
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
