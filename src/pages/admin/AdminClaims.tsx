@@ -243,6 +243,39 @@ export function AdminClaims() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded])
 
+  // Stedi patient control number — derived from the claim's UUID (dashes
+  // stripped, truncated to 20 chars — Stedi's PCN column shows this exact
+  // format in their portal + accepts it in search). Sara 2026-09-23.
+  function pcnFor(claim: any): string {
+    return String(claim.id ?? '').replace(/-/g, '').slice(0, 20)
+  }
+  const [copiedPcnId, setCopiedPcnId] = useState<string | null>(null)
+  async function copyPcn(claim: any) {
+    const pcn = pcnFor(claim)
+    try {
+      await navigator.clipboard.writeText(pcn)
+      setCopiedPcnId(claim.id)
+      setTimeout(() => setCopiedPcnId(current => current === claim.id ? null : current), 1500)
+    } catch {
+      window.prompt('Copy the PCN below:', pcn)
+    }
+  }
+  function renderPcnPill(claim: any) {
+    const pcn = pcnFor(claim)
+    if (!pcn) return null
+    const isCopied = copiedPcnId === claim.id
+    return (
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); copyPcn(claim) }}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono border transition-colors ${isCopied ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#085041]' : 'border-[#E8E8E4] bg-[#FAFAF8] text-[#555] hover:bg-white hover:border-[#7F77DD] hover:text-[#7F77DD]'}`}
+        title="Click to copy this claim's Patient Control Number — paste it into Stedi's claim search."
+      >
+        {isCopied ? '✓ Copied' : `PCN: ${pcn}`}
+      </button>
+    )
+  }
+
   async function saveActivityNote(claimId: string) {
     const draft = (activityDraftByClaim[claimId] ?? '').trim()
     if (!draft) return
@@ -1097,6 +1130,7 @@ export function AdminClaims() {
                             </span>
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                            {renderPcnPill(c)}
                             {/* Reopened badge — claim was submitted, then a biller reopened
                                 for correction. Distinct from brand-new pending claims so
                                 rework doesn't drown in the queue. Hover for reason + note. */}
@@ -1827,6 +1861,7 @@ export function AdminClaims() {
                             </span>
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
+                            {renderPcnPill(c)}
                             {c.era_received_at && !c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA

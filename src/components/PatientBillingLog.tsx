@@ -124,6 +124,22 @@ export function PatientBillingLog({
 
 function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim: (e: BillingLogEntry) => void }) {
   const [open, setOpen] = useState(false)
+  const [pcnCopied, setPcnCopied] = useState(false)
+
+  // Stedi PCN — derived from claim UUID (dashes stripped, first 20 chars —
+  // Stedi's portal shows/accepts this exact format). Andrea grabs it here
+  // to paste into Stedi's claim search. Sara 2026-09-23.
+  const pcn = String(e.claim_id ?? '').replace(/-/g, '').slice(0, 20)
+  async function copyPcn(ev: React.MouseEvent) {
+    ev.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(pcn)
+      setPcnCopied(true)
+      setTimeout(() => setPcnCopied(false), 1500)
+    } catch {
+      window.prompt('Copy the PCN below:', pcn)
+    }
+  }
 
   const claimBadge = CLAIM_BADGE[e.claim_status ?? ''] ?? { label: e.claim_status ?? 'Unknown', cls: 'bg-[#F1EFE8] text-[#777]' }
   const stmtBadge = e.statement_status ? (STATEMENT_BADGE[e.statement_status] ?? { label: e.statement_status, cls: 'bg-[#F1EFE8] text-[#777]' }) : null
@@ -188,6 +204,16 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${stmtBadge.cls}`}>
                   {stmtBadge.label}
                 </span>
+              )}
+              {pcn && (
+                <button
+                  type="button"
+                  onClick={copyPcn}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono border transition-colors ${pcnCopied ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#085041]' : 'border-[#E8E8E4] bg-[#FAFAF8] text-[#555] hover:bg-white hover:border-[#7F77DD] hover:text-[#7F77DD]'}`}
+                  title="Click to copy this claim's Patient Control Number — paste it into Stedi's claim search."
+                >
+                  {pcnCopied ? '✓ Copied' : `PCN: ${pcn}`}
+                </button>
               )}
             </div>
             <div className="flex items-center gap-3 mt-1 text-[12px] text-[#555] flex-wrap">
