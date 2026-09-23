@@ -27,6 +27,16 @@ const STEDI_POLL_TRANSACTIONS_URL =
   'https://core.us.stedi.com/2026-06-01/polling/transactions'
 const STEDI_835_REPORT_URL = (transactionId: string) =>
   `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/835`
+// Same URL family, 277 suffix. If Stedi returns 404, the fetch failure
+// gets recorded in stedi_transactions_processed with source
+// '277-backfill-fetch-fail' so we can iterate on the URL without
+// stalling the rest of the backfill.
+const STEDI_277_REPORT_URL = (transactionId: string) =>
+  `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/277`
+
+// 277 rejection status categories — must match the constants in the
+// webhook and the manual attach endpoint.
+const REJECTION_CATEGORIES_277 = new Set(['A3', 'A4', 'A6', 'A7', 'A8'])
 
 async function verifyProviderToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -240,6 +250,117 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
   }
 }
 
+// ── X12 277 Claim Acknowledgment parser (inlined — Vercel forbids api/lib) ──
+// Duplicate of parseX12_277 in api/admin/attach-277-x12.ts and
+// parseX12_277_full in api/webhooks/stedi-transaction.ts. If you change
+// the shape, change all three.
+type Parsed277Status = { category: string; code: string; entity: string; action: string; date: string; amount: number; message: string }
+type Parsed277 = {
+  patientControlNumber: string | null
+  payerClaimControlNumber: string | null
+  patientFirstName: string | null
+  patientLastName: string | null
+  serviceDateFrom: string | null
+  serviceDateTo: string | null
+  payerName: string | null
+  transactionSetIdentifier: string | null
+  statuses: Parsed277Status[]
+  isRejection: boolean
+}
+function parseX12_277(text: string): Parsed277 {
+  const out: Parsed277 = {
+    patientControlNumber: null, payerClaimControlNumber: null,
+    patientFirstName: null, patientLastName: null,
+    serviceDateFrom: null, serviceDateTo: null,
+    payerName: null, transactionSetIdentifier: null,
+    statuses: [], isRejection: false,
+  }
+  if (!text || typeof text !== 'string') return out
+  const segments = text.replace(/[\r\n]+/g, '').split('~').map(s => s.trim()).filter(Boolean)
+  let currentHLLevel: string | null = null
+  for (const seg of segments) {
+    const fields = seg.split('*')
+    const tag = fields[0]
+    if (tag === 'ST') { out.transactionSetIdentifier = String(fields[1] ?? '').trim() || null; continue }
+    if (tag === 'HL') { currentHLLevel = String(fields[3] ?? '').trim() || null; continue }
+    if (tag === 'NM1') {
+      const entity = String(fields[1] ?? '').trim()
+      if (entity === 'QC') {
+        out.patientLastName  = out.patientLastName  ?? (String(fields[3] ?? '').trim() || null)
+        out.patientFirstName = out.patientFirstName ?? (String(fields[4] ?? '').trim() || null)
+      }
+      if (entity === 'PR') out.payerName = out.payerName ?? (String(fields[3] ?? '').trim() || null)
+      continue
+    }
+    if (tag === 'TRN' && currentHLLevel === 'PT') {
+      const v = String(fields[2] ?? '').trim()
+      if (v && v !== '0' && !out.patientControlNumber) out.patientControlNumber = v
+      continue
+    }
+    if (tag === 'REF' && String(fields[1] ?? '').trim() === '1K') {
+      out.payerClaimControlNumber = String(fields[2] ?? '').trim() || null
+      continue
+    }
+    if (tag === 'DTP' && String(fields[1] ?? '').trim() === '472') {
+      const raw = String(fields[3] ?? '').trim()
+      const parts = raw.split('-')
+      const iso = (y: string) => y?.length === 8 ? `${y.slice(0,4)}-${y.slice(4,6)}-${y.slice(6,8)}` : null
+      out.serviceDateFrom = iso(parts[0])
+      out.serviceDateTo   = iso(parts[1] ?? parts[0])
+      continue
+    }
+    if (tag === 'STC') {
+      const composite = String(fields[1] ?? '')
+      const parts = composite.split(/[`:]/)
+      const category = String(parts[0] ?? '').trim()
+      const code     = String(parts[1] ?? '').trim()
+      const entity   = String(parts[2] ?? '').trim()
+      const dateStr  = String(fields[2] ?? '').trim()
+      const action   = String(fields[3] ?? '').trim()
+      const amount   = parseFloat(String(fields[4] ?? '0')) || 0
+      const messageParts: string[] = []
+      for (let i = 12; i < fields.length; i++) { const p = String(fields[i] ?? '').trim(); if (p) messageParts.push(p) }
+      const message = messageParts.join(' ').trim()
+      out.statuses.push({ category, code, entity, action, date: dateStr, amount, message })
+      if (REJECTION_CATEGORIES_277.has(category)) out.isRejection = true
+      continue
+    }
+  }
+  return out
+}
+
+// Attach a parsed 277 to whichever local claim its PCN matches. Uses
+// the same findClaim helper as the 835 path so PCN matching behaves
+// identically. Idempotent — COALESCE preserves the first-seen
+// timestamp across repeated backfills.
+async function attach277ToClaim(sql: any, parsed: Parsed277, rawX12: string, practiceId: string): Promise<{ matched: boolean; claimId?: string }> {
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_response jsonb` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_reasons jsonb` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_seen_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_by_name text` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handling_notes text` } catch {}
+
+  const claim = await findClaim(sql, parsed.patientControlNumber, parsed.payerClaimControlNumber, practiceId)
+  if (!claim) return { matched: false }
+
+  const reasons = parsed.statuses
+    .filter(s => REJECTION_CATEGORIES_277.has(s.category))
+    .map(s => ({ category: s.category, code: s.code, entity: s.entity, action: s.action, amount: s.amount, message: s.message }))
+
+  const responsePayload = { parsed, rawX12 }
+
+  await sql`
+    UPDATE claims SET
+      claim_rejection_at       = COALESCE(claim_rejection_at, NOW()),
+      claim_rejection_response = ${JSON.stringify(responsePayload)}::jsonb,
+      claim_rejection_reasons  = ${JSON.stringify(reasons)}::jsonb,
+      updated_at               = NOW()
+    WHERE id = ${claim.id}::uuid`
+  return { matched: true, claimId: claim.id }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -278,6 +399,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     skippedNotEra: 0,
     skippedAlreadyProcessed: 0,
     claimsUpdated: 0,
+    // 277 CA (Claim Acknowledgment / rejection) counters — separate
+    // from 835 counters so the biller can tell at a glance how many
+    // of each type landed in this backfill run.
+    rejections277Seen: 0,
+    rejections277Attached: 0,
+    rejections277Unmatched: 0,
+    rejections277SkippedAck: 0,
     pagesFetched: 0,
     errors: [] as string[],
     sampleTimeline: '' as string,
@@ -316,6 +444,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const is835 = arts.some(a =>
           String(a?.artifactType ?? '').toLowerCase().includes('835') ||
           String(a?.model ?? '').toLowerCase().includes('remittance'))
+        const is277 = arts.some(a =>
+          String(a?.artifactType ?? '').toLowerCase().includes('277') ||
+          String(a?.model ?? '').toLowerCase().includes('claim status') ||
+          String(a?.model ?? '').toLowerCase().includes('acknowledgment') ||
+          String(a?.model ?? '').toLowerCase().includes('acknowledgement'))
+
+        // ── 277 branch (Claim Acknowledgment / payer rejection at
+        //    intake). Fetch the report, parse, match by PCN, attach
+        //    as a claim rejection. Non-rejection acks (A1/A2) are
+        //    recorded as processed so we don't re-fetch them next
+        //    time but they don't touch any claim.
+        const forceReprocess = req.query.force === '1'
+        if (tx?.direction === 'INBOUND' && is277 && tx?.status === 'succeeded') {
+          const [prior277] = await sql`SELECT 1 FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
+          if (prior277 && !forceReprocess) { summary.skippedAlreadyProcessed += 1; continue }
+          summary.rejections277Seen += 1
+          try {
+            const rr = await fetch(STEDI_277_REPORT_URL(transactionId), {
+              headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
+            })
+            if (!rr.ok) {
+              const b = await rr.text().catch(() => '')
+              summary.errors.push(`277 ${transactionId}: ${rr.status} ${b.slice(0, 160)}`)
+              await sql`
+                INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+                VALUES (${transactionId}, 0, '277-backfill-fetch-fail')
+                ON CONFLICT (transaction_id) DO UPDATE SET matched_claim_count = 0, processed_at = NOW()`
+              continue
+            }
+            const body = await rr.json()
+            const rawX12: string | null =
+              (typeof body === 'object' && typeof body?.x12 === 'string') ? body.x12 :
+              (typeof body === 'string') ? body : null
+            if (!rawX12) {
+              summary.errors.push(`277 ${transactionId}: no x12 field in report body; keys=${Object.keys(body ?? {}).join(',')}`)
+              await sql`
+                INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+                VALUES (${transactionId}, 0, '277-backfill-no-x12')
+                ON CONFLICT (transaction_id) DO UPDATE SET matched_claim_count = 0, processed_at = NOW()`
+              continue
+            }
+            const parsed = parseX12_277(rawX12)
+            if (!parsed.isRejection) {
+              // A1/A2 ack — not actionable, record as processed and move on.
+              summary.rejections277SkippedAck += 1
+              await sql`
+                INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+                VALUES (${transactionId}, 0, '277-backfill-ack-only')
+                ON CONFLICT (transaction_id) DO UPDATE SET matched_claim_count = 0, processed_at = NOW()`
+              continue
+            }
+            const { matched, claimId } = await attach277ToClaim(sql, parsed, rawX12, provider.practice_id)
+            if (matched) { summary.rejections277Attached += 1 } else { summary.rejections277Unmatched += 1 }
+            await sql`
+              INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+              VALUES (${transactionId}, ${matched ? 1 : 0}, '277-backfill')
+              ON CONFLICT (transaction_id) DO UPDATE SET matched_claim_count = EXCLUDED.matched_claim_count, processed_at = NOW()`
+            if (matched) console.log('[backfill-stedi-cas] 277 attached', transactionId, '→ claim', claimId)
+          } catch (e277: any) {
+            summary.errors.push(`277 ${transactionId} exception: ${e277?.message ?? String(e277)}`)
+          }
+          continue
+        }
+
         if (tx?.direction !== 'INBOUND' || !is835 || tx?.status !== 'succeeded') {
           summary.skippedNotEra += 1
           continue
@@ -327,7 +519,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // processed. Needed because the transaction webhook stores nothing
         // useful for downstream debug — it applies CAS then throws the
         // raw 835 away. Force lets us re-run against the actual payload.
-        const forceReprocess = req.query.force === '1'
+        // (forceReprocess is declared once at the top of this loop for
+        // the 277 branch; 835 branch reuses the same const.)
         const [prior] = await sql`SELECT 1 FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
         if (prior && !forceReprocess) { summary.skippedAlreadyProcessed += 1; continue }
 
