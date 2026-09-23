@@ -50,7 +50,7 @@ function extractStediErrorSummary(details: any): string | null {
   return details?.message ?? null
 }
 
-type Tab = 'review' | 'submitted' | 'completed'
+type Tab = 'review' | 'rework' | 'submitted' | 'completed'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
   pending_review: { label: 'Pending Review', cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
@@ -192,7 +192,8 @@ export function AdminClaims() {
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, any>>({})
-  const [reopening, setReopening] = useState<string | null>(null)
+  // reopening state removed with the Reopen button — see comment on
+  // handleReopen removal above.
   const [deleting, setDeleting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [markingReady, setMarkingReady] = useState<string | null>(null)
@@ -396,19 +397,14 @@ export function AdminClaims() {
     }
   }
 
-  async function handleReopen(claimId: string) {
-    if (!confirm('Move this claim back to Pending Review? The claim has already been submitted to insurance — only do this if you need to correct an error and resubmit.')) return
-    setReopening(claimId)
-    try {
-      await updateClaim(claimId, { status: 'pending_review' })
-      await load()
-      setTab('review')
-    } catch (e: any) {
-      alert(e.message || 'Failed to reopen claim')
-    } finally {
-      setReopening(null)
-    }
-  }
+  // handleReopen (the button that flipped a submitted claim's status
+  // back to 'pending_review') was removed 2026-09-23. Andrea was
+  // clicking it to VIEW submitted claims, which silently mutated their
+  // state and caused Olive Dings / Rhett Richmond / Carson Yates to
+  // disappear from the Submitted tab. The read-only "What was
+  // submitted" panel now lives in the expanded card so viewing is
+  // always non-destructive. A deliberate rework/resubmit flow can be
+  // designed later if needed.
 
   async function handlePayerSave(claimId: string) {
     const p = editPayer[claimId]
@@ -872,9 +868,9 @@ export function AdminClaims() {
                             </span>
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
-                            {/* Same denial badge used in Submitted+Completed tabs — surfaces
-                                on reopened / previously-denied claims so Andrea can tell rework
-                                from truly-new pending work at a glance. Sara 2026-09-23. */}
+                            {/* Same denial badge already used in Submitted+Completed. Rendered
+                                here too because reworked claims (submitted → denied → reopened)
+                                live in the Rework tab, which reuses this same card component. */}
                             {(() => {
                               const outcome = detectErraOutcome(c.denial_codes)
                               if (outcome.status === 'clean') return null
@@ -1615,6 +1611,93 @@ export function AdminClaims() {
                           )
                         })()}
 
+                        {/* Read-only "what was submitted" panel. Andrea was clicking
+                            Reopen just to view submitted claims, which flipped their
+                            status back to pending_review and hid them from the
+                            Submitted tab — exactly the Olive Dings / Rhett Richmond
+                            / Carson Yates confusion. Rendering the details here as a
+                            passive view means she doesn't need to touch Reopen unless
+                            she actually intends to rework the claim. Sara 2026-09-23. */}
+                        <div className="bg-[#F9F9F7] border border-[#E8E8E4] rounded-xl p-4 space-y-4">
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">What was submitted</div>
+
+                          {/* Patient + subscriber grid */}
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+                            <div><span className="text-[#1A1A2E]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
+                            <div><span className="text-[#1A1A2E]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
+                            <div><span className="text-[#1A1A2E]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
+                            <div><span className="text-[#1A1A2E]">Subscriber DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.subscriber_dob)}</span></div>
+                            <div><span className="text-[#1A1A2E]">Member ID: </span><span className="text-[#1A1A2E]">{c.member_id || '—'}</span></div>
+                            <div><span className="text-[#1A1A2E]">Group #: </span><span className="text-[#1A1A2E]">{c.group_number || '—'}</span></div>
+                            <div><span className="text-[#1A1A2E]">Service date: </span><span className="text-[#1A1A2E]">{fmtDate(c.service_date)}</span></div>
+                            <div><span className="text-[#1A1A2E]">Rendering provider: </span><span className="text-[#1A1A2E]">{c.rendering_provider_name || '—'} ({c.rendering_provider_npi || 'no NPI'})</span></div>
+                            <div><span className="text-[#1A1A2E]">Payer: </span><span className="text-[#1A1A2E] font-medium">{c.payer_name || '—'}{c.payer_id ? ` (ID: ${c.payer_id})` : ''}</span></div>
+                            {c.stedi_claim_id && (
+                              <div><span className="text-[#1A1A2E]">Stedi ref: </span><span className="text-[#1A1A2E] font-mono text-[12px]">{c.stedi_claim_id}</span></div>
+                            )}
+                            {(c.effective_child_id ?? c.child_id) && (
+                              <div className="col-span-2"><span className="text-[#1A1A2E]">Encounter note: </span>
+                                <Link to={`/admin/chart/${c.effective_child_id ?? c.child_id}`} className="text-[#7F77DD] hover:underline inline-flex items-center gap-1 text-[13px]">
+                                  <FileText size={12} /> View in patient chart
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Diagnoses + Procedures side by side */}
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5">Diagnoses</div>
+                              {(c.diagnoses ?? []).length === 0 ? (
+                                <div className="text-[12px] text-[#555]">—</div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {(c.diagnoses ?? []).map((d: any, i: number) => (
+                                    <div key={d.code} className="text-[12px] text-[#1A1A2E]">
+                                      <span className="inline-block w-4 text-right text-[10px] font-semibold text-[#1A1A2E] mr-1">{i + 1}</span>
+                                      <span className="font-semibold text-[#7F77DD]">{d.code}</span> {d.name}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5">Procedures &amp; Fees</div>
+                              {(c.cpt_codes ?? []).length === 0 ? (
+                                <div className="text-[12px] text-[#555]">—</div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {(c.cpt_codes ?? []).map((cp: any) => {
+                                    const units = parseInt(cp.units, 10) || 1
+                                    const lineTotal = (parseFloat(cp.charge_amount ?? 0) || 0) * units
+                                    return (
+                                      <div key={cp.code} className="flex justify-between items-start text-[12px] gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-[#1A1A2E]">
+                                            <span className="font-semibold text-[#555]">{cp.code}</span>
+                                            {cp.modifier && <span className="ml-1 text-[10px] font-semibold text-[#F5943A]">-{cp.modifier}</span>}
+                                            {' '}{cp.description}
+                                            {units > 1 && <span className="ml-1 text-[10px] text-[#555]">× {units} units</span>}
+                                          </span>
+                                          {cp.ndc_code && (
+                                            <div className="text-[10px] text-[#555] mt-0.5">
+                                              <span className="text-[#1A1A2E]">NDC:</span> <span className="font-mono">{cp.ndc_code}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <span className="text-[#1A1A2E] font-medium ml-2 flex-shrink-0">{fmtMoney(lineTotal)}</span>
+                                      </div>
+                                    )
+                                  })}
+                                  <div className="text-[12px] font-semibold text-[#1A1A2E] pt-1 border-t border-[#F1EFE8]">
+                                    Total: {fmtMoney(c.total_charge)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
                         {/* ERA payment breakdown */}
                         {c.era_received_at && (
                           <div className="bg-[#E1F5EE] border border-[#A9DFBF] rounded-xl p-4">
@@ -1676,11 +1759,6 @@ export function AdminClaims() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-3">
-                          <Button size="sm" variant="secondary"
-                            loading={reopening === c.id}
-                            onClick={() => handleReopen(c.id)}>
-                            Reopen
-                          </Button>
                           <a href="https://portal.stedi.com/app/healthcare/claims" target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
                             View in Stedi <ExternalLink size={10} />
