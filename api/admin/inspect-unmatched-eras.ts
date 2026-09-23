@@ -52,6 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!provider?.is_admin) return res.status(403).json({ error: 'Admin access required' })
 
     const days = parseInt(String(req.query.days ?? '60'), 10) || 60
+    const includeLegacy = String(req.query.include_legacy ?? '') === '1'
     const rows = await sql`
       SELECT transaction_id, source, processed_at
         FROM stedi_transactions_processed
@@ -128,7 +129,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    return res.status(200).json({ ok: true, days, unmatched_count: rows.length, results })
+    // Legacy PED#### PCNs are pre-platform old-EHR remittances (Charm
+// era), reconciled in the old system and not our concern. Filter them
+// out by default — they'd otherwise clutter the modal forever. Pass
+// ?include_legacy=1 to see them.
+    const filtered = includeLegacy
+      ? results
+      : results.filter((r: any) => !(r?.claims ?? []).every((cl: any) => /^PED\d+$/i.test(String(cl?.patient_control_number ?? ''))))
+    const hiddenLegacyCount = results.length - filtered.length
+
+    return res.status(200).json({
+      ok: true,
+      days,
+      unmatched_count: rows.length,
+      hidden_legacy_count: hiddenLegacyCount,
+      include_legacy: includeLegacy,
+      results: filtered,
+    })
   } catch (e: any) {
     console.error('inspect-unmatched-eras error:', e)
     return res.status(500).json({ error: e.message ?? 'Internal server error' })

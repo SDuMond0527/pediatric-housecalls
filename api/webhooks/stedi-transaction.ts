@@ -38,6 +38,18 @@ const STEDI_WEBHOOK_SECRET  = process.env.STEDI_WEBHOOK_SECRET  || ''
 
 const STEDI_835_REPORT_URL = (transactionId: string) =>
   `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/835`
+// Same URL family; substituting the transaction type suffix. If Stedi
+// returns 404, we log verbosely (the response body ends up in Vercel
+// logs) so we can iterate on the URL if the guess is wrong. Whatever
+// URL turns out to actually work, the pipeline below is agnostic to
+// the response shape — it takes either parsed JSON or raw X12.
+const STEDI_277_REPORT_URL = (transactionId: string) =>
+  `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/277`
+
+// 277 status categories that count as REJECTIONS (as opposed to A1/A2
+// acknowledgements). Must match the constant in
+// api/admin/attach-277-x12.ts.
+const REJECTION_CATEGORIES_277 = new Set(['A3', 'A4', 'A6', 'A7', 'A8'])
 
 interface CasBreakdown {
   patient_deductible:     number
@@ -401,6 +413,122 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
   }
 }
 
+// ── X12 277 Claim Acknowledgment parser ──────────────────────────────
+// Full duplicate of api/admin/attach-277-x12.ts::parseX12_277 because
+// Vercel forbids api/lib helpers (all logic must live within the api/
+// endpoint file that uses it). If the shape needs to change, update
+// both.
+type Parsed277Status = { category: string; code: string; entity: string; action: string; date: string; amount: number; message: string }
+type Parsed277Full = {
+  patientControlNumber: string | null
+  payerClaimControlNumber: string | null
+  patientFirstName: string | null
+  patientLastName: string | null
+  serviceDateFrom: string | null
+  serviceDateTo: string | null
+  payerName: string | null
+  transactionSetIdentifier: string | null
+  statuses: Parsed277Status[]
+  isRejection: boolean
+}
+function parseX12_277_full(text: string): Parsed277Full {
+  const out: Parsed277Full = {
+    patientControlNumber: null, payerClaimControlNumber: null,
+    patientFirstName: null, patientLastName: null,
+    serviceDateFrom: null, serviceDateTo: null,
+    payerName: null, transactionSetIdentifier: null,
+    statuses: [], isRejection: false,
+  }
+  if (!text || typeof text !== 'string') return out
+  const segments = text.replace(/[\r\n]+/g, '').split('~').map(s => s.trim()).filter(Boolean)
+  let currentHLLevel: string | null = null
+  for (const seg of segments) {
+    const fields = seg.split('*')
+    const tag = fields[0]
+    if (tag === 'ST') { out.transactionSetIdentifier = String(fields[1] ?? '').trim() || null; continue }
+    if (tag === 'HL') { currentHLLevel = String(fields[3] ?? '').trim() || null; continue }
+    if (tag === 'NM1') {
+      const entity = String(fields[1] ?? '').trim()
+      if (entity === 'QC') {
+        out.patientLastName  = out.patientLastName  ?? (String(fields[3] ?? '').trim() || null)
+        out.patientFirstName = out.patientFirstName ?? (String(fields[4] ?? '').trim() || null)
+      }
+      if (entity === 'PR') out.payerName = out.payerName ?? (String(fields[3] ?? '').trim() || null)
+      continue
+    }
+    if (tag === 'TRN' && currentHLLevel === 'PT') {
+      const v = String(fields[2] ?? '').trim()
+      if (v && v !== '0' && !out.patientControlNumber) out.patientControlNumber = v
+      continue
+    }
+    if (tag === 'REF' && String(fields[1] ?? '').trim() === '1K') {
+      out.payerClaimControlNumber = String(fields[2] ?? '').trim() || null
+      continue
+    }
+    if (tag === 'DTP' && String(fields[1] ?? '').trim() === '472') {
+      const raw = String(fields[3] ?? '').trim()
+      const parts = raw.split('-')
+      const iso = (y: string) => y?.length === 8 ? `${y.slice(0,4)}-${y.slice(4,6)}-${y.slice(6,8)}` : null
+      out.serviceDateFrom = iso(parts[0])
+      out.serviceDateTo   = iso(parts[1] ?? parts[0])
+      continue
+    }
+    if (tag === 'STC') {
+      const composite = String(fields[1] ?? '')
+      const parts = composite.split(/[`:]/)
+      const category = String(parts[0] ?? '').trim()
+      const code     = String(parts[1] ?? '').trim()
+      const entity   = String(parts[2] ?? '').trim()
+      const dateStr  = String(fields[2] ?? '').trim()
+      const action   = String(fields[3] ?? '').trim()
+      const amount   = parseFloat(String(fields[4] ?? '0')) || 0
+      const messageParts: string[] = []
+      for (let i = 12; i < fields.length; i++) { const p = String(fields[i] ?? '').trim(); if (p) messageParts.push(p) }
+      const message = messageParts.join(' ').trim()
+      out.statuses.push({ category, code, entity, action, date: dateStr, amount, message })
+      if (REJECTION_CATEGORIES_277.has(category)) out.isRejection = true
+      continue
+    }
+  }
+  return out
+}
+
+// Attach a parsed 277 to whichever local claim the PCN matches. Same
+// findClaim + column bootstraps as the manual attach endpoint. Idempotent
+// (COALESCE on claim_rejection_at so the first-seen timestamp is
+// preserved across repeated processing).
+async function attach277ToClaim(sql: any, parsed: Parsed277Full, rawX12: string | null): Promise<{ matched: boolean; claimId?: string }> {
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_response jsonb` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_reasons jsonb` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_seen_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_by_name text` } catch {}
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handling_notes text` } catch {}
+
+  const claim = await findClaim(sql, parsed.patientControlNumber, parsed.payerClaimControlNumber)
+  if (!claim) return { matched: false }
+
+  const reasons = parsed.statuses
+    .filter(s => REJECTION_CATEGORIES_277.has(s.category))
+    .map(s => ({ category: s.category, code: s.code, entity: s.entity, action: s.action, amount: s.amount, message: s.message }))
+
+  // Stash the raw X12 alongside the parsed shape so parser bugs are
+  // debuggable without re-fetching from Stedi.
+  const responsePayload = rawX12
+    ? { parsed, rawX12 }
+    : { parsed }
+
+  await sql`
+    UPDATE claims SET
+      claim_rejection_at       = COALESCE(claim_rejection_at, NOW()),
+      claim_rejection_response = ${JSON.stringify(responsePayload)}::jsonb,
+      claim_rejection_reasons  = ${JSON.stringify(reasons)}::jsonb,
+      updated_at               = NOW()
+    WHERE id = ${claim.id}::uuid`
+  return { matched: true, claimId: claim.id }
+}
+
 async function readRawBody(req: VercelRequest): Promise<string> {
   const chunks: Buffer[] = []
   for await (const chunk of req as unknown as AsyncIterable<Buffer>) {
@@ -507,15 +635,85 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Could not find transactionId on webhook payload', eventType, x12Type })
   }
 
-  // Only process 835 ERAs. Ack 200 on other X12 types (277 claim
-  // status acks, 999 functional acks, etc.) so Stedi stops retrying
-  // events we don't care about — a non-2xx would keep it retrying
-  // forever and eventually disable the destination.
-  if (x12Type && !x12Type.endsWith('.835')) {
-    return res.status(200).json({ ok: true, skipped: 'not_835', x12Type, transactionId })
+  const sql = neon(process.env.DATABASE_URL!)
+
+  // Branch on X12 type:
+  //   .835 → existing ERA/CAS processing (below)
+  //   .277 → NEW: fetch the 277 report, parse, attach to matched
+  //          claim as a rejection if it's A3/A4/A6/A7/A8. Skip
+  //          A1/A2 (those are just acks, not actionable).
+  //   .999 or anything else → silent ack (200) so Stedi doesn't retry
+  //          forever; we don't care about those transaction types.
+  if (x12Type && x12Type.endsWith('.277')) {
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS stedi_transactions_processed (
+          transaction_id text PRIMARY KEY,
+          processed_at timestamptz NOT NULL DEFAULT NOW(),
+          matched_claim_count integer NOT NULL DEFAULT 0,
+          source text
+        )`
+    } catch {}
+    const [prior] = await sql`SELECT transaction_id FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
+    if (prior) return res.status(200).json({ ok: true, transactionId, x12Type, skipped: 'already_processed_277' })
+
+    const reportRes = await fetch(STEDI_277_REPORT_URL(transactionId), {
+      headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
+    })
+    if (!reportRes.ok) {
+      // Log verbosely so the exact error is captured in Vercel logs.
+      // Don't 5xx — Stedi would keep retrying and the report is unlikely
+      // to appear on retry. Record 0 matches so we can spot the failure
+      // in the Inspect Unmatched ERAs modal if needed.
+      const errBody = await reportRes.text().catch(() => '')
+      console.error('[stedi-transaction] 277 report fetch failed:', reportRes.status, errBody.slice(0, 500), 'transactionId:', transactionId)
+      await sql`
+        INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+        VALUES (${transactionId}, 0, '277-webhook-fetch-fail')
+        ON CONFLICT (transaction_id) DO NOTHING`
+      return res.status(200).json({ ok: false, transactionId, x12Type, stediStatus: reportRes.status, error: errBody.slice(0, 300) })
+    }
+    const reportBody = await reportRes.json()
+
+    // The Stedi report response may return either parsed JSON or a
+    // raw X12 field, depending on the endpoint variant. Try both.
+    const rawX12: string | null =
+      (typeof reportBody === 'object' && typeof reportBody?.x12 === 'string') ? reportBody.x12 :
+      (typeof reportBody === 'string') ? reportBody :
+      null
+
+    if (!rawX12) {
+      console.error('[stedi-transaction] 277 report had no x12 field. Body keys:', Object.keys(reportBody ?? {}), 'transactionId:', transactionId)
+      await sql`
+        INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+        VALUES (${transactionId}, 0, '277-webhook-no-x12')
+        ON CONFLICT (transaction_id) DO NOTHING`
+      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'no x12 field in report body', report_keys: Object.keys(reportBody ?? {}) })
+    }
+
+    const parsed = parseX12_277_full(rawX12)
+    if (!parsed.isRejection) {
+      // A1/A2 or similar — ack, not rejection. Skip attaching.
+      await sql`
+        INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+        VALUES (${transactionId}, 0, '277-webhook-ack-only')
+        ON CONFLICT (transaction_id) DO NOTHING`
+      return res.status(200).json({ ok: true, transactionId, x12Type, skipped: 'ack_not_rejection', statuses: parsed.statuses.map(s => `${s.category}/${s.code}`) })
+    }
+
+    const { matched, claimId } = await attach277ToClaim(sql, parsed, rawX12)
+    await sql`
+      INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+      VALUES (${transactionId}, ${matched ? 1 : 0}, '277-webhook')
+      ON CONFLICT (transaction_id) DO UPDATE SET matched_claim_count = EXCLUDED.matched_claim_count, processed_at = NOW()`
+    return res.status(200).json({ ok: true, transactionId, x12Type, matched, claimId })
   }
 
-  const sql = neon(process.env.DATABASE_URL!)
+  // Non-835, non-277 transactions (999 functional acks etc.) — silent
+  // ack so Stedi stops retrying.
+  if (x12Type && !x12Type.endsWith('.835')) {
+    return res.status(200).json({ ok: true, skipped: 'not_835_or_277', x12Type, transactionId })
+  }
 
   try {
     await sql`

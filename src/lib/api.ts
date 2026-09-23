@@ -960,13 +960,20 @@ export const inspectUnmatchedEras = (days = 60) =>
     results: Array<any>
   }>(`/api/admin/inspect-unmatched-eras?days=${days}`)
 
-// TEMPORARY diagnostic — polls Stedi for 277 transactions and returns
-// the raw shape so I can build the full 277 ingestion pipeline
-// against real data instead of guessing at Stedi's response contract.
-// Remove this + the endpoint + the "Inspect 277s" button once the
-// pipeline is shipped and verified end-to-end.
-export const inspect277s = (days = 30) =>
-  apiFetch<any>(`/api/admin/inspect-277s?days=${days}`)
+// Attach a 277 Claim Acknowledgment (rejection) to a specific claim
+// by pasting the raw X12 text. Used to retroactively bring in denials
+// that arrived before the webhook was set up to process 277s. Future
+// 277s attach automatically via the webhook.
+export const attach277X12 = (body: { claim_id: string; x12_text: string }) =>
+  apiFetch<{ ok: boolean; parsed?: any; error?: string }>(
+    '/api/admin/attach-277-x12', { method: 'POST', body: JSON.stringify(body) }
+  )
+
+// Mark a 277 rejection as handled — biller has read + acted on it.
+// Muted "handled" badge replaces the flashing red one but the rejection
+// details stay visible for audit.
+export const markRejectionHandled = (id: string, body: { notes: string }) =>
+  apiFetch<any>(`/api/claims/${id}/mark-rejection-handled`, { method: 'POST', body: JSON.stringify(body) })
 
 export const refetchKnownEras = () =>
   apiFetch<{

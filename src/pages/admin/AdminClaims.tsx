@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, inspect277s, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, markRejectionHandled, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -211,12 +211,22 @@ export function AdminClaims() {
   const [inspectRunning, setInspectRunning] = useState(false)
   const [inspectResult, setInspectResult]   = useState<any | null>(null)
 
-  // TEMPORARY — "Inspect 277s" diagnostic used to see how Stedi
-  // exposes 277 Claim Acknowledgment transactions so we can build
-  // the full 277 ingestion pipeline against real data. Remove this
-  // + the button + the endpoint once the pipeline is shipped.
-  const [inspect277Running, setInspect277Running] = useState(false)
-  const [inspect277Result, setInspect277Result]   = useState<any | null>(null)
+  // Attach 277 X12 (retroactive) — for rejections that arrived before
+  // the webhook was configured to process 277s (Olive Dings 2026-09-14
+  // is the anchor case). Sara grabs the raw 277 X12 from the Stedi
+  // portal (X12 tab) for a specific claim, pastes it here, and it
+  // attaches as a rejection. Future 277s auto-attach via the webhook.
+  const [attach277Target, setAttach277Target]     = useState<any | null>(null)
+  const [attach277Text, setAttach277Text]         = useState('')
+  const [attach277Error, setAttach277Error]       = useState<string | null>(null)
+  const [attach277Submitting, setAttach277Submitting] = useState(false)
+
+  // Mark rejection handled — biller acknowledges a 277 rejection banner
+  // and records what she did about it. Same shape as the existing
+  // mark-denial-handled flow.
+  const [rejectionHandledOpen, setRejectionHandledOpen] = useState<string | null>(null)
+  const [rejectionHandledNotes, setRejectionHandledNotes] = useState('')
+  const [rejectionHandledSaving, setRejectionHandledSaving] = useState(false)
 
   // Reopen modal — replaces the old one-click Reopen. Requires a
   // categorized reason + a note (min 20 chars server-enforced) so a
@@ -549,6 +559,10 @@ export function AdminClaims() {
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
+  // 277 rejections needing biller attention — payer rejected the claim at
+  // intake and no one has acknowledged the rejection banner yet. Cleared
+  // per-claim by clicking "Mark rejection handled" in the expanded card.
+  const unhandledRejectionCount = baseVisibleClaims.filter((c: any) => c.claim_rejection_at && !c.claim_rejection_handled_at).length
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`
@@ -724,24 +738,6 @@ export function AdminClaims() {
             title="Fetch the raw 835 for every ERA Stedi pushed us that didn't match any claim record — shows the PCN the payer echoed vs. the PCN we sent.">
             <Search size={12} /> {inspectRunning ? 'Inspecting…' : 'Inspect unmatched ERAs'}
           </button>
-          <button
-            onClick={async () => {
-              setInspect277Running(true)
-              setInspect277Result(null)
-              try {
-                const r = await inspect277s(30)
-                setInspect277Result(r)
-              } catch (e: any) {
-                setInspect277Result({ ok: false, error: e?.message ?? String(e) })
-              } finally {
-                setInspect277Running(false)
-              }
-            }}
-            disabled={inspect277Running}
-            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#DC2626] text-[#DC2626] hover:bg-[#FEE2E2] transition-colors disabled:opacity-50"
-            title="TEMP: polls Stedi for 277 CA transactions in the last 30 days so we can see how their API exposes them. Removed once the full 277 pipeline is live.">
-            <Search size={12} /> {inspect277Running ? 'Inspecting…' : 'Inspect 277s (temp)'}
-          </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
           </button>
@@ -863,6 +859,20 @@ export function AdminClaims() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {unhandledRejectionCount > 0 && (
+        <div className="mb-4 flex items-center gap-2 bg-[#FEE2E2] border border-[#FECACA] text-[#7F1D1D] px-4 py-2.5 rounded-xl">
+          <AlertOctagon size={14} />
+          <div className="text-[13px] font-medium">
+            {unhandledRejectionCount} claim{unhandledRejectionCount === 1 ? '' : 's'} rejected at intake by the payer — needs rework. Look for the pulsing <span className="mx-1 inline-flex items-center gap-0.5 bg-[#FEE2E2] text-[#7F1D1D] px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-[#FECACA]">REJECTED AT INTAKE</span> badge on the Submitted tab.
+          </div>
+          <button
+            onClick={() => setTab('submitted')}
+            className="ml-auto text-[12px] font-medium px-3 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] transition-colors">
+            Go to Submitted
+          </button>
         </div>
       )}
 
@@ -1682,6 +1692,24 @@ export function AdminClaims() {
                                 </span>
                               )
                             })()}
+                            {/* 277 rejection badge — payer rejected at intake (before
+                                adjudication), never entered the payment workflow.
+                                Distinct from 835 denial (which reaches adjudication
+                                and generates CAS). Flashing red until biller acks. */}
+                            {c.claim_rejection_at && !c.claim_rejection_handled_at && (
+                              <span
+                                className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse bg-[#FEE2E2] text-[#7F1D1D]"
+                                title={(c.claim_rejection_reasons ?? []).map((r: any) => `[${r.category}/${r.code}] ${r.message}`).join(' · ')}>
+                                <AlertOctagon size={9} /> REJECTED AT INTAKE
+                              </span>
+                            )}
+                            {c.claim_rejection_at && c.claim_rejection_handled_at && (
+                              <span
+                                className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
+                                title={`Handled by ${c.claim_rejection_handled_by_name ?? 'biller'}${c.claim_rejection_handling_notes ? ' — ' + String(c.claim_rejection_handling_notes).slice(0, 200) : ''}`}>
+                                ✓ REJECTED — HANDLED
+                              </span>
+                            )}
                           </div>
                           <div className="text-[12px] text-[#1A1A2E] mt-0.5">
                             {c.payer_name} · {fmtMoney(c.total_charge)}
@@ -1712,6 +1740,99 @@ export function AdminClaims() {
                               <div className="text-[13px] font-semibold text-[#78350F] leading-snug">
                                 Reminder: Aetna patient! Please change any test CPT codes to self-pay CPT codes before submitting!
                               </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* 277 rejection banner — payer rejected the claim before
+                            adjudication (bundling, missing modifiers, invalid
+                            member ID, etc.). Shows the full reason list Stedi
+                            captured. "Mark handled" swaps the flashing red badge
+                            for the muted "REJECTED — HANDLED" tag; details stay
+                            visible for audit. */}
+                        {c.claim_rejection_at && (() => {
+                          const reasons: any[] = Array.isArray(c.claim_rejection_reasons) ? c.claim_rejection_reasons : []
+                          const isHandled = !!c.claim_rejection_handled_at
+                          const isOpenForm = rejectionHandledOpen === c.id
+                          const borderCls = isHandled ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-[#FECACA] bg-[#FEE2E2]'
+                          const textCls   = isHandled ? 'text-[#065F46]' : 'text-[#7F1D1D]'
+                          return (
+                            <div className={`rounded-xl border-2 ${borderCls} px-4 py-3`}>
+                              <div className={`flex items-start gap-3 ${textCls}`}>
+                                <AlertOctagon size={18} className="flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[13px] font-semibold uppercase tracking-wide">
+                                    {isHandled ? 'Rejected at intake — handled' : `Rejected by ${c.payer_name || 'payer'} at intake`}
+                                  </div>
+                                  <div className="text-[12px] mt-0.5 opacity-90">
+                                    {isHandled
+                                      ? `Received ${fmtDate(c.claim_rejection_at)}. This claim never entered adjudication; you'll need to correct + resubmit to get paid.`
+                                      : `Received ${fmtDate(c.claim_rejection_at)}. This claim never entered adjudication.`}
+                                  </div>
+                                  {reasons.length > 0 && (
+                                    <ul className="mt-2 space-y-1.5 text-[12px]">
+                                      {reasons.map((r: any, i: number) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                          <span className="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-white/70 border border-current/20">
+                                            {r.category}/{r.code}
+                                          </span>
+                                          <span className="whitespace-pre-wrap">{r.message || '(no free-text reason provided)'}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {isHandled && (
+                                    <div className="mt-2 text-[12px] italic">
+                                      Handled by {c.claim_rejection_handled_by_name ?? 'biller'} · {fmtDate(c.claim_rejection_handled_at)}{c.claim_rejection_handling_notes ? ` — ${c.claim_rejection_handling_notes}` : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {!isHandled && !isOpenForm && (
+                                <div className="mt-3 flex gap-2">
+                                  <button
+                                    onClick={() => { setRejectionHandledOpen(c.id); setRejectionHandledNotes('') }}
+                                    className="text-[12px] px-2.5 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] font-medium">
+                                    Mark rejection handled
+                                  </button>
+                                </div>
+                              )}
+                              {!isHandled && isOpenForm && (
+                                <div className="mt-3 space-y-2">
+                                  <label className="text-[11px] text-[#555] block">What did you do about this rejection? (required)</label>
+                                  <textarea
+                                    className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[60px]"
+                                    value={rejectionHandledNotes}
+                                    onChange={e => setRejectionHandledNotes(e.target.value)}
+                                    disabled={rejectionHandledSaving}
+                                    placeholder="e.g. Added modifier 59 to 99345 line, resubmitting" />
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      onClick={() => setRejectionHandledOpen(null)}
+                                      disabled={rejectionHandledSaving}
+                                      className="text-[12px] px-2.5 py-1 rounded-lg border border-[#E8E8E4] text-[#1A1A2E] hover:bg-[#FAFAF8]">Cancel</button>
+                                    <button
+                                      onClick={async () => {
+                                        if (!rejectionHandledNotes.trim()) { alert('Please describe what you did.'); return }
+                                        setRejectionHandledSaving(true)
+                                        try {
+                                          await markRejectionHandled(c.id, { notes: rejectionHandledNotes.trim() })
+                                          await load()
+                                          setRejectionHandledOpen(null)
+                                          setRejectionHandledNotes('')
+                                        } catch (err: any) {
+                                          alert(err?.message ?? 'Failed to save')
+                                        } finally {
+                                          setRejectionHandledSaving(false)
+                                        }
+                                      }}
+                                      disabled={rejectionHandledSaving || !rejectionHandledNotes.trim()}
+                                      className="text-[12px] px-2.5 py-1 rounded-lg bg-[#DC2626] text-white hover:bg-[#B91C1C] disabled:opacity-50">
+                                      {rejectionHandledSaving ? 'Saving…' : 'Save & mark handled'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )
                         })()}
@@ -1863,7 +1984,7 @@ export function AdminClaims() {
                         )}
 
                         {/* Actions */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <Button size="sm" variant="secondary"
                             onClick={() => {
                               setReopenTarget(c)
@@ -1873,6 +1994,15 @@ export function AdminClaims() {
                             }}
                             title="Reopen this claim for correction + resubmission. Requires a reason and a note; logged for audit.">
                             Reopen for correction
+                          </Button>
+                          {/* Retroactive 277 attachment — for rejections that
+                              arrived before the webhook was configured to
+                              process 277s. Sara grabs the raw 277 X12 from
+                              the Stedi portal's X12 tab and pastes it here. */}
+                          <Button size="sm" variant="secondary"
+                            onClick={() => { setAttach277Target(c); setAttach277Text(''); setAttach277Error(null) }}
+                            title="Attach a 277 Claim Acknowledgment (rejection) that came in before the webhook was configured. Paste the raw X12 from the Stedi portal's X12 tab.">
+                            Attach 277 (paste X12)
                           </Button>
                           <a href="https://portal.stedi.com/app/healthcare/claims" target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline">
@@ -2068,23 +2198,64 @@ export function AdminClaims() {
         </div>
       )}
 
-      {/* TEMP: Inspect 277s diagnostic result. Dumps the raw Stedi
-          response so we can see how they expose 277 CA transactions
-          and build the ingestion pipeline against a known contract.
-          Remove modal + button + endpoint when the pipeline ships. */}
-      {inspect277Result && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setInspect277Result(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+      {/* Attach 277 (paste X12) — retroactive rejection attachment.
+          For 277s that came in before the webhook processed them. */}
+      {attach277Target && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !attach277Submitting && setAttach277Target(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-[#E8E8E4]">
               <div className="flex items-center gap-2">
-                <Search size={18} className="text-[#DC2626]" />
-                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">277 diagnostic (temp — will be removed)</h2>
+                <AlertOctagon size={18} className="text-[#7F1D1D]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Attach 277 rejection (paste X12)</h2>
               </div>
-              <button onClick={() => setInspect277Result(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+              <button onClick={() => !attach277Submitting && setAttach277Target(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
             </div>
-            <div className="overflow-auto p-4">
-              <div className="text-[11px] text-[#555] mb-2">Copy this whole thing into chat — it tells me exactly how Stedi is exposing 277 transactions so I can build the ingestion pipeline.</div>
-              <pre className="text-[11px] font-mono bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 whitespace-pre-wrap break-all">{JSON.stringify(inspect277Result, null, 2)}</pre>
+            <div className="p-4 overflow-auto space-y-3">
+              <div className="text-[12px] text-[#1A1A2E] bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-2.5">
+                <div className="font-medium">
+                  {[(attach277Target.child_first_name ?? attach277Target.patient_first_name), (attach277Target.child_last_name ?? attach277Target.patient_last_name)].filter(Boolean).join(' ')}
+                </div>
+                <div className="text-[#555] mt-0.5">
+                  {attach277Target.payer_name} · {fmtDate(attach277Target.service_date)} · {fmtMoney(attach277Target.total_charge)}
+                </div>
+              </div>
+              <div className="text-[12px] text-[#555] leading-relaxed">
+                <strong>How to get the X12:</strong> Open this claim in the Stedi portal → click the <strong>X12</strong> tab (top-right of the Acknowledgment page) → copy the whole ISA...IEA block → paste below.
+              </div>
+              <label className="text-[11px] text-[#555] block">Raw 277 X12</label>
+              <textarea
+                className="w-full px-2.5 py-2 border border-[#E8E8E4] rounded-lg text-[11px] font-mono outline-none focus:border-[#7F77DD] bg-white min-h-[200px]"
+                value={attach277Text}
+                onChange={e => setAttach277Text(e.target.value)}
+                disabled={attach277Submitting}
+                placeholder="ISA*00*          *00*          *ZZ*STEDI          *ZZ*..." />
+              {attach277Error && (
+                <div className="text-[12px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-2.5 py-1.5 rounded-lg">{attach277Error}</div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-[#E8E8E4]">
+              <Button variant="secondary" size="sm" onClick={() => setAttach277Target(null)} disabled={attach277Submitting}>Cancel</Button>
+              <Button
+                variant="teal"
+                size="sm"
+                loading={attach277Submitting}
+                disabled={attach277Text.trim().length < 50}
+                onClick={async () => {
+                  setAttach277Submitting(true)
+                  setAttach277Error(null)
+                  try {
+                    await attach277X12({ claim_id: attach277Target.id, x12_text: attach277Text.trim() })
+                    await load()
+                    setAttach277Target(null)
+                    setAttach277Text('')
+                  } catch (err: any) {
+                    setAttach277Error(err?.message ?? 'Failed to attach 277')
+                  } finally {
+                    setAttach277Submitting(false)
+                  }
+                }}>
+                Attach rejection
+              </Button>
             </div>
           </div>
         </div>
