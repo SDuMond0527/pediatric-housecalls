@@ -960,6 +960,14 @@ export const inspectUnmatchedEras = (days = 60) =>
     results: Array<any>
   }>(`/api/admin/inspect-unmatched-eras?days=${days}`)
 
+// TEMPORARY diagnostic — polls Stedi for 277 transactions and returns
+// the raw shape so I can build the full 277 ingestion pipeline
+// against real data instead of guessing at Stedi's response contract.
+// Remove this + the endpoint + the "Inspect 277s" button once the
+// pipeline is shipped and verified end-to-end.
+export const inspect277s = (days = 30) =>
+  apiFetch<any>(`/api/admin/inspect-277s?days=${days}`)
+
 export const refetchKnownEras = () =>
   apiFetch<{
     list_http: number

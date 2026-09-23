@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, inspect277s, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -210,6 +210,13 @@ export function AdminClaims() {
   // can see the mismatch and either manually attach or fix findClaim.
   const [inspectRunning, setInspectRunning] = useState(false)
   const [inspectResult, setInspectResult]   = useState<any | null>(null)
+
+  // TEMPORARY — "Inspect 277s" diagnostic used to see how Stedi
+  // exposes 277 Claim Acknowledgment transactions so we can build
+  // the full 277 ingestion pipeline against real data. Remove this
+  // + the button + the endpoint once the pipeline is shipped.
+  const [inspect277Running, setInspect277Running] = useState(false)
+  const [inspect277Result, setInspect277Result]   = useState<any | null>(null)
 
   // Reopen modal — replaces the old one-click Reopen. Requires a
   // categorized reason + a note (min 20 chars server-enforced) so a
@@ -716,6 +723,24 @@ export function AdminClaims() {
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#4C1D95] text-[#4C1D95] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50"
             title="Fetch the raw 835 for every ERA Stedi pushed us that didn't match any claim record — shows the PCN the payer echoed vs. the PCN we sent.">
             <Search size={12} /> {inspectRunning ? 'Inspecting…' : 'Inspect unmatched ERAs'}
+          </button>
+          <button
+            onClick={async () => {
+              setInspect277Running(true)
+              setInspect277Result(null)
+              try {
+                const r = await inspect277s(30)
+                setInspect277Result(r)
+              } catch (e: any) {
+                setInspect277Result({ ok: false, error: e?.message ?? String(e) })
+              } finally {
+                setInspect277Running(false)
+              }
+            }}
+            disabled={inspect277Running}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#DC2626] text-[#DC2626] hover:bg-[#FEE2E2] transition-colors disabled:opacity-50"
+            title="TEMP: polls Stedi for 277 CA transactions in the last 30 days so we can see how their API exposes them. Removed once the full 277 pipeline is live.">
+            <Search size={12} /> {inspect277Running ? 'Inspecting…' : 'Inspect 277s (temp)'}
           </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
@@ -2038,6 +2063,28 @@ export function AdminClaims() {
                 onClick={confirmReopen}>
                 Reopen &amp; move to Pending Review
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TEMP: Inspect 277s diagnostic result. Dumps the raw Stedi
+          response so we can see how they expose 277 CA transactions
+          and build the ingestion pipeline against a known contract.
+          Remove modal + button + endpoint when the pipeline ships. */}
+      {inspect277Result && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setInspect277Result(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-[#E8E8E4]">
+              <div className="flex items-center gap-2">
+                <Search size={18} className="text-[#DC2626]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">277 diagnostic (temp — will be removed)</h2>
+              </div>
+              <button onClick={() => setInspect277Result(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            </div>
+            <div className="overflow-auto p-4">
+              <div className="text-[11px] text-[#555] mb-2">Copy this whole thing into chat — it tells me exactly how Stedi is exposing 277 transactions so I can build the ingestion pipeline.</div>
+              <pre className="text-[11px] font-mono bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 whitespace-pre-wrap break-all">{JSON.stringify(inspect277Result, null, 2)}</pre>
             </div>
           </div>
         </div>
