@@ -243,10 +243,12 @@ export function AdminClaims() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded])
 
-  // Stedi patient control number — derived from the claim's UUID (dashes
-  // stripped, truncated to 20 chars — Stedi's PCN column shows this exact
-  // format in their portal + accepts it in search). Sara 2026-09-23.
+  // Patient Control Number — prefer the new short PEDS00042 form if
+  // assigned (all claims submitted after 2026-09-23), fall back to
+  // the 20-char UUID prefix for pre-existing already-submitted claims
+  // (can't retroactively change what's already on file with the payer).
   function pcnFor(claim: any): string {
+    if (claim.payer_control_number) return String(claim.payer_control_number)
     return String(claim.id ?? '').replace(/-/g, '').slice(0, 20)
   }
   const [copiedPcnId, setCopiedPcnId] = useState<string | null>(null)

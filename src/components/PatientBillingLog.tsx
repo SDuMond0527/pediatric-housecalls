@@ -22,6 +22,7 @@ export type BillingLogEntry = {
   submitted_at: string | null
   stedi_claim_id: string | null
   submission_error: string | null
+  payer_control_number: string | null
   visit_type: string | null
   provider_name: string | null
   patient_first_name: string | null
@@ -126,10 +127,13 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
   const [open, setOpen] = useState(false)
   const [pcnCopied, setPcnCopied] = useState(false)
 
-  // Stedi PCN — derived from claim UUID (dashes stripped, first 20 chars —
-  // Stedi's portal shows/accepts this exact format). Andrea grabs it here
-  // to paste into Stedi's claim search. Sara 2026-09-23.
-  const pcn = String(e.claim_id ?? '').replace(/-/g, '').slice(0, 20)
+  // Patient Control Number — prefer the short PEDS00042 form assigned
+  // to claims submitted after 2026-09-23; fall back to the 20-char UUID
+  // prefix for pre-existing already-submitted claims (payer already has
+  // that PCN on file, can't retroactively rename).
+  const pcn = e.payer_control_number
+    ? String(e.payer_control_number)
+    : String(e.claim_id ?? '').replace(/-/g, '').slice(0, 20)
   async function copyPcn(ev: React.MouseEvent) {
     ev.stopPropagation()
     try {

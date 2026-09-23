@@ -373,6 +373,12 @@ async function findClaim(sql: any, pcn: string | null, payerClaimControlNumber: 
     if (rows[0]) return rows[0]
   }
   if (pcn) {
+    // Prefer exact-match on the new short PCN (PEDS####) — every claim
+    // submitted after 2026-09-23 uses this format.
+    const shortRows = await sql`SELECT id FROM claims WHERE payer_control_number = ${pcn} LIMIT 1`
+    if (shortRows[0]) return shortRows[0]
+    // Fall back to the UUID-prefix match for legacy claims submitted
+    // before the short-PCN format shipped.
     const rows = await sql`SELECT id FROM claims WHERE REPLACE(id::text, '-', '') ILIKE ${pcn + '%'} LIMIT 1`
     if (rows[0]) return rows[0]
   }

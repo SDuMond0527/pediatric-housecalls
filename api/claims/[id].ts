@@ -101,8 +101,14 @@ function buildStediPayload(claim: any, testMode = false): object {
   const BCBS_PAYER_IDS = ['UPICO', 'BCSNC', 'NCBCBS', 'NCBLS', 'NCPNHP']
   const claimFilingCode = BCBS_PAYER_IDS.includes(claim.payer_id ?? '') ? 'BL' : 'CI'
 
-  // Patient control number max 20 chars — use first 20 of UUID without dashes
-  const patientControlNumber = (claim.id ?? '').replace(/-/g, '').slice(0, 20)
+  // Patient control number — prefer the short, sequential PEDS####
+  // number if one has been assigned to this claim (assigned in the
+  // submit handler before buildStediPayload runs; falls back to the
+  // 20-char UUID prefix for legacy claims submitted before the short
+  // format shipped).
+  const patientControlNumber = claim.payer_control_number
+    ? String(claim.payer_control_number)
+    : (claim.id ?? '').replace(/-/g, '').slice(0, 20)
 
   // X12 837P HI segment caps a claim at 12 diagnoses total.
   const claimDiagnoses = diagnoses.slice(0, 12)
@@ -512,6 +518,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({
           error: 'Patient address is incomplete. Click "Edit patient & insurance info" and enter the full street address (street, city, state, ZIP) — Aetna and Blue Cross reject claims without it.',
         })
+      }
+
+      // Assign a short, sequential Patient Control Number the first time
+      // this claim submits (PEDS + zero-padded 5-digit global sequence,
+      // e.g. PEDS00042). Payer sees it, echoes it back on the ERA / 277,
+      // matcher on the way in finds the claim via this value first, PCN
+      // pill on the card displays it. Legacy claims that submitted
+      // before this shipped keep their 20-char UUID PCN.
+      //
+      // Uses a Postgres SEQUENCE for atomic increments so bursts of
+      // concurrent submits can't collide on the same number. Sara +
+      // Andrea 2026-09-23.
+      if (!claim.payer_control_number) {
+        try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text` } catch {}
+        try { await sql`CREATE SEQUENCE IF NOT EXISTS peds_pcn_seq START 1` } catch {}
+        const [pcnRow] = await sql`
+          UPDATE claims SET
+            payer_control_number = 'PEDS' || LPAD(nextval('peds_pcn_seq')::text, 5, '0'),
+            updated_at = NOW()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid AND payer_control_number IS NULL
+          RETURNING payer_control_number
+        `
+        if (pcnRow?.payer_control_number) claim.payer_control_number = pcnRow.payer_control_number
       }
 
       const payload = buildStediPayload(claim, testMode)

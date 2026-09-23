@@ -194,6 +194,17 @@ async function findClaimByStediIdOrPCN(sql: any, stediClaimId: string | null, pc
       LIMIT 1`
     if (rows[0]) return rows[0]
   }
+  // Prefer exact-match on the new short PCN (PEDS####).
+  const shortRows = await sql`
+    SELECT id, practice_id, encounter_note_id, appointment_id, child_id,
+           payer_name, payer_id, service_date, cpt_codes,
+           patient_first_name, patient_last_name, patient_dob, patient_gender,
+           era_received_at, era_seen_at, stedi_claim_id
+    FROM claims
+    WHERE payer_control_number = ${pcn}
+    LIMIT 1`
+  if (shortRows[0]) return shortRows[0]
+  // Fall back to UUID-prefix match for legacy claims.
   const rows = await sql`
     SELECT id, practice_id, encounter_note_id, appointment_id, child_id,
            payer_name, payer_id, service_date, cpt_codes,
@@ -410,6 +421,10 @@ async function findClaimByPcnOrPayerControlNumber(sql: any, pcn: string | null, 
     if (rows[0]) return rows[0]
   }
   if (pcn) {
+    // Prefer exact-match on the new short PCN (PEDS####).
+    const shortRows = await sql`SELECT id FROM claims WHERE payer_control_number = ${pcn} LIMIT 1`
+    if (shortRows[0]) return shortRows[0]
+    // Fall back to UUID-prefix match for legacy claims.
     const rows = await sql`SELECT id FROM claims WHERE REPLACE(id::text, '-', '') ILIKE ${pcn + '%'} LIMIT 1`
     if (rows[0]) return rows[0]
   }

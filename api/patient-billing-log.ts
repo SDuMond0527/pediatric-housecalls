@@ -44,6 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await sql`ALTER TABLE patient_statements ADD COLUMN IF NOT EXISTS payment_note text`
     } catch {}
+    // Bootstrap PCN column for the SELECT below — per the "bootstrap
+    // on every read path" rule.
+    try {
+      await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text`
+    } catch {}
 
     const rows = await sql`
       SELECT
@@ -64,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cl.era_received_at,
         cl.submitted_at,
         cl.stedi_claim_id,
+        cl.payer_control_number,
         cl.submission_error,
         cl.subscriber_name,
         cl.subscriber_dob::text        AS subscriber_dob,

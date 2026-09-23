@@ -164,6 +164,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by uuid` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by_name text` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_note text` } catch {}
+      // Short human-readable Patient Control Number sent on the outbound
+      // 837 claim. PEDS + 5-digit sequential (e.g., PEDS00042). Assigned
+      // at submit time from a Postgres sequence.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
       // Lightweight count of claims with unreviewed ERA payments

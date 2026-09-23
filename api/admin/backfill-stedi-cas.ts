@@ -206,6 +206,14 @@ async function findClaim(sql: any, pcn: string | null, payerClaimControlNumber: 
     if (rows[0]) return rows[0]
   }
   if (pcn) {
+    // Prefer exact-match on the new short PCN (PEDS####).
+    const shortRows = await sql`
+      SELECT id FROM claims
+      WHERE payer_control_number = ${pcn}
+        AND practice_id = ${practiceId}::uuid
+      LIMIT 1`
+    if (shortRows[0]) return shortRows[0]
+    // Fall back to UUID-prefix match for legacy claims.
     const rows = await sql`
       SELECT id FROM claims
       WHERE REPLACE(id::text, '-', '') ILIKE ${pcn + '%'}
