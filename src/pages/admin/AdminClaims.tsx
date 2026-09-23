@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -203,6 +203,14 @@ export function AdminClaims() {
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, any>>({})
+  // Diagnostic — "Inspect unmatched ERAs" surfaces ERAs Stedi pushed
+  // to us but that findClaim() couldn't attach to any claim record.
+  // Used when a biller says "the ERA came back at Stedi but not in the
+  // app." Result modal renders the payer's PCN + patient name so we
+  // can see the mismatch and either manually attach or fix findClaim.
+  const [inspectRunning, setInspectRunning] = useState(false)
+  const [inspectResult, setInspectResult]   = useState<any | null>(null)
+
   // Reopen modal — replaces the old one-click Reopen. Requires a
   // categorized reason + a note (min 20 chars server-enforced) so a
   // reopen is always a deliberate act with an audit trail.
@@ -690,6 +698,24 @@ export function AdminClaims() {
             disabled={refetchRunning}
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E6F6F2] transition-colors disabled:opacity-50">
             <Zap size={12} /> {refetchRunning ? 'Refetching…' : 'Refetch known ERAs by ID'}
+          </button>
+          <button
+            onClick={async () => {
+              setInspectRunning(true)
+              setInspectResult(null)
+              try {
+                const r = await inspectUnmatchedEras(60)
+                setInspectResult(r)
+              } catch (e: any) {
+                setInspectResult({ ok: false, error: e?.message ?? String(e) })
+              } finally {
+                setInspectRunning(false)
+              }
+            }}
+            disabled={inspectRunning}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#4C1D95] text-[#4C1D95] hover:bg-[#EEEDFE] transition-colors disabled:opacity-50"
+            title="Fetch the raw 835 for every ERA Stedi pushed us that didn't match any claim record — shows the PCN the payer echoed vs. the PCN we sent.">
+            <Search size={12} /> {inspectRunning ? 'Inspecting…' : 'Inspect unmatched ERAs'}
           </button>
           <button onClick={load} className="flex items-center gap-1.5 text-[12px] text-[#1A1A2E] hover:text-[#555] transition-colors">
             <RefreshCw size={13} /> Refresh
@@ -2012,6 +2038,61 @@ export function AdminClaims() {
                 onClick={confirmReopen}>
                 Reopen &amp; move to Pending Review
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect unmatched ERAs — diagnostic result modal.
+          Shows per-transaction: payer, patient name (from the 835),
+          the PCN the payer echoed back, the payer's claim control
+          number, service dates, dollar amounts. Compare the PCN to
+          the expected PCN (claim UUID with dashes stripped) to see
+          why findClaim() missed the match. */}
+      {inspectResult && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setInspectResult(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-[#E8E8E4]">
+              <div className="flex items-center gap-2">
+                <Search size={18} className="text-[#4C1D95]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Unmatched ERAs (last {inspectResult.days ?? 60}d)</h2>
+              </div>
+              <button onClick={() => setInspectResult(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            </div>
+            <div className="overflow-auto p-4 space-y-3">
+              {inspectResult.error && (
+                <div className="text-[13px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] p-3 rounded-lg">{inspectResult.error}</div>
+              )}
+              {inspectResult.results?.length === 0 && (
+                <div className="text-[13px] text-[#1A1A2E] text-center py-8">No unmatched ERAs in the window — everything matched to a claim.</div>
+              )}
+              {(inspectResult.results ?? []).map((r: any, i: number) => (
+                <div key={r.transaction_id ?? i} className="border border-[#E8E8E4] rounded-xl p-3 bg-[#FAFAF8] text-[12px]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-mono text-[11px] text-[#555]">tx {r.transaction_id}</div>
+                    <div className="text-[10px] text-[#555]">
+                      {r.source} · {r.processed_at ? new Date(r.processed_at).toLocaleString() : '—'}
+                    </div>
+                  </div>
+                  {r.error ? (
+                    <div className="text-[12px] text-[#991B1B]">Error fetching: {r.error}</div>
+                  ) : (
+                    <>
+                      <div className="mb-2"><span className="text-[#555]">Payer:</span> <span className="font-medium">{r.payer_name ?? '—'}</span></div>
+                      {(r.claims ?? []).map((cl: any, j: number) => (
+                        <div key={j} className="bg-white border border-[#E8E8E4] rounded-lg p-2.5 mb-2 space-y-1">
+                          <div><span className="text-[#555]">Patient:</span> <span className="font-medium">{[cl.patient_first, cl.patient_last].filter(Boolean).join(' ') || '—'}</span></div>
+                          <div><span className="text-[#555]">Patient control # (returned):</span> <span className="font-mono text-[11px]">{cl.patient_control_number ?? '—'}</span></div>
+                          <div><span className="text-[#555]">Payer claim control #:</span> <span className="font-mono text-[11px]">{cl.payer_claim_control_number ?? '—'}</span></div>
+                          <div><span className="text-[#555]">Service date(s):</span> <span>{(cl.service_dates ?? []).join(', ') || '—'}</span></div>
+                          <div><span className="text-[#555]">Charge:</span> <span>${cl.total_claim_charge ?? '—'}</span> · <span className="text-[#555]">Paid:</span> <span>${cl.insurance_payment ?? '—'}</span></div>
+                          <div><span className="text-[#555]">Claim status code:</span> <span className="font-mono text-[11px]">{cl.claim_status_code ?? '—'}</span></div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-09-23-reopen-with-reason
+// Service worker — deliberate passthrough. Version: 2026-09-23-inspect-unmatched-eras
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

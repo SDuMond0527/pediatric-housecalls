@@ -946,6 +946,20 @@ export const sendBillerQuestion = (body: { claimId: string; providerId: string; 
     { method: 'POST', body: JSON.stringify({ type: 'biller_question_to_provider', ...body }) })
 
 // Admin-only: backfill CAS breakdown from historical 835s.
+// Diagnostic — pulls the raw 835 for every unmatched ERA (rows in
+// stedi_transactions_processed with matched_claim_count = 0) and
+// returns just enough parsed metadata to identify which claim each
+// one belongs to. Use when a biller reports "the ERA came back at
+// Stedi but not in the platform" — output tells us the payer's PCN
+// so we can compare to our expected PCN and see the mismatch.
+export const inspectUnmatchedEras = (days = 60) =>
+  apiFetch<{
+    ok: boolean
+    days: number
+    unmatched_count: number
+    results: Array<any>
+  }>(`/api/admin/inspect-unmatched-eras?days=${days}`)
+
 export const refetchKnownEras = () =>
   apiFetch<{
     list_http: number
