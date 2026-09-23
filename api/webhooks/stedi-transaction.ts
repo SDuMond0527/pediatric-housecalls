@@ -644,7 +644,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //          A1/A2 (those are just acks, not actionable).
   //   .999 or anything else → silent ack (200) so Stedi doesn't retry
   //          forever; we don't care about those transaction types.
-  if (x12Type && x12Type.endsWith('.277')) {
+  // Match any 277 X12 type string — .277, .277CA, .277P, whatever
+  // shape Stedi uses. Broader than endsWith so we don't miss variants.
+  if (x12Type && String(x12Type).toLowerCase().includes('277')) {
+    // Log the full payload the first time we see a 277 so we can see
+    // exactly what Stedi delivers — the X12 may be inline, may be
+    // linked, may need a separate fetch. Server-side only; no Sara
+    // action needed. Log lives in Vercel function logs.
+    console.log('[stedi-transaction] 277 event received. transactionId:',
+      transactionId, 'x12Type:', x12Type,
+      'payload (first 6000 chars):', JSON.stringify(payload).slice(0, 6000))
+
     try {
       await sql`
         CREATE TABLE IF NOT EXISTS stedi_transactions_processed (
@@ -657,39 +667,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [prior] = await sql`SELECT transaction_id FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
     if (prior) return res.status(200).json({ ok: true, transactionId, x12Type, skipped: 'already_processed_277' })
 
-    const reportRes = await fetch(STEDI_277_REPORT_URL(transactionId), {
-      headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
-    })
-    if (!reportRes.ok) {
-      // Log verbosely so the exact error is captured in Vercel logs.
-      // Don't 5xx — Stedi would keep retrying and the report is unlikely
-      // to appear on retry. Record 0 matches so we can spot the failure
-      // in the Inspect Unmatched ERAs modal if needed.
-      const errBody = await reportRes.text().catch(() => '')
-      console.error('[stedi-transaction] 277 report fetch failed:', reportRes.status, errBody.slice(0, 500), 'transactionId:', transactionId)
-      await sql`
-        INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
-        VALUES (${transactionId}, 0, '277-webhook-fetch-fail')
-        ON CONFLICT (transaction_id) DO NOTHING`
-      return res.status(200).json({ ok: false, transactionId, x12Type, stediStatus: reportRes.status, error: errBody.slice(0, 300) })
-    }
-    const reportBody = await reportRes.json()
+    // Try multiple X12 extraction paths so a wrong-URL guess doesn't
+    // block ingestion. First one that yields a valid ISA-headed X12
+    // string wins. Records which source worked in Vercel logs.
+    let rawX12: string | null = null
+    let x12Source = ''
 
-    // The Stedi report response may return either parsed JSON or a
-    // raw X12 field, depending on the endpoint variant. Try both.
-    const rawX12: string | null =
-      (typeof reportBody === 'object' && typeof reportBody?.x12 === 'string') ? reportBody.x12 :
-      (typeof reportBody === 'string') ? reportBody :
-      null
+    // Attempt 1 — X12 embedded directly in the webhook payload. Stedi
+    // often includes the artifact body inline on transaction.processed
+    // events. Check several common paths.
+    const inlineCandidates: any[] = [
+      payload?.v1Event?.resource?.body,
+      payload?.v1Event?.resource?.x12,
+      payload?.v1Event?.data?.x12,
+      payload?.v1Event?.artifact?.body,
+      payload?.v1Event?.artifact?.content,
+      payload?.data?.x12,
+      payload?.body,
+      payload?.x12,
+    ]
+    for (const cand of inlineCandidates) {
+      if (typeof cand === 'string' && cand.trim().startsWith('ISA')) {
+        rawX12 = cand; x12Source = 'webhook-payload-inline'; break
+      }
+    }
+
+    // Attempt 2 — related resources with a URL to the artifact.
+    if (!rawX12) {
+      const related: any[] = Array.isArray(payload?.v1Event?.relatedResources) ? payload.v1Event.relatedResources : []
+      for (const rr of related) {
+        if (!rr) continue
+        const typeStr = String(rr.type ?? '').toLowerCase()
+        const isCandidate = typeStr.includes('277') || typeStr.includes('artifact')
+        const url: string | null = typeof rr.url === 'string' ? rr.url : typeof rr.href === 'string' ? rr.href : null
+        if (!isCandidate || !url) continue
+        try {
+          const rrRes = await fetch(url, { headers: { Authorization: `Key ${STEDI_API_KEY}` } })
+          if (!rrRes.ok) {
+            console.error('[stedi-transaction] related-resource fetch failed', rrRes.status, 'url:', url)
+            continue
+          }
+          const rrText = (await rrRes.text()).trim()
+          if (rrText.startsWith('ISA')) { rawX12 = rrText; x12Source = `related-resource:${url}`; break }
+          // Might be JSON wrapping the X12
+          try {
+            const rrJson = JSON.parse(rrText)
+            const embedded = rrJson?.x12 ?? rrJson?.body ?? rrJson?.content
+            if (typeof embedded === 'string' && embedded.trim().startsWith('ISA')) {
+              rawX12 = embedded; x12Source = `related-resource-json:${url}`; break
+            }
+          } catch {}
+        } catch (rrErr: any) {
+          console.error('[stedi-transaction] related-resource fetch threw', rrErr?.message, 'url:', url)
+        }
+      }
+    }
+
+    // Attempt 3 — assumed report URL pattern (parallel to 835).
+    if (!rawX12) {
+      try {
+        const reportRes = await fetch(STEDI_277_REPORT_URL(transactionId), {
+          headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
+        })
+        if (reportRes.ok) {
+          const rawText = (await reportRes.text()).trim()
+          if (rawText.startsWith('ISA')) {
+            rawX12 = rawText; x12Source = 'report-endpoint-x12'
+          } else {
+            try {
+              const body = JSON.parse(rawText)
+              const embedded = body?.x12 ?? body?.body ?? body?.content
+              if (typeof embedded === 'string' && embedded.trim().startsWith('ISA')) {
+                rawX12 = embedded; x12Source = 'report-endpoint-json'
+              } else {
+                console.error('[stedi-transaction] report endpoint JSON had no x12. keys:', Object.keys(body ?? {}))
+              }
+            } catch {
+              console.error('[stedi-transaction] report endpoint returned non-JSON non-X12. head:', rawText.slice(0, 300))
+            }
+          }
+        } else {
+          console.error('[stedi-transaction] report endpoint failed:', reportRes.status, (await reportRes.text().catch(() => '')).slice(0, 500))
+        }
+      } catch (rptErr: any) {
+        console.error('[stedi-transaction] report endpoint threw:', rptErr?.message)
+      }
+    }
 
     if (!rawX12) {
-      console.error('[stedi-transaction] 277 report had no x12 field. Body keys:', Object.keys(reportBody ?? {}), 'transactionId:', transactionId)
+      console.error('[stedi-transaction] 277 X12 extraction FAILED after all attempts. transactionId:', transactionId,
+        'payload (first 3000 chars):', JSON.stringify(payload).slice(0, 3000))
       await sql`
         INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
         VALUES (${transactionId}, 0, '277-webhook-no-x12')
         ON CONFLICT (transaction_id) DO NOTHING`
-      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'no x12 field in report body', report_keys: Object.keys(reportBody ?? {}) })
+      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'could not extract X12 from webhook payload, related resources, or report endpoint. See Vercel logs.' })
     }
+    console.log('[stedi-transaction] 277 X12 obtained via:', x12Source, 'transactionId:', transactionId, 'len:', rawX12.length)
 
     const parsed = parseX12_277_full(rawX12)
     if (!parsed.isRejection) {
