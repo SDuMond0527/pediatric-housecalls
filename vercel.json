@@ -63,6 +63,7 @@
     { "src": "/api/claims/([^/]+)/era-pdf",             "dest": "/api/claims/[id]/era-pdf?id=$1" },
     { "src": "/api/claims/([^/]+)/mark-denial-handled",    "dest": "/api/claims/[id]/mark-denial-handled?id=$1" },
     { "src": "/api/claims/([^/]+)/mark-rejection-handled", "dest": "/api/claims/[id]/mark-rejection-handled?id=$1" },
+    { "src": "/api/claims/([^/]+)/277-x12",                "dest": "/api/claims/[id]/277-x12?id=$1" },
     { "src": "/api/claims/([^/]+)/write-off",           "dest": "/api/claims/[id]/write-off?id=$1" },
     { "src": "/api/claims/([^/]+)/review-write-off",    "dest": "/api/claims/[id]/review-write-off?id=$1" },
     { "src": "/api/claims/([^/]+)/reopen",              "dest": "/api/claims/[id]/reopen?id=$1" },

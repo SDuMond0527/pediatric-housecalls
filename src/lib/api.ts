@@ -895,6 +895,29 @@ export const downloadClaim1500Pdf = (id: string) =>
 export const downloadClaimEraPdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/era-pdf`, `ERA-claim-${id.slice(0, 8)}.pdf`)
 
+// 277 X12 is text (not a PDF) so we use a lighter path than openClaimPdf.
+// Fetch as text, blob it, trigger the download AND open in a new tab so
+// the biller can eyeball it inline if she wants.
+export async function download277X12(id: string) {
+  const headers = await authHeaders()
+  const res = await fetch(`/api/claims/${id}/277-x12`, { headers })
+  const text = await res.text()
+  if (!res.ok) {
+    try { throw new Error(JSON.parse(text)?.error ?? text.slice(0, 400)) }
+    catch { throw new Error(text.slice(0, 400) || `HTTP ${res.status}`) }
+  }
+  const cd = res.headers.get('content-disposition') || ''
+  const nameMatch = /filename="([^"]+)"/.exec(cd)
+  const filename = nameMatch?.[1] || `277-${id.slice(0, 8)}.txt`
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.rel = 'noopener'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 120_000)
+}
+
 // Approval workflow — owner (super_admin) reviews pending requests.
 export const getPendingWriteOffs = () =>
   apiFetch<{ statements: any[]; claims: any[]; total: number }>('/api/admin/pending-write-offs')

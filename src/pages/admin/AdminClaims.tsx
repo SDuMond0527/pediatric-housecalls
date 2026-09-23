@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, markRejectionHandled, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, markRejectionHandled, download277X12, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -2041,6 +2041,34 @@ export function AdminClaims() {
                               <Download size={11} /> View ERA PDF
                             </button>
                           )}
+                          {/* 277 rejection artifacts — parallel to View 1500 / View ERA.
+                              Only shows when this claim has an attached rejection. */}
+                          {c.claim_rejection_at && (
+                            <button
+                              onClick={() => download277X12(c.id).catch(e => alert(e?.message ?? 'Failed to download 277 X12'))}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#DC2626] hover:underline font-medium"
+                              title="Downloads the raw 277 Claim Acknowledgment X12 (EDI text). Same file the payer sent — useful for archiving or forwarding to payer support.">
+                              <Download size={11} /> Download 277 X12
+                            </button>
+                          )}
+                          {c.claim_rejection_at && (() => {
+                            // Stedi's portal deep-link uses the truncated PCN
+                            // (first 20 chars of our claim UUID with dashes
+                            // stripped — confirmed 2026-09-23 by inspecting
+                            // Stedi's returned patientControlNumber for Olive
+                            // Dings and Carson Yates).
+                            const pcn = String(c.id).replace(/-/g, '').slice(0, 20)
+                            return (
+                              <a
+                                href={`https://portal.stedi.com/app/healthcare/claims/${pcn}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-[#DC2626] hover:underline font-medium"
+                                title="Opens this claim's 277 acknowledgment directly in the Stedi portal.">
+                                View 277 in Stedi <ExternalLink size={10} />
+                              </a>
+                            )
+                          })()}
                           {(c.statement_status === 'sent' || c.statement_status === 'paid') && (
                             <span className="inline-flex items-center gap-0.5 bg-[#EEF6FB] text-[#2D7BA6] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
                               <Send size={9} /> Statement sent {c.statement_sent_at ? fmtDate(c.statement_sent_at) : ''}
