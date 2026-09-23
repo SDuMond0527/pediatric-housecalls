@@ -1009,6 +1009,22 @@ export function AdminClaims() {
                                 </span>
                               )
                             })()}
+                            {/* 277 rejection badge on Pending Review too (Olive Dings
+                                was reopened after her 277 rejection, so she lives here). */}
+                            {c.claim_rejection_at && !c.claim_rejection_handled_at && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse bg-[#FEE2E2] text-[#7F1D1D]"
+                                title={(c.claim_rejection_reasons ?? []).map((r: any) => `[${r.category}/${r.code}] ${r.message}`).join(' · ')}>
+                                <AlertOctagon size={9} /> REJECTED AT INTAKE
+                              </span>
+                            )}
+                            {c.claim_rejection_at && c.claim_rejection_handled_at && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#ECFDF5] text-[#065F46]"
+                                title={`Handled by ${c.claim_rejection_handled_by_name ?? 'biller'}${c.claim_rejection_handling_notes ? ' — ' + String(c.claim_rejection_handling_notes).slice(0, 200) : ''}`}>
+                                ✓ REJECTED — HANDLED
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {isError ? (
@@ -1054,6 +1070,108 @@ export function AdminClaims() {
                             <span className="font-semibold">Stedi rejection: </span>{stediError}
                           </div>
                         )}
+                        {/* 277 rejection banner on Pending Review — appears on
+                            reopened claims that were previously rejected at
+                            intake (Olive Dings pattern). Same structure and
+                            handler as the banner on Submitted+Completed. */}
+                        {c.claim_rejection_at && (() => {
+                          const reasons: any[] = Array.isArray(c.claim_rejection_reasons) ? c.claim_rejection_reasons : []
+                          const isHandled = !!c.claim_rejection_handled_at
+                          const isOpenForm = rejectionHandledOpen === c.id
+                          const borderCls = isHandled ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-[#FECACA] bg-[#FEE2E2]'
+                          const textCls   = isHandled ? 'text-[#065F46]' : 'text-[#7F1D1D]'
+                          return (
+                            <div className={`rounded-xl border-2 ${borderCls} px-4 py-3`}>
+                              <div className={`flex items-start gap-3 ${textCls}`}>
+                                <AlertOctagon size={18} className="flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[13px] font-semibold uppercase tracking-wide">
+                                    {isHandled ? 'Rejected at intake — handled' : `Rejected by ${c.payer_name || 'payer'} at intake`}
+                                  </div>
+                                  <div className="text-[12px] mt-0.5 opacity-90">
+                                    Received {fmtDate(c.claim_rejection_at)}. This claim never entered adjudication; correct + resubmit to get paid.
+                                  </div>
+                                  {reasons.length > 0 && (
+                                    <ul className="mt-2 space-y-1.5 text-[12px]">
+                                      {reasons.map((r: any, i: number) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                          <span className="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-white/70 border border-current/20">
+                                            {r.category}/{r.code}
+                                          </span>
+                                          <span className="whitespace-pre-wrap">{r.message || '(no free-text reason provided)'}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {isHandled && (
+                                    <div className="mt-2 text-[12px] italic">
+                                      Handled by {c.claim_rejection_handled_by_name ?? 'biller'} · {fmtDate(c.claim_rejection_handled_at)}{c.claim_rejection_handling_notes ? ` — ${c.claim_rejection_handling_notes}` : ''}
+                                    </div>
+                                  )}
+                                  <div className="mt-3 flex gap-2 flex-wrap">
+                                    <button
+                                      onClick={() => download277X12(c.id).catch(e => alert(e?.message ?? 'Failed to download 277 X12'))}
+                                      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-white/70 border border-current/30 hover:bg-white font-medium">
+                                      <Download size={11} /> Download 277 X12
+                                    </button>
+                                    <a
+                                      href={`https://portal.stedi.com/app/healthcare/claims/${String(c.id).replace(/-/g, '').slice(0, 20)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-white/70 border border-current/30 hover:bg-white font-medium">
+                                      View 277 in Stedi <ExternalLink size={10} />
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                              {!isHandled && !isOpenForm && (
+                                <div className="mt-3 flex gap-2">
+                                  <button
+                                    onClick={() => { setRejectionHandledOpen(c.id); setRejectionHandledNotes('') }}
+                                    className="text-[12px] px-2.5 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] font-medium">
+                                    Mark rejection handled
+                                  </button>
+                                </div>
+                              )}
+                              {!isHandled && isOpenForm && (
+                                <div className="mt-3 space-y-2">
+                                  <label className="text-[11px] text-[#555] block">What did you do about this rejection? (required)</label>
+                                  <textarea
+                                    className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[60px]"
+                                    value={rejectionHandledNotes}
+                                    onChange={e => setRejectionHandledNotes(e.target.value)}
+                                    disabled={rejectionHandledSaving}
+                                    placeholder="e.g. Added modifier 59 to 99345 line, resubmitting" />
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      onClick={() => setRejectionHandledOpen(null)}
+                                      disabled={rejectionHandledSaving}
+                                      className="text-[12px] px-2.5 py-1 rounded-lg border border-[#E8E8E4] text-[#1A1A2E] hover:bg-[#FAFAF8]">Cancel</button>
+                                    <button
+                                      onClick={async () => {
+                                        if (!rejectionHandledNotes.trim()) { alert('Please describe what you did.'); return }
+                                        setRejectionHandledSaving(true)
+                                        try {
+                                          await markRejectionHandled(c.id, { notes: rejectionHandledNotes.trim() })
+                                          await load()
+                                          setRejectionHandledOpen(null)
+                                          setRejectionHandledNotes('')
+                                        } catch (err: any) {
+                                          alert(err?.message ?? 'Failed to save')
+                                        } finally {
+                                          setRejectionHandledSaving(false)
+                                        }
+                                      }}
+                                      disabled={rejectionHandledSaving || !rejectionHandledNotes.trim()}
+                                      className="text-[12px] px-2.5 py-1 rounded-lg bg-[#DC2626] text-white hover:bg-[#B91C1C] disabled:opacity-50">
+                                      {rejectionHandledSaving ? 'Saving…' : 'Save & mark handled'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                         {/* Aetna reminder — Aetna denies routine test CPT codes
                             for this pediatric practice, so the biller MUST swap
                             them to self-pay codes before submission. Sara
@@ -1604,6 +1722,19 @@ export function AdminClaims() {
                                 disabled={!!submitting || missingPayer}
                                 onClick={() => handleSubmit(c.id)}>
                                 <Send size={13} className="mr-1.5" /> Submit to insurance
+                              </Button>
+                            )}
+                            {/* Attach 277 also available on Pending Review cards
+                                for claims that were previously submitted (Olive
+                                Dings is here — reopened before we knew what
+                                happened). Only shows when submitted_at is set,
+                                since a 277 can only exist for a claim that
+                                actually reached the payer. */}
+                            {c.submitted_at && (
+                              <Button variant="secondary"
+                                onClick={() => { setAttach277Target(c); setAttach277Text(''); setAttach277Error(null) }}
+                                title="Attach a 277 Claim Acknowledgment (rejection) that came in before the webhook was configured. Paste the raw X12 from the Stedi portal.">
+                                Attach 277 (paste X12)
                               </Button>
                             )}
                             {/* Write-off on the review tab — for stuck
