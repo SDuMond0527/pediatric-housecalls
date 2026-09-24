@@ -694,9 +694,15 @@ export function AdminClaims() {
     return true
   }
 
-  // Pending Review = brand-new (or drafts) that aren't in Rework. Every
-  // filter excludes Rework so a claim only ever appears in one tab.
-  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft'))
+  // Pending Review = truly brand-new claims (never sent to any payer)
+  // OR drafts OR errors that never made it to submission. Anything with
+  // submitted_at set has been to a payer at some point and belongs in
+  // Rework / Submitted / Completed based on its state — not back on
+  // the "new work" queue. Sara caught 2026-09-24: Rhett Richmond Sep 11
+  // was appearing in both Review AND Completed because he had status
+  // pending_review (from a manual reopen SQL) AND rework_resolved_at
+  // (from a Mark-as-worked click) — both filters matched.
+  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft'))
   const reworkClaims    = visibleClaims.filter(isInRework)
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
