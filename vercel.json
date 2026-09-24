@@ -66,6 +66,7 @@
     { "src": "/api/claims/([^/]+)/277-x12",                "dest": "/api/claims/[id]/277-x12?id=$1" },
     { "src": "/api/claims/([^/]+)/activity",               "dest": "/api/claims/[id]/activity?id=$1" },
     { "src": "/api/claims/([^/]+)/resolve-rework",         "dest": "/api/claims/[id]/resolve-rework?id=$1" },
+    { "src": "/api/claims/([^/]+)/resolve-with-statement", "dest": "/api/claims/[id]/resolve-with-statement?id=$1" },
     { "src": "/api/claims/([^/]+)/write-off",           "dest": "/api/claims/[id]/write-off?id=$1" },
     { "src": "/api/claims/([^/]+)/review-write-off",    "dest": "/api/claims/[id]/review-write-off?id=$1" },
     { "src": "/api/claims/([^/]+)/reopen",              "dest": "/api/claims/[id]/reopen?id=$1" },

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
@@ -292,6 +292,24 @@ export function AdminClaims() {
       await load()
     } catch (e: any) {
       alert(e?.message ?? 'Failed to mark as worked')
+    } finally {
+      setResolvingReworkId(null)
+    }
+  }
+
+  async function markReworkResolvedWithStatement(claim: any) {
+    if (!window.confirm(`Mark "${[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ')}" as worked, move to Completed, AND generate a draft patient statement?\n\nThe draft statement will appear on the Statements page for Andrea to edit + send.`)) return
+    setResolvingReworkId(claim.id)
+    try {
+      const result = await resolveReworkWithStatement(claim.id)
+      await load()
+      if (result?.statement_created) {
+        alert('Done. Draft statement created — find it on the Statements page.')
+      } else {
+        alert('Marked as worked. A draft statement already existed for this claim.')
+      }
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to mark as worked + create statement')
     } finally {
       setResolvingReworkId(null)
     }
@@ -2171,6 +2189,17 @@ export function AdminClaims() {
                               onClick={() => markReworkResolved(c)}
                               title="Marks this claim as worked and moves it to the Completed tab. If a new denial or rejection lands later, it moves back to Rework automatically.">
                               Mark as worked → Completed
+                            </Button>
+                          )}
+                          {/* Same as above but ALSO creates a draft patient
+                              statement so Andrea can bill the patient for
+                              any remaining balance. Sara 2026-09-24. */}
+                          {tab === 'rework' && (
+                            <Button size="sm" variant="teal"
+                              loading={resolvingReworkId === c.id}
+                              onClick={() => markReworkResolvedWithStatement(c)}
+                              title="Marks this claim as worked, moves it to Completed, and creates a draft patient statement so you can bill the patient. Find the draft on the Statements page.">
+                              Mark as worked → Generate patient statement draft
                             </Button>
                           )}
                           <Button size="sm" variant="secondary"

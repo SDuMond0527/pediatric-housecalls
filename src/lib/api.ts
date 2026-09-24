@@ -1020,6 +1020,15 @@ export const addClaimActivity = (id: string, body: string) =>
 export const resolveRework = (id: string, body: { note?: string } = {}) =>
   apiFetch<any>(`/api/claims/${id}/resolve-rework`, { method: 'POST', body: JSON.stringify(body) })
 
+// Same as resolveRework but ALSO creates a draft patient_statements
+// row (if none exists yet) so Andrea can send a bill to the patient.
+// Used when the biller worked the rework outside GoRoam AND needs to
+// bill the patient for a remaining balance.
+export const resolveReworkWithStatement = (id: string) =>
+  apiFetch<{ ok: boolean; claim_id: string; statement_id?: string; statement_created: boolean }>(
+    `/api/claims/${id}/resolve-with-statement`, { method: 'POST', body: '{}' }
+  )
+
 export const refetchKnownEras = () =>
   apiFetch<{
     list_http: number
