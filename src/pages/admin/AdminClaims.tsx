@@ -613,15 +613,19 @@ export function AdminClaims() {
     }
   }
 
-  // Once the admin has sent the patient statement for a self-pay claim, hide
-  // the claim from the list — self-pay claims aren't submitted to insurance,
-  // so the statement being sent is their end state. `statement_status` and
-  // `statement_sent_at` come from the LEFT JOIN on patient_statements in
-  // api/claims/index.ts.
-  const isSelfPayWithSentStatement = (c: any) =>
-    c.payer_id === 'PP' && (c.statement_status === 'sent' || !!c.statement_sent_at)
+  // A claim is "done" — no more biller action needed on the Claims
+  // page — when EITHER (a) the patient statement has been sent or
+  // paid (the patient's been billed, ball's in their court), OR (b)
+  // the claim was written off. Both terminal states exit the Claims
+  // page entirely; historical lookup happens on the Statements page
+  // and the patient chart. Sara 2026-09-24.
+  const hasReachedTerminalState = (c: any) =>
+    c.statement_status === 'sent' ||
+    c.statement_status === 'paid' ||
+    !!c.statement_sent_at ||
+    c.status === 'written_off'
   const isReady = (c: any) => !!c.ready_for_biller_at
-  const baseVisibleClaims = claims.filter(c => !isSelfPayWithSentStatement(c))
+  const baseVisibleClaims = claims.filter(c => !hasReachedTerminalState(c))
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
 
   // Rework tab — "everything in flight" per Sara 2026-09-23. Enters
@@ -681,10 +685,14 @@ export function AdminClaims() {
   const submittedClaims = visibleClaims.filter(c =>
     !isInRework(c) && !c.rework_resolved_at &&
     c.status === 'submitted' && !c.era_received_at)
-  // Completed = ERA back OR written off OR biller marked rework resolved, not in Rework.
+  // Completed = actionable end-stage queue. Insurance claim with ERA
+  // back but statement not yet sent (biller still owes an action —
+  // review the draft statement + send it, or write off). Once she
+  // sends the statement (or writes off), the claim exits via
+  // hasReachedTerminalState. Rework claims the biller marked done
+  // also live here until their statement is handled.
   const completedClaims = visibleClaims.filter(c => !isInRework(c) && (
     (c.status === 'submitted' && !!c.era_received_at) ||
-    c.status === 'written_off' ||
     !!c.rework_resolved_at
   ))
 
