@@ -6,8 +6,9 @@ import {
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
-  chargeCard, apiFetch, getOnCallSchedule, getCmaSchedule,
+  chargeCard, apiFetch, getOnCallSchedule, getCmaSchedule, searchPharmacies,
 } from '../lib/api'
+import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from '../components/CmaOrderModal'
@@ -103,7 +104,7 @@ export function Today() {
     // Clinical — required for new patients per
     // feedback_all_patient_info_required_and_displayed.md
     allergies: '', currentMedications: '', medicalHistory: '',
-    preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+    preferredPharmacy: '', preferredPharmacyId: null as number | null, pcp: '', vaccinationStatus: '',
     // Insurance — self-pay hides the rest
     selfPay: false as boolean,
     insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
@@ -432,7 +433,7 @@ export function Today() {
       patientName: '', dob: '', gender: '',
       phone: '', email: '',
       allergies: '', currentMedications: '', medicalHistory: '',
-      preferredPharmacy: '', pcp: '', vaccinationStatus: '',
+      preferredPharmacy: '', preferredPharmacyId: null as number | null, pcp: '', vaccinationStatus: '',
       selfPay: false,
       insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
       subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
@@ -568,6 +569,7 @@ export function Today() {
             current_medications:  addForm.currentMedications || null,
             medical_history:      addForm.medicalHistory || null,
             preferred_pharmacy:   addForm.preferredPharmacy || null,
+            dosespot_pharmacy_id: addForm.preferredPharmacyId,
             pcp:                  addForm.pcp || null,
             vaccination_status:   addForm.vaccinationStatus || null,
             insurance_provider:                addForm.selfPay ? 'Self-pay' : (addForm.insurancePayer    || null),
@@ -1603,14 +1605,21 @@ export function Today() {
                   <textarea rows={2} placeholder='Medical history * — type "None" if no significant history' value={addForm.medicalHistory}
                     onChange={e => setAddForm(f => ({ ...f, medicalHistory: e.target.value }))}
                     className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] resize-none" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input type="text" placeholder="Pharmacy *" value={addForm.preferredPharmacy}
-                      onChange={e => setAddForm(f => ({ ...f, preferredPharmacy: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
-                    <input type="text" placeholder="PCP *" value={addForm.pcp}
-                      onChange={e => setAddForm(f => ({ ...f, pcp: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy *</label>
+                    <PharmacyAutocomplete
+                      value={addForm.preferredPharmacy}
+                      pharmacyId={addForm.preferredPharmacyId}
+                      defaultZip={addForm.zip}
+                      defaultState={addForm.state}
+                      search={searchPharmacies}
+                      onSelect={m => setAddForm(f => ({ ...f, preferredPharmacy: m.label, preferredPharmacyId: m.dosespot_pharmacy_id }))}
+                      onClear={() => setAddForm(f => ({ ...f, preferredPharmacy: '', preferredPharmacyId: null }))}
+                    />
                   </div>
+                  <input type="text" placeholder="PCP *" value={addForm.pcp}
+                    onChange={e => setAddForm(f => ({ ...f, pcp: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px]" />
                   <select value={addForm.vaccinationStatus} onChange={e => setAddForm(f => ({ ...f, vaccinationStatus: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] bg-white">
                     <option value="">Vaccination status *</option>

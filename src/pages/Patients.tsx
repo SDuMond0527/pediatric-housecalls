@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, ChevronRight, Plus, Upload, X } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
-import { searchChildren, providerCreateChild, providerUpdateChild, providerUploadInsuranceCard } from '../lib/api'
+import { searchChildren, providerCreateChild, providerUpdateChild, providerUploadInsuranceCard, searchPharmacies } from '../lib/api'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { ChartNumberPill } from '../components/ChartNumberPill'
+import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 
 const EMPTY_FORM = {
   first_name: '', last_name: '', date_of_birth: '', gender: '', nickname: '',
@@ -13,7 +14,14 @@ const EMPTY_FORM = {
   parent_address: '', parent_city: '', parent_state: '', parent_zip: '',
   // Medical — see feedback_all_patient_info_required_and_displayed.md.
   allergies: '', current_medications: '', medical_history: '',
-  preferred_pharmacy: '', pcp: '', vaccination_status: '',
+  // Pharmacy: preferred_pharmacy is the human-readable label (name +
+  // address) displayed on the chart; dosespot_pharmacy_id is the
+  // DoseSpot ID we send to their SSO for e-Rx routing. Set together
+  // when the user picks from the autocomplete. Sara + Andrea
+  // 2026-09-16 (Path B — DoseSpot-backed autocomplete). Admin
+  // add-patient flow was missing this wiring — patched 2026-09-25.
+  preferred_pharmacy: '', dosespot_pharmacy_id: null as number | null,
+  pcp: '', vaccination_status: '',
   // Insurance / self-pay
   self_pay: false as boolean,
   insurance_provider: '', insurance_member_id: '', insurance_group_number: '',
@@ -194,6 +202,7 @@ export function Patients() {
         current_medications: form.current_medications.trim(),
         medical_history: form.medical_history.trim(),
         preferred_pharmacy: form.preferred_pharmacy.trim(),
+        dosespot_pharmacy_id: form.dosespot_pharmacy_id,
         pcp: form.pcp.trim(),
         vaccination_status: form.vaccination_status,
         insurance_provider:                form.self_pay ? 'Self-pay' : form.insurance_provider.trim(),
@@ -441,7 +450,28 @@ export function Patients() {
                   {...field('medical_history')} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Preferred pharmacy" required placeholder="CVS on Main St" {...field('preferred_pharmacy')} />
+                <div>
+                  <label className="block text-[11px] font-medium text-[#555] uppercase tracking-wide mb-1">
+                    Preferred pharmacy<span className="text-[#C0392B] ml-0.5">*</span>
+                  </label>
+                  <PharmacyAutocomplete
+                    value={form.preferred_pharmacy}
+                    pharmacyId={form.dosespot_pharmacy_id}
+                    defaultZip={form.parent_zip}
+                    defaultState={form.parent_state}
+                    search={searchPharmacies}
+                    onSelect={m => setForm(f => ({
+                      ...f,
+                      preferred_pharmacy: m.label,
+                      dosespot_pharmacy_id: m.dosespot_pharmacy_id,
+                    }))}
+                    onClear={() => setForm(f => ({
+                      ...f,
+                      preferred_pharmacy: '',
+                      dosespot_pharmacy_id: null,
+                    }))}
+                  />
+                </div>
                 <Input label="Primary care provider" required placeholder="Dr. Jane Smith" {...field('pcp')} />
               </div>
               <Select label="Vaccination status" required {...field('vaccination_status')}>

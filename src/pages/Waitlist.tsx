@@ -5,6 +5,7 @@ import {
   apiFetch, getWaitlistEntries, updateWaitlistEntry, updateFamilyAsAdmin,
   createAppointmentWithOverlapRetry, invokeNotifications, createWaitlistEntry, createBroadcast,
   getChildrenByFamilyIds, providerUpdateChild as updateChild, providerCreateChild as createChild,
+  searchPharmacies,
 } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Badge } from '../components/ui/Badge'
@@ -14,6 +15,7 @@ import { TIME_SLOTS } from '../lib/zipData'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { DUAL_VISIT_TYPES, isIvFluidsPair } from '../lib/dualVisitTypes'
 import { ChartNumberPill } from '../components/ChartNumberPill'
+import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 
 interface WaitlistEntry {
   id: string
@@ -41,7 +43,7 @@ const EMPTY_ADD = {
   visitType: '', complaint: '',
   preferredDate: '', preferredTime: '',
   allergies: '', medications: '', pmh: '',
-  pcp: '', pharmacy: '', vaccinationStatus: '',
+  pcp: '', pharmacy: '', pharmacyId: null as number | null, vaccinationStatus: '',
   selfPay: false as boolean,
   insurance: '', memberId: '', groupNum: '',
   subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
@@ -243,7 +245,7 @@ export function Waitlist() {
     fetchEntries()
   }
 
-  function setField(k: keyof typeof EMPTY_ADD, v: string | boolean) {
+  function setField(k: keyof typeof EMPTY_ADD, v: string | boolean | number | null) {
     setAddForm(f => ({ ...f, [k]: v }))
   }
 
@@ -287,6 +289,7 @@ export function Waitlist() {
       pmh: child.medical_history || '',
       pcp: child.pcp || '',
       pharmacy: child.preferred_pharmacy || '',
+      pharmacyId: child.dosespot_pharmacy_id ?? null,
       insurance: child.insurance_provider || '',
       memberId: child.insurance_member_id || '',
       groupNum: child.insurance_group_number || '',
@@ -359,6 +362,7 @@ export function Waitlist() {
         parent_zip:    addForm.zip,
         pcp:           addForm.pcp,
         preferred_pharmacy: addForm.pharmacy,
+        dosespot_pharmacy_id: addForm.pharmacyId,
         allergies: addForm.allergies,
         current_medications: addForm.medications,
         medical_history: addForm.pmh,
@@ -1025,9 +1029,24 @@ export function Waitlist() {
                   <Input label="Allergies *" placeholder='e.g. Penicillin — or "NKDA"' value={addForm.allergies} onChange={e => setField('allergies', e.target.value)} />
                   <Input label="Current medications *" placeholder='None, or list medications' value={addForm.medications} onChange={e => setField('medications', e.target.value)} />
                   <Input label="PMH *" placeholder='Significant past medical history — or "None"' value={addForm.pmh} onChange={e => setField('pmh', e.target.value)} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input label="PCP *" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
-                    <Input label="Pharmacy *" placeholder="Preferred pharmacy" value={addForm.pharmacy} onChange={e => setField('pharmacy', e.target.value)} />
+                  <Input label="PCP *" placeholder="Primary care provider" value={addForm.pcp} onChange={e => setField('pcp', e.target.value)} />
+                  <div>
+                    <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred pharmacy *</label>
+                    <PharmacyAutocomplete
+                      value={addForm.pharmacy}
+                      pharmacyId={addForm.pharmacyId}
+                      defaultZip={addForm.zip}
+                      defaultState={addForm.state}
+                      search={searchPharmacies}
+                      onSelect={m => {
+                        setField('pharmacy', m.label)
+                        setField('pharmacyId', m.dosespot_pharmacy_id)
+                      }}
+                      onClear={() => {
+                        setField('pharmacy', '')
+                        setField('pharmacyId', null)
+                      }}
+                    />
                   </div>
                   <div>
                     <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Vaccination status *</label>

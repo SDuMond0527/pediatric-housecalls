@@ -255,7 +255,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const CLEARABLE = new Set([
         'nickname',
         'allergies', 'current_medications', 'medical_history',
-        'preferred_pharmacy', 'pcp', 'pcp_id', 'vaccination_status',
+        'preferred_pharmacy', 'dosespot_pharmacy_id', 'pcp', 'pcp_id', 'vaccination_status',
         'insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code',
         'insurance_subscriber_name', 'insurance_subscriber_dob',
         'insurance_subscriber_gender', 'insurance_subscriber_relationship',

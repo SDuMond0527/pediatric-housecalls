@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies } from '../lib/api'
+import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
 import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
@@ -205,7 +206,7 @@ export function PatientChart() {
   const [editSaved, setEditSaved] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [contactEdit, setContactEdit] = useState({ first_name: '', last_name: '', nickname: '', date_of_birth: '', gender: '', parent_name: '', parent_phone: '', parent_email: '', parent_address: '', parent_city: '', parent_state: '', parent_zip: '' })
-  const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '' })
+  const [medEdit, setMedEdit] = useState({ allergies: '', current_medications: '', medical_history: '', pcp: '', preferred_pharmacy: '', dosespot_pharmacy_id: null as number | null })
   const [pcpList, setPcpList] = useState<any[]>([])
   const [pcpSearch, setPcpSearch] = useState('')
   const [pcpDropdownOpen, setPcpDropdownOpen] = useState(false)
@@ -486,6 +487,7 @@ export function PatientChart() {
         medical_history: child?.medical_history || '',
         pcp: child?.pcp || '',
         preferred_pharmacy: child?.preferred_pharmacy || '',
+        dosespot_pharmacy_id: child?.dosespot_pharmacy_id ?? null,
       })
       setPcpSearch('')
       setPcpDropdownOpen(false)
@@ -540,7 +542,7 @@ export function PatientChart() {
       // shared_code_first_try.md.
       const CLEARABLE_BY_SECTION: Record<string, string[]> = {
         contact:   ['parent_phone', 'parent_email', 'parent_address', 'parent_city', 'parent_state', 'parent_zip'],
-        medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'pcp', 'pcp_id', 'vaccination_status'],
+        medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'dosespot_pharmacy_id', 'pcp', 'pcp_id', 'vaccination_status'],
         insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship'],
       }
       const clears = computeClears(child ?? {}, body, CLEARABLE_BY_SECTION[section] || [])
@@ -1006,9 +1008,15 @@ export function PatientChart() {
                       </div>
                       <div>
                         <label className="text-[11px] text-[#1A1A2E] block mb-1">Preferred pharmacy</label>
-                        <input className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] focus:border-[#7F77DD] outline-none"
-                          value={medEdit.preferred_pharmacy} onChange={e => setMedEdit(p => ({ ...p, preferred_pharmacy: e.target.value }))}
-                          placeholder="e.g. CVS on Providence Rd" />
+                        <PharmacyAutocomplete
+                          value={medEdit.preferred_pharmacy}
+                          pharmacyId={medEdit.dosespot_pharmacy_id}
+                          defaultZip={child?.parent_zip || ''}
+                          defaultState={child?.parent_state || ''}
+                          search={searchPharmacies}
+                          onSelect={m => setMedEdit(p => ({ ...p, preferred_pharmacy: m.label, dosespot_pharmacy_id: m.dosespot_pharmacy_id }))}
+                          onClear={() => setMedEdit(p => ({ ...p, preferred_pharmacy: '', dosespot_pharmacy_id: null }))}
+                        />
                       </div>
                       {editError && <div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
