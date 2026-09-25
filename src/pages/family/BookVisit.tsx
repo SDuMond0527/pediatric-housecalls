@@ -1211,6 +1211,140 @@ export function BookVisit() {
     })
   }
 
+  // ── Missing-field enumerators (Sara 2026-09-25) ────────────────────────
+  // For every stepXValid() that returns false, the "Continue" button used
+  // to just disable silently with no signal about WHAT'S MISSING — same
+  // trap that hit Danielle. These helpers return a plain-English list of
+  // what's still needed so the button can show it under itself and the
+  // parent knows exactly what to fill in. Booleans are preserved so
+  // downstream logic that depended on the boolean form (e.g., disabling
+  // NavButtons) still works.
+
+  function step1Missing(): string[] {
+    const m: string[] = []
+    if (!booking.visitType) m.push('Choose a visit type')
+    if (!isCpr && booking.selectedChildIds.length === 0) m.push('Select at least one child')
+    return m
+  }
+
+  // Returns e.g. ["Emma: Allergies, Current medications", "Jack: Phone"] —
+  // one string per selected child, grouped so the parent knows which
+  // child's card to scroll to.
+  function step2Missing(): string[] {
+    const out: string[] = []
+    for (const id of booking.selectedChildIds) {
+      const intake = booking.childIntakes[id]
+      const missing: string[] = []
+      if (!intake) { out.push('Fill in every field for this child'); continue }
+      if (!intake.chiefComplaint)         missing.push('Chief complaint / reason for visit')
+      if (!intake.firstName)              missing.push('First name')
+      if (!intake.lastName)               missing.push('Last name')
+      if (!intake.dateOfBirth)            missing.push('Date of birth')
+      if (!intake.gender)                 missing.push('Sex')
+      if (!intake.allergies)              missing.push('Allergies (type "NKDA" if none)')
+      if (!intake.currentMedications)     missing.push('Current medications (type "None" if none)')
+      if (!intake.medicalHistory)         missing.push('Medical history (type "None" if none)')
+      if (!intake.preferredPharmacy)      missing.push('Preferred pharmacy')
+      if (!intake.pcp_id && !intake.pcpNoPcp) missing.push('Primary care provider (or check "no PCP")')
+      if (!intake.vaccinationStatus)      missing.push('Vaccination status')
+      if (!intake.phiSharingConsent)      missing.push('Check the PHI-sharing consent box')
+      if (!intake.selfPay) {
+        if (!intake.insuranceProvider)             missing.push('Insurance provider')
+        if (!intake.insuranceMemberId)             missing.push('Member ID')
+        if (!intake.insuranceGroupNumber)          missing.push('Group #')
+        if (!intake.insuranceSubscriberName)       missing.push('Subscriber name')
+        if (!intake.insuranceSubscriberDob)        missing.push('Subscriber DOB')
+        if (!intake.insuranceSubscriberGender)     missing.push('Subscriber sex')
+        if (!intake.insuranceSubscriberRelationship) missing.push('Subscriber relationship')
+        if (!intake.cardOnFile && (!intake.insuranceCardFrontUrl || !intake.insuranceCardBackUrl)) {
+          missing.push('Insurance card photos (front + back)')
+        }
+      }
+      if (missing.length) {
+        const label = intake.firstName?.trim() || 'This child'
+        out.push(`${label}: ${missing.join(', ')}`)
+      }
+    }
+    return out
+  }
+
+  function cprIntakeMissing(): string[] {
+    const m: string[] = []
+    if (!booking.visitAddress)             m.push('Home address')
+    if (!booking.participantNames.trim())  m.push('Participant names')
+    if (!booking.cprAgeRange.trim())       m.push('Age range of participants')
+    if (!booking.cprPriorTraining)         m.push('Prior CPR training level')
+    if (!booking.cprClassLocation.trim())  m.push('Class location details')
+    return m
+  }
+
+  function ivFluidsMissing(): string[] {
+    const m: string[] = []
+    const iv: any = booking.ivFluidsIntake ?? {}
+    if (!iv.symptomOnset)      m.push('Symptom onset')
+    if (!iv.symptoms)          m.push('Symptoms')
+    if (!iv.fluidIntake)       m.push('Recent fluid intake')
+    if (!iv.oralRehydration)   m.push('Oral rehydration attempts')
+    if (!iv.lastUrination)     m.push('Time of last urination')
+    if (!iv.diarrhea)          m.push('Diarrhea')
+    if (!iv.vomiting)          m.push('Vomiting')
+    if (!iv.activityLevel)     m.push('Activity level')
+    if (!iv.mouthDryness)      m.push('Mouth dryness')
+    if (!iv.tears)             m.push('Tears when crying')
+    if (!iv.hasFever)          m.push('Fever status')
+    if (!iv.redFlags || iv.redFlags.length === 0) m.push('Red flags checklist (check all that apply, or "None")')
+    if (!iv.recentIvFluids)    m.push('Recent IV fluids')
+    if (!iv.availableTimes)    m.push('Available times')
+    if (!iv.consentUnderstood) m.push('Consent understood checkbox')
+    return m
+  }
+
+  // Translate common raw server error messages from the booking submit
+  // path into plain-English text the parent can act on. Falls through
+  // to the original message if we don't recognize the shape.
+  // Sara 2026-09-25.
+  function friendlyBookingSubmitError(raw: unknown): string {
+    const s = String(raw ?? '')
+    if (/no availability configured/i.test(s))          return "This provider isn't set up to see patients on that date. Please pick a different date or a different provider."
+    if (/not available on this day/i.test(s))           return "This provider doesn't work on that day of the week. Please pick a different date."
+    if (/not available on this date/i.test(s))          return "This provider isn't available on that date. Please pick a different date or provider."
+    if (/outside this provider's available hours/i.test(s)) return s  // already lists the exact hours
+    if (/no availability for this visit type/i.test(s)) return "This provider isn't offering that visit type on that date. Please pick a different date, provider, or visit type."
+    if (/overlap|already booked|already at that time/i.test(s)) return "That time slot was just booked by someone else. Please pick a different time."
+    if (/Family not found/i.test(s))                    return "There's a mismatch on your account. Please text us at 704-560-4169 and we'll fix it for you right away."
+    if (/Provider not found/i.test(s))                  return "That provider isn't in our system. Please pick a different provider, or text us at 704-560-4169."
+    if (/session expired|please log in/i.test(s))       return "Your session expired. Please refresh the page and log in again — text 704-560-4169 if you keep hitting this."
+    if (/Failed to fetch|NetworkError|network request failed|load failed/i.test(s)) {
+      return "Your internet connection dropped mid-submit. Your info is still filled in — just press Confirm again. Text 704-560-4169 if it keeps failing."
+    }
+    if (!s) return 'Something went wrong submitting your appointment. Please try again, or text us at 704-560-4169.'
+    return s
+  }
+
+  function locationMissing(): string[] {
+    const m: string[] = []
+    if (isCpr) {
+      if (!booking.date)              m.push('Class date')
+      if (!booking.cprTimeOfDay)      m.push('Morning or afternoon')
+      if (!booking.phone)             m.push('Phone number')
+      if (!booking.contactEmail.trim()) m.push('Contact email')
+      return m
+    }
+    if (!booking.date)    m.push('Appointment date')
+    if (!booking.time)    m.push('Appointment time')
+    if (!booking.phone)   m.push('Phone number')
+    if (!booking.zone)    m.push('Enter a valid service ZIP')
+    if (booking.zone && waitlistZones.includes(booking.zone)) m.push('This ZIP is on our waitlist — see below to join')
+    if (booking.zone && !waitlistZones.includes(booking.zone) && zoneProviders.length === 0) m.push('No providers available for this ZIP right now — join the waitlist below')
+    if (booking.zone && zoneProviders.length > 0 && !booking.provider) m.push('Pick a provider')
+    if (booking.provider === '__first_available__' && !firstAvailResult) m.push('Choose a specific provider or wait for first-available search to complete')
+    // In-home visits also need street + city (telemedicine / CPR bypass this).
+    const needsAddress = (byType[booking.visitType]?.is_in_home ?? true)
+    if (needsAddress && !booking.visitAddress) m.push('Home street address')
+    if (needsAddress && !booking.city)         m.push('City')
+    return m
+  }
+
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
   async function submit() {
@@ -1374,7 +1508,7 @@ export function BookVisit() {
           ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
         })
       } catch (e: any) {
-        setSubmitError(e?.message ?? 'This time slot is no longer available. Please go back and choose a different time.')
+        setSubmitError(friendlyBookingSubmitError(e?.message))
         submittingRef.current = false
         setSubmitting(false)
         return
@@ -1764,7 +1898,7 @@ export function BookVisit() {
           )}
           </>}
 
-          <NavButtons nextDisabled={!step1Valid()} onNext={() => setStep(STEP_INTAKE)} />
+          <NavButtons nextDisabled={!step1Valid()} missingItems={step1Missing()} onNext={() => setStep(STEP_INTAKE)} />
         </Step>
       )}
 
@@ -1865,6 +1999,7 @@ export function BookVisit() {
 
           <NavButtons
             onBack={() => setStep(0)}
+            missingItems={cprIntakeMissing()}
             nextDisabled={
               !booking.visitAddress
               || !booking.participantNames.trim()
@@ -1934,7 +2069,7 @@ export function BookVisit() {
             })
           }
 
-          <NavButtons onBack={() => setStep(0)} nextDisabled={!step2Valid()} onNext={() => setStep(isIvFluids ? STEP_IV : STEP_LOCATION)} />
+          <NavButtons onBack={() => setStep(0)} nextDisabled={!step2Valid()} missingItems={step2Missing()} onNext={() => setStep(isIvFluids ? STEP_IV : STEP_LOCATION)} />
         </Step>
       )}
 
@@ -2093,6 +2228,7 @@ export function BookVisit() {
               !booking.ivFluidsIntake.availableTimes ||
               !booking.ivFluidsIntake.consentUnderstood
             }
+            missingItems={ivFluidsMissing()}
             onNext={() => setStep(STEP_LOCATION)}
           />
         </Step>
@@ -2684,6 +2820,7 @@ export function BookVisit() {
 
           <NavButtons
             onBack={() => setStep(isCpr ? STEP_INTAKE : isIvFluids ? STEP_IV : STEP_INTAKE)}
+            missingItems={locationMissing()}
             nextDisabled={
               isCpr
                 ? (!booking.date || !booking.cprTimeOfDay || !booking.phone || !booking.contactEmail.trim())
@@ -2842,6 +2979,10 @@ export function BookVisit() {
             nextLabel={isCpr ? 'Submit request' : 'Confirm appointment'}
             loading={submitting}
             nextDisabled={(needsAgreements && !agreementsAccepted) || (needsPaymentPolicy && !paymentPolicyAccepted)}
+            missingItems={[
+              ...(needsAgreements && !agreementsAccepted ? ['Check the "I agree to the terms above" box'] : []),
+              ...(needsPaymentPolicy && !paymentPolicyAccepted ? ['Check the payment policy acknowledgment box'] : []),
+            ]}
             onNext={() => { setSubmitError(null); submit() }}
           />
         </Step>
@@ -3726,19 +3867,41 @@ function Step({ title, sub, children }: { title: string; sub: string; children: 
   )
 }
 
-function NavButtons({ onBack, onNext, nextDisabled = false, nextLabel = 'Continue', loading = false }: {
-  onBack?: () => void; onNext: () => void; nextDisabled?: boolean; nextLabel?: string; loading?: boolean
+function NavButtons({ onBack, onNext, nextDisabled = false, nextLabel = 'Continue', loading = false, missingItems }: {
+  onBack?: () => void
+  onNext: () => void
+  nextDisabled?: boolean
+  nextLabel?: string
+  loading?: boolean
+  // Plain-English list of what the parent still needs to fill in
+  // before the button becomes clickable. Renders as a yellow
+  // "Still needed" box under the button so the parent knows exactly
+  // what's blocking them — no more silent-disabled trap. Sara 2026-09-25.
+  missingItems?: string[]
 }) {
+  const showMissing = nextDisabled && missingItems && missingItems.length > 0
   return (
-    <div className="flex items-center gap-3 mt-6 pt-5 border-t border-[#E8E8E4]">
-      {onBack && (
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[#555] hover:text-[#1A1A2E]">
-          <ChevronLeft size={15} /> Back
-        </button>
-      )}
-      <div className="ml-auto">
-        <Button onClick={onNext} disabled={nextDisabled} loading={loading}>{nextLabel}</Button>
+    <div className="mt-6 pt-5 border-t border-[#E8E8E4]">
+      <div className="flex items-center gap-3">
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[#555] hover:text-[#1A1A2E]">
+            <ChevronLeft size={15} /> Back
+          </button>
+        )}
+        <div className="ml-auto">
+          <Button onClick={onNext} disabled={nextDisabled} loading={loading}>{nextLabel}</Button>
+        </div>
       </div>
+      {showMissing && (
+        <div className="mt-3 bg-[#FAEEDA] border border-[#EFC98A] rounded-lg p-3">
+          <div className="text-[12px] font-semibold text-[#633806] mb-1">Still needed before you can continue:</div>
+          <ul className="list-disc list-inside space-y-0.5 text-[12px] text-[#633806]">
+            {missingItems!.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

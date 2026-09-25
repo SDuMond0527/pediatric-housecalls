@@ -163,7 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // NOT just non-empty (a `null` value is invalid on first intake).
         // Handled separately from REQUIRED_ALWAYS which uses non-empty check.
         if (typeof b.previously_seen_by_phc !== 'boolean') {
-          return res.status(400).json({ error: 'Missing required fields: previously_seen_by_phc' })
+          return res.status(400).json({
+            error: 'Please answer whether this child has been seen by Pediatric Housecalls before (yes or no).',
+          })
         }
         const REQUIRED_IF_INSURED = [
           'insurance_member_id', 'insurance_group_number',
@@ -183,7 +185,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             for (const k of REQUIRED_IF_INSURED) if (!nonEmpty(b[k])) missing.push(k)
           }
           if (missing.length) {
-            return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
+            // Translate internal column names into human labels so the
+            // family sees something usable instead of e.g. "Missing
+            // required fields: insurance_subscriber_dob". Sara 2026-09-25.
+            const HUMAN_LABEL: Record<string, string> = {
+              last_name:                     'Last name',
+              date_of_birth:                 'Date of birth',
+              gender:                        'Sex',
+              parent_phone:                  'Parent phone number',
+              parent_email:                  'Parent email',
+              parent_address:                'Home address',
+              allergies:                     'Allergies (type "NKDA" if none)',
+              current_medications:           'Current medications (type "None" if none)',
+              medical_history:               'Medical history (type "None" if none)',
+              preferred_pharmacy:            'Preferred pharmacy',
+              vaccination_status:            'Vaccination status',
+              pcp:                           'Primary care provider',
+              insurance_provider:            'Insurance provider',
+              insurance_member_id:           'Insurance member ID',
+              insurance_group_number:        'Insurance group number',
+              insurance_subscriber_name:     'Insurance subscriber name',
+              insurance_subscriber_dob:      'Insurance subscriber date of birth',
+              insurance_subscriber_gender:   'Insurance subscriber sex',
+              insurance_card_front_url:      'Insurance card — front photo',
+              insurance_card_back_url:       'Insurance card — back photo',
+            }
+            const friendly = missing.map(k => HUMAN_LABEL[k] ?? k)
+            return res.status(400).json({
+              error: `Please fill in every field before saving — still needed: ${friendly.join(', ')}.`,
+            })
           }
         }
 

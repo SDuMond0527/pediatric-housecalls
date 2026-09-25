@@ -100,6 +100,12 @@ export function FamilySetup() {
       const missing = childIsComplete(children[i])
       if (missing) {
         setError(`Child ${i + 1}: ${missing} is required. Every field must be filled in before we can create your account.`)
+        // Scroll the parent's viewport to the incomplete child's card so
+        // they don't have to hunt for "Child N" in a long form. Sara
+        // 2026-09-25.
+        try {
+          document.getElementById(`family-setup-child-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } catch { /* not fatal */ }
         return
       }
     }
@@ -223,20 +229,25 @@ export function FamilySetup() {
 
             <div className="space-y-6">
               {children.map((child, i) => (
-                <ChildIntakeForm
-                  key={i}
-                  index={i}
-                  child={child}
-                  removable={children.length > 1}
-                  uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
-                  searchPharmacies={familySearchPharmacies}
-                  defaultZip={zip}
-                  defaultState={state}
-                  onField={(k, v) => updateChildField(i, k, v)}
-                  onRemove={() => setChildren(prev => prev.filter((_, idx) => idx !== i))}
-                  onConfirmMatch={() => confirmMatch(i)}
-                  onDismissMatch={() => dismissMatch(i)}
-                />
+                // The wrapping id lets save() scroll the parent to the
+                // specific child card whose form is incomplete, so they
+                // don't have to hunt for "Child 3" on a long page.
+                // Sara 2026-09-25.
+                <div key={i} id={`family-setup-child-${i}`}>
+                  <ChildIntakeForm
+                    index={i}
+                    child={child}
+                    removable={children.length > 1}
+                    uploadCard={(f, s) => familyUploadInsuranceCard(user?.id || user?.email || 'unknown', f, s)}
+                    searchPharmacies={familySearchPharmacies}
+                    defaultZip={zip}
+                    defaultState={state}
+                    onField={(k, v) => updateChildField(i, k, v)}
+                    onRemove={() => setChildren(prev => prev.filter((_, idx) => idx !== i))}
+                    onConfirmMatch={() => confirmMatch(i)}
+                    onDismissMatch={() => dismissMatch(i)}
+                  />
+                </div>
               ))}
             </div>
           </div>
