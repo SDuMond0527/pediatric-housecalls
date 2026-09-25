@@ -4,6 +4,7 @@ import { Check, Circle } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { AuthHelpFooter } from '../../components/AuthHelpFooter'
 
 export function FamilySignup() {
   const { signUp } = useFamilyAuth()
@@ -115,6 +116,7 @@ export function FamilySignup() {
             <Link to="/family/login" className="text-[#7F77DD] font-medium hover:underline">Sign in</Link>
           </p>
         </div>
+        <AuthHelpFooter />
       </div>
     </div>
   )

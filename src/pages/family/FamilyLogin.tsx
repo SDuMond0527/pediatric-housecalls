@@ -4,6 +4,7 @@ import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { DemoBanner } from '../../components/DemoBanner'
+import { AuthHelpFooter } from '../../components/AuthHelpFooter'
 import { PracticeLogo, PRACTICE_NAME, PRACTICE_TAGLINE, DEMO_MODE, DEMO_CREDS } from '../../lib/practice'
 
 export function FamilyLogin() {
@@ -84,6 +85,7 @@ export function FamilyLogin() {
             Are you a provider?{' '}
             <Link to="/login" className="text-[#555] hover:underline">Provider portal →</Link>
           </p>
+          <AuthHelpFooter />
         </div>
       </div>
     </div>

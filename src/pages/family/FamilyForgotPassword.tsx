@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { AuthHelpFooter } from '../../components/AuthHelpFooter'
 import { PracticeLogo } from '../../lib/practice'
 
 export function FamilyForgotPassword() {
@@ -74,6 +75,7 @@ export function FamilyForgotPassword() {
             Are you a provider?{' '}
             <Link to="/login" className="text-[#555] hover:underline">Provider portal →</Link>
           </p>
+          <AuthHelpFooter />
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { AuthHelpFooter } from '../../components/AuthHelpFooter'
 import { PracticeLogo } from '../../lib/practice'
 
 export function FamilyResetPassword() {
@@ -44,9 +45,12 @@ export function FamilyResetPassword() {
   if (!token) {
     return (
       <div className="min-h-screen bg-[#FAFAF8] flex items-center justify-center p-4">
-        <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7 max-w-sm w-full text-center">
-          <p className="text-[14px] text-[#791F1F]">Invalid reset link.</p>
-          <Link to="/family/forgot-password" className="mt-4 block text-[13px] text-[#7F77DD] hover:underline">Request a new one</Link>
+        <div className="max-w-sm w-full">
+          <div className="bg-white border border-[#E8E8E4] rounded-xl shadow-sm p-7 text-center">
+            <p className="text-[14px] text-[#791F1F]">Invalid reset link.</p>
+            <Link to="/family/forgot-password" className="mt-4 block text-[13px] text-[#7F77DD] hover:underline">Request a new one</Link>
+          </div>
+          <AuthHelpFooter />
         </div>
       </div>
     )
@@ -89,6 +93,7 @@ export function FamilyResetPassword() {
               </>
             )}
           </div>
+          <AuthHelpFooter />
         </div>
       </div>
     </div>

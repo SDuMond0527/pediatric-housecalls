@@ -5,6 +5,7 @@ import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard, fa
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { AuthHelpFooter } from '../../components/AuthHelpFooter'
 import { PracticeLogo } from '../../lib/practice'
 import {
   ChildIntakeForm,
@@ -247,6 +248,7 @@ export function FamilySetup() {
             Nothing is saved until every field is complete. If any field is missing we'll tell you which one — we never create a half-empty chart.
           </p>
         </div>
+        <AuthHelpFooter />
       </div>
     </div>
   )
