@@ -216,7 +216,7 @@ function to12h(time24: string): string {
 function pamBookingContactBlock(): string {
   return `<div style="margin-top:20px;padding:14px 16px;background:#FAFAF8;border:1px solid #E8E8E4;border-radius:10px;text-align:center;font-size:13px;color:#1A1A2E;line-height:1.6;">
     Have questions about this appointment booking or need help with something?<br>
-    <strong>Text Pam at <a href="sms:+17045777615" style="color:#7F77DD;text-decoration:none;">704-577-7615</a></strong>
+    <strong>Text Pam at <a href="sms:+17045604169" style="color:#7F77DD;text-decoration:none;">704-560-4169</a></strong>
   </div>`
 }
 
