@@ -241,69 +241,97 @@ export function computeClears(
   return out
 }
 
+// Shared image prep for insurance card uploads. Handles two real
+// iPhone-parent failure modes the old raw-FileReader path had:
+//
+//   1. HEIC/HEIF files — iPhone's default camera format. The old code
+//      base64-encoded raw HEIC bytes and slapped a .jpg extension on
+//      them. Blob storage stored garbage; every non-Safari browser
+//      rendered a broken image, which looked to the parent like
+//      "upload failed."
+//   2. Big photos — a 4MB iPhone photo becomes 5.4MB base64. Vercel's
+//      serverless request body limit is 4.5MB. Silent 413.
+//
+// Fix: draw the image to a <canvas> (Safari on iOS decodes HEIC
+// natively for HTMLImageElement, other browsers decode via
+// createImageBitmap where they can). Downscale so the long edge is
+// at most 1600px, encode as JPEG at 0.85 quality. Insurance cards
+// stay readable and payloads land well under 500KB.
+async function prepareCardImageForUpload(file: File): Promise<{ dataUrl: string; ext: string }> {
+  // Try createImageBitmap first (Chrome / Firefox / newer Safari,
+  // handles HEIC in recent Chrome; ImageBitmap is a stable API).
+  let bitmap: ImageBitmap | null = null
+  try { bitmap = await createImageBitmap(file) } catch { /* fall through */ }
+
+  // Fallback: HTMLImageElement + object URL. iOS Safari decodes HEIC
+  // this way (Apple's WebKit ships a native HEIC decoder).
+  let src: HTMLImageElement | null = null
+  if (!bitmap) {
+    const objUrl = URL.createObjectURL(file)
+    try {
+      src = await new Promise<HTMLImageElement>((res, rej) => {
+        const img = new Image()
+        img.onload = () => res(img)
+        img.onerror = () => rej(new Error(`Your browser could not decode this image. If this is a HEIC photo from an iPhone, please take a new photo — most iPhones now capture as JPEG by default in Camera > Formats > Most Compatible.`))
+        img.src = objUrl
+      })
+    } finally {
+      // Revoke after the image is decoded (or after failure).
+      setTimeout(() => URL.revokeObjectURL(objUrl), 5000)
+    }
+  }
+
+  const srcW = bitmap?.width ?? src?.naturalWidth ?? 0
+  const srcH = bitmap?.height ?? src?.naturalHeight ?? 0
+  if (!srcW || !srcH) throw new Error('Could not read image dimensions from this file.')
+
+  const MAX_DIM = 1600
+  const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH))
+  const w = Math.max(1, Math.round(srcW * scale))
+  const h = Math.max(1, Math.round(srcH * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not create canvas 2D context.')
+  ctx.drawImage((bitmap ?? src) as CanvasImageSource, 0, 0, w, h)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+  return { dataUrl, ext: 'jpg' }
+}
+
 // Family-auth insurance card upload. Used during initial signup / intake
 // before any child_id exists — filename is keyed on family sub + side.
 export async function familyUploadInsuranceCard(familySub: string, file: File, side: 'front' | 'back'): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const data = reader.result as string
-        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
-        const filename = `insurance-cards/family/${familySub}/${side}-${Date.now()}.${ext}`
-        const json = await familyApiFetch<{ url: string }>('/api/upload-insurance-card', {
-          method: 'POST',
-          body: JSON.stringify({ data, filename }),
-        })
-        resolve(json.url)
-      } catch (e) { reject(e) }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsDataURL(file)
+  const { dataUrl, ext } = await prepareCardImageForUpload(file)
+  const filename = `insurance-cards/family/${familySub}/${side}-${Date.now()}.${ext}`
+  const json = await familyApiFetch<{ url: string }>('/api/upload-insurance-card', {
+    method: 'POST',
+    body: JSON.stringify({ data: dataUrl, filename }),
   })
+  return json.url
 }
 
 // Provider-auth insurance card upload used BEFORE a child_id exists
 // (during provider "Add patient" or "Add sibling" intake flows).
 // Keyed by timestamp under a pre-child prefix in blob storage.
 export async function providerUploadInsuranceCardPreChild(file: File, side: 'front' | 'back'): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const data = reader.result as string
-        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
-        const filename = `insurance-cards/pre-child/${Date.now()}-${side}.${ext}`
-        const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
-          method: 'POST',
-          body: JSON.stringify({ data, filename }),
-        })
-        resolve(json.url)
-      } catch (e) { reject(e) }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsDataURL(file)
+  const { dataUrl, ext } = await prepareCardImageForUpload(file)
+  const filename = `insurance-cards/pre-child/${Date.now()}-${side}.${ext}`
+  const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
+    method: 'POST',
+    body: JSON.stringify({ data: dataUrl, filename }),
   })
+  return json.url
 }
 
 export async function providerUploadInsuranceCard(childId: string, file: File, side: 'front' | 'back'): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const data = reader.result as string
-        const ext = file.type.includes('png') ? 'png' : file.type.includes('gif') ? 'gif' : 'jpg'
-        const filename = `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`
-        const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
-          method: 'POST',
-          body: JSON.stringify({ data, filename }),
-        })
-        resolve(json.url)
-      } catch (e) { reject(e) }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsDataURL(file)
+  const { dataUrl, ext } = await prepareCardImageForUpload(file)
+  const filename = `insurance-cards/${childId}/${side}-${Date.now()}.${ext}`
+  const json = await apiFetch<{ url: string }>('/api/upload-insurance-card', {
+    method: 'POST',
+    body: JSON.stringify({ data: dataUrl, filename }),
   })
+  return json.url
 }
 
 export const archiveChildInsurance = (id: string) =>
