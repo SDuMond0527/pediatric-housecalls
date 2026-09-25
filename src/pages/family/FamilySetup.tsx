@@ -37,6 +37,20 @@ export function FamilySetup() {
   }, [user, loading])
 
   const [displayName, setDisplayName] = useState('')
+  // Phone was previously read only from sessionStorage (stashed on the
+  // preceding Signup page) and never editable here — if sessionStorage
+  // was wiped between signup and setup (browser closed, new tab, strict
+  // privacy mode, session timeout), the phone was silently lost and
+  // the parent got "10-digit phone required — go back to signup" with
+  // no recovery path. Now we render an actual input, pre-populate from
+  // sessionStorage if present, and always let the parent edit. Sara
+  // 2026-09-25.
+  const [phone, setPhone] = useState<string>(() => {
+    try {
+      const stashed = sessionStorage.getItem('phc_signup_phone') || ''
+      return stashed.replace(/\D/g, '').slice(0, 10)
+    } catch { return '' }
+  })
   const [addressLine1, setAddressLine1] = useState('')
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
@@ -89,17 +103,19 @@ export function FamilySetup() {
       }
     }
 
-    setSaving(true)
-
-    // Phone is required. Collected at signup and stashed in sessionStorage.
-    let signupPhone = ''
-    try { signupPhone = sessionStorage.getItem('phc_signup_phone') || '' } catch {}
-    const digits = signupPhone.replace(/\D/g, '')
-    if (digits.length < 10) {
-      setError('A 10-digit phone number is required. Please go back to sign up and provide one.')
-      setSaving(false)
+    // Phone is required. Read from the on-page input FIRST (source of
+    // truth — parent can always type or correct it). Fall back to the
+    // sessionStorage value if the input is empty (helps parents who
+    // navigate directly here without touching the field).
+    let sessionPhone = ''
+    try { sessionPhone = sessionStorage.getItem('phc_signup_phone') || '' } catch {}
+    const digits = (phone || sessionPhone).replace(/\D/g, '')
+    if (digits.length !== 10) {
+      setError('A 10-digit mobile phone number is required.')
       return
     }
+
+    setSaving(true)
 
     try {
       await updateMyFamily({
@@ -157,6 +173,14 @@ export function FamilySetup() {
                 placeholder="e.g. The Smith Family, or just your first name"
                 value={displayName} onChange={e => setDisplayName(e.target.value)} />
               <p className="text-[11px] text-[#aeaeb2] mt-1">This is just how we'll greet you in the portal.</p>
+            </div>
+            <div className="mb-3">
+              <Input label="Mobile phone *"
+                type="tel"
+                placeholder="(704) 555-0000"
+                value={phone}
+                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+              <p className="text-[11px] text-[#aeaeb2] mt-1">Providers use this to reach you about appointments and prescriptions. Required.</p>
             </div>
             <div className="space-y-3">
               <Input label="Home street address *" placeholder="123 Main St"
