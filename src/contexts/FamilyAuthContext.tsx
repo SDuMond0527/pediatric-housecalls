@@ -36,6 +36,36 @@ export async function getFamilyAccessToken(): Promise<string> {
   return getStoredTokens()?.accessToken ?? ''
 }
 
+// Trades the stored refresh token for a fresh access token via the
+// server refresh endpoint. Called from familyApiFetch on 401 so a
+// parent whose session lapsed mid-flow (e.g. mid-upload during
+// signup) gets a transparent retry instead of losing their filled-in
+// form to a re-login screen. Returns the new access token on success
+// or null if refresh isn't possible (no refresh token stored, refresh
+// itself failed, etc.) — in which case the caller re-throws the 401.
+export async function refreshFamilyAccessToken(): Promise<string | null> {
+  const stored = getStoredTokens()
+  if (!stored?.refreshToken) return null
+  try {
+    const res = await fetch('/api/families/refresh-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: stored.refreshToken }),
+    })
+    if (!res.ok) return null
+    const { accessToken, idToken, expiresIn } = await res.json()
+    if (!accessToken) return null
+    const updated: StoredTokens = {
+      ...stored,
+      accessToken,
+      idToken: idToken ?? stored.idToken,
+      expiresAt: Date.now() + (expiresIn as number ?? 3600) * 1000,
+    }
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(updated))
+    return accessToken as string
+  } catch { return null }
+}
+
 interface CognitoUser { id: string; email?: string }
 
 interface FamilyAuthContextType {
@@ -95,12 +125,17 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
         const { error } = await res.json()
         return { error: new Error(error || 'Invalid email or password') }
       }
-      const { accessToken, idToken, expiresIn } = await res.json()
+      const { accessToken, idToken, refreshToken, expiresIn } = await res.json()
       const payload = parseJwt(accessToken)
       const idPayload = parseJwt(idToken)
       const tokens: StoredTokens = {
         accessToken, idToken,
-        refreshToken: '',
+        // Store the actual refresh token so refreshFamilyAccessToken()
+        // can trade it for a new access token on 401. Previously this
+        // was hardcoded to '' — meaning family sessions died silently
+        // when the access token expired (typically 1hr) and parents
+        // had to re-login. Sara 2026-09-25.
+        refreshToken: refreshToken ?? '',
         sub: payload.sub as string,
         email: idPayload.email as string ?? email,
         expiresAt: Date.now() + (expiresIn as number) * 1000,

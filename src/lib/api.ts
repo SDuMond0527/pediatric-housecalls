@@ -1,6 +1,6 @@
 import '../lib/amplify'
 import { fetchAuthSession } from 'aws-amplify/auth'
-import { getFamilyAccessToken } from '../contexts/FamilyAuthContext'
+import { getFamilyAccessToken, refreshFamilyAccessToken } from '../contexts/FamilyAuthContext'
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await fetchAuthSession()
@@ -38,10 +38,36 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 async function familyApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await familyAuthHeaders()
-  const res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
+  let res = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
+
+  // On 401, try to refresh the access token once and retry the request.
+  // Parents in the middle of a signup / booking / upload should not lose
+  // their work to a silent session expiry. If refresh also fails, fall
+  // through to the friendlier error below. Sara 2026-09-25.
+  if (res.status === 401) {
+    const fresh = await refreshFamilyAccessToken()
+    if (fresh) {
+      const retryHeaders = { ...headers, Authorization: `Bearer ${fresh}`, ...(init?.headers ?? {}) }
+      res = await fetch(path, { ...init, headers: retryHeaders })
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error ?? res.statusText)
+    // Translate a small set of technical errors into plain-English text
+    // the parent can act on. Anything we don't recognize falls through
+    // to the original message.
+    const raw = err.error ?? res.statusText ?? ''
+    if (res.status === 401) {
+      throw new Error("Your session expired while you were working. Please refresh the page — you'll need to log in again. If you keep hitting this, text us at 704-560-4169.")
+    }
+    if (res.status === 413) {
+      throw new Error('That file is too large. If you\'re uploading a photo, try again — the app will auto-resize on the next attempt.')
+    }
+    if (res.status >= 500) {
+      throw new Error(`Something on our end went wrong (${res.status}). Please try once more. If it still fails, text us at 704-560-4169 and we'll get you through it.`)
+    }
+    throw new Error(raw || `HTTP ${res.status}`)
   }
   if (res.status === 204) return undefined as T
   return res.json()
