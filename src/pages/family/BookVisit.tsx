@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, Check, Plus, User, Upload, X, Camera } from 'lucide-react'
 import {
   getProviderByName,
@@ -2366,6 +2366,11 @@ export function BookVisit() {
                 className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
               </button>
+              {!(booking.phone || (family as any)?.phone) && (
+                <p className="text-[12px] text-[#633806] leading-relaxed">
+                  You need a mobile phone number on your family profile before you can join the waitlist. <Link to="/family/dashboard" className="underline font-medium">Add one on your dashboard</Link> and come back.
+                </p>
+              )}
             </div>
           )}
 
@@ -3035,6 +3040,11 @@ export function BookVisit() {
                     Join waitlist
                   </Button>
                 </div>
+                {!(booking.phone || (family as any)?.phone) && (
+                  <p className="text-[12px] text-[#791F1F] leading-relaxed">
+                    You need a mobile phone number on your family profile before you can join the waitlist. <Link to="/family/dashboard" className="underline font-medium">Add one on your dashboard</Link> and come back.
+                  </p>
+                )}
               </div>
             </div>
           </div>
