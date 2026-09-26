@@ -16,17 +16,17 @@ import {
   type ChildEntry,
 } from '../../components/ChildIntakeForm'
 
-const US_STATES: [string, string][] = [
-  ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],
-  ['CO','Colorado'],['CT','Connecticut'],['DE','Delaware'],['FL','Florida'],['GA','Georgia'],
-  ['HI','Hawaii'],['ID','Idaho'],['IL','Illinois'],['IN','Indiana'],['IA','Iowa'],
-  ['KS','Kansas'],['KY','Kentucky'],['LA','Louisiana'],['ME','Maine'],['MD','Maryland'],
-  ['MA','Massachusetts'],['MI','Michigan'],['MN','Minnesota'],['MS','Mississippi'],['MO','Missouri'],
-  ['MT','Montana'],['NE','Nebraska'],['NV','Nevada'],['NH','New Hampshire'],['NJ','New Jersey'],
-  ['NM','New Mexico'],['NY','New York'],['NC','North Carolina'],['ND','North Dakota'],['OH','Ohio'],
-  ['OK','Oklahoma'],['OR','Oregon'],['PA','Pennsylvania'],['RI','Rhode Island'],['SC','South Carolina'],
-  ['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],['UT','Utah'],['VT','Vermont'],
-  ['VA','Virginia'],['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming'],
+// Restricted to the practice's actual service states. family_profiles.state
+// has a DB check constraint (state in ('NC','SC','VA')) — offering the full
+// 50-state list here let a new parent pick any state and crash their very
+// first profile save with an unhandled constraint violation (surfaced to
+// them as a generic "Something on our end went wrong (500)" error). Match
+// the same restricted list already used in BookVisit.tsx and
+// FamilyProfile.tsx.
+const SERVICE_STATES: [string, string][] = [
+  ['NC', 'North Carolina'],
+  ['SC', 'South Carolina'],
+  ['VA', 'Virginia'],
 ]
 
 export function FamilySetup() {
@@ -200,7 +200,7 @@ export function FamilySetup() {
                   <select value={state} onChange={e => setState(e.target.value)}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
                     <option value="">Select</option>
-                    {US_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                    {SERVICE_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                   </select>
                 </div>
                 <Input label="Zip *" placeholder="28078" maxLength={5} value={zip} onChange={e => setZip(e.target.value)} />
