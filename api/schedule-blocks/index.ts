@@ -28,14 +28,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = providerRows[0].practice_id as string
 
   if (req.method === 'GET') {
-    const { provider_id, date } = req.query as Record<string, string>
-    const rows = await sql`
-      SELECT * FROM schedule_blocks
-      WHERE provider_id = ${provider_id}::uuid
-        AND practice_id = ${practiceId}::uuid
-        AND start_date <= ${date}::date
-        AND end_date >= ${date}::date
-      ORDER BY start_time`
+    const { provider_id, date, date_gte, date_lte } = req.query as Record<string, string>
+    let rows: unknown[]
+    if (provider_id && date_gte && date_lte) {
+      rows = await sql`
+        SELECT * FROM schedule_blocks
+        WHERE provider_id = ${provider_id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND start_date <= ${date_lte}::date
+          AND end_date   >= ${date_gte}::date
+        ORDER BY start_date, start_time`
+    } else if (date_gte && date_lte) {
+      // Week view: admin surface fetches every provider's blocks in range.
+      rows = await sql`
+        SELECT * FROM schedule_blocks
+        WHERE practice_id = ${practiceId}::uuid
+          AND start_date <= ${date_lte}::date
+          AND end_date   >= ${date_gte}::date
+        ORDER BY start_date, start_time`
+    } else if (provider_id && date) {
+      rows = await sql`
+        SELECT * FROM schedule_blocks
+        WHERE provider_id = ${provider_id}::uuid
+          AND practice_id = ${practiceId}::uuid
+          AND start_date <= ${date}::date
+          AND end_date   >= ${date}::date
+        ORDER BY start_time`
+    } else {
+      rows = []
+    }
     return res.json(rows)
   }
 

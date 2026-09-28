@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, CheckCircle2, Navigation, ShieldCheck, ShieldX, ShieldQuestion, FileText, Pencil, X, Search, XCircle, Phone } from 'lucide-react'
-import { format, addDays } from 'date-fns'
-import { apiFetch, getProviders, getAppointments, createAppointmentWithOverlapRetry, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
+import { format, addDays, subDays, parseISO, startOfWeek } from 'date-fns'
+import { apiFetch, getProviders, getAppointments, getScheduleBlocks, getChildrenByIds, createAppointmentWithOverlapRetry, updateAppointment, updateBookingRequest, invokeNotifications, checkEligibility, getEncounterNote, getVitals, patchEncounterNote, updateEncounterNote, getFeeSchedule, getOnCallSchedule, setOnCallProvider, getCmaSchedule, searchChildren, createWaitlistEntry } from '../../lib/api'
+import { WeekBlockView } from '../../components/WeekBlockView'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -153,6 +155,12 @@ export function AdminSchedule() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [filterProvider, setFilterProvider] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  // Day vs Week toggle. Week mode shows a Sun-Sat block grid across every
+  // provider (color-coded via the same avatar_color used elsewhere). Sara 2026-09-28.
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
+  const [weekAppts, setWeekAppts] = useState<any[]>([])
+  const [weekBlocks, setWeekBlocks] = useState<any[]>([])
+  const [weekChildNames, setWeekChildNames] = useState<Record<string, string>>({})
 
   // On-call schedule — keyed by `${date}::${state}`
   const [onCallEntries, setOnCallEntries] = useState<Record<string, { id: string; provider_id: string; provider_name: string; initials: string; avatar_color: string; avatar_text_color: string }>>({})
@@ -295,7 +303,37 @@ export function AdminSchedule() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchAppointments() }, [filterDate, filterProvider])
+  async function fetchWeek() {
+    setLoading(true)
+    const weekStart = startOfWeek(parseISO(filterDate), { weekStartsOn: 0 })
+    const weekEnd   = addDays(weekStart, 6)
+    const gte = format(weekStart, 'yyyy-MM-dd')
+    const lte = format(weekEnd, 'yyyy-MM-dd')
+    const apptParams: Record<string, string> = { date_gte: gte, date_lte: lte }
+    const blockParams: Record<string, string> = { date_gte: gte, date_lte: lte }
+    if (filterProvider) { apptParams.provider_id = filterProvider; blockParams.provider_id = filterProvider }
+    const [appts, blks] = await Promise.all([
+      getAppointments(apptParams).catch(() => []),
+      getScheduleBlocks(blockParams).catch(() => []),
+    ])
+    setWeekAppts((appts ?? []) as any[])
+    setWeekBlocks((blks ?? []) as any[])
+    const childIds = Array.from(new Set(((appts ?? []) as any[]).map(a => a.child_id).filter(Boolean))) as string[]
+    if (childIds.length) {
+      const rows = await getChildrenByIds(childIds).catch(() => [] as any[])
+      const map: Record<string, string> = {}
+      for (const c of rows ?? []) map[c.id] = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() || 'Patient'
+      setWeekChildNames(map)
+    } else {
+      setWeekChildNames({})
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (viewMode === 'week') fetchWeek()
+    else fetchAppointments()
+  }, [filterDate, filterProvider, viewMode])
 
   async function runEligibilityCheck(apptId: string) {
     setEligibility(prev => ({ ...prev, [apptId]: { loading: true, data: null, error: null } }))
@@ -617,8 +655,34 @@ export function AdminSchedule() {
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Schedule</div>
         <div className="flex items-center gap-2">
-          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-            className="text-[13px] px-3 py-1.5 border border-[#E8E8E4] rounded-lg font-sans" />
+          <div className="flex items-center gap-0.5 bg-[#F1EFE8] rounded-lg p-0.5">
+            <button onClick={() => setViewMode('day')}
+              className={`px-2.5 py-1 text-[12px] font-medium rounded transition-colors ${viewMode === 'day' ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-[#555] hover:text-[#1A1A2E]'}`}>
+              Day
+            </button>
+            <button onClick={() => setViewMode('week')}
+              className={`px-2.5 py-1 text-[12px] font-medium rounded transition-colors ${viewMode === 'week' ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-[#555] hover:text-[#1A1A2E]'}`}>
+              Week
+            </button>
+          </div>
+          {viewMode === 'week' ? (
+            <div className="flex items-center gap-1 bg-[#F1EFE8] rounded-lg px-1 py-1">
+              <button onClick={() => setFilterDate(format(subDays(parseISO(filterDate), 7), 'yyyy-MM-dd'))}
+                className="p-1 rounded hover:bg-white transition-colors">
+                <ChevronLeft size={14} className="text-[#555]" />
+              </button>
+              <span className="text-[13px] font-medium text-[#1A1A2E] px-2 min-w-[160px] text-center">
+                {`${format(startOfWeek(parseISO(filterDate), { weekStartsOn: 0 }), 'MMM d')} – ${format(addDays(startOfWeek(parseISO(filterDate), { weekStartsOn: 0 }), 6), 'MMM d')}`}
+              </span>
+              <button onClick={() => setFilterDate(format(addDays(parseISO(filterDate), 7), 'yyyy-MM-dd'))}
+                className="p-1 rounded hover:bg-white transition-colors">
+                <ChevronRight size={14} className="text-[#555]" />
+              </button>
+            </div>
+          ) : (
+            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
+              className="text-[13px] px-3 py-1.5 border border-[#E8E8E4] rounded-lg font-sans" />
+          )}
           <select value={filterProvider} onChange={e => setFilterProvider(e.target.value)}
             className="text-[13px] px-3 py-1.5 border border-[#E8E8E4] rounded-lg font-sans">
             <option value="">All providers</option>
@@ -688,10 +752,29 @@ export function AdminSchedule() {
       </div>
 
       <div className="p-6 space-y-6">
-        {!loading && grouped.length === 0 && (
+        {viewMode === 'week' && (
+          <WeekBlockView
+            weekStartDate={startOfWeek(parseISO(filterDate), { weekStartsOn: 0 })}
+            appointments={weekAppts}
+            blocks={weekBlocks}
+            providers={providers}
+            showProviderColors={true}
+            singleProviderId={filterProvider || undefined}
+            childNameById={weekChildNames}
+            onSelectAppointment={id => {
+              const a = weekAppts.find(x => x.id === id)
+              if (a) {
+                setViewMode('day')
+                setFilterDate(a.scheduled_date.slice(0, 10))
+                setExpanded(id)
+              }
+            }}
+          />
+        )}
+        {viewMode === 'day' && !loading && grouped.length === 0 && (
           <div className="text-center py-16 text-[#1A1A2E] text-[14px]">No appointments for this date.</div>
         )}
-        {grouped.map(({ provider, appts }) => (
+        {viewMode === 'day' && grouped.map(({ provider, appts }) => (
           <div key={provider.id}>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium flex-shrink-0"

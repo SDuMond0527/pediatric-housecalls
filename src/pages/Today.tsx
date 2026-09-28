@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
-import { format, addDays, subDays, isToday, parseISO } from 'date-fns'
+import { format, addDays, subDays, isToday, parseISO, startOfWeek } from 'date-fns'
 import {
   getAppointments, createAppointmentWithOverlapRetry, updateAppointment,
   getScheduleBlocks, createScheduleBlock, deleteScheduleBlock,
@@ -21,6 +21,7 @@ import { usePracticeZones } from '../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
 import { displayVisitType } from '../lib/appointmentDisplay'
 import { ChartNumberPill } from '../components/ChartNumberPill'
+import { WeekBlockView } from '../components/WeekBlockView'
 import type { Appointment } from '../types'
 
 function to12h(time24: string): string {
@@ -91,6 +92,12 @@ export function Today() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [viewDate, setViewDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  // Day vs Week toggle. Week mode shows a Sun-Sat block view of the
+  // provider's own schedule for the week containing viewDate. Sara 2026-09-28.
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
+  const [weekAppts, setWeekAppts] = useState<any[]>([])
+  const [weekBlocks, setWeekBlocks] = useState<any[]>([])
+  const [weekChildNames, setWeekChildNames] = useState<Record<string, string>>({})
   const [charmDetails, setCharmDetails] = useState<Record<string, any>>({})
   const [childRecords, setChildRecords] = useState<Record<string, any>>({})
 
@@ -353,13 +360,44 @@ export function Today() {
     setLoading(false)
   }
 
+  async function fetchWeek() {
+    if (!provider) return
+    const weekStart = startOfWeek(parseISO(viewDate), { weekStartsOn: 0 })
+    const weekEnd   = addDays(weekStart, 6)
+    const gte = format(weekStart, 'yyyy-MM-dd')
+    const lte = format(weekEnd,   'yyyy-MM-dd')
+    const [appts, blks] = await Promise.all([
+      getAppointments({ provider_id: provider.id, date_gte: gte, date_lte: lte }).catch(() => []),
+      getScheduleBlocks({ provider_id: provider.id, date_gte: gte, date_lte: lte }).catch(() => []),
+    ])
+    setWeekAppts((appts ?? []) as any[])
+    setWeekBlocks((blks ?? []) as any[])
+    // Fetch child names for every appointment in one shot for label rendering.
+    const childIds = Array.from(new Set(((appts ?? []) as any[]).map(a => a.child_id).filter(Boolean))) as string[]
+    if (childIds.length) {
+      const rows = await getChildrenByIds(childIds).catch(() => [] as any[])
+      const map: Record<string, string> = {}
+      for (const c of rows ?? []) {
+        map[c.id] = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() || 'Patient'
+      }
+      setWeekChildNames(map)
+    } else {
+      setWeekChildNames({})
+    }
+    setLoading(false)
+  }
+
   async function fetchBlocks() {
     if (!provider) return
     const data = await getScheduleBlocks({ provider_id: provider.id, date: viewDate })
     setBlocks((data ?? []) as ScheduleBlock[])
   }
 
-  useEffect(() => { fetchAppts(); fetchBlocks(); setExpanded(null); setCharmDetails({}); setChildRecords({}) }, [provider, viewDate])
+  useEffect(() => {
+    if (viewMode === 'week') { fetchWeek() }
+    else { fetchAppts(); fetchBlocks() }
+    setExpanded(null); setCharmDetails({}); setChildRecords({})
+  }, [provider, viewDate, viewMode])
 
   useEffect(() => {
     if (!provider) return
@@ -725,15 +763,27 @@ export function Today() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 bg-[#F1EFE8] rounded-lg p-0.5">
+            <button onClick={() => setViewMode('day')}
+              className={`px-2.5 py-1 text-[12px] font-medium rounded transition-colors ${viewMode === 'day' ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-[#555] hover:text-[#1A1A2E]'}`}>
+              Day
+            </button>
+            <button onClick={() => setViewMode('week')}
+              className={`px-2.5 py-1 text-[12px] font-medium rounded transition-colors ${viewMode === 'week' ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-[#555] hover:text-[#1A1A2E]'}`}>
+              Week
+            </button>
+          </div>
           <div className="flex items-center gap-1 bg-[#F1EFE8] rounded-lg px-1 py-1">
-            <button onClick={() => setViewDate(format(subDays(parseISO(viewDate), 1), 'yyyy-MM-dd'))}
+            <button onClick={() => setViewDate(format(subDays(parseISO(viewDate), viewMode === 'week' ? 7 : 1), 'yyyy-MM-dd'))}
               className="p-1 rounded hover:bg-white transition-colors">
               <ChevronLeft size={14} className="text-[#555]" />
             </button>
-            <span className="text-[13px] font-medium text-[#1A1A2E] px-2 min-w-[140px] text-center">
-              {isToday(parseISO(viewDate)) ? 'Today' : format(parseISO(viewDate), 'EEE, MMM d')}
+            <span className="text-[13px] font-medium text-[#1A1A2E] px-2 min-w-[160px] text-center">
+              {viewMode === 'week'
+                ? `${format(startOfWeek(parseISO(viewDate), { weekStartsOn: 0 }), 'MMM d')} – ${format(addDays(startOfWeek(parseISO(viewDate), { weekStartsOn: 0 }), 6), 'MMM d')}`
+                : isToday(parseISO(viewDate)) ? 'Today' : format(parseISO(viewDate), 'EEE, MMM d')}
             </span>
-            <button onClick={() => setViewDate(format(addDays(parseISO(viewDate), 1), 'yyyy-MM-dd'))}
+            <button onClick={() => setViewDate(format(addDays(parseISO(viewDate), viewMode === 'week' ? 7 : 1), 'yyyy-MM-dd'))}
               className="p-1 rounded hover:bg-white transition-colors">
               <ChevronRight size={14} className="text-[#555]" />
             </button>
@@ -741,10 +791,11 @@ export function Today() {
           {!isToday(parseISO(viewDate)) && (
             <button onClick={() => setViewDate(today)}
               className="text-[12px] text-[#7F77DD] hover:underline">
-              Back to today
+              {viewMode === 'week' ? 'This week' : 'Back to today'}
             </button>
           )}
-          <Badge variant="purple">{appts.length} appointments</Badge>
+          {viewMode === 'day' && <Badge variant="purple">{appts.length} appointments</Badge>}
+          {viewMode === 'week' && <Badge variant="purple">{weekAppts.filter(a => a.status !== 'cancelled').length} this week</Badge>}
           <Button variant="secondary" size="sm" onClick={openBlock}>
             <Ban size={13} /> Block time
           </Button>
@@ -888,8 +939,26 @@ export function Today() {
           </div>
         )}
 
-        {/* ── Appointments list ── */}
-        {!loading && appts.length === 0 ? (
+        {/* ── Appointments list / Week grid ── */}
+        {viewMode === 'week' ? (
+          <WeekBlockView
+            weekStartDate={startOfWeek(parseISO(viewDate), { weekStartsOn: 0 })}
+            appointments={weekAppts}
+            blocks={weekBlocks}
+            providers={provider ? [provider as any] : []}
+            singleProviderId={provider?.id}
+            showProviderColors={false}
+            childNameById={weekChildNames}
+            onSelectAppointment={id => {
+              setViewMode('day')
+              const a = weekAppts.find(x => x.id === id)
+              if (a) {
+                setViewDate(a.scheduled_date.slice(0, 10))
+                setExpanded(id)
+              }
+            }}
+          />
+        ) : !loading && appts.length === 0 ? (
           <div className="text-center py-16 text-[#1A1A2E] text-[14px]">
             No appointments scheduled for today.
           </div>
