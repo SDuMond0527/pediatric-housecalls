@@ -71,6 +71,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           AND cl.status IN ('submitted', 'error', 'pending_review')
           AND cl.era_received_at IS NULL
           AND COALESCE(cl.total_charge, 0) > 0
+          -- Self-pay claims never go to a payer — they belong on the
+          -- patient AR report, not the insurance AR report. Andrea 2026-09-28.
+          AND COALESCE(cl.payer_name, '') NOT ILIKE '%self%pay%'
       ) t
       GROUP BY payer_name
       ORDER BY total DESC
