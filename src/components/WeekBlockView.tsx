@@ -35,6 +35,24 @@ const END_HOUR = 20
 const HOUR_HEIGHT = 60
 const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT
 
+// Hand-picked palette for maximum inter-provider distinction. Ordered by
+// hue so adjacent indices are clearly different. Assigned by sorting
+// providers by id (stable across renders — a provider always gets the
+// same slot regardless of which providers are visible). All colors have
+// enough contrast against white to render bold white text on top.
+const WEEK_PALETTE: Array<{ bg: string; fg: string }> = [
+  { bg: '#DC2626', fg: '#ffffff' }, // red
+  { bg: '#EA580C', fg: '#ffffff' }, // orange
+  { bg: '#CA8A04', fg: '#ffffff' }, // gold
+  { bg: '#16A34A', fg: '#ffffff' }, // green
+  { bg: '#0891B2', fg: '#ffffff' }, // cyan
+  { bg: '#2563EB', fg: '#ffffff' }, // blue
+  { bg: '#7C3AED', fg: '#ffffff' }, // purple
+  { bg: '#DB2777', fg: '#ffffff' }, // pink
+  { bg: '#059669', fg: '#ffffff' }, // emerald
+  { bg: '#7C2D12', fg: '#ffffff' }, // brown
+]
+
 function minutesFromDayStart(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return (h - START_HOUR) * 60 + m
@@ -91,6 +109,16 @@ export function WeekBlockView({
   const providerById = useMemo(() => {
     const m: Record<string, Provider> = {}
     for (const p of providers) m[p.id] = p
+    return m
+  }, [providers])
+
+  // Stable palette-index-by-provider mapping. Sort by id so a provider
+  // always gets the same color slot even when the visible provider set
+  // changes (e.g., an inactive provider joins/leaves the list).
+  const paletteByProviderId = useMemo(() => {
+    const m: Record<string, { bg: string; fg: string }> = {}
+    const sorted = [...providers].sort((a, b) => a.id.localeCompare(b.id))
+    sorted.forEach((p, i) => { m[p.id] = WEEK_PALETTE[i % WEEK_PALETTE.length] })
     return m
   }, [providers])
 
@@ -204,18 +232,25 @@ export function WeekBlockView({
                 {/* Appointment blocks */}
                 {positioned.map(({ appt, startMin, dur, col, totalCols }) => {
                   const prov = providerById[appt.provider_id]
-                  const bg   = showProviderColors && prov ? prov.avatar_color : '#7F77DD'
-                  const fg   = showProviderColors && prov ? prov.avatar_text_color : '#ffffff'
+                  const palette = showProviderColors && prov ? paletteByProviderId[prov.id] : null
+                  const bg = palette ? palette.bg : '#7F77DD'
+                  const fg = palette ? palette.fg : '#ffffff'
                   const left = (col / totalCols) * 100
                   const width = (1 / totalCols) * 100
                   const childName = appt.child_name || (appt.child_id ? childNameById?.[appt.child_id] : null) || 'No patient linked'
+                  const height = Math.max(22, dur - 2)
+                  // Below ~44px we can only fit two tight lines; below ~28px
+                  // one line. Adjust the content density so short visits
+                  // stay legible.
+                  const density: 'compact' | 'medium' | 'roomy' =
+                    height >= 56 ? 'roomy' : height >= 36 ? 'medium' : 'compact'
                   return (
                     <div key={appt.id}
                       onClick={() => onSelectAppointment(appt.id)}
-                      className="absolute rounded px-1.5 py-1 text-[10px] overflow-hidden cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                      className="absolute rounded px-1.5 py-1 text-[10px] overflow-hidden cursor-pointer hover:brightness-95 transition-all shadow-sm"
                       style={{
                         top: startMin,
-                        height: Math.max(22, dur - 2),
+                        height,
                         left: `calc(${left}% + 2px)`,
                         width: `calc(${width}% - 4px)`,
                         backgroundColor: bg,
@@ -223,10 +258,34 @@ export function WeekBlockView({
                         zIndex: 2,
                       }}
                       title={`${formatTime12(appt.scheduled_time)} · ${appt.visit_type} · ${childName}${prov ? ' · ' + prov.name : ''}`}>
-                      <div className="font-semibold truncate leading-tight">{formatTime12(appt.scheduled_time)} {childName}</div>
-                      <div className="opacity-90 truncate leading-tight">{appt.visit_type}</div>
-                      {showProviderColors && prov && (
-                        <div className="opacity-80 truncate leading-tight text-[9px]">{prov.name}</div>
+                      {showProviderColors && prov ? (
+                        // Admin week: lead with provider name (bold, 11px) + an
+                        // initials pill so identifying the provider does not
+                        // depend on distinguishing colors. Then patient, then
+                        // time + visit type.
+                        <>
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="inline-flex items-center justify-center rounded-full text-[9px] font-bold flex-shrink-0"
+                              style={{ background: 'rgba(255,255,255,0.28)', width: 16, height: 16 }}>
+                              {prov.initials}
+                            </span>
+                            <span className="font-bold text-[11px] truncate leading-tight">{prov.name.split(' ')[0]}</span>
+                          </div>
+                          {density !== 'compact' && (
+                            <div className="font-semibold truncate leading-tight">{childName}</div>
+                          )}
+                          {density === 'roomy' && (
+                            <div className="opacity-90 truncate leading-tight text-[9px]">
+                              {formatTime12(appt.scheduled_time)} · {appt.visit_type}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        // Provider week (single provider, no color coding needed).
+                        <>
+                          <div className="font-semibold truncate leading-tight">{formatTime12(appt.scheduled_time)} {childName}</div>
+                          <div className="opacity-90 truncate leading-tight">{appt.visit_type}</div>
+                        </>
                       )}
                     </div>
                   )
@@ -240,12 +299,19 @@ export function WeekBlockView({
       {/* Provider legend for admin week */}
       {showProviderColors && providers.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1.5 px-3 py-2 border-t border-[#E8E8E4] bg-[#FAFAF8]">
-          {providers.filter(p => p.is_active).map(p => (
-            <div key={p.id} className="flex items-center gap-1.5 text-[11px] text-[#1A1A2E]">
-              <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: p.avatar_color }} />
-              {p.name}
-            </div>
-          ))}
+          {providers.filter(p => p.is_active).map(p => {
+            const palette = paletteByProviderId[p.id]
+            if (!palette) return null
+            return (
+              <div key={p.id} className="flex items-center gap-1.5 text-[11px] text-[#1A1A2E]">
+                <span className="inline-flex items-center justify-center rounded-full text-[9px] font-bold"
+                  style={{ backgroundColor: palette.bg, color: palette.fg, width: 18, height: 18 }}>
+                  {p.initials}
+                </span>
+                {p.name}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

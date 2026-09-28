@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-09-25-pharmacy-autocomplete-provider-surfaces
+// Service worker — deliberate passthrough. Version: 2026-09-28-schedule-week-view
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
