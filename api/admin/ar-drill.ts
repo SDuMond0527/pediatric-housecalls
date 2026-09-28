@@ -81,6 +81,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND COALESCE(cl.total_charge, 0) > 0
             -- Self-pay excluded from insurance AR (Andrea 2026-09-28).
             AND COALESCE(cl.payer_name, '') NOT ILIKE '%self%pay%'
+            -- Same terminal filter as the aggregate query: exclude
+            -- claims whose statement has been sent or paid.
+            AND NOT EXISTS (
+              SELECT 1 FROM patient_statements ps
+              WHERE ps.claim_id = cl.id
+                AND ps.status IN ('sent', 'paid')
+            )
         )
         SELECT * FROM aged
         WHERE (${group} = '__all__' OR payer_name = ${group})

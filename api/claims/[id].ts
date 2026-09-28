@@ -351,7 +351,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = providerRows[0].practice_id as string
 
   if (req.method === 'GET') {
-    const [claim] = await sql`SELECT * FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    // Include linked patient statement info so the ClaimReviewModal can
+    // detect a terminal state — a paid or sent statement means the claim
+    // isn't actually "in flight" even if cl.status is still e.g.
+    // pending_review. Andrea 2026-09-28 (Matthew Porcelli case).
+    const [claim] = await sql`
+      SELECT cl.*,
+             ps.id       AS statement_id,
+             ps.status   AS statement_status,
+             ps.sent_at  AS statement_sent_at,
+             ps.paid_at  AS statement_paid_at
+      FROM claims cl
+      LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+      WHERE cl.id = ${id}::uuid AND cl.practice_id = ${practiceId}::uuid
+      LIMIT 1`
     return res.json(claim ?? null)
   }
 

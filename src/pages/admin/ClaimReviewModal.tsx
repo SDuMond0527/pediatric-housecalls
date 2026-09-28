@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, ExternalLink, FileText, AlertCircle, CheckCircle, Clock, Download } from 'lucide-react'
 import { getClaim, downloadClaim1500Pdf, downloadClaimEraPdf, markClaimDenialHandled } from '../../lib/api'
 import { detectErraOutcome, outcomeLabel } from '../../lib/carcCodes'
@@ -57,6 +58,7 @@ export function ClaimReviewModal({
   const [handling, setHandling] = useState(false)
   const [handlingNotes, setHandlingNotes] = useState('')
   const [handlingOpen, setHandlingOpen] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
@@ -122,6 +124,14 @@ export function ClaimReviewModal({
   const submittedAge = ageDays(claim?.submitted_at)
   const stediErr = extractStediErrorSummary(claim?.submission_error)
 
+  // Terminal state: the family already got a patient statement, so the
+  // claim is no longer "in flight" on the Claims page even if cl.status
+  // is stale. Suppress the confusing "Not yet submitted" banner and
+  // reroute the CTA to the Statements page. Andrea 2026-09-28.
+  const statementPaid = claim?.statement_status === 'paid'
+  const statementSent = claim?.statement_status === 'sent' && !statementPaid
+  const statementTerminal = statementPaid || statementSent
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
@@ -163,7 +173,25 @@ export function ClaimReviewModal({
                   lifecycle. Ordered by "what a biller needs to know
                   first" — errors are loudest, ERA-back-and-handled is
                   quietest. */}
-              {claim.status === 'pending_review' && (
+              {statementPaid && (
+                <div className="flex items-start gap-2 text-[13px] text-[#085041] bg-[#E1F5EE] border border-[#8FD8BE] px-3 py-2.5 rounded-lg">
+                  <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-semibold">Paid via patient statement on {fmtDate(claim.statement_paid_at) || '—'}</div>
+                    <div className="text-[12px] mt-0.5">This claim is closed — the family paid the practice directly. No further action needed. Full detail lives on the Statements page.</div>
+                  </div>
+                </div>
+              )}
+              {statementSent && (
+                <div className="flex items-start gap-2 text-[13px] text-[#31447A] bg-[#EEF1F8] border border-[#CBD5E1] px-3 py-2.5 rounded-lg">
+                  <Clock size={14} className="mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-semibold">Statement sent to family on {fmtDate(claim.statement_sent_at) || '—'}</div>
+                    <div className="text-[12px] mt-0.5">The ball's in the family's court. Track collection on the Statements page.</div>
+                  </div>
+                </div>
+              )}
+              {claim.status === 'pending_review' && !statementTerminal && (
                 <div className="flex items-start gap-2 text-[13px] text-[#8A4B00] bg-[#FFF4E5] border border-[#F5D5A6] px-3 py-2.5 rounded-lg">
                   <Clock size={14} className="mt-0.5 flex-shrink-0" />
                   <div>
@@ -352,12 +380,21 @@ export function ClaimReviewModal({
                 </button>
               )}
             </div>
-            <button
-              onClick={() => onOpenFullEditor(claim.id)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#7F77DD] rounded-lg hover:bg-[#6C64C8]"
-            >
-              Open full editor <ExternalLink size={12} />
-            </button>
+            {statementTerminal ? (
+              <button
+                onClick={() => { onClose(); navigate('/admin/statements') }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#7F77DD] rounded-lg hover:bg-[#6C64C8]"
+              >
+                View in Statements <ExternalLink size={12} />
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenFullEditor(claim.id)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[#7F77DD] rounded-lg hover:bg-[#6C64C8]"
+              >
+                Open full editor <ExternalLink size={12} />
+              </button>
+            )}
           </div>
         )}
       </div>

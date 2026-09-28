@@ -74,6 +74,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           -- Self-pay claims never go to a payer — they belong on the
           -- patient AR report, not the insurance AR report. Andrea 2026-09-28.
           AND COALESCE(cl.payer_name, '') NOT ILIKE '%self%pay%'
+          -- Terminal state: if the family already got a statement (sent
+          -- or paid), the ball is no longer in the payer's court. Same
+          -- rule the Claims page uses in hasReachedTerminalState — keeps
+          -- surfaced-to-biller queues consistent with the AR report.
+          -- Otherwise stale-status claims (pending_review that never got
+          -- resolved after a self-pay statement was paid) show forever.
+          -- Andrea 2026-09-28 (Matthew Porcelli case).
+          AND NOT EXISTS (
+            SELECT 1 FROM patient_statements ps
+            WHERE ps.claim_id = cl.id
+              AND ps.status IN ('sent', 'paid')
+          )
       ) t
       GROUP BY payer_name
       ORDER BY total DESC
