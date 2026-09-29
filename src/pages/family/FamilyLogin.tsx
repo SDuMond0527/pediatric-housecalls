@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { DemoBanner } from '../../components/DemoBanner'
 import { AuthHelpFooter } from '../../components/AuthHelpFooter'
-import { PracticeLogo, PRACTICE_NAME, PRACTICE_TAGLINE, DEMO_MODE, DEMO_CREDS } from '../../lib/practice'
+import { PracticeLogo, PRACTICE_TAGLINE, DEMO_MODE, DEMO_CREDS } from '../../lib/practice'
 
 export function FamilyLogin() {
   const { signIn } = useFamilyAuth()
@@ -74,9 +74,10 @@ export function FamilyLogin() {
             </form>
 
             {!DEMO_MODE && (
-              <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
-                New to {PRACTICE_NAME}?{' '}
-                <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">Create account</Link>
+              <p className="text-center text-[13px] text-[#1A1A2E] mt-5 leading-relaxed">
+                First time using our new scheduling system? Even if you are an established patient, please{' '}
+                <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">create an account</Link>.
+                You will be asked to do this once and then your information will be saved for easy booking next time!
               </p>
             )}
           </div>
