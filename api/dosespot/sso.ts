@@ -294,8 +294,15 @@ async function findOrCreateDoseSpotPatient(
       LastName:         child.last_name   || '',
       DateOfBirth:      child.date_of_birth ? formatDob(String(child.date_of_birth)) : '',
       Gender:           genderCode(child.gender),
-      Address1:         family.address_line1,
-      City:             family.city,
+      // DoseSpot enforces a 35-char maximum on every address line and a
+      // 35-char cap on City. Real addresses (and messy signup data that
+      // jammed full "street city state zip" into address_line1) blow
+      // through that limit and DoseSpot rejects the whole patient create
+      // with HTTP 400, which blocks prescribing entirely. Truncate at
+      // the vendor's hard limit — better to send a slightly-clipped
+      // address than fail the sync. Sara 2026-09-29 (Adelaide Hendon).
+      Address1:         String(family.address_line1 || '').slice(0, 35),
+      City:             String(family.city          || '').slice(0, 35),
       State:            family.state         || '',
       ZipCode:          family.zip           || '',
       PrimaryPhone:     phone,
