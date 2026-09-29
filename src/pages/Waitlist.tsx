@@ -807,7 +807,7 @@ export function Waitlist() {
                       {displayEmail}
                     </a>
                   )}
-                  <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window || 'Any time'}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} /> Preferred time: <strong className="text-[#1A1A2E] font-semibold">{entry.preferred_time_window || 'Any time'}</strong></span>
                   <span>Waiting since {safeFormat(entry.created_at, 'MMM d, yyyy')}</span>
                 </div>
 

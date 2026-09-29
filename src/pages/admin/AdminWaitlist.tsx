@@ -328,7 +328,7 @@ export function AdminWaitlist() {
                       {e.family_email}
                     </a>
                   )}
-                  <span className="flex items-center gap-1"><Clock size={11} /> {e.preferred_time_window || 'Any time'}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} /> Preferred time: <strong className="text-[#1A1A2E] font-semibold">{e.preferred_time_window || 'Any time'}</strong></span>
                   <span>{format(new Date(e.created_at), 'MMM d, yyyy')}</span>
                 </div>
 
