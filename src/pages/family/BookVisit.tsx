@@ -347,7 +347,7 @@ export function BookVisit() {
   const [convFeeLoading, setConvFeeLoading] = useState(false)
   const [waitlistOpen, setWaitlistOpen] = useState(false)
   const [waitlistDone, setWaitlistDone] = useState(false)
-  const [waitlistTime, setWaitlistTime] = useState('')
+  const [waitlistTime, setWaitlistTime] = useState('Any time')
   const [waitlistNotes, setWaitlistNotes] = useState('')
   const [waitlistComplaint, setWaitlistComplaint] = useState('')
   const [waitlistChildId, setWaitlistChildId] = useState('')
@@ -3038,7 +3038,7 @@ export function BookVisit() {
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
                       <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                        <option value="">Any time</option>
+                        <option value="Any time">Any time</option>
                         <option>Morning (before noon)</option>
                         <option>Afternoon (noon–5pm)</option>
                         <option>After 5pm</option>
@@ -3157,7 +3157,7 @@ export function BookVisit() {
                       <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
                       <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
                         className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                        <option value="">Any time</option>
+                        <option value="Any time">Any time</option>
                         <option>Morning (before noon)</option>
                         <option>Afternoon (noon–5pm)</option>
                         <option>After 5pm</option>

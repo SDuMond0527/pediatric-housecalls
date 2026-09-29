@@ -41,7 +41,7 @@ const EMPTY_ADD = {
   address: '', city: '', zip: '', state: '',
   gender: '',
   visitType: '', complaint: '',
-  preferredDate: '', preferredTime: '',
+  preferredDate: '', preferredTime: 'Any time',
   allergies: '', medications: '', pmh: '',
   pcp: '', pharmacy: '', pharmacyId: null as number | null, vaccinationStatus: '',
   selfPay: false as boolean,
@@ -807,7 +807,7 @@ export function Waitlist() {
                       {displayEmail}
                     </a>
                   )}
-                  {entry.preferred_time_window && <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window}</span>}
+                  <span className="flex items-center gap-1"><Clock size={11} /> {entry.preferred_time_window || 'Any time'}</span>
                   <span>Waiting since {safeFormat(entry.created_at, 'MMM d, yyyy')}</span>
                 </div>
 
@@ -1013,7 +1013,7 @@ export function Waitlist() {
                   <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time</label>
                   <select value={addForm.preferredTime} onChange={e => setField('preferredTime', e.target.value)}
                     className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white outline-none focus:border-[#7F77DD]">
-                    <option value="">Any time</option>
+                    <option value="Any time">Any time</option>
                     <option>Morning (before noon)</option>
                     <option>Afternoon (noon–5pm)</option>
                     <option>After 5pm</option>
