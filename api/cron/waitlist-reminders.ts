@@ -172,8 +172,31 @@ Remove us from the waitlist: ${removeUrl}`
   // never asked for auto-cleanup; a prior session added it silently.
   // Real harm: Viviana Opre's 3:52am entry got killed at 4:00am
   // because the condition also fired overnight (hour < BIZ_START).
-  // Waitlist entries now stay until someone (admin, family via
-  // reminder link, or family via the portal) explicitly removes them.
 
-  return res.json({ ok: true, checked: entries.length, sent: remindersSent })
+  // ── 2. 24-hour auto-removal ────────────────────────────────────────────────
+  // Explicitly requested 2026-09-29. Any waitlist entry that has been
+  // 'waiting' for more than 24 hours + 1 minute gets flipped to
+  // 'removed' silently — no SMS, no email. Families will see the
+  // updated status if they revisit the portal; otherwise they'd need
+  // to re-add themselves to be considered again.
+  //
+  // Applies even to entries where the family responded "keep" at the
+  // 3-hour mark — the 24h ceiling is absolute per Sara's ask. The
+  // FEATURE_LAUNCH_AT guard on the reminder pass above intentionally
+  // does NOT apply here — 24h is a slow enough interval that grand-
+  // fathered entries would already exceed it anyway.
+  const removed = await sql`
+    UPDATE waitlist_entries
+    SET status = 'removed',
+        parent_response = 'auto_24h',
+        parent_response_at = NOW()
+    WHERE status = 'waiting'
+      AND created_at < NOW() - INTERVAL '24 hours 1 minute'
+    RETURNING id
+  `
+  if (removed.length > 0) {
+    console.error('[waitlist-reminders] auto-removed', removed.length, '24h+ entries')
+  }
+
+  return res.json({ ok: true, checked: entries.length, sent: remindersSent, auto_removed_24h: removed.length })
 }
