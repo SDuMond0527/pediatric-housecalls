@@ -172,6 +172,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // reads work on a prod that hasn't yet triggered the /api/children
     // POST bootstrap. Sara 2026-09-21.
     try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
+    // Self-executing 24h auto-removal — every waitlist GET runs the
+    // cleanup so admin always sees fresh data, regardless of whether
+    // the Vercel cron scheduler is firing on schedule. Idempotent,
+    // cheap (a single UPDATE with a fast-indexed WHERE). Sara 2026-09-29.
+    try {
+      await sql`
+        UPDATE waitlist_entries
+        SET status = 'removed', parent_response = 'auto_24h', parent_response_at = NOW()
+        WHERE status = 'waiting'
+          AND created_at < NOW() - INTERVAL '24 hours 1 minute'
+      `
+    } catch (e) { console.error('[waitlist GET] 24h sweep err:', e) }
     const { status, family_id } = req.query as Record<string, string>
     let rows: unknown[]
     if (family_id) {
