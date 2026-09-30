@@ -37,7 +37,7 @@ function isWithin2Hours(booking: BookingRequest): boolean {
 }
 
 export function FamilyDashboard() {
-  const { family, children, refreshFamily } = useFamilyAuth()
+  const { family, children, refreshFamily, user, loading: authLoading } = useFamilyAuth()
   const { zipToZone } = usePracticeZones()
   const navigate = useNavigate()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
@@ -156,6 +156,17 @@ export function FamilyDashboard() {
     fetchBookings()
   }
 
+  // Abandoned-setup edge case: parent completed Cognito signup but never
+  // submitted the FamilySetup form, so we have a valid session but no
+  // family_profiles row. Rather than render a blank page (previous
+  // behavior), send them back to setup so they can finish. Only fire
+  // once auth loading is done so we don't redirect during the initial
+  // token check. Sara 2026-09-30 (Erin Doyle follow-up).
+  useEffect(() => {
+    if (!authLoading && user && !family) {
+      navigate('/family/setup', { replace: true })
+    }
+  }, [authLoading, user, family, navigate])
   if (!family) return null
 
   const upcoming = bookings.filter(b => b.status !== 'cancelled' && new Date(b.preferred_date + 'T23:59:59') >= new Date())
