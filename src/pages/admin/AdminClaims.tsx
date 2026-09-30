@@ -236,6 +236,10 @@ export function AdminClaims() {
   const [activityLoading, setActivityLoading]       = useState<Record<string, boolean>>({})
   const [activityDraftByClaim, setActivityDraftByClaim] = useState<Record<string, string>>({})
   const [activitySaving, setActivitySaving]         = useState<Record<string, boolean>>({})
+  // Explicit expand/collapse of the Activity panel — collapsed by default
+  // on cards with no prior notes to reduce clutter (Andrea 2026-09-30).
+  // When notes exist, auto-expands so nothing gets hidden.
+  const [activityExpanded, setActivityExpanded]     = useState<Record<string, boolean>>({})
 
   // Fetch activity the first time a card is expanded.
   useEffect(() => {
@@ -752,6 +756,22 @@ export function AdminClaims() {
     const draft = activityDraftByClaim[claim.id] ?? ''
     const saving = !!activitySaving[claim.id]
     const canSave = !saving && draft.trim().length > 0
+    // Auto-expand if there are prior entries, if the user has typed a
+    // draft, or if she explicitly clicked expand. Otherwise collapsed to
+    // a single button so the Pending Review card isn't cluttered with
+    // an empty notes panel by default. Andrea 2026-09-30.
+    const hasEntries = (entries ?? []).length > 0
+    const isExpanded = activityExpanded[claim.id] || hasEntries || draft.length > 0
+
+    if (!isExpanded) {
+      return (
+        <div>
+          <Button size="xs" variant="secondary" onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: true }))}>
+            + Add note
+          </Button>
+        </div>
+      )
+    }
 
     const fmtEntryTime = (iso: string) => {
       try {
@@ -767,7 +787,18 @@ export function AdminClaims() {
       <div className="bg-[#F9F9F7] border border-[#E8E8E4] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Activity</div>
-          <div className="text-[10px] text-[#555]">{(entries ?? []).length} entr{(entries ?? []).length === 1 ? 'y' : 'ies'}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] text-[#555]">{(entries ?? []).length} entr{(entries ?? []).length === 1 ? 'y' : 'ies'}</div>
+            {!hasEntries && draft.length === 0 && (
+              <button
+                onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: false }))}
+                className="text-[11px] text-[#7F77DD] hover:underline"
+                title="Hide notes panel"
+              >
+                Hide
+              </button>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <textarea
