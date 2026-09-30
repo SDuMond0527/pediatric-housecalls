@@ -61,6 +61,14 @@ export function FamilyLogin() {
             <h1 className="font-display text-xl font-medium text-[#1A1A2E] mb-1">Welcome back</h1>
             <p className="text-[13px] text-[#1A1A2E] mb-5">Sign in to book and manage appointments</p>
 
+            {!DEMO_MODE && (
+              <div className="mb-5 p-4 rounded-lg bg-[#EEEDFE] border border-[#AFA9EC] text-[13px] text-[#1A1A2E] leading-relaxed">
+                <strong>We have a new scheduling system!</strong> If you have never used this new scheduling system to book an appointment, please{' '}
+                <Link to="/family/signup" className="text-[#7F77DD] font-semibold hover:underline">create an account</Link>{' '}
+                <strong className="uppercase">even if your child has been seen many times by us in the past!</strong> You will only need to create an account one time, and every time after that, you can use your password to log directly in, with all of your information saved, and booking will be quick and easy!
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input label="Email" type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
               <div>
@@ -72,14 +80,6 @@ export function FamilyLogin() {
               {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
               <Button type="submit" className="w-full !py-2.5" loading={loading}>Sign in</Button>
             </form>
-
-            {!DEMO_MODE && (
-              <p className="text-center text-[13px] text-[#1A1A2E] mt-5 leading-relaxed">
-                First time using our new scheduling system? Even if you are an established patient, please{' '}
-                <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">create an account</Link>.
-                You will be asked to do this once and then your information will be saved for easy booking next time!
-              </p>
-            )}
           </div>
 
           <p className="text-center text-[12px] text-[#1A1A2E] mt-4">
