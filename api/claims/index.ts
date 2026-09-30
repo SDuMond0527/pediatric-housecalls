@@ -170,13 +170,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
-      // Lightweight count of claims with unreviewed ERA payments
+      // Lightweight count of claims the biller still needs to act on.
+      // Historically this was just "ERA back + status=submitted" but it
+      // kept counting claims Andrea had already resolved via the Rework
+      // workflow (which sets rework_resolved_at without changing status)
+      // OR whose family had already been billed / paid (statement
+      // sent / paid). Match the effective-status derivation used on the
+      // Claims page + chart Billing tab. Andrea 2026-09-30.
       if (era_count === '1') {
         const [row] = await sql`
-          SELECT COUNT(*)::int AS count FROM claims
-          WHERE practice_id = ${practiceId}::uuid
-            AND era_received_at IS NOT NULL
-            AND status = 'submitted'`
+          SELECT COUNT(*)::int AS count
+          FROM claims cl
+          LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+          WHERE cl.practice_id = ${practiceId}::uuid
+            AND cl.era_received_at IS NOT NULL
+            AND cl.status = 'submitted'
+            AND cl.rework_resolved_at IS NULL
+            AND (ps.status IS NULL OR ps.status NOT IN ('sent', 'paid'))`
         return res.json({ count: row?.count ?? 0 })
       }
       const rows = status

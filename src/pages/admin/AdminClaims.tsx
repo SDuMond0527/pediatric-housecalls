@@ -394,6 +394,11 @@ export function AdminClaims() {
         getClaims('written_off'),
       ])
       setClaims([...review, ...errored, ...submitted, ...draft, ...writtenOff])
+      // Nudge the sidebar to re-fetch the Claims badge count immediately
+      // instead of waiting for its 60s poll. Any AdminClaims action that
+      // ends in load() (resolve, submit, delete, mark-worked, etc.) will
+      // now update the badge in the same tick. Andrea 2026-09-30.
+      try { window.dispatchEvent(new Event('claims:changed')) } catch {}
     } catch (e: any) {
       alert('Failed to load claims: ' + (e.message ?? 'Unknown error'))
     } finally {

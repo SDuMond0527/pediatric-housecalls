@@ -140,7 +140,15 @@ export function AdminLayout() {
     }
     refresh()
     const interval = setInterval(refresh, 60000)
-    return () => clearInterval(interval)
+    // AdminClaims dispatches this after every mutation so the sidebar
+    // badge updates in the same tick instead of after the 60s poll.
+    // Andrea 2026-09-30 flagged the stale count.
+    const onClaimsChanged = () => refresh()
+    window.addEventListener('claims:changed', onClaimsChanged)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('claims:changed', onClaimsChanged)
+    }
   }, [user])
 
   if (loading) return (
