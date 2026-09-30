@@ -80,11 +80,25 @@ const CLAIM_BADGE: Record<string, { label: string; cls: string }> = {
   self_pay:         { label: 'Self-pay',         cls: 'bg-[#EEEDFE] text-[#3C3489]' },
 }
 
-/** Match AdminClaims: a claim is effectively "Completed" if the biller
- * marked rework resolved OR insurance paid (submitted + ERA received).
- * Otherwise use the raw DB status. */
-function effectiveClaimStatus(e: { claim_status: string | null; rework_resolved_at: string | null; era_received_at: string | null }): string {
+/** A claim is effectively "Completed" if any of:
+ *   - biller marked rework resolved (rework_resolved_at set)
+ *   - insurance paid it (status=submitted AND ERA received)
+ *   - the family has been billed (statement sent OR paid) — even if the
+ *     raw claim status is still pending_review, the practice's work is
+ *     done because the ball is with the family or their payment already
+ *     landed
+ * Otherwise use the raw DB status. Matches the AdminClaims dropdown +
+ * the isInRework / Completed-tab filter semantics.
+ * Sara 2026-09-30 — audit of prod claims found 19 rows still showing
+ * "Pending review" that should have been Completed. */
+function effectiveClaimStatus(e: {
+  claim_status: string | null
+  rework_resolved_at: string | null
+  era_received_at: string | null
+  statement_status: string | null
+}): string {
   if (e.rework_resolved_at) return 'completed'
+  if (e.statement_status === 'paid' || e.statement_status === 'sent') return 'completed'
   if (e.claim_status === 'submitted' && e.era_received_at) return 'completed'
   return e.claim_status ?? 'unknown'
 }

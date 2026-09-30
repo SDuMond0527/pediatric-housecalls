@@ -1946,12 +1946,15 @@ export function AdminClaims() {
                 <div className="text-center py-12 text-[#1A1A2E] text-[13px]">{emptyMsg}</div>
               )}
               {list.map(c => {
-                // "Completed" is a derived status — a claim is Completed if
-                // the biller marked it worked (rework_resolved_at set) OR
-                // it's been paid via ERA. Compute once so the pill color +
-                // dropdown value both reflect what tab it actually lives in.
+                // "Completed" is derived from any of: biller marked rework
+                // resolved, ERA came back for a submitted claim, or the
+                // family already has a sent/paid statement. Matches the
+                // billing log derivation in PatientBillingLog.tsx.
                 const effectiveStatus =
-                  c.rework_resolved_at || (c.status === 'submitted' && c.era_received_at)
+                  c.rework_resolved_at
+                  || (c.status === 'submitted' && c.era_received_at)
+                  || c.statement_status === 'paid'
+                  || c.statement_status === 'sent'
                     ? 'completed'
                     : c.status
                 const badge = STATUS_BADGE[effectiveStatus] ?? STATUS_BADGE.submitted
