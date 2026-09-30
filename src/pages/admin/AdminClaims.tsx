@@ -64,11 +64,14 @@ function extractStediErrorSummary(details: any): string | null {
 type Tab = 'review' | 'rework' | 'submitted' | 'completed'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
+  draft:          { label: 'Draft',          cls: 'bg-[#F1EFE8] text-[#555]',    icon: FileText },
   pending_review: { label: 'Pending Review', cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
-  submitted:      { label: 'Submitted',      cls: 'bg-[#E1F5EE] text-[#085041]', icon: Send },
+  submitted:      { label: 'Submitted',      cls: 'bg-[#EEF1F8] text-[#31447A]', icon: Send },
   accepted:       { label: 'Accepted',       cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
   rejected:       { label: 'Rejected',       cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: XCircle },
-  error:          { label: 'Error',          cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: AlertCircle },
+  error:          { label: 'Rework',         cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: AlertCircle },
+  completed:      { label: 'Completed',      cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
+  written_off:    { label: 'Written off',    cls: 'bg-[#F1EFE8] text-[#555]',    icon: XCircle },
 }
 
 const KNOWN_PAYERS: Record<string, string> = {
@@ -1943,7 +1946,15 @@ export function AdminClaims() {
                 <div className="text-center py-12 text-[#1A1A2E] text-[13px]">{emptyMsg}</div>
               )}
               {list.map(c => {
-                const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.submitted
+                // "Completed" is a derived status — a claim is Completed if
+                // the biller marked it worked (rework_resolved_at set) OR
+                // it's been paid via ERA. Compute once so the pill color +
+                // dropdown value both reflect what tab it actually lives in.
+                const effectiveStatus =
+                  c.rework_resolved_at || (c.status === 'submitted' && c.era_received_at)
+                    ? 'completed'
+                    : c.status
+                const badge = STATUS_BADGE[effectiveStatus] ?? STATUS_BADGE.submitted
                 const isOpen = expanded === c.id
                 const patientBalance = [c.patient_deductible_era, c.patient_coinsurance_era, c.patient_copay_era, c.patient_non_covered_era]
                   .reduce((s, v) => s + (parseFloat(v ?? 0) || 0), 0)
@@ -1985,15 +1996,30 @@ export function AdminClaims() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                         <select
-                          value={c.status}
+                          value={effectiveStatus}
                           disabled={statusChanging === c.id}
                           onChange={async e => {
                             const next = e.target.value
-                            if (next === c.status) return
-                            if (!window.confirm(`Change claim status from "${c.status}" to "${next}"? This may move it to a different tab.`)) return
+                            if (next === effectiveStatus) return
+                            const label = ({
+                              draft: 'Draft',
+                              pending_review: 'Pending Review',
+                              error: 'Rework',
+                              submitted: 'Submitted',
+                              completed: 'Completed',
+                              written_off: 'Written off',
+                            } as Record<string, string>)[next] ?? next
+                            if (!window.confirm(`Change claim status to "${label}"? This may move it to a different tab.`)) return
                             setStatusChanging(c.id)
                             try {
-                              await updateClaim(c.id, { status: next })
+                              if (next === 'completed') {
+                                // Marks rework_resolved_at — the claim lands
+                                // on the Completed tab regardless of what
+                                // status is stored underneath.
+                                await resolveRework(c.id)
+                              } else {
+                                await updateClaim(c.id, { status: next })
+                              }
                               await load()
                             } catch (err: any) {
                               alert('Failed to change status: ' + (err?.message ?? 'unknown error'))
@@ -2011,8 +2037,9 @@ export function AdminClaims() {
                         >
                           <option value="draft">Draft</option>
                           <option value="pending_review">Pending Review</option>
-                          <option value="error">Error</option>
+                          <option value="error">Rework</option>
                           <option value="submitted">Submitted</option>
+                          <option value="completed">Completed</option>
                           <option value="written_off">Written off</option>
                         </select>
                         {isOpen ? <ChevronUp size={14} className="text-[#1A1A2E]" /> : <ChevronDown size={14} className="text-[#1A1A2E]" />}
