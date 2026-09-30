@@ -104,10 +104,11 @@ export function Handbook() {
     const file = e.target.files?.[0]
     e.target.value = '' // let the same file be picked again after error
     if (!file || !activeSectionId) return
-    // Server body limit ~4.5 MB — surface a specific error BEFORE trying
-    // the upload so the parent's not left staring at a cryptic 413.
-    if (file.size > 4.4 * 1024 * 1024) {
-      setError(`"${file.name}" is ${fmtBytes(file.size)}, larger than the 4.4 MB upload limit. Try a smaller version or split the doc.`)
+    // Vercel Blob supports up to 5 TB per file via client-direct
+    // upload. Set a generous 500 MB soft cap so a rogue drag-drop of
+    // a massive video doesn't hang the browser silently.
+    if (file.size > 500 * 1024 * 1024) {
+      setError(`"${file.name}" is ${fmtBytes(file.size)}. Files over 500 MB aren't supported here — split it or store it in Google Drive and link to it in a text entry.`)
       return
     }
     setUploading(true); setError(null)

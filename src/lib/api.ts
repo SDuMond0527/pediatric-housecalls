@@ -526,23 +526,38 @@ export const deleteHandbookEntry = (id: string) =>
   apiFetch<{ ok: true }>(`/api/handbook?kind=entry&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 /**
- * Upload a file to Vercel Blob for the handbook. Two-step:
+ * Upload a file to Vercel Blob for the handbook. Uses client-direct
+ * upload — browser streams the file straight to Blob using a signed
+ * token from /api/handbook-upload-token. Bypasses the 4.5 MB Vercel
+ * function body limit (Blob supports up to 5 TB per file).
+ *
+ * Auth: the `upload()` helper doesn't let us attach a custom
+ * Authorization header to its internal fetch, so we pass the Cognito
+ * access token via `clientPayload`. The server's
+ * onBeforeGenerateToken hook parses it and verifies admin status.
+ *
+ * Two-step usage:
  *   (1) uploadHandbookFile(file) → { url, filename, mime_type, size_bytes }
  *   (2) createHandbookFile(section_id, title, upload) → HandbookFile row
- * Reads the file as base64 in the browser; server body cap ~4.5 MB
- * applies (upgrade to client-direct upload if that becomes limiting).
  */
 export async function uploadHandbookFile(file: File): Promise<{ url: string; filename: string; mime_type: string; size_bytes: number }> {
-  const data = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result))
-    r.onerror = () => reject(new Error('Failed to read file'))
-    r.readAsDataURL(file)
+  const [{ upload }, session] = await Promise.all([
+    import('@vercel/blob/client'),
+    fetchAuthSession(),
+  ])
+  const accessToken = session.tokens?.accessToken?.toString()
+  if (!accessToken) throw new Error('Not signed in')
+  const blob = await upload(`handbook/${file.name}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/handbook-upload-token',
+    clientPayload: JSON.stringify({ accessToken }),
   })
-  return apiFetch<{ url: string; filename: string; mime_type: string; size_bytes: number }>(
-    '/api/handbook-upload',
-    { method: 'POST', body: JSON.stringify({ data, filename: file.name, mime_type: file.type || undefined }) },
-  )
+  return {
+    url: blob.url,
+    filename: file.name,
+    mime_type: file.type || 'application/octet-stream',
+    size_bytes: file.size,
+  }
 }
 
 export const createHandbookFile = (
