@@ -49,6 +49,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }))
     return res.json({ ok: true })
   } catch (e: any) {
-    return res.status(400).json({ error: e.message ?? 'Password reset failed' })
+    const msg = String(e?.message ?? '')
+    // Cognito returns "User does not exist" either when no account exists
+    // OR when the user is UNCONFIRMED. Both cases mean the parent should
+    // sign up fresh instead of reset. Translate to something actionable
+    // so they don't sit in a loop. Sara 2026-09-30 (Erin Doyle case).
+    if (e?.name === 'UserNotFoundException' || /User does not exist|user not found/i.test(msg)) {
+      return res.status(404).json({
+        error: "We don't see a completed account for this email. If you're new — or your previous signup didn't finish — please create an account instead. Go back to sign-in and tap 'create an account'.",
+      })
+    }
+    return res.status(400).json({ error: msg || 'Password reset failed' })
   }
 }

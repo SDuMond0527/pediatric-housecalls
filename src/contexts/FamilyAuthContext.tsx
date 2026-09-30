@@ -151,7 +151,7 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
   }
 
   async function signUp(email: string, password: string) {
-    try {
+    async function doSignUp() {
       const result = await cognitoSignUp({ username: email, password, options: { userAttributes: { email } } })
       if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
         const confirmRes = await fetch('/api/families/confirm-signup', {
@@ -161,13 +161,41 @@ export function FamilyAuthProvider({ children: contextChildren }: { children: Re
         })
         if (!confirmRes.ok) {
           const { error } = await confirmRes.json()
-          return { error: new Error(error || 'Could not confirm account'), needsConfirmation: false }
+          throw new Error(error || 'Could not confirm account')
         }
       }
       const { error } = await signIn(email, password)
-      if (error) return { error, needsConfirmation: false }
+      if (error) throw error
+    }
+
+    try {
+      await doSignUp()
       return { error: null, needsConfirmation: false }
-    } catch (e) {
+    } catch (e: any) {
+      // Self-heal for parents stuck in UNCONFIRMED Cognito state from a
+      // prior partial signup — the auto-confirm step failed and left them
+      // unable to sign up again AND unable to reset their password.
+      // Check + purge the stuck user, then retry once. Sara 2026-09-30
+      // (Erin Doyle case).
+      const msg = String(e?.message ?? '')
+      if (/UsernameExistsException|already exists/i.test(msg)) {
+        try {
+          const healRes = await fetch('/api/families/reset-stuck-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          })
+          const heal = await healRes.json()
+          if (heal?.deleted) {
+            try {
+              await doSignUp()
+              return { error: null, needsConfirmation: false }
+            } catch (retryErr) {
+              return { error: retryErr as Error, needsConfirmation: false }
+            }
+          }
+        } catch { /* fall through to original error */ }
+      }
       return { error: e as Error, needsConfirmation: false }
     }
   }
