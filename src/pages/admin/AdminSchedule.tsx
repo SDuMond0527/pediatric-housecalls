@@ -224,6 +224,7 @@ export function AdminSchedule() {
     insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
     subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
     scheduled_time: '09:00', scheduled_date: format(new Date(), 'yyyy-MM-dd'),
+    symptoms: '',
   })
   const [patientSearch, setPatientSearch] = useState('')
   const [patientResults, setPatientResults] = useState<any[]>([])
@@ -551,6 +552,7 @@ export function AdminSchedule() {
     // more KEY:value dumps into appointment.notes.
     // See feedback_no_branches_on_entry_origin.md.
     const noteParts: string[] = []
+    if (form.symptoms.trim()) noteParts.push(`Symptoms: ${form.symptoms.trim()}`)
 
     // Resolve child_id BEFORE creating the appointment so the schedule card
     // can pull the full Patient / Clinical / Insurance blocks from the child
@@ -1784,6 +1786,14 @@ export function AdminSchedule() {
             </div>
           </div>
         </div>
+        <div className="mt-4">
+          <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Current symptoms <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span></label>
+          <textarea rows={2} value={form.symptoms}
+            onChange={e => setForm(f => ({ ...f, symptoms: e.target.value }))}
+            placeholder="e.g. Fever 102 since Sunday, sore throat, no cough"
+            className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] font-sans outline-none focus:border-[#7F77DD] resize-none" />
+        </div>
+
         <div className="flex gap-2 mt-4">
           <Button variant="secondary" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button size="sm" onClick={addAppointment} disabled={!form.provider_id || !form.zone}>Add appointment</Button>

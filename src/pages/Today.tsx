@@ -116,7 +116,7 @@ export function Today() {
     selfPay: false as boolean,
     insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
     subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
-    date: '', time: '', notes: '',
+    date: '', time: '', notes: '', symptoms: '',
   })
   const [addCustomTime, setAddCustomTime] = useState('')
   const [addSubmitting, setAddSubmitting] = useState(false)
@@ -475,7 +475,7 @@ export function Today() {
       selfPay: false,
       insurancePayer: '', insuranceMemberId: '', insuranceGroup: '',
       subscriberName: '', subscriberDob: '', subscriberGender: '', subscriberRelationship: 'Child',
-      date: viewDate, time: '', notes: '',
+      date: viewDate, time: '', notes: '', symptoms: '',
     })
     setAddCustomTime('')
     setPatientSearch('')
@@ -563,6 +563,7 @@ export function Today() {
     // KEY:value dumps into appointment.notes that could drift from truth.
     // See feedback_no_branches_on_entry_origin.md.
     const noteParts: string[] = []
+    if (addForm.symptoms.trim()) noteParts.push(`Symptoms: ${addForm.symptoms.trim()}`)
     if (addForm.notes) noteParts.push(addForm.notes)
 
     const providerId = addForProviderId || provider.id
@@ -1856,6 +1857,12 @@ export function Today() {
                 )}
               </div>
 
+              <div>
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Current symptoms <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span></label>
+                <textarea rows={2} placeholder="e.g. Fever 102 since Sunday, sore throat, no cough" value={addForm.symptoms}
+                  onChange={e => setAddForm(f => ({ ...f, symptoms: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#7F77DD] resize-none" />
+              </div>
               <div>
                 <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Notes <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span></label>
                 <textarea rows={2} placeholder="e.g. Parent texted directly, 2 children" value={addForm.notes}

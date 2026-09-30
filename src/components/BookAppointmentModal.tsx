@@ -33,6 +33,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
     scheduled_date: today,
     scheduled_time: '9:00 AM',
     zone: autoZone,
+    symptoms: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,6 +91,7 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
         child_id: child.id,
         status: 'upcoming',
         duration_minutes: visitDur,
+        notes: form.symptoms.trim() ? `Symptoms: ${form.symptoms.trim()}` : null,
       }
       const appt = await createAppointmentWithOverlapRetry(
         {
@@ -217,6 +219,17 @@ export function BookAppointmentModal({ child, onClose, onBooked }: Props) {
               {zones.map(z => <option key={z} value={z}>{z}</option>)}
               {autoZone && !zones.includes(autoZone) && <option value={autoZone}>{autoZone}</option>}
             </select>
+          </div>
+
+          {/* Current symptoms */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#555] uppercase tracking-wider block mb-1.5">
+              Current symptoms <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
+            </label>
+            <textarea rows={2} value={form.symptoms}
+              onChange={e => set('symptoms', e.target.value)}
+              placeholder="e.g. Fever 102 since Sunday, sore throat, no cough"
+              className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] resize-none" />
           </div>
 
           {error && (
