@@ -68,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cl.patient_non_covered_era,
         cl.era_received_at,
         cl.submitted_at,
+        cl.rework_resolved_at,
         cl.stedi_claim_id,
         cl.payer_control_number,
         cl.submission_error,

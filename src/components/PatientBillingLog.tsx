@@ -20,6 +20,7 @@ export type BillingLogEntry = {
   patient_non_covered_era: string | number | null
   era_received_at: string | null
   submitted_at: string | null
+  rework_resolved_at: string | null
   stedi_claim_id: string | null
   submission_error: string | null
   payer_control_number: string | null
@@ -71,10 +72,21 @@ const CLAIM_BADGE: Record<string, { label: string; cls: string }> = {
   draft:            { label: 'Draft',            cls: 'bg-[#F1EFE8] text-[#777]' },
   pending_review:   { label: 'Pending review',   cls: 'bg-[#FEF3C7] text-[#92400E]' },
   submitted:        { label: 'Submitted',        cls: 'bg-[#EEF6FB] text-[#2D7BA6]' },
-  error:            { label: 'Error',            cls: 'bg-[#FCEBEB] text-[#991B1B]' },
+  error:            { label: 'Rework',           cls: 'bg-[#FCEBEB] text-[#991B1B]' },
+  completed:        { label: 'Completed',        cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
+  written_off:      { label: 'Written off',      cls: 'bg-[#F1EFE8] text-[#777]' },
   paid:             { label: 'Paid by payer',    cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
   denied:           { label: 'Denied',           cls: 'bg-[#FCEBEB] text-[#991B1B]' },
   self_pay:         { label: 'Self-pay',         cls: 'bg-[#EEEDFE] text-[#3C3489]' },
+}
+
+/** Match AdminClaims: a claim is effectively "Completed" if the biller
+ * marked rework resolved OR insurance paid (submitted + ERA received).
+ * Otherwise use the raw DB status. */
+function effectiveClaimStatus(e: { claim_status: string | null; rework_resolved_at: string | null; era_received_at: string | null }): string {
+  if (e.rework_resolved_at) return 'completed'
+  if (e.claim_status === 'submitted' && e.era_received_at) return 'completed'
+  return e.claim_status ?? 'unknown'
 }
 
 const STATEMENT_BADGE: Record<string, { label: string; cls: string }> = {
@@ -145,7 +157,8 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
     }
   }
 
-  const claimBadge = CLAIM_BADGE[e.claim_status ?? ''] ?? { label: e.claim_status ?? 'Unknown', cls: 'bg-[#F1EFE8] text-[#777]' }
+  const effective = effectiveClaimStatus(e)
+  const claimBadge = CLAIM_BADGE[effective] ?? { label: effective, cls: 'bg-[#F1EFE8] text-[#777]' }
   const stmtBadge = e.statement_status ? (STATEMENT_BADGE[e.statement_status] ?? { label: e.statement_status, cls: 'bg-[#F1EFE8] text-[#777]' }) : null
 
   // Top-line amount: prefer statement's total_amount_due, else ERA
