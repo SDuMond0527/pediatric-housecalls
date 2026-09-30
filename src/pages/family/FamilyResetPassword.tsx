@@ -30,7 +30,16 @@ export function FamilyResetPassword() {
       })
       if (!res.ok) {
         const { error } = await res.json()
-        setError(error || 'Reset failed. Your link may have expired.')
+        // Server returns HTTP 404 with a "please create an account instead"
+        // message when the email doesn't have a completed Cognito account
+        // (common: parent went to Forgot Password by mistake without ever
+        // signing up). Surface as a nudge to the signup page, not just
+        // raw text in the red error box. Sara 2026-09-30 (Erin Doyle).
+        if (res.status === 404) {
+          setError('__NO_ACCOUNT__')
+        } else {
+          setError(error || 'Reset failed. Your link may have expired.')
+        }
       } else {
         setDone(true)
         setTimeout(() => navigate('/family/login'), 2500)
@@ -84,7 +93,15 @@ export function FamilyResetPassword() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <Input label="New password" type="password" placeholder="••••••••" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
                   <Input label="Confirm new password" type="password" placeholder="••••••••" value={confirm} onChange={e => setConfirm(e.target.value)} required />
-                  {error && <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>}
+                  {error === '__NO_ACCOUNT__' ? (
+                    <div className="p-4 rounded-lg bg-[#FFF7ED] border border-[#F5D5A6] text-[13px] text-[#7C2D12] leading-relaxed">
+                      <strong>We don't see an account for this email.</strong><br />
+                      If you're new to our scheduling system — or if a previous signup didn't finish — please create your account instead.<br />
+                      <Link to="/family/signup" className="inline-block mt-2 text-[#7F77DD] font-semibold hover:underline">Create an account →</Link>
+                    </div>
+                  ) : error ? (
+                    <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">{error}</div>
+                  ) : null}
                   <Button type="submit" className="w-full !py-2.5" loading={loading}>Set new password</Button>
                 </form>
                 <p className="text-center text-[13px] text-[#1A1A2E] mt-5">

@@ -67,6 +67,12 @@ export function FamilyForgotPassword() {
                 <p className="text-center text-[13px] text-[#1A1A2E] mt-5">
                   <Link to="/family/login" className="text-[#7F77DD] font-medium hover:underline">Back to sign in</Link>
                 </p>
+                <div className="mt-4 pt-4 border-t border-[#E8E8E4]">
+                  <p className="text-center text-[12px] text-[#1A1A2E] leading-relaxed">
+                    <strong>Never created an account here before?</strong> Even if you're an established Pediatric Housecalls patient, our new scheduling system requires a one-time signup.<br />
+                    <Link to="/family/signup" className="text-[#7F77DD] font-medium hover:underline">Create an account instead →</Link>
+                  </p>
+                </div>
               </>
             )}
           </div>
