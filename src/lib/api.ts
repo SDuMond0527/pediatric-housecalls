@@ -502,9 +502,10 @@ export const familyUpdateWaitlistEntry = (id: string, body: Record<string, unkno
 // ── Handbook ("All things PHC") ───────────────────────────────
 export interface HandbookSection { id: string; title: string; sort_order: number }
 export interface HandbookEntry { id: string; section_id: string; title: string; body: string; sort_order: number; updated_at: string }
+export interface HandbookFile { id: string; section_id: string; title: string; blob_url: string; filename: string; mime_type: string | null; size_bytes: number | null; sort_order: number; updated_at: string }
 
 export const getHandbook = () =>
-  apiFetch<{ sections: HandbookSection[]; entries: HandbookEntry[] }>('/api/handbook')
+  apiFetch<{ sections: HandbookSection[]; entries: HandbookEntry[]; files: HandbookFile[] }>('/api/handbook')
 
 export const createHandbookSection = (title: string, sort_order = 0) =>
   apiFetch<HandbookSection>('/api/handbook', { method: 'POST', body: JSON.stringify({ kind: 'section', title, sort_order }) })
@@ -523,6 +524,52 @@ export const updateHandbookEntry = (id: string, patch: { title?: string; body?: 
 
 export const deleteHandbookEntry = (id: string) =>
   apiFetch<{ ok: true }>(`/api/handbook?kind=entry&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/**
+ * Upload a file to Vercel Blob for the handbook. Two-step:
+ *   (1) uploadHandbookFile(file) → { url, filename, mime_type, size_bytes }
+ *   (2) createHandbookFile(section_id, title, upload) → HandbookFile row
+ * Reads the file as base64 in the browser; server body cap ~4.5 MB
+ * applies (upgrade to client-direct upload if that becomes limiting).
+ */
+export async function uploadHandbookFile(file: File): Promise<{ url: string; filename: string; mime_type: string; size_bytes: number }> {
+  const data = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = () => reject(new Error('Failed to read file'))
+    r.readAsDataURL(file)
+  })
+  return apiFetch<{ url: string; filename: string; mime_type: string; size_bytes: number }>(
+    '/api/handbook-upload',
+    { method: 'POST', body: JSON.stringify({ data, filename: file.name, mime_type: file.type || undefined }) },
+  )
+}
+
+export const createHandbookFile = (
+  section_id: string,
+  title: string,
+  upload: { url: string; filename: string; mime_type: string; size_bytes: number },
+  sort_order = 0,
+) =>
+  apiFetch<HandbookFile>('/api/handbook', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'file',
+      section_id,
+      title,
+      blob_url: upload.url,
+      filename: upload.filename,
+      mime_type: upload.mime_type,
+      size_bytes: upload.size_bytes,
+      sort_order,
+    }),
+  })
+
+export const updateHandbookFile = (id: string, patch: { title?: string; sort_order?: number }) =>
+  apiFetch<HandbookFile>('/api/handbook', { method: 'PATCH', body: JSON.stringify({ kind: 'file', id, ...patch }) })
+
+export const deleteHandbookFile = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/handbook?kind=file&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 // ── Specialists + referrals ───────────────────────────────────
 export interface Specialist {

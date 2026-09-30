@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle, HelpCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle, HelpCircle, Upload, FileText, Download } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,8 +8,16 @@ import {
   getHandbook,
   createHandbookSection, updateHandbookSection, deleteHandbookSection,
   createHandbookEntry,   updateHandbookEntry,   deleteHandbookEntry,
-  type HandbookSection, type HandbookEntry,
+  uploadHandbookFile, createHandbookFile, updateHandbookFile, deleteHandbookFile,
+  type HandbookSection, type HandbookEntry, type HandbookFile,
 } from '../lib/api'
+
+function fmtBytes(n: number | null): string {
+  if (n == null || !isFinite(n)) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
 
 // Auto-linkify US-style phone numbers so raw text like "704-555-1234"
 // becomes a tap-to-call link on mobile. remark-gfm's autolinker
@@ -37,6 +45,11 @@ export function Handbook() {
 
   const [sections, setSections] = useState<HandbookSection[]>([])
   const [entries,  setEntries]  = useState<HandbookEntry[]>([])
+  const [files,    setFiles]    = useState<HandbookFile[]>([])
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
+  const [editingFileTitle, setEditingFileTitle] = useState('')
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
@@ -61,6 +74,7 @@ export function Handbook() {
       const data = await getHandbook()
       setSections(data.sections)
       setEntries(data.entries)
+      setFiles(data.files ?? [])
       // Preserve current selection if still present, else pick first.
       setActiveSectionId(prev =>
         prev && data.sections.some(s => s.id === prev)
@@ -78,6 +92,58 @@ export function Handbook() {
   const activeSection = sections.find(s => s.id === activeSectionId)
   const activeEntries = entries.filter(e => e.section_id === activeSectionId)
     .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title))
+  const activeFiles = files.filter(f => f.section_id === activeSectionId)
+    .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title))
+
+  async function handleUploadClick() {
+    if (!activeSectionId) { setError('Pick or create a section first.'); return }
+    fileInputRef.current?.click()
+  }
+
+  async function handleFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be picked again after error
+    if (!file || !activeSectionId) return
+    // Server body limit ~4.5 MB — surface a specific error BEFORE trying
+    // the upload so the parent's not left staring at a cryptic 413.
+    if (file.size > 4.4 * 1024 * 1024) {
+      setError(`"${file.name}" is ${fmtBytes(file.size)}, larger than the 4.4 MB upload limit. Try a smaller version or split the doc.`)
+      return
+    }
+    setUploading(true); setError(null)
+    try {
+      const upload = await uploadHandbookFile(file)
+      const displayTitle = window.prompt('Display title for this file (defaults to filename):', file.name.replace(/\.[^.]+$/, ''))
+      if (displayTitle == null) { setUploading(false); return } // cancelled
+      const created = await createHandbookFile(activeSectionId, displayTitle.trim() || file.name, upload, files.length)
+      setFiles(prev => [...prev, created])
+    } catch (err: any) {
+      setError(err?.message ?? 'File upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleRenameFile() {
+    if (!editingFileId || !editingFileTitle.trim()) return
+    setBusy(true); setError(null)
+    try {
+      const updated = await updateHandbookFile(editingFileId, { title: editingFileTitle.trim() })
+      setFiles(prev => prev.map(f => f.id === updated.id ? updated : f))
+      setEditingFileId(null); setEditingFileTitle('')
+    } catch (e: any) { setError(e?.message ?? 'Failed to rename file') }
+    finally { setBusy(false) }
+  }
+
+  async function handleDeleteFile(id: string, title: string) {
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
+    setBusy(true); setError(null)
+    try {
+      await deleteHandbookFile(id)
+      setFiles(prev => prev.filter(f => f.id !== id))
+    } catch (e: any) { setError(e?.message ?? 'Failed to delete file') }
+    finally { setBusy(false) }
+  }
 
   async function handleAddSection() {
     const title = window.prompt('New section title (e.g. "Colleague contact info")')
@@ -249,15 +315,95 @@ export function Handbook() {
           {/* Entries for the active section */}
           <main className="flex-1 min-w-0 space-y-3">
             {activeSection && (
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                 <h2 className="font-display text-[18px] font-medium text-[#1A1A2E]">{activeSection.title}</h2>
-                {isAdmin && !addingEntry && (
-                  <Button size="xs" variant="secondary" onClick={() => { setAddingEntry(true); setNewEntryTitle(''); setNewEntryBody('') }}>
-                    <Plus size={11} /> Add entry
-                  </Button>
+                {isAdmin && (
+                  <div className="flex gap-1.5">
+                    {!addingEntry && (
+                      <Button size="xs" variant="secondary" onClick={() => { setAddingEntry(true); setNewEntryTitle(''); setNewEntryBody('') }}>
+                        <Plus size={11} /> Add entry
+                      </Button>
+                    )}
+                    <Button size="xs" variant="secondary" loading={uploading} onClick={handleUploadClick}>
+                      <Upload size={11} /> Upload file
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      hidden
+                      onChange={handleFilePicked}
+                    />
+                  </div>
                 )}
               </div>
             )}
+
+            {/* File items — rendered above text entries in each section
+                per Sara's "files as their own kind of item" design. */}
+            {activeFiles.map(file => {
+              const isEditing = file.id === editingFileId
+              if (isEditing) {
+                return (
+                  <div key={file.id} className="p-4 border-2 border-[#7F77DD] rounded-lg bg-white space-y-2">
+                    <input value={editingFileTitle} onChange={e => setEditingFileTitle(e.target.value)} className={inputCls} />
+                    <div className="text-[11px] text-[#1A1A2E]/60">Filename: {file.filename} · {fmtBytes(file.size_bytes)}</div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="teal" loading={busy} disabled={!editingFileTitle.trim()} onClick={handleRenameFile}>
+                        <Check size={12} /> Save
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => { setEditingFileId(null); setEditingFileTitle('') }}>
+                        <X size={12} /> Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={file.id} className="group p-4 border border-[#E8E8E4] rounded-lg bg-white flex items-start gap-3">
+                  <FileText size={18} className="text-[#7F77DD] flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium text-[14px] text-[#1A1A2E] truncate">{file.title}</div>
+                        <div className="text-[11px] text-[#1A1A2E]/60 truncate">
+                          {file.filename}{file.size_bytes ? ` · ${fmtBytes(file.size_bytes)}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0 items-start">
+                        <a
+                          href={file.blob_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={file.filename}
+                          className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:text-[#5F58B8] font-medium"
+                          title="Download"
+                        >
+                          <Download size={12} /> Download
+                        </a>
+                        {isAdmin && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => { setEditingFileId(file.id); setEditingFileTitle(file.title) }}
+                              className="p-1 text-[#1A1A2E]/60 hover:text-[#7F77DD]"
+                              title="Rename"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFile(file.id, file.title)}
+                              className="p-1 text-[#1A1A2E]/60 hover:text-[#991B1B]"
+                              title="Delete"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
 
             {isAdmin && addingEntry && (
               <div className="p-4 border-2 border-[#7F77DD] rounded-lg bg-white space-y-2">
@@ -287,9 +433,9 @@ export function Handbook() {
               </div>
             )}
 
-            {activeEntries.length === 0 && !addingEntry && (
+            {activeEntries.length === 0 && activeFiles.length === 0 && !addingEntry && (
               <div className="text-center py-12 text-[13px] text-[#1A1A2E]/60">
-                {isAdmin ? 'Nothing here yet. Click "Add entry" to start.' : 'Nothing here yet.'}
+                {isAdmin ? 'Nothing here yet. Add an entry or upload a file to start.' : 'Nothing here yet.'}
               </div>
             )}
 

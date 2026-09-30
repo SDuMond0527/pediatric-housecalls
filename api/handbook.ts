@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { del as deleteBlob } from '@vercel/blob'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
@@ -71,12 +72,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `
     await sql`CREATE INDEX IF NOT EXISTS handbook_entries_section_idx ON handbook_entries(section_id)`
+    // Files-as-first-class items in a section (Sara 2026-09-30). Blob URLs
+    // live on Vercel Blob; DELETE handler purges the blob alongside the row.
+    await sql`
+      CREATE TABLE IF NOT EXISTS handbook_files (
+        id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        section_id  uuid NOT NULL REFERENCES handbook_sections(id) ON DELETE CASCADE,
+        title       text NOT NULL,
+        blob_url    text NOT NULL,
+        filename    text NOT NULL,
+        mime_type   text,
+        size_bytes  bigint,
+        sort_order  int  NOT NULL DEFAULT 0,
+        created_at  timestamptz NOT NULL DEFAULT now(),
+        updated_at  timestamptz NOT NULL DEFAULT now()
+      )
+    `
+    await sql`CREATE INDEX IF NOT EXISTS handbook_files_section_idx ON handbook_files(section_id)`
   } catch (e: any) {
     console.error('handbook bootstrap failed:', e?.message)
   }
 
   if (req.method === 'GET') {
-    const [sections, entries] = await Promise.all([
+    const [sections, entries, files] = await Promise.all([
       sql`SELECT id, title, sort_order FROM handbook_sections WHERE practice_id = ${practiceId}::uuid ORDER BY sort_order, title`,
       sql`
         SELECT e.id, e.section_id, e.title, e.body, e.sort_order, e.updated_at
@@ -85,8 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         WHERE s.practice_id = ${practiceId}::uuid
         ORDER BY e.sort_order, e.created_at
       `,
+      sql`
+        SELECT f.id, f.section_id, f.title, f.blob_url, f.filename, f.mime_type, f.size_bytes, f.sort_order, f.updated_at
+        FROM handbook_files f
+        JOIN handbook_sections s ON s.id = f.section_id
+        WHERE s.practice_id = ${practiceId}::uuid
+        ORDER BY f.sort_order, f.created_at
+      `,
     ])
-    return res.status(200).json({ sections, entries })
+    return res.status(200).json({ sections, entries, files })
   }
 
   // Everything below is a write — admin-only.
@@ -119,7 +144,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `
       return res.status(200).json(row)
     }
-    return res.status(400).json({ error: 'kind must be section or entry' })
+    if (kind === 'file') {
+      const { section_id, title, blob_url, filename, mime_type, size_bytes, sort_order } = req.body
+      if (!section_id) return res.status(400).json({ error: 'section_id required' })
+      if (!title?.trim()) return res.status(400).json({ error: 'title required' })
+      if (!blob_url) return res.status(400).json({ error: 'blob_url required (upload first)' })
+      if (!filename) return res.status(400).json({ error: 'filename required' })
+      const [sect] = await sql`SELECT id FROM handbook_sections WHERE id = ${section_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!sect) return res.status(404).json({ error: 'Section not found' })
+      const [row] = await sql`
+        INSERT INTO handbook_files (section_id, title, blob_url, filename, mime_type, size_bytes, sort_order)
+        VALUES (${section_id}::uuid, ${title.trim()}, ${blob_url}, ${filename}, ${mime_type ?? null}, ${size_bytes ?? null}, ${Number(sort_order) || 0})
+        RETURNING id, section_id, title, blob_url, filename, mime_type, size_bytes, sort_order, updated_at
+      `
+      return res.status(200).json(row)
+    }
+    return res.status(400).json({ error: 'kind must be section, entry, or file' })
   }
 
   if (req.method === 'PATCH') {
@@ -153,7 +193,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!row) return res.status(404).json({ error: 'Entry not found' })
       return res.status(200).json(row)
     }
-    return res.status(400).json({ error: 'kind must be section or entry' })
+    if (kind === 'file') {
+      // Only title / sort_order are patchable — the blob itself is
+      // immutable once uploaded (replace = delete + reupload).
+      const [row] = await sql`
+        UPDATE handbook_files f SET
+          title      = COALESCE(${title?.trim() || null}, f.title),
+          sort_order = COALESCE(${sort_order != null ? Number(sort_order) : null}, f.sort_order),
+          updated_at = NOW()
+        FROM handbook_sections s
+        WHERE f.id = ${id}::uuid
+          AND s.id = f.section_id
+          AND s.practice_id = ${practiceId}::uuid
+        RETURNING f.id, f.section_id, f.title, f.blob_url, f.filename, f.mime_type, f.size_bytes, f.sort_order, f.updated_at
+      `
+      if (!row) return res.status(404).json({ error: 'File not found' })
+      return res.status(200).json(row)
+    }
+    return res.status(400).json({ error: 'kind must be section, entry, or file' })
   }
 
   if (req.method === 'DELETE') {
@@ -177,7 +234,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!rows.length) return res.status(404).json({ error: 'Entry not found' })
       return res.status(200).json({ ok: true })
     }
-    return res.status(400).json({ error: 'kind must be section or entry' })
+    if (kind === 'file') {
+      // Fetch blob_url before delete so we can purge the actual object
+      // storage — otherwise orphan blobs accumulate on Vercel forever.
+      const rows = await sql`
+        DELETE FROM handbook_files f
+        USING handbook_sections s
+        WHERE f.id = ${id}::uuid
+          AND s.id = f.section_id
+          AND s.practice_id = ${practiceId}::uuid
+        RETURNING f.blob_url
+      `
+      if (!rows.length) return res.status(404).json({ error: 'File not found' })
+      try { await deleteBlob(rows[0].blob_url as string) } catch (e: any) { console.error('handbook file blob delete failed (row already gone):', e?.message) }
+      return res.status(200).json({ ok: true })
+    }
+    return res.status(400).json({ error: 'kind must be section, entry, or file' })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
