@@ -101,6 +101,9 @@ export function AdminClaims() {
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpandedRaw] = useState<string | null>(null)
+  // Tracks which claim's status dropdown is currently PATCHing so the
+  // select disables during the in-flight write. Sara 2026-09-30.
+  const [statusChanging, setStatusChanging] = useState<string | null>(null)
   const [eraTestRunning, setEraTestRunning] = useState(false)
   const [eraTestResult, setEraTestResult] = useState<Awaited<ReturnType<typeof testStediEraSync>> | null>(null)
   const [backfillRunning, setBackfillRunning] = useState(false)
@@ -673,7 +676,11 @@ export function AdminClaims() {
     // AFTER she marked resolved), the claim belongs in Rework.
     const triggers: (string | null | undefined)[] = []
     if ((c.status === 'pending_review' || c.status === 'error') && c.submitted_at) {
-      triggers.push(c.reopened_at ?? c.updated_at ?? c.submitted_at)
+      // Drop updated_at from the fallback: every write to the claim row
+      // bumps updated_at, including "Mark as worked" itself, which caused
+      // resolved claims to immediately reappear in Rework (Rhett Richmond
+      // 2026-09-30). Use only reopen or original submit as the trigger.
+      triggers.push(c.reopened_at ?? c.submitted_at)
     }
     if (c.status === 'submitted' && c.claim_rejection_at) {
       triggers.push(c.claim_rejection_at)
@@ -1937,7 +1944,6 @@ export function AdminClaims() {
               )}
               {list.map(c => {
                 const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.submitted
-                const Icon = badge.icon
                 const isOpen = expanded === c.id
                 const patientBalance = [c.patient_deductible_era, c.patient_coinsurance_era, c.patient_copay_era, c.patient_non_covered_era]
                   .reduce((s, v) => s + (parseFloat(v ?? 0) || 0), 0)
@@ -1977,10 +1983,38 @@ export function AdminClaims() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${badge.cls}`}>
-                          <Icon size={11} /> {badge.label}
-                        </span>
+                      <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        <select
+                          value={c.status}
+                          disabled={statusChanging === c.id}
+                          onChange={async e => {
+                            const next = e.target.value
+                            if (next === c.status) return
+                            if (!window.confirm(`Change claim status from "${c.status}" to "${next}"? This may move it to a different tab.`)) return
+                            setStatusChanging(c.id)
+                            try {
+                              await updateClaim(c.id, { status: next })
+                              await load()
+                            } catch (err: any) {
+                              alert('Failed to change status: ' + (err?.message ?? 'unknown error'))
+                            } finally {
+                              setStatusChanging(null)
+                            }
+                          }}
+                          title="Change claim status"
+                          className={`appearance-none inline-flex items-center gap-1.5 pl-2.5 pr-6 py-1 rounded-full text-[11px] font-semibold cursor-pointer border-0 bg-no-repeat bg-right ${badge.cls}`}
+                          style={{
+                            backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><polyline points=\'6 9 12 15 18 9\'/></svg>")',
+                            backgroundPosition: 'right 0.4rem center',
+                            backgroundSize: '10px 10px',
+                          }}
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="pending_review">Pending Review</option>
+                          <option value="error">Error</option>
+                          <option value="submitted">Submitted</option>
+                          <option value="written_off">Written off</option>
+                        </select>
                         {isOpen ? <ChevronUp size={14} className="text-[#1A1A2E]" /> : <ChevronDown size={14} className="text-[#1A1A2E]" />}
                       </div>
                     </button>
