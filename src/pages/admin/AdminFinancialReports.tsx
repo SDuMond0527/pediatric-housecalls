@@ -7,6 +7,7 @@ import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
 import { PatientStatementModal } from './PatientStatementModal'
 import { ClaimReviewModal } from './ClaimReviewModal'
+import { AdminClaimsPipeline } from './AdminClaimsPipeline'
 
 type DrillTarget = {
   type: 'insurance' | 'patient'
@@ -80,6 +81,7 @@ function downloadCsv(filename: string, csv: string) {
 export function AdminFinancialReports() {
   const today = new Date()
   const navigate = useNavigate()
+  const [tab, setTab] = useState<'reports' | 'pipeline'>('reports')
   const [start, setStart] = useState(format(startOfMonth(subMonths(today, 2)), 'yyyy-MM-dd'))
   const [end, setEnd]     = useState(format(today, 'yyyy-MM-dd'))
   const [data, setData]   = useState<ReportsData | null>(null)
@@ -107,6 +109,22 @@ export function AdminFinancialReports() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Tab strip — Monthly reports vs Claims pipeline. Each tab has its
+          own date-logic (reports uses charges/payment windowing, pipeline
+          uses DOS windowing per Sara 2026-10-01). */}
+      <div className="flex items-center gap-1 border-b border-[#E8E8E4] mb-6">
+        <button onClick={() => setTab('reports')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'reports' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
+          Monthly reports
+        </button>
+        <button onClick={() => setTab('pipeline')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'pipeline' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
+          Claims pipeline
+        </button>
+      </div>
+
+      {tab === 'pipeline' && <AdminClaimsPipeline />}
+      {tab === 'reports' && <>
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">Financial reports</h1>
@@ -186,6 +204,7 @@ export function AdminFinancialReports() {
           <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
+      </>}
 
       {drill && (
         <ArDrillModal

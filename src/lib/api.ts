@@ -729,6 +729,45 @@ export const getEraCount = () =>
 export const submitProviderReply = (claimId: string, body: string) =>
   apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
 
+// ── Claims pipeline (financials tab) ────────────────────────────
+export type ClaimsPipelineRange = 'this_month' | 'last_90' | 'last_6mo'
+export interface ClaimsPipelineRow {
+  id: string
+  service_date: string
+  patient_name: string
+  payer_name: string | null
+  rendering_provider: string
+  billed: number
+  insurance_paid: number
+  patient_responsibility: number
+  family_paid: number
+  family_owes: number
+  statement_status: string | null
+  submitted_at: string | null
+  era_received_at: string | null
+  status: 'not_yet_sent' | 'rejected' | 'sent_waiting' | 'paid' | 'denied'
+  reason_code: string | null
+  reason_label: string | null
+  days_waiting: number
+  days_since_dos: number
+}
+export interface ClaimsPipelineData {
+  range: ClaimsPipelineRange
+  follow_the_money: {
+    billed: number
+    insurance_collected: number
+    family_collected: number
+    total_collected: number
+    family_balance: number
+    waiting_on_insurance: number
+  }
+  by_status: Array<{ status: string; dollar_total: number; claim_count: number; oldest_age_days: number }>
+  aging_buckets: Record<string, { total: number; count: number }>
+  action_items: ClaimsPipelineRow[]
+}
+export const getClaimsPipeline = (range: ClaimsPipelineRange) =>
+  apiFetch<ClaimsPipelineData>(`/api/admin/claims-pipeline?range=${range}`)
+
 // ── Chronic problems (per-child problem list) ─────────────────
 export interface ChronicProblem {
   id: string
