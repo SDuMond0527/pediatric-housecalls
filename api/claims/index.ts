@@ -170,26 +170,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
-      // Lightweight count of claims the biller still needs to act on.
-      // Historically this was just "ERA back + status=submitted" but it
-      // kept counting claims Andrea had already resolved via the Rework
-      // workflow (which sets rework_resolved_at without changing status)
-      // OR whose family had already been billed / paid (statement
-      // sent / paid). Match the effective-status derivation used on the
-      // Claims page + chart Billing tab. Andrea 2026-09-30.
+      // Biller work queue: Pending Review + Rework + Submitted (waiting on
+      // payer). Explicitly EXCLUDES anything that has moved to Pam's
+      // queue — a draft statement means Andrea's done, Pam reviews and
+      // sends it. Also excludes anything terminal (written off, rework
+      // resolved, ERA back on a submitted claim all live on the
+      // Completed tab, which is the hand-off to Pam). Also excludes
+      // pending_provider_response (ball is with the provider, not
+      // Andrea). Mirrors the sum of the Pending Review + Rework +
+      // Submitted tab counts on AdminClaims. Sara 2026-10-01.
       if (era_count === '1') {
-        // pending_provider_response is intentionally NOT counted — the ball
-        // is with the provider, not the biller. Ditto rework-resolved and
-        // sent/paid statements (family or ERA already handled it).
         const [row] = await sql`
           SELECT COUNT(*)::int AS count
           FROM claims cl
-          LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
           WHERE cl.practice_id = ${practiceId}::uuid
-            AND cl.era_received_at IS NOT NULL
-            AND cl.status = 'submitted'
+            AND cl.status != 'written_off'
+            AND cl.status != 'pending_provider_response'
             AND cl.rework_resolved_at IS NULL
-            AND (ps.status IS NULL OR ps.status NOT IN ('sent', 'paid'))`
+            AND NOT (cl.status = 'submitted' AND cl.era_received_at IS NOT NULL)
+            AND NOT EXISTS (
+              SELECT 1 FROM patient_statements ps
+              WHERE ps.claim_id = cl.id
+                AND ps.status IN ('draft', 'sent', 'paid')
+            )`
         return res.json({ count: row?.count ?? 0 })
       }
       const rows = status
