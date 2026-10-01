@@ -768,6 +768,45 @@ export interface ClaimsPipelineData {
 export const getClaimsPipeline = (range: ClaimsPipelineRange) =>
   apiFetch<ClaimsPipelineData>(`/api/admin/claims-pipeline?range=${range}`)
 
+// ── Collections by visit month ──────────────────────────────────
+export type DayStatus = 'not_yet' | 'filling_in' | 'complete'
+export interface CollectionsMonthRow {
+  month: string
+  label: string
+  visits: number
+  billed: number
+  allowed_known: number
+  allowed_pending_count: number
+  collected_total: number
+  collected_30: number
+  collected_60: number
+  collected_90: number
+  status_30: DayStatus
+  status_60: DayStatus
+  status_90: DayStatus
+}
+export interface CollectionsByMonth {
+  months: CollectionsMonthRow[]
+  headline: {
+    reference_month: string | null
+    net_collection_rate_90: number | null
+    allowed_per_visit: number | null
+    collected_per_visit_90: number | null
+    avg_days_to_final_payment: number | null
+  }
+  filters_applied: { payer: string | null; provider_id: string | null }
+  options: {
+    payers: string[]
+    providers: Array<{ id: string; name: string }>
+  }
+}
+export const getCollectionsByMonth = (opts: { payer?: string; providerId?: string } = {}) => {
+  const params = new URLSearchParams()
+  if (opts.payer) params.set('payer', opts.payer)
+  if (opts.providerId) params.set('provider_id', opts.providerId)
+  return apiFetch<CollectionsByMonth>(`/api/admin/collections-by-month${params.toString() ? '?' + params.toString() : ''}`)
+}
+
 // ── Chronic problems (per-child problem list) ─────────────────
 export interface ChronicProblem {
   id: string
