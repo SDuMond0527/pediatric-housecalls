@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "smoke": "node --env-file=.env.local scripts/smoke/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

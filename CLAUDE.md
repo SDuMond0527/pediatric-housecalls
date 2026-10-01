@@ -2,6 +2,54 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Pre-push discipline — do not skip
+
+Three rules Sara put in place on 2026-10-01 after a chain of 500s
+reached end users. All three are non-negotiable.
+
+### 1. Run smoke tests before every push
+
+```
+npm run smoke
+```
+
+Replays representative SQL from each API handler against the
+preview branch (uses `.env.local` DATABASE_URL). Any failure =
+DO NOT push. Fix the SQL / schema / bootstrap first.
+
+Catches the class of bug where code assumes a column type or shape
+that doesn't match the actual schema (e.g. the "text ≤ time without
+time zone" cast error that silently 500'd every CMA+tele booking on
+2026-10-01 until Keaira hit it in the field).
+
+When adding a new API endpoint or a new SQL query to an existing
+one, add a representative check to the `CHECKS` array in
+`scripts/smoke/run.mjs`.
+
+If a smoke test fails with "column does not exist", the preview
+branch is behind prod. Catch it up by running the same ALTER TABLE /
+CREATE TABLE IF NOT EXISTS bootstraps the API handler would run,
+then re-run smoke.
+
+### 2. "Verified" means showing the test output
+
+When I say "I verified this works," I paste the actual command I
+ran and its result into chat. Not "I checked, it works." Not
+"end-to-end tested." The literal output. If I can't show the
+output, I didn't verify it.
+
+Rationale: Sara has repeatedly caught me saying "verified" when I
+had only reasoned about the code or run a partial check. The output
+is the proof.
+
+### 3. Build safety nets before features
+
+If a bug reveals a gap in safety infrastructure (no test caught it,
+no error log recorded it, no monitor paged on it), fix the gap
+BEFORE shipping the next feature. Sara called this out directly on
+2026-10-01 — she'd rather have fewer features that work reliably
+than more features that need babysitting.
+
 ## Commands
 
 ```bash
@@ -9,6 +57,7 @@ npm run dev          # Start Vite dev server
 npm run build        # Type-check + build (tsc -b && vite build)
 npm run lint         # ESLint (flat config, TypeScript + React hooks rules)
 npm run preview      # Preview production build
+npm run smoke        # Pre-push smoke tests (see above)
 
 # Supabase edge functions
 supabase functions serve <function-name>   # Run function locally
