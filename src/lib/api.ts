@@ -729,6 +729,37 @@ export const getEraCount = () =>
 export const submitProviderReply = (claimId: string, body: string) =>
   apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
 
+// ── Chronic problems (per-child problem list) ─────────────────
+export interface ChronicProblem {
+  id: string
+  child_id: string
+  label: string
+  icd10_code: string | null
+  source_kind: 'provider_dx' | 'parent_history' | 'manual'
+  source_encounter_note_id: string | null
+  added_by_name: string | null
+  added_at: string
+  resolved_at: string | null
+  resolved_by_name: string | null
+  resolved_reason: string | null
+}
+export const getChronicProblems = (childId: string, includeResolved = false) =>
+  apiFetch<{ problems: ChronicProblem[] }>(
+    `/api/chronic-problems?child_id=${encodeURIComponent(childId)}${includeResolved ? '&include_resolved=1' : ''}`,
+  )
+export const addChronicProblem = (body: {
+  child_id: string
+  label: string
+  icd10_code?: string | null
+  source_kind?: 'provider_dx' | 'parent_history' | 'manual'
+  source_encounter_note_id?: string | null
+}) =>
+  apiFetch<ChronicProblem>('/api/chronic-problems', { method: 'POST', body: JSON.stringify(body) })
+export const resolveChronicProblem = (id: string, resolved_reason?: string) =>
+  apiFetch<ChronicProblem>(`/api/chronic-problems/${id}`, { method: 'PATCH', body: JSON.stringify({ resolved_reason }) })
+export const deleteChronicProblem = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/chronic-problems/${id}`, { method: 'DELETE' })
+
 export const generateClaim = (encounter_note_id: string) =>
   apiFetch<any>('/api/claims', { method: 'POST', body: JSON.stringify({ encounter_note_id }) })
 

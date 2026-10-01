@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
 import { PatientStatementModal } from './admin/PatientStatementModal'
@@ -194,6 +194,10 @@ export function PatientChart() {
   const [dsNotifCount, setDsNotifCount] = useState(0)
   const [dsNotifBreakdown, setDsNotifBreakdown] = useState<{ renewals: number; rxChanges: number; errors: number }>({ renewals: 0, rxChanges: 0, errors: 0 })
   const [child, setChild] = useState<any | null>(null)
+  const [chronicProblems, setChronicProblems] = useState<ChronicProblem[]>([])
+  const [addingChronic, setAddingChronic] = useState(false)
+  const [newChronicLabel, setNewChronicLabel] = useState('')
+  const [newChronicCode, setNewChronicCode] = useState('')
   const [notes, setNotes] = useState<NoteWithVisit[]>([])
   const [vitalsByAppt, setVitalsByAppt] = useState<Record<string, any>>({})
   const [bookingRequests, setBookingRequests] = useState<any[]>([])
@@ -314,13 +318,15 @@ export function PatientChart() {
     const cid = childId
     async function load() {
       setLoading(true)
-      const [childrenRes, notesRes, vitalsRes, bookingRes, apptRes] = await Promise.all([
+      const [childrenRes, notesRes, vitalsRes, bookingRes, apptRes, chronicRes] = await Promise.all([
         getChildrenByIds([cid]).catch(() => [] as any[]),
         getEncounterNotes({ child_id: cid }).catch(() => [] as NoteWithVisit[]),
         getVitalsList({ child_id: cid }).catch(() => [] as any[]),
         getBookingRequests({ child_id: cid }).catch(() => [] as any[]),
         getAppointments({ child_id: cid }).catch(() => [] as any[]),
+        getChronicProblems(cid).catch(() => ({ problems: [] })),
       ])
+      setChronicProblems(chronicRes?.problems ?? [])
       const loadedChild = childrenRes?.[0] ?? null
       setChild(loadedChild)
       logAudit('view_patient', 'child', cid)
@@ -1045,6 +1051,85 @@ export function PatientChart() {
                           <div className="text-[13px] text-[#1A1A2E] mt-0.5">Not recorded</div>
                         )}
                       </div>
+                      {/* Chronic problem list — carried over from encounter
+                          notes where the provider starred a diagnosis. Shown
+                          prominently so it's the first thing anyone sees when
+                          they open the chart. Sara 2026-10-01. */}
+                      <div className="mb-5 p-4 rounded-xl border border-[#F5D98F] bg-[#FEF7E6]">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-semibold text-[#78350F] uppercase tracking-wider">Chronic problem list</div>
+                          {!addingChronic && (
+                            <button onClick={() => { setAddingChronic(true); setNewChronicLabel(''); setNewChronicCode('') }}
+                              className="text-[11px] font-medium text-[#78350F] hover:underline">+ Add</button>
+                          )}
+                        </div>
+                        {chronicProblems.length === 0 && !addingChronic && (
+                          <div className="text-[12px] text-[#78350F] italic">None recorded. Chronic diagnoses get added here by starring a dx in an encounter note.</div>
+                        )}
+                        {chronicProblems.length > 0 && (
+                          <div className="space-y-1.5">
+                            {chronicProblems.map(p => (
+                              <div key={p.id} className="flex items-center justify-between gap-2 bg-white border border-[#F5D98F] rounded-lg px-3 py-1.5">
+                                <div className="text-[13px] text-[#1A1A2E]">
+                                  {p.icd10_code && <span className="font-mono text-[11px] text-[#78350F] mr-1.5">{p.icd10_code}</span>}
+                                  <span>{p.label}</span>
+                                  {p.added_by_name && <span className="text-[11px] text-[#78350F]/70 ml-2">· added by {p.added_by_name}</span>}
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    const reason = window.prompt(`Mark "${p.label}" as resolved? Reason (optional):`, '')
+                                    if (reason === null) return
+                                    try {
+                                      await resolveChronicProblem(p.id, reason || undefined)
+                                      setChronicProblems(prev => prev.filter(x => x.id !== p.id))
+                                    } catch (e: any) {
+                                      alert('Failed to resolve: ' + (e?.message ?? 'unknown'))
+                                    }
+                                  }}
+                                  className="text-[11px] text-[#78350F] hover:underline flex-shrink-0"
+                                >Resolve</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {addingChronic && (
+                          <div className="mt-2 bg-white border border-[#F5D98F] rounded-lg p-2 space-y-2">
+                            <input value={newChronicLabel} onChange={e => setNewChronicLabel(e.target.value)}
+                              placeholder='Problem description (e.g. "Asthma")'
+                              className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded text-[13px] outline-none focus:border-[#78350F]" />
+                            <input value={newChronicCode} onChange={e => setNewChronicCode(e.target.value.toUpperCase())}
+                              placeholder="ICD-10 code (optional, e.g. J45.909)"
+                              className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded text-[13px] font-mono outline-none focus:border-[#78350F]" />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!childId || !newChronicLabel.trim()) return
+                                  try {
+                                    const row = await addChronicProblem({
+                                      child_id: childId,
+                                      label: newChronicLabel.trim(),
+                                      icd10_code: newChronicCode.trim() || undefined,
+                                      source_kind: 'manual',
+                                    })
+                                    setChronicProblems(prev => [row, ...prev.filter(p => p.id !== row.id)])
+                                    setAddingChronic(false)
+                                  } catch (e: any) {
+                                    alert('Failed to add: ' + (e?.message ?? 'unknown'))
+                                  }
+                                }}
+                                disabled={!newChronicLabel.trim()}
+                                className="px-2.5 py-1 bg-[#78350F] text-white text-[12px] font-medium rounded disabled:opacity-40">
+                                Add
+                              </button>
+                              <button onClick={() => setAddingChronic(false)}
+                                className="px-2.5 py-1 border border-[#E8E8E4] text-[12px] text-[#555] rounded">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {[
                           { label: 'Current medications', value: child?.current_medications },

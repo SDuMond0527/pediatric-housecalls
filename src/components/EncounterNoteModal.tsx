@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus } from 'lucide-react'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
@@ -750,6 +750,50 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [plan, setPlan] = useState('')
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([])
   const [teleDuration, setTeleDuration] = useState('')
+  // Chronic problem list for this child. Shown above the diagnosis
+  // picker so provider can one-click carry over asthma/eczema/etc. from
+  // prior visits. Dx pills in this note get a star toggle that promotes
+  // them into the chronic list on click. Sara 2026-10-01.
+  const [chronicProblems, setChronicProblems] = useState<ChronicProblem[]>([])
+  const [togglingChronic, setTogglingChronic] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!linkedChildId) { setChronicProblems([]); return }
+    getChronicProblems(linkedChildId).then(r => setChronicProblems(r.problems ?? [])).catch(() => {})
+  }, [linkedChildId])
+
+  const chronicByCode = new Map(chronicProblems.filter(p => p.icd10_code).map(p => [p.icd10_code as string, p]))
+
+  async function addDxFromChronic(p: ChronicProblem) {
+    if (!p.icd10_code) return
+    if (diagnoses.find(d => d.code === p.icd10_code)) return
+    setDiagnoses(prev => [...prev, { code: p.icd10_code as string, name: p.label }])
+  }
+
+  async function toggleDxChronic(dx: Diagnosis) {
+    if (!linkedChildId || togglingChronic === dx.code) return
+    setTogglingChronic(dx.code)
+    try {
+      const existing = chronicByCode.get(dx.code)
+      if (existing) {
+        await resolveChronicProblem(existing.id)
+        setChronicProblems(prev => prev.filter(p => p.id !== existing.id))
+      } else {
+        const row = await addChronicProblem({
+          child_id: linkedChildId,
+          label: dx.name,
+          icd10_code: dx.code,
+          source_kind: 'provider_dx',
+          source_encounter_note_id: noteId || undefined,
+        })
+        setChronicProblems(prev => [row, ...prev])
+      }
+    } catch (e: any) {
+      alert('Couldn\'t update chronic status: ' + (e?.message ?? 'unknown'))
+    } finally {
+      setTogglingChronic(null)
+    }
+  }
 
   function setTeleDurationAndAssessment(cpt: string) {
     const next = teleDuration === cpt ? '' : cpt
@@ -2274,19 +2318,55 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </div>
               )}
 
+              {/* Chronic problem list — one-click carry-over from prior visits.
+                  Chips are codes NOT already in this note's diagnoses, so the
+                  provider can add asthma / eczema / etc. with a single click
+                  instead of searching + re-selecting every time. Sara 2026-10-01. */}
+              {!readOnly && chronicProblems.length > 0 && (() => {
+                const unaddedChronic = chronicProblems.filter(p => p.icd10_code && !diagnoses.find(d => d.code === p.icd10_code))
+                if (!unaddedChronic.length) return null
+                return (
+                  <div className="mb-3 p-2.5 rounded-lg bg-[#FEF7E6] border border-[#F5D98F]">
+                    <div className="text-[10px] font-semibold text-[#78350F] uppercase tracking-wider mb-1.5">Chronic — add to this note?</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {unaddedChronic.map(p => (
+                        <button key={p.id} type="button" onClick={() => addDxFromChronic(p)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-[#F5D98F] rounded-full text-[11px] text-[#78350F] font-medium hover:bg-[#FEF3C7] transition-colors">
+                          <Plus size={10} /> {p.icd10_code} {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {diagnoses.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {diagnoses.map(dx => (
-                    <span key={dx.code} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEEDFE] text-[#3C3489] rounded-full text-[12px] font-medium">
-                      {dx.code} – {dx.name}
-                      {(!readOnly || editingDx) && (
-                        <button onClick={() => removeDiagnosis(dx.code)}
-                          className="hover:text-[#791F1F] transition-colors ml-0.5">
-                          <X size={11} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
+                  {diagnoses.map(dx => {
+                    const isChronic = chronicByCode.has(dx.code)
+                    return (
+                      <span key={dx.code} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEEDFE] text-[#3C3489] rounded-full text-[12px] font-medium">
+                        {dx.code} – {dx.name}
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => toggleDxChronic(dx)}
+                            disabled={togglingChronic === dx.code}
+                            title={isChronic ? 'Chronic — click to remove from problem list' : 'Mark as chronic (carry over to future visits)'}
+                            className="transition-colors disabled:opacity-50"
+                          >
+                            <Star size={11} fill={isChronic ? '#EAB308' : 'none'} stroke={isChronic ? '#EAB308' : '#3C3489'} />
+                          </button>
+                        )}
+                        {(!readOnly || editingDx) && (
+                          <button onClick={() => removeDiagnosis(dx.code)}
+                            className="hover:text-[#791F1F] transition-colors ml-0.5">
+                            <X size={11} />
+                          </button>
+                        )}
+                      </span>
+                    )
+                  })}
                 </div>
               )}
 
