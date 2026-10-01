@@ -87,18 +87,27 @@ export function AdminBroadcasts() {
           <div>
             <div className="text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider mb-3">Closed / accepted</div>
             <div className="space-y-2">
-              {closed.map(bc => (
-                <div key={bc.id} className="border border-[#E8E8E4] rounded-lg px-4 py-2.5 flex items-center gap-3 bg-white opacity-60">
-                  <span className="text-[13px] font-medium text-[#1A1A2E] flex-1">
-                    {bc.patient_first_name} {bc.patient_last_name} · {bc.request_type}
-                  </span>
-                  <Badge variant="gray">Closed</Badge>
-                  <Button variant="secondary" size="xs" onClick={() => toggleOpen(bc)}>Reopen</Button>
-                  <button onClick={() => remove(bc.id)} className="p-1 rounded hover:bg-[#FCEBEB] text-[#1A1A2E] hover:text-[#791F1F]">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+              {closed.map(bc => {
+                const name = [bc.patient_first_name, bc.patient_last_name].filter(Boolean).join(' ').trim()
+                // Old broadcasts (pre-patient-fields) have no name. Fall back
+                // to a short complaint snippet so they're identifiable instead
+                // of rendering as a sea of " · standard" rows. Sara 2026-10-01.
+                const complaintSnippet = bc.complaint ? bc.complaint.slice(0, 80) + (bc.complaint.length > 80 ? '…' : '') : null
+                const label = name || complaintSnippet || '(no details)'
+                const subtitle = bc.request_type || null
+                return (
+                  <div key={bc.id} className="border border-[#E8E8E4] rounded-lg px-4 py-2.5 flex items-center gap-3 bg-white opacity-60">
+                    <span className="text-[13px] font-medium text-[#1A1A2E] flex-1 min-w-0 truncate">
+                      {label}{subtitle && name ? ` · ${subtitle}` : ''}
+                    </span>
+                    <Badge variant="gray">Closed</Badge>
+                    <Button variant="secondary" size="xs" onClick={() => toggleOpen(bc)}>Reopen</Button>
+                    <button onClick={() => remove(bc.id)} className="p-1 rounded hover:bg-[#FCEBEB] text-[#1A1A2E] hover:text-[#791F1F]">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
