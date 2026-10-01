@@ -726,6 +726,9 @@ export const getClaims = (status?: string) =>
 export const getEraCount = () =>
   apiFetch<{ count: number }>('/api/claims?era_count=1')
 
+export const submitProviderReply = (claimId: string, body: string) =>
+  apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
+
 export const generateClaim = (encounter_note_id: string) =>
   apiFetch<any>('/api/claims', { method: 'POST', body: JSON.stringify({ encounter_note_id }) })
 

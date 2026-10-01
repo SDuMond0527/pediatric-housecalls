@@ -2561,12 +2561,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const asker = String(billerName || 'The billing team').trim()
       const q     = String(question).trim()
 
-      // Encounter note lives at /patients if we have its id — sends the
-      // provider to the specific note. Fallback = /admin/claims where
-      // they can find it themselves.
-      const noteLink = claim.encounter_note_id
-        ? `${PORTAL_URL}/patients?note=${claim.encounter_note_id}`
-        : `${PORTAL_URL}/admin/claims`
+      // Take the provider straight to a dedicated Answer-the-biller page
+      // for this claim — shows the question + inline reply form that
+      // auto-logs the response and flips the claim status back to
+      // pending_review. Sara/Andrea 2026-09-30.
+      const noteLink = `${PORTAL_URL}/claim-question/${String(claimId)}`
 
       const smsBody = `${PRACTICE_NAME}: ${asker} has a billing question about ${patientName} (DOB ${dob}, visit ${doe}). "${q.slice(0, 240)}${q.length > 240 ? '…' : ''}" — Reply or view: ${noteLink}`
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
@@ -2605,6 +2604,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendSMS(prov.phone, smsBody)
           .then(() => { smsSent = true })
           .catch(e => console.error('biller-question SMS failed:', e))
+      }
+      // Auto-log the question to the claim's activity_log AND flip status
+      // to 'pending_provider_response' so the claim card visually shows
+      // "Waiting on provider" and drops out of the biller's active count
+      // until the provider replies. Andrea 2026-09-30 asked for both.
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS claim_activity_log (
+            id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            claim_id        uuid NOT NULL,
+            created_at      timestamptz NOT NULL DEFAULT NOW(),
+            created_by      uuid,
+            created_by_name text,
+            kind            text NOT NULL DEFAULT 'note',
+            body            text NOT NULL
+          )`
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+          VALUES (${String(claimId)}::uuid, ${asker}, 'biller_question', ${q})`
+      } catch (logErr: any) {
+        console.error('biller-question activity log insert failed (non-fatal):', logErr?.message)
+      }
+      try {
+        // Only flip if the current status is a "biller can act" state. Don't
+        // clobber submitted / written_off / etc.
+        await sql`
+          UPDATE claims
+          SET status = 'pending_provider_response', updated_at = NOW()
+          WHERE id = ${String(claimId)}::uuid
+            AND status IN ('pending_review', 'error', 'draft')`
+      } catch (statusErr: any) {
+        console.error('biller-question status update failed (non-fatal):', statusErr?.message)
       }
       return res.json({ ok: true, emailSent, smsSent, providerName: prov.name })
     }

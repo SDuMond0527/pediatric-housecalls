@@ -22,6 +22,7 @@ import { AdminReports } from './pages/admin/AdminReports'
 import { AdminBookings } from './pages/admin/AdminBookings'
 import { CprRequests } from './pages/CprRequests'
 import { Handbook } from './pages/Handbook'
+import { ClaimQuestion } from './pages/ClaimQuestion'
 import { AdminSpecialists } from './pages/admin/AdminSpecialists'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
@@ -115,6 +116,7 @@ export default function App() {
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<CprRequests />} />
                 <Route path="handbook"       element={<Handbook />} />
+                <Route path="claim-question/:claimId" element={<ClaimQuestion />} />
               </Route>
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Navigate to="/admin/analytics" replace />} />

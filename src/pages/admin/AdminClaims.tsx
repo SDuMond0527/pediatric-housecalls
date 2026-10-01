@@ -64,14 +64,15 @@ function extractStediErrorSummary(details: any): string | null {
 type Tab = 'review' | 'rework' | 'submitted' | 'completed'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
-  draft:          { label: 'Draft',          cls: 'bg-[#F1EFE8] text-[#555]',    icon: FileText },
-  pending_review: { label: 'Pending Review', cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
-  submitted:      { label: 'Submitted',      cls: 'bg-[#EEF1F8] text-[#31447A]', icon: Send },
-  accepted:       { label: 'Accepted',       cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
-  rejected:       { label: 'Rejected',       cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: XCircle },
-  error:          { label: 'Rework',         cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: AlertCircle },
-  completed:      { label: 'Completed',      cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
-  written_off:    { label: 'Written off',    cls: 'bg-[#F1EFE8] text-[#555]',    icon: XCircle },
+  draft:                     { label: 'Draft',                cls: 'bg-[#F1EFE8] text-[#555]',    icon: FileText },
+  pending_review:            { label: 'Pending Review',       cls: 'bg-[#FEF3E8] text-[#633806]', icon: Clock },
+  pending_provider_response: { label: 'Waiting on provider',  cls: 'bg-[#FFF7ED] text-[#7C2D12]', icon: Clock },
+  submitted:                 { label: 'Submitted',            cls: 'bg-[#EEF1F8] text-[#31447A]', icon: Send },
+  accepted:                  { label: 'Accepted',             cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
+  rejected:                  { label: 'Rejected',             cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: XCircle },
+  error:                     { label: 'Rework',               cls: 'bg-[#FEE2E2] text-[#7F1D1D]', icon: AlertCircle },
+  completed:                 { label: 'Completed',            cls: 'bg-[#E1F5EE] text-[#085041]', icon: CheckCircle },
+  written_off:               { label: 'Written off',          cls: 'bg-[#F1EFE8] text-[#555]',    icon: XCircle },
 }
 
 const KNOWN_PAYERS: Record<string, string> = {
@@ -386,14 +387,15 @@ export function AdminClaims() {
       // in a status that this page doesn't render, even accidentally.
       // Fetch written_off so the Completed tab has somewhere to render
       // closed-via-write-off workflows (not just closed-via-payment).
-      const [review, errored, submitted, draft, writtenOff] = await Promise.all([
+      const [review, errored, submitted, draft, writtenOff, waitingProvider] = await Promise.all([
         getClaims('pending_review'),
         getClaims('error'),
         getClaims('submitted'),
         getClaims('draft'),
         getClaims('written_off'),
+        getClaims('pending_provider_response'),
       ])
-      setClaims([...review, ...errored, ...submitted, ...draft, ...writtenOff])
+      setClaims([...review, ...errored, ...submitted, ...draft, ...writtenOff, ...waitingProvider])
       // Nudge the sidebar to re-fetch the Claims badge count immediately
       // instead of waiting for its 60s poll. Any AdminClaims action that
       // ends in load() (resolve, submit, delete, mark-worked, etc.) will
@@ -721,7 +723,7 @@ export function AdminClaims() {
   // was appearing in both Review AND Completed because he had status
   // pending_review (from a manual reopen SQL) AND rework_resolved_at
   // (from a Mark-as-worked click) — both filters matched.
-  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft'))
+  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft'))
   const reworkClaims    = visibleClaims.filter(isInRework)
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
@@ -742,7 +744,7 @@ export function AdminClaims() {
   // "Ready for biller" counter spans truly-new Review + Rework (both
   // are Andrea's active work). Excludes submitted/completed rows where
   // the biller has already handed the claim off.
-  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (isInRework(c) || (!isInRework(c) && (c.status === 'pending_review' || c.status === 'error' || c.status === 'draft')))).length
+  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (isInRework(c) || (!isInRework(c) && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft')))).length
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
@@ -2043,6 +2045,7 @@ export function AdminClaims() {
                             const label = ({
                               draft: 'Draft',
                               pending_review: 'Pending Review',
+                              pending_provider_response: 'Waiting on provider',
                               error: 'Rework',
                               submitted: 'Submitted',
                               completed: 'Completed',
@@ -2076,6 +2079,7 @@ export function AdminClaims() {
                         >
                           <option value="draft">Draft</option>
                           <option value="pending_review">Pending Review</option>
+                          <option value="pending_provider_response">Waiting on provider</option>
                           <option value="error">Rework</option>
                           <option value="submitted">Submitted</option>
                           <option value="completed">Completed</option>

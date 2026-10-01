@@ -69,15 +69,16 @@ function fmtMoney(n: any) {
 }
 
 const CLAIM_BADGE: Record<string, { label: string; cls: string }> = {
-  draft:            { label: 'Draft',            cls: 'bg-[#F1EFE8] text-[#777]' },
-  pending_review:   { label: 'Pending review',   cls: 'bg-[#FEF3C7] text-[#92400E]' },
-  submitted:        { label: 'Submitted',        cls: 'bg-[#EEF6FB] text-[#2D7BA6]' },
-  error:            { label: 'Rework',           cls: 'bg-[#FCEBEB] text-[#991B1B]' },
-  completed:        { label: 'Completed',        cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
-  written_off:      { label: 'Written off',      cls: 'bg-[#F1EFE8] text-[#777]' },
-  paid:             { label: 'Paid by payer',    cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
-  denied:           { label: 'Denied',           cls: 'bg-[#FCEBEB] text-[#991B1B]' },
-  self_pay:         { label: 'Self-pay',         cls: 'bg-[#EEEDFE] text-[#3C3489]' },
+  draft:                     { label: 'Draft',                cls: 'bg-[#F1EFE8] text-[#777]' },
+  pending_review:            { label: 'Pending review',       cls: 'bg-[#FEF3C7] text-[#92400E]' },
+  pending_provider_response: { label: 'Waiting on provider',  cls: 'bg-[#FFF7ED] text-[#7C2D12]' },
+  submitted:                 { label: 'Submitted',            cls: 'bg-[#EEF6FB] text-[#2D7BA6]' },
+  error:                     { label: 'Rework',               cls: 'bg-[#FCEBEB] text-[#991B1B]' },
+  completed:                 { label: 'Completed',            cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
+  written_off:               { label: 'Written off',          cls: 'bg-[#F1EFE8] text-[#777]' },
+  paid:                      { label: 'Paid by payer',        cls: 'bg-[#E6F6F2] text-[#1A7D5A]' },
+  denied:                    { label: 'Denied',               cls: 'bg-[#FCEBEB] text-[#991B1B]' },
+  self_pay:                  { label: 'Self-pay',             cls: 'bg-[#EEEDFE] text-[#3C3489]' },
 }
 
 /** A claim is effectively "Completed" if any of:

@@ -178,6 +178,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // sent / paid). Match the effective-status derivation used on the
       // Claims page + chart Billing tab. Andrea 2026-09-30.
       if (era_count === '1') {
+        // pending_provider_response is intentionally NOT counted — the ball
+        // is with the provider, not the biller. Ditto rework-resolved and
+        // sent/paid statements (family or ERA already handled it).
         const [row] = await sql`
           SELECT COUNT(*)::int AS count
           FROM claims cl
