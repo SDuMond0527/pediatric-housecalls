@@ -54,11 +54,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const client = new CognitoIdentityProviderClient({ region, credentials: { accessKeyId, secretAccessKey } })
   try {
     const info = await client.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email.trim().toLowerCase() }))
+    const attrs: Record<string, string> = {}
+    for (const a of info.UserAttributes ?? []) {
+      if (a.Name) attrs[a.Name] = a.Value ?? ''
+    }
     return res.json({
       exists: true,
       status: info.UserStatus,
       username: info.Username,
       enabled: info.Enabled,
+      attributes: attrs,
       resetWillWork: info.UserStatus === 'CONFIRMED' || info.UserStatus === 'RESET_REQUIRED',
     })
   } catch (e: any) {
