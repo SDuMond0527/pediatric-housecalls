@@ -447,9 +447,21 @@ export function Broadcasts() {
                   : bc.pairing_role_needed === 'MD/NP'
                     ? 'Claim telemedicine half'
                     : 'Claim in-home half'
-              const dateStr = bc.scheduled_date
-                ? format(new Date(bc.scheduled_date + 'T12:00:00'), 'EEE, MMM d')
-                : null
+              // scheduled_date can arrive as either a Date (new column) or a
+              // yyyy-mm-dd string. The old `str + 'T12:00:00'` concat produced
+              // garbage from a Date object → Invalid Date → format threw →
+              // whole page went blank. Try/catch so a weird value NEVER
+              // crashes the page. Sara 2026-10-01.
+              let dateStr: string | null = null
+              if (bc.scheduled_date) {
+                try {
+                  const raw = bc.scheduled_date as any
+                  const d = raw instanceof Date
+                    ? raw
+                    : new Date(String(raw).slice(0, 10) + 'T12:00:00')
+                  if (!isNaN(d.getTime())) dateStr = format(d, 'EEE, MMM d')
+                } catch { /* leave null */ }
+              }
               return (
                 <div key={bc.id} className="border-2 border-[#AFA9EC] bg-[#F5F4FE] rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
