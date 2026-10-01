@@ -30,14 +30,45 @@ function fmtDay(d: string | null) {
     return format(new Date(y, m - 1, day), 'MMM d, yyyy')
   } catch { return d }
 }
-function toCsv(rows: any[], headers: { key: string; label: string }[]): string {
+function toCsv(rows: any[], headers: { key: string; label: string }[], meta?: { title?: string; periodStart?: string; periodEnd?: string }): string {
   const escape = (v: any) => {
     const s = v == null ? '' : String(v)
     return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const head = headers.map(h => escape(h.label)).join(',')
   const body = rows.map(r => headers.map(h => escape(r[h.key])).join(',')).join('\n')
-  return head + '\n' + body
+  // Optional header lines above the column headers, so a printed CSV
+  // identifies itself: report title, period covered, generated-on date.
+  // Sara 2026-10-01 — bookkeeping needs the month/period on the sheet
+  // so months don't blur together when printed.
+  const metaLines: string[] = []
+  if (meta?.title) metaLines.push(escape(meta.title))
+  if (meta?.periodStart && meta?.periodEnd) {
+    metaLines.push(escape(`Period: ${formatPeriodLabel(meta.periodStart, meta.periodEnd)}`))
+  }
+  metaLines.push(escape(`Generated: ${format(new Date(), 'MMM d, yyyy')}`))
+  const metaBlock = metaLines.length ? metaLines.join('\n') + '\n\n' : ''
+  return metaBlock + head + '\n' + body
+}
+
+/** Human label for a date range. Collapses to a single month name when
+ *  start+end cover exactly one calendar month ("September 2026"),
+ *  otherwise shows a readable range ("Jul 1 – Aug 31, 2026"). */
+function formatPeriodLabel(start: string, end: string): string {
+  try {
+    const [sy, sm, sd] = start.split('-').map(Number)
+    const [ey, em, ed] = end.split('-').map(Number)
+    const sDate = new Date(sy, sm - 1, sd)
+    const eDate = new Date(ey, em - 1, ed)
+    const lastDayOfStartMonth = new Date(sy, sm, 0).getDate()
+    if (sy === ey && sm === em && sd === 1 && ed === lastDayOfStartMonth) {
+      return format(sDate, 'MMMM yyyy')
+    }
+    if (sy === ey) {
+      return `${format(sDate, 'MMM d')} – ${format(eDate, 'MMM d, yyyy')}`
+    }
+    return `${format(sDate, 'MMM d, yyyy')} – ${format(eDate, 'MMM d, yyyy')}`
+  } catch { return `${start} to ${end}` }
 }
 function downloadCsv(filename: string, csv: string) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -117,6 +148,8 @@ export function AdminFinancialReports() {
             filenameStem="ar-aging-insurance"
             drillType="insurance"
             onDrill={setDrill}
+            start={start}
+            end={end}
           />
 
           <ArAgingSection
@@ -130,15 +163,17 @@ export function AdminFinancialReports() {
             filenameStem="ar-aging-patient"
             drillType="patient"
             onDrill={setDrill}
+            start={start}
+            end={end}
           />
 
           <CashCollectionsSection data={data} start={start} end={end} />
 
           <ChargesVsCollectionsSection data={data} />
 
-          <AdjustmentsSection data={data} />
+          <AdjustmentsSection data={data} start={start} end={end} />
 
-          <RefundsSection data={data} />
+          <RefundsSection data={data} start={start} end={end} />
 
           {/* ── Phase 2: practice health ─────────────────────────────── */}
           <div className="pt-4 mt-2 border-t border-[#E8E8E4]">
@@ -146,9 +181,9 @@ export function AdminFinancialReports() {
             <p className="text-[12px] text-[#1A1A2E]/70">Reports below are less about closing the month and more about spotting trends — payer concentration, contract quality, and problem payers.</p>
           </div>
 
-          <PayerMixSection data={data} />
-          <ReimbursementByPayerSection data={data} />
-          <DenialsByPayerSection data={data} />
+          <PayerMixSection data={data} start={start} end={end} />
+          <ReimbursementByPayerSection data={data} start={start} end={end} />
+          <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
 
@@ -209,7 +244,7 @@ export function AdminFinancialReports() {
 
 function ArAgingSection({
   title, icon: Icon, plainEnglish, rows, groupLabel, groupKey, countKey, filenameStem,
-  drillType, onDrill,
+  drillType, onDrill, start, end,
 }: {
   title: string
   icon: any
@@ -221,6 +256,8 @@ function ArAgingSection({
   filenameStem: string
   drillType: 'insurance' | 'patient'
   onDrill: (t: DrillTarget) => void
+  start: string
+  end: string
 }) {
   const totals = rows.reduce((acc, r) => ({
     b_0_30: acc.b_0_30 + parseFloat(r.b_0_30 ?? 0),
@@ -254,7 +291,7 @@ function ArAgingSection({
         { key: 'b_120_plus', label: '120+' },
         { key: 'total',    label: 'Total' },
         { key: countKey,   label: 'Count' },
-      ])
+      ], { title, periodStart: start, periodEnd: end })
       downloadCsv(`${filenameStem}.csv`, csv)
     }}>
       {rows.length === 0 ? (
@@ -365,7 +402,7 @@ function CashCollectionsSection({ data, start, end }: { data: ReportsData; start
           { key: 'insurance_amount', label: 'Insurance' },
           { key: 'patient_amount',   label: 'Patient' },
           { key: 'total',            label: 'Total' },
-        ])
+        ], { title: 'Cash collections', periodStart: start, periodEnd: end })
         downloadCsv(`cash-collections-${start}-to-${end}.csv`, csv)
       }}>
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -435,7 +472,7 @@ const REASON_LABEL: Record<string, string> = {
   other:          'Other',
 }
 
-function AdjustmentsSection({ data }: { data: ReportsData }) {
+function AdjustmentsSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
   const adj = parseFloat(String(data.adjustments.contractual_adjustments ?? 0))
   const woffStatement = parseFloat(String(data.adjustments.write_offs ?? 0))
   const claimWoffTotal = (data.write_offs_claim_by_reason ?? []).reduce((s, r: any) => s + parseFloat(String(r.amount ?? 0)), 0)
@@ -455,7 +492,7 @@ function AdjustmentsSection({ data }: { data: ReportsData }) {
           { key: 'reason', label: 'Reason' },
           { key: 'count',  label: 'Count' },
           { key: 'amount', label: 'Amount' },
-        ])
+        ], { title: 'Write-offs by reason', periodStart: start, periodEnd: end })
         downloadCsv('write-offs-by-reason.csv', csv)
       }}>
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -527,7 +564,7 @@ function AdjustmentsSection({ data }: { data: ReportsData }) {
 
 // ─── Refunds ──────────────────────────────────────────────────────────────
 
-function RefundsSection({ data }: { data: ReportsData }) {
+function RefundsSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
   return (
     <ReportShell
       title="Refunds / overpayments"
@@ -541,7 +578,7 @@ function RefundsSection({ data }: { data: ReportsData }) {
           { key: 'total_amount_due',   label: 'Amount due' },
           { key: 'paid_amount_cents',  label: 'Amount paid (cents)' },
           { key: 'overpayment',        label: 'Overpayment' },
-        ])
+        ], { title: 'Refunds / overpayments', periodStart: start, periodEnd: end })
         downloadCsv('refunds-overpayments.csv', csv)
       }}>
       {data.refunds.length === 0 ? (
@@ -576,7 +613,7 @@ function RefundsSection({ data }: { data: ReportsData }) {
 
 // ─── Payer mix ────────────────────────────────────────────────────────────
 
-function PayerMixSection({ data }: { data: ReportsData }) {
+function PayerMixSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
   const rows = data.payer_mix
   return (
     <ReportShell
@@ -590,7 +627,7 @@ function PayerMixSection({ data }: { data: ReportsData }) {
           { key: 'pct_of_claims',   label: '% of claims' },
           { key: 'total_charged',   label: 'Total charged' },
           { key: 'pct_of_charges',  label: '% of charges' },
-        ])
+        ], { title: 'Payer mix', periodStart: start, periodEnd: end })
         downloadCsv('payer-mix.csv', csv)
       }}>
       {rows.length === 0 ? (
@@ -629,7 +666,7 @@ function PayerMixSection({ data }: { data: ReportsData }) {
 
 // ─── Reimbursement by payer × visit type ──────────────────────────────────
 
-function ReimbursementByPayerSection({ data }: { data: ReportsData }) {
+function ReimbursementByPayerSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
   const rows = data.reimbursement_by_payer
   return (
     <ReportShell
@@ -645,7 +682,7 @@ function ReimbursementByPayerSection({ data }: { data: ReportsData }) {
           { key: 'avg_paid',       label: 'Avg paid' },
           { key: 'avg_adjustment', label: 'Avg adjustment' },
           { key: 'payment_pct',    label: '% of charges' },
-        ])
+        ], { title: 'Reimbursement by payer', periodStart: start, periodEnd: end })
         downloadCsv('reimbursement-by-payer.csv', csv)
       }}>
       {rows.length === 0 ? (
@@ -688,7 +725,7 @@ function ReimbursementByPayerSection({ data }: { data: ReportsData }) {
 
 // ─── Denials by payer ────────────────────────────────────────────────────
 
-function DenialsByPayerSection({ data }: { data: ReportsData }) {
+function DenialsByPayerSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
   const rows = data.denials_by_payer
   return (
     <ReportShell
@@ -704,7 +741,7 @@ function DenialsByPayerSection({ data }: { data: ReportsData }) {
           { key: 'denied_count',     label: 'Denied' },
           { key: 'zero_pay_count',   label: 'Zero-pay' },
           { key: 'denial_rate_pct',  label: 'Denial %' },
-        ])
+        ], { title: 'Denials by payer', periodStart: start, periodEnd: end })
         downloadCsv('denials-by-payer.csv', csv)
       }}>
       {rows.length === 0 ? (
