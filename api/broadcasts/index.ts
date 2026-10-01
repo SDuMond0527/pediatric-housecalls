@@ -27,6 +27,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!rows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = rows[0].practice_id as string
 
+  // Idempotent column bootstrap. The INSERT below references columns that
+  // weren't in the original broadcasts table. Running this on every request
+  // is cheap (Postgres short-circuits IF NOT EXISTS) and prevents the
+  // silent-500 class of bug where code expects a column prod doesn't have.
+  // Sara 2026-10-01 — this exact mismatch broke Smits acceptance for hours.
+  try {
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS family_phone text`
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS family_email text`
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS pairing_initiator_id uuid`
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS pairing_initiator_name text`
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_date date`
+    await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS scheduled_time text`
+  } catch (e: any) {
+    console.error('[broadcasts] column bootstrap failed:', e?.message)
+  }
+
   if (req.method === 'GET') {
     const { open_only } = req.query as Record<string, string>
     let result: unknown[]
