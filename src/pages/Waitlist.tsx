@@ -553,27 +553,40 @@ export function Waitlist() {
         const patientFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : patientFullName
         const patientLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
         const noteMap = parseNotes(accepting.notes)
-        const bc = await createBroadcast({
-          patient_first_name: patientFirst,
-          patient_last_name: patientLast,
-          patient_address: noteMap['Address'] || null,
-          family_phone: accepting.family_phone || noteMap['Phone'] || null,
-          family_email: accepting.family_email || noteMap['Email'] || null,
-          state: accepting.state || null,
-          zone: accepting.zip || null,
-          visit_type: finalVisitType,
-          request_type: requestType,
-          complaint: accepting.complaint || noteMap['Complaint'] || null,
-          is_urgent: false,
-          created_by: provider.id,
-          created_by_name: `${provider.role} ${provider.name}`,
-          pairing_initiator_id: provider.id,
-          pairing_initiator_name: `${provider.role} ${provider.name}`,
-          pairing_role_needed: pairingRoleNeeded,
-          scheduled_date: date,
-          scheduled_time: time24,
-          waitlist_entry_id: accepting.id,
-        }).catch(() => null)
+        // NO silent catch here — if the broadcast insert fails, the whole
+        // accept flow should abort with a visible error so Sara knows the
+        // waitlist entry didn't actually get accepted. Previous .catch(()=>null)
+        // let a failed broadcast look like a success (modal closed, waitlist
+        // refreshed, nothing on the Broadcasts tab). Sara 2026-10-01 (Smits
+        // case). Any failure surfaces as an alert and the modal stays open.
+        let bc: Awaited<ReturnType<typeof createBroadcast>> | null = null
+        try {
+          bc = await createBroadcast({
+            patient_first_name: patientFirst,
+            patient_last_name: patientLast,
+            patient_address: noteMap['Address'] || null,
+            family_phone: accepting.family_phone || noteMap['Phone'] || null,
+            family_email: accepting.family_email || noteMap['Email'] || null,
+            state: accepting.state || null,
+            zone: accepting.zip || null,
+            visit_type: finalVisitType,
+            request_type: requestType,
+            complaint: accepting.complaint || noteMap['Complaint'] || null,
+            is_urgent: false,
+            created_by: provider.id,
+            created_by_name: `${provider.role} ${provider.name}`,
+            pairing_initiator_id: provider.id,
+            pairing_initiator_name: `${provider.role} ${provider.name}`,
+            pairing_role_needed: pairingRoleNeeded,
+            scheduled_date: date,
+            scheduled_time: time24,
+            waitlist_entry_id: accepting.id,
+          })
+        } catch (err: any) {
+          alert(`Couldn't send the pairing broadcast — the waitlist entry was NOT accepted.\n\n${err?.message ?? 'Unknown error'}\n\nPlease try again or let the dev know.`)
+          setSubmitting(false)
+          return
+        }
         if (bc?.id) {
           invokeNotifications({ type: 'broadcast', broadcastId: bc.id }).catch(() => {})
         }
