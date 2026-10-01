@@ -2378,8 +2378,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             SELECT oc.provider_id, p.name, p.email, p.phone FROM on_call_schedule oc
             JOIN providers p ON p.id = oc.provider_id
             WHERE oc.practice_id = ${cancelPracticeId}::uuid AND oc.date = ${date}::date AND oc.state = ${cancelState}
-              AND (oc.start_time IS NULL OR oc.start_time <= ${time}::time)
-              AND (oc.end_time IS NULL OR oc.end_time > ${time}::time)
+              AND (oc.start_time IS NULL OR oc.start_time::time <= ${time}::time)
+              AND (oc.end_time   IS NULL OR oc.end_time::time   >  ${time}::time)
             LIMIT 1`
           if (onCallRows.length) {
             const md = onCallRows[0] as any

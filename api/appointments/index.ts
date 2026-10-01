@@ -103,12 +103,17 @@ async function createAppointmentCore(
         const [md] = await sql`SELECT id, name FROM providers WHERE id = ${second_provider_id}::uuid LIMIT 1`
         if (md) { mdProviderId = (md as any).id as string; mdName = ((md as any).name ?? '') as string }
       } else if (state) {
+        // on_call_schedule.start_time/end_time are TEXT in prod. Casting
+        // only the right side (${scheduled_time}::time) throws
+        // "operator does not exist: text <= time without time zone".
+        // Cast BOTH sides to time. Sentry 8d1a19c0 2026-10-01 21:37 UTC.
         const onCallRows = await sql`
           SELECT oc.provider_id, p.name AS provider_name FROM on_call_schedule oc
           JOIN providers p ON p.id = oc.provider_id
           WHERE oc.practice_id = ${practiceId}::uuid AND oc.date = ${scheduled_date}::date AND oc.state = ${state}
-            AND (oc.start_time IS NULL OR oc.start_time <= ${scheduled_time}::time)
-            AND (oc.end_time IS NULL OR oc.end_time > ${scheduled_time}::time) LIMIT 1`
+            AND (oc.start_time IS NULL OR oc.start_time::time <= ${scheduled_time}::time)
+            AND (oc.end_time   IS NULL OR oc.end_time::time   >  ${scheduled_time}::time)
+          LIMIT 1`
         if (onCallRows.length) {
           mdProviderId = (onCallRows[0] as any).provider_id as string
           mdName = ((onCallRows[0] as any).provider_name ?? '') as string
