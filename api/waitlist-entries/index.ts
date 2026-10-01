@@ -214,7 +214,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(
             (SELECT previously_seen_by_phc FROM children WHERE id = ANY(we.child_ids) LIMIT 1),
             (SELECT previously_seen_by_phc FROM children WHERE family_id = fp.id LIMIT 1)
-          ) AS previously_seen_by_phc
+          ) AS previously_seen_by_phc,
+          -- Open broadcast info — client uses this to hide the "Accept"
+          -- button once a pairing broadcast has been fired, so an in-home
+          -- provider doesn't accidentally skip pairing by taking the
+          -- waitlist entry directly. Sara 2026-10-01 (Smits case).
+          (SELECT id FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_id,
+          (SELECT pairing_role_needed FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_role_needed,
+          (SELECT pairing_initiator_name FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_initiator_name
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -246,7 +253,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(
             (SELECT previously_seen_by_phc FROM children WHERE id = ANY(we.child_ids) LIMIT 1),
             (SELECT previously_seen_by_phc FROM children WHERE family_id = fp.id LIMIT 1)
-          ) AS previously_seen_by_phc
+          ) AS previously_seen_by_phc,
+          -- Open broadcast info — client uses this to hide the "Accept"
+          -- button once a pairing broadcast has been fired, so an in-home
+          -- provider doesn't accidentally skip pairing by taking the
+          -- waitlist entry directly. Sara 2026-10-01 (Smits case).
+          (SELECT id FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_id,
+          (SELECT pairing_role_needed FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_role_needed,
+          (SELECT pairing_initiator_name FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_initiator_name
           FROM waitlist_entries we
           LEFT JOIN family_profiles fp ON fp.id = we.family_id
           WHERE we.status = ${status}
@@ -277,7 +291,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(
             (SELECT previously_seen_by_phc FROM children WHERE id = ANY(we.child_ids) LIMIT 1),
             (SELECT previously_seen_by_phc FROM children WHERE family_id = fp.id LIMIT 1)
-          ) AS previously_seen_by_phc
+          ) AS previously_seen_by_phc,
+          -- Open broadcast info — client uses this to hide the "Accept"
+          -- button once a pairing broadcast has been fired, so an in-home
+          -- provider doesn't accidentally skip pairing by taking the
+          -- waitlist entry directly. Sara 2026-10-01 (Smits case).
+          (SELECT id FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_id,
+          (SELECT pairing_role_needed FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_role_needed,
+          (SELECT pairing_initiator_name FROM broadcasts WHERE waitlist_entry_id = we.id AND is_open = true LIMIT 1) AS open_broadcast_initiator_name
         FROM waitlist_entries we
         LEFT JOIN family_profiles fp ON fp.id = we.family_id
         WHERE (we.practice_id = ${practiceId}::uuid OR we.practice_id IS NULL)

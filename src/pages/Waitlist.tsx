@@ -24,6 +24,9 @@ interface WaitlistEntry {
   family_email: string | null
   family_phone: string | null
   visit_type: string | null
+  open_broadcast_id: string | null
+  open_broadcast_role_needed: string | null
+  open_broadcast_initiator_name: string | null
   zip: string
   state: string | null
   preferred_time_window: string | null
@@ -639,6 +642,17 @@ export function Waitlist() {
         msg => window.confirm(`${msg}\n\nOK to double-book this provider?`),
       )
 
+      // Server returns { error } when pairing failed (e.g., no MD/NP on
+      // call for the state/date/time). The primary insert has already been
+      // rolled back server-side. Surface it loudly and leave the waitlist
+      // entry untouched so the user can retry via the pairing broadcast.
+      // Sara 2026-10-01 (Smits case).
+      if ((apptResult as any)?.error) {
+        alert((apptResult as any).error)
+        setSubmitting(false)
+        return
+      }
+
       await updateWaitlistEntry(accepting.id, { status: 'converted', converted_provider_id: provider.id })
 
       // Save patient data from the waitlist entry into the child's permanent
@@ -871,9 +885,20 @@ export function Waitlist() {
                   <Pencil size={11} /> Edit contact
                 </Button>
                 {entry.status === 'waiting' && (
-                  <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setAcceptVisitType(entry.visit_type || ''); setDate(''); setTime('') }}>
-                    <CheckCircle2 size={11} /> Accept to schedule
-                  </Button>
+                  entry.open_broadcast_id ? (
+                    // A pairing broadcast is already open for this entry.
+                    // Accepting the waitlist directly skips the pairing path
+                    // and creates orphan appointments (no paired MD/NP for
+                    // the in-home provider's visit). Force claiming via the
+                    // Broadcasts tab instead. Sara 2026-10-01 (Smits case).
+                    <div className="text-[11px] text-[#78350F] bg-[#FEF7E6] border border-[#F5D98F] rounded px-2 py-1.5 leading-tight">
+                      Pairing in progress — ask the {entry.open_broadcast_role_needed} to claim via the <strong>Broadcasts</strong> tab (paired with {entry.open_broadcast_initiator_name || 'the initiator'}).
+                    </div>
+                  ) : (
+                    <Button variant="teal" size="sm" onClick={() => { setAccepting(entry); setAcceptVisitType(entry.visit_type || ''); setDate(''); setTime('') }}>
+                      <CheckCircle2 size={11} /> Accept to schedule
+                    </Button>
+                  )
                 )}
                 <Button variant="danger" size="xs" onClick={() => updateStatus(entry.id, 'removed')}>
                   <XCircle size={11} /> Remove

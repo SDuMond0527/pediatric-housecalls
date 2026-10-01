@@ -36,6 +36,29 @@ async function createAppointmentCore(
 ): Promise<CreateAppointmentResult> {
   const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = input
   const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
+
+  // Rapid-click dedup: if the exact same booking landed in the last 60
+  // seconds (same provider + child + date + time + visit_type), treat
+  // this request as idempotent and return the existing row instead of
+  // creating a duplicate. Prevents the Smits-case where Karen's double-
+  // clicks produced 10 identical appointments.
+  if (child_id) {
+    const [recent] = await sql`
+      SELECT * FROM appointments
+      WHERE practice_id = ${practiceId}::uuid
+        AND provider_id = ${provider_id}::uuid
+        AND child_id    = ${child_id}::uuid
+        AND scheduled_date = ${scheduled_date}::date
+        AND scheduled_time = ${scheduled_time}
+        AND visit_type = ${visit_type}
+        AND status != 'cancelled'
+        AND created_at > NOW() - INTERVAL '60 seconds'
+      LIMIT 1`
+    if (recent) {
+      return { primary: recent, secondary: null }
+    }
+  }
+
   if (!allow_overlap) {
     const [nh, nm] = String(scheduled_time).split(':').map(Number)
     const newStart = nh * 60 + nm
@@ -92,7 +115,18 @@ async function createAppointmentCore(
         }
       }
       if (!mdProviderId && state) {
+        // Email admins AND roll back the primary insert — otherwise the
+        // in-home provider ends up with an orphan appointment and nobody
+        // on the MD/NP side. Surface a loud error so the caller tells the
+        // user to pick an MD/NP explicitly instead of relying on on-call
+        // lookup. Sara 2026-10-01 (Smits case: Karen got 10 appts, Sara 0).
         alertNoOnCallMD(sql, practiceId, visit_type, scheduled_date, scheduled_time, state).catch(() => {})
+        await sql`DELETE FROM appointments WHERE id = ${(primaryRow as any).id}::uuid`
+        return {
+          primary: null,
+          secondary: null,
+          error: `No MD/NP on call for ${state} on ${scheduled_date} at ${scheduled_time} to pair with this ${visit_type}. The in-home half was NOT created. Ask an MD/NP to accept via the pairing broadcast on their /broadcasts page, or add an on-call MD for that date/state and retry.`,
+        }
       }
     }
     if (mdProviderId) {
