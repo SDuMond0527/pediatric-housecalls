@@ -206,6 +206,36 @@ const CHECKS = [
     },
   },
   {
+    name: 'radiology_orders bootstrap + GET',
+    run: async () => {
+      // Mirrors the SELECT in api/radiology/results.ts. Also makes sure
+      // the table (and its FK to children/providers) exists.
+      await sql`
+        CREATE TABLE IF NOT EXISTS radiology_orders (
+          id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          child_id        uuid NOT NULL REFERENCES children(id)   ON DELETE CASCADE,
+          provider_id     uuid NOT NULL REFERENCES providers(id),
+          appointment_id  uuid,
+          tests           jsonb NOT NULL DEFAULT '[]'::jsonb,
+          diagnoses       text[] NOT NULL DEFAULT '{}',
+          priority        text   NOT NULL DEFAULT 'routine',
+          notes           text,
+          status          text   NOT NULL DEFAULT 'pending',
+          created_at      timestamptz NOT NULL DEFAULT NOW()
+        )`
+      const [c] = await sql`SELECT id FROM children LIMIT 1`
+      if (!c) return
+      await sql`
+        SELECT o.id, o.tests, o.diagnoses, o.priority, o.status, o.notes, o.created_at,
+               p.name AS provider_name
+        FROM radiology_orders o
+        JOIN providers p ON p.id = o.provider_id
+        WHERE o.child_id = ${c.id}::uuid
+        ORDER BY o.created_at DESC
+        LIMIT 10`
+    },
+  },
+  {
     name: 'cma-schedule availability_overrides lookup',
     run: async () => {
       const [p] = await sql`SELECT practice_id FROM providers WHERE is_active = true LIMIT 1`

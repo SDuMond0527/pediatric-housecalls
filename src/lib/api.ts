@@ -1345,6 +1345,22 @@ export const createLabOrder = (body: {
 export const emailLabOrder = (orderId: string) =>
   apiFetch<{ sent: boolean; to: string }>(`/api/labs/${orderId}/email`, { method: 'POST' })
 
+// ── Radiology ─────────────────────────────────────────────────
+export const getRadiologyOrders = (childId: string) =>
+  apiFetch<any[]>(`/api/radiology/results?child_id=${encodeURIComponent(childId)}`)
+
+export const createRadiologyOrder = (body: {
+  child_id: string
+  appointment_id?: string
+  tests: { code: string; name: string }[]
+  diagnoses: string[]
+  priority: 'routine' | 'stat'
+  notes?: string
+}) => apiFetch<any>('/api/radiology/order', { method: 'POST', body: JSON.stringify(body) })
+
+export const emailRadiologyOrder = (orderId: string) =>
+  apiFetch<{ sent: boolean; to: string }>(`/api/radiology/${orderId}/email`, { method: 'POST' })
+
 // ── PHI Audit Log ─────────────────────────────────────────────
 export function logAudit(action: string, resource_type: string, resource_id?: string) {
   apiFetch<void>('/api/audit', { method: 'POST', body: JSON.stringify({ action, resource_type, resource_id }) })

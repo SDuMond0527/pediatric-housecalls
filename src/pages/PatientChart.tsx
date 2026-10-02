@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
 import { PatientStatementModal } from './admin/PatientStatementModal'
@@ -150,7 +150,7 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'growth' | 'vaccines' | 'medical_history' | 'billing'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing'>('overview')
   // Billing tab: log-book of every claim + statement for this child.
   // Loaded lazily on first tab visit to avoid a round-trip on every
   // chart open — same pattern as `labsLoaded` below.
@@ -302,6 +302,75 @@ export function PatientChart() {
     }
   }
 
+  // Radiology — mirrors Labs. For now the only study ordered through
+  // this flow is a PA/Lateral chest x-ray, so the form skips the test
+  // picker and submits that single CPT every time.
+  const RADIOLOGY_TEST = { code: '71046', name: 'PA/Lateral Chest X-ray' }
+
+  const [radiologyOrders, setRadiologyOrders] = useState<any[]>([])
+  const [radiologyLoading, setRadiologyLoading] = useState(false)
+  const [radiologyLoaded, setRadiologyLoaded] = useState(false)
+  const [radiologyError, setRadiologyError] = useState<string | null>(null)
+  const [radOrderFormOpen, setRadOrderFormOpen] = useState(false)
+  const [radOrderDiagnoses, setRadOrderDiagnoses] = useState('')
+  const [radOrderPriority, setRadOrderPriority] = useState<'routine' | 'stat'>('routine')
+  const [radOrderNotes, setRadOrderNotes] = useState('')
+  const [radOrderSubmitting, setRadOrderSubmitting] = useState(false)
+  const [radOrderError, setRadOrderError] = useState<string | null>(null)
+  const [emailingRadOrderId, setEmailingRadOrderId] = useState<string | null>(null)
+  const [emailRadResult, setEmailRadResult] = useState<Record<string, 'sent' | 'error'>>({})
+
+  async function handleEmailRadiologyOrder(orderId: string) {
+    setEmailingRadOrderId(orderId)
+    try {
+      await emailRadiologyOrder(orderId)
+      setEmailRadResult(prev => ({ ...prev, [orderId]: 'sent' }))
+    } catch {
+      setEmailRadResult(prev => ({ ...prev, [orderId]: 'error' }))
+    } finally {
+      setEmailingRadOrderId(null)
+    }
+  }
+
+  async function loadRadiology() {
+    if (!childId) return
+    setRadiologyLoading(true)
+    setRadiologyError(null)
+    try {
+      const data = await getRadiologyOrders(childId)
+      setRadiologyOrders(data ?? [])
+      setRadiologyLoaded(true)
+    } catch (e: any) {
+      setRadiologyError(e.message || 'Failed to load radiology orders')
+    } finally {
+      setRadiologyLoading(false)
+    }
+  }
+
+  async function submitRadiologyOrder() {
+    if (!childId) return
+    setRadOrderSubmitting(true)
+    setRadOrderError(null)
+    try {
+      const order = await createRadiologyOrder({
+        child_id: childId,
+        tests: [RADIOLOGY_TEST],
+        diagnoses: radOrderDiagnoses.split(',').map(s => s.trim()).filter(Boolean),
+        priority: radOrderPriority,
+        notes: radOrderNotes || undefined,
+      })
+      setRadiologyOrders(prev => [order, ...prev])
+      setRadOrderFormOpen(false)
+      setRadOrderDiagnoses('')
+      setRadOrderPriority('routine')
+      setRadOrderNotes('')
+    } catch (e: any) {
+      setRadOrderError(e.message || 'Failed to place order')
+    } finally {
+      setRadOrderSubmitting(false)
+    }
+  }
+
   // Add sibling
   const [siblingOpen, setSiblingOpen] = useState(false)
   const [siblingSubmitting, setSiblingSubmitting] = useState(false)
@@ -405,6 +474,7 @@ export function PatientChart() {
     { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
+    { key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null },
     { key: 'billing' as const,  label: 'Billing',   count: billingEntries.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
   ]
@@ -738,6 +808,7 @@ export function PatientChart() {
               onClick={() => {
                 setActiveTab(tab.key)
                 if (tab.key === 'labs' && !labsLoaded) loadLabs()
+                if (tab.key === 'radiology' && !radiologyLoaded) loadRadiology()
                 if (tab.key === 'billing' && !billingLoaded) loadBilling()
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
@@ -2029,6 +2100,160 @@ export function PatientChart() {
                                 <pre className="whitespace-pre-wrap font-sans text-[12px]">{typeof r.result_data === 'string' ? r.result_data : JSON.stringify(r.result_data, null, 2)}</pre>
                               </div>
                             ))}
+                          </div>
+                        )}
+
+                        {order.notes && (
+                          <div className="text-[12px] text-[#777] mt-2 pt-2 border-t border-[#F1EFE8]">{order.notes}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'radiology' && (
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">Radiology Orders</div>
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">Order a PA/Lateral chest x-ray — parent takes the PDF to any outpatient imaging center</div>
+                  </div>
+                  <button
+                    onClick={() => { setRadOrderFormOpen(true); setRadOrderError(null) }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors"
+                  >
+                    + New Order
+                  </button>
+                </div>
+
+                {/* Order form */}
+                {radOrderFormOpen && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="font-medium text-[14px] text-[#1A1A2E]">New Radiology Order</div>
+                      <button onClick={() => setRadOrderFormOpen(false)} className="text-[#1A1A2E] hover:text-[#555]"><X size={16} /></button>
+                    </div>
+
+                    {/* Study (fixed) */}
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Study</div>
+                      <div className="flex items-center justify-between px-3 py-2 bg-[#F1EFE8] rounded-lg">
+                        <span className="text-[13px] text-[#1A1A2E]">{RADIOLOGY_TEST.name}</span>
+                        <span className="text-[11px] text-[#1A1A2E] font-mono">CPT {RADIOLOGY_TEST.code}</span>
+                      </div>
+                    </div>
+
+                    {/* Diagnoses */}
+                    <div className="mb-4">
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Diagnosis Codes (ICD-10)</label>
+                      <input
+                        value={radOrderDiagnoses}
+                        onChange={e => setRadOrderDiagnoses(e.target.value)}
+                        placeholder="e.g. J18.9, R05.9"
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                      <div className="text-[11px] text-[#1A1A2E] mt-1">Comma-separated</div>
+                    </div>
+
+                    {/* Priority */}
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Priority</div>
+                      <div className="flex gap-2">
+                        {(['routine', 'stat'] as const).map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setRadOrderPriority(p)}
+                            className={`px-4 py-1.5 rounded-lg text-[12px] font-medium border transition-all capitalize ${radOrderPriority === p ? (p === 'stat' ? 'bg-red-500 text-white border-red-500' : 'bg-[#7F77DD] text-white border-[#7F77DD]') : 'border-[#E8E8E4] text-[#666] hover:bg-[#F1EFE8]'}`}
+                          >
+                            {p === 'stat' ? 'STAT' : 'Routine'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="mb-4">
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Notes (optional)</label>
+                      <textarea
+                        value={radOrderNotes}
+                        onChange={e => setRadOrderNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Any special instructions for this order…"
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                    </div>
+
+                    {radOrderError && (
+                      <div className="text-[12px] text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{radOrderError}</div>
+                    )}
+
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setRadOrderFormOpen(false)} className="px-4 py-2 text-[13px] text-[#666] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8] transition-colors">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitRadiologyOrder}
+                        disabled={radOrderSubmitting}
+                        className="px-4 py-2 text-[13px] bg-[#7F77DD] text-white rounded-lg hover:bg-[#6C64C8] transition-colors disabled:opacity-50 font-medium"
+                      >
+                        {radOrderSubmitting ? 'Placing…' : 'Place Order'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Order list */}
+                {radiologyLoading ? (
+                  <div className="text-center py-8 text-[13px] text-[#1A1A2E]">Loading…</div>
+                ) : radiologyError ? (
+                  <div className="text-[13px] text-red-500 bg-red-50 px-4 py-3 rounded-xl">{radiologyError}</div>
+                ) : radiologyOrders.length === 0 ? (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 shadow-sm text-center">
+                    <div className="text-[13px] text-[#1A1A2E]">No radiology orders yet for this patient.</div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {radiologyOrders.map(order => (
+                      <div key={order.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {(order.tests ?? []).map((t: any) => (
+                                <span key={t.code} className="px-2 py-0.5 bg-[#F1EFE8] text-[#555] text-[11px] rounded-full font-medium">{t.name}</span>
+                              ))}
+                              {order.priority === 'stat' && (
+                                <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[11px] rounded-full font-semibold">STAT</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[#1A1A2E] mt-1">
+                              Ordered by {order.provider_name} · {order.created_at ? format(new Date(order.created_at), 'MMM d, yyyy') : ''}
+                            </div>
+                            {order.diagnoses?.length > 0 && (
+                              <div className="text-[11px] text-[#1A1A2E] mt-0.5">Dx: {order.diagnoses.join(', ')}</div>
+                            )}
+                          </div>
+                          <LabStatusBadge status={order.status} />
+                        </div>
+
+                        {order.status === 'pending' && (
+                          <div className="mt-3 pt-3 border-t border-[#F1EFE8] flex items-center gap-3">
+                            <button
+                              onClick={() => handleEmailRadiologyOrder(order.id)}
+                              disabled={emailingRadOrderId === order.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-[#7F77DD] text-[#7F77DD] rounded-lg hover:bg-[#7F77DD]/8 transition-colors disabled:opacity-50"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                              {emailingRadOrderId === order.id ? 'Sending…' : 'Email order to patient'}
+                            </button>
+                            {emailRadResult[order.id] === 'sent' && (
+                              <span className="text-[12px] text-emerald-600 font-medium">Sent ✓</span>
+                            )}
+                            {emailRadResult[order.id] === 'error' && (
+                              <span className="text-[12px] text-red-500">Failed — check patient email on file</span>
+                            )}
                           </div>
                         )}
 
