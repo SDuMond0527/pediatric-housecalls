@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
-import { CalendarPlus, Home, User, LogOut, ClipboardList, Shield } from 'lucide-react'
+import { CalendarPlus, Home, User, LogOut, ClipboardList, Shield, FlaskConical, Activity } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
@@ -47,6 +47,14 @@ export function FamilyLayout() {
             <NavLink to="/family/vaccines"
               className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
               <Shield size={14} /> Vaccines
+            </NavLink>
+            <NavLink to="/family/labs"
+              className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
+              <FlaskConical size={14} /> Labs
+            </NavLink>
+            <NavLink to="/family/radiology"
+              className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>
+              <Activity size={14} /> Radiology
             </NavLink>
             <NavLink to="/family/book"
               className={({ isActive }) => `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${isActive ? 'bg-[#EEEDFE] text-[#3C3489]' : 'text-[#555] hover:bg-[#F1EFE8]'}`}>

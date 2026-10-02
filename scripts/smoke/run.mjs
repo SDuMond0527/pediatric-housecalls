@@ -206,6 +206,40 @@ const CHECKS = [
     },
   },
   {
+    name: 'patient_reports bootstrap + GET (lab + radiology report uploads)',
+    run: async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS patient_reports (
+          id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          child_id          uuid NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+          practice_id       uuid NOT NULL REFERENCES practices(id),
+          kind              text NOT NULL CHECK (kind IN ('lab','radiology')),
+          title             text NOT NULL,
+          blob_url          text NOT NULL,
+          filename          text NOT NULL,
+          mime_type         text,
+          size_bytes        bigint,
+          uploaded_by_type  text NOT NULL CHECK (uploaded_by_type IN ('provider','family')),
+          uploaded_by_id    uuid,
+          uploaded_by_name  text NOT NULL,
+          uploaded_at       timestamptz NOT NULL DEFAULT NOW()
+        )`
+      const [p] = await sql`SELECT practice_id FROM providers WHERE is_active = true LIMIT 1`
+      const [c] = await sql`SELECT id FROM children WHERE practice_id = ${p.practice_id}::uuid LIMIT 1`
+      if (!c) return
+      // Replay the GET SELECT for each kind so we catch any column rename.
+      for (const kind of ['lab', 'radiology']) {
+        await sql`
+          SELECT id, child_id, kind, title, blob_url, filename, mime_type, size_bytes,
+                 uploaded_by_type, uploaded_by_name, uploaded_at
+          FROM patient_reports
+          WHERE child_id = ${c.id}::uuid AND kind = ${kind} AND practice_id = ${p.practice_id}::uuid
+          ORDER BY uploaded_at DESC
+          LIMIT 10`
+      }
+    },
+  },
+  {
     name: 'radiology_orders bootstrap + GET',
     run: async () => {
       // Mirrors the SELECT in api/radiology/results.ts. Also makes sure

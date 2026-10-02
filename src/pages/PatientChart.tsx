@@ -5,6 +5,7 @@ import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
 import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
+import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
 import { PatientStatementModal } from './admin/PatientStatementModal'
@@ -1914,6 +1915,10 @@ export function PatientChart() {
 
             {activeTab === 'labs' && (
               <div className="space-y-4">
+                {/* Uploaded reports — above the order list so result PDFs
+                    are the first thing a provider sees when they open Labs. */}
+                {childId && <PatientReportsSection childId={childId} kind="lab" role="provider" />}
+
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -2115,6 +2120,10 @@ export function PatientChart() {
 
             {activeTab === 'radiology' && (
               <div className="space-y-4">
+                {/* Uploaded radiology reports — surfaced first for the
+                    same reason as the Labs tab. */}
+                {childId && <PatientReportsSection childId={childId} kind="radiology" role="provider" />}
+
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>

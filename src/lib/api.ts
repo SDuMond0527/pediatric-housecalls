@@ -1361,6 +1361,86 @@ export const createRadiologyOrder = (body: {
 export const emailRadiologyOrder = (orderId: string) =>
   apiFetch<{ sent: boolean; to: string }>(`/api/radiology/${orderId}/email`, { method: 'POST' })
 
+// ── Patient Reports (lab + radiology report file uploads) ────
+export interface PatientReport {
+  id: string
+  child_id: string
+  kind: 'lab' | 'radiology'
+  title: string
+  blob_url: string
+  filename: string
+  mime_type: string | null
+  size_bytes: number | null
+  uploaded_by_type: 'provider' | 'family'
+  uploaded_by_name: string
+  uploaded_at: string
+}
+
+export const getPatientReports = (childId: string, kind: 'lab' | 'radiology') =>
+  apiFetch<PatientReport[]>(`/api/patient-reports?child_id=${encodeURIComponent(childId)}&kind=${kind}`)
+
+export const familyGetPatientReports = (childId: string, kind: 'lab' | 'radiology') =>
+  familyApiFetch<PatientReport[]>(`/api/patient-reports?child_id=${encodeURIComponent(childId)}&kind=${kind}`)
+
+export const createPatientReport = (body: {
+  child_id: string
+  kind: 'lab' | 'radiology'
+  title: string
+  blob_url: string
+  filename: string
+  mime_type?: string
+  size_bytes?: number
+}) => apiFetch<PatientReport>('/api/patient-reports', { method: 'POST', body: JSON.stringify(body) })
+
+export const familyCreatePatientReport = (body: {
+  child_id: string
+  kind: 'lab' | 'radiology'
+  title: string
+  blob_url: string
+  filename: string
+  mime_type?: string
+  size_bytes?: number
+}) => familyApiFetch<PatientReport>('/api/patient-reports', { method: 'POST', body: JSON.stringify(body) })
+
+export const deletePatientReport = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/patient-reports?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/**
+ * Upload a lab/radiology report PDF (or image) directly to Vercel Blob.
+ * Mirrors uploadHandbookFile — browser streams the file straight to Blob
+ * using a signed token from /api/patient-reports/upload-token, which
+ * accepts BOTH provider and family Cognito pools.
+ *
+ * Call with role='provider' from the chart; call with role='family' from
+ * the family portal. The server verifies the matching pool and asserts
+ * child ownership before issuing the signing token.
+ */
+export async function uploadPatientReportFile(
+  file: File,
+  opts: { child_id: string; kind: 'lab' | 'radiology'; role: 'provider' | 'family' },
+): Promise<{ url: string; filename: string; mime_type: string; size_bytes: number }> {
+  const { upload } = await import('@vercel/blob/client')
+  let accessToken = ''
+  if (opts.role === 'provider') {
+    const session = await fetchAuthSession()
+    accessToken = session.tokens?.accessToken?.toString() ?? ''
+  } else {
+    accessToken = await getFamilyAccessToken()
+  }
+  if (!accessToken) throw new Error('Not signed in')
+  const blob = await upload(`patient-reports/${opts.child_id}/${opts.kind}/${file.name}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/patient-reports/upload-token',
+    clientPayload: JSON.stringify({ accessToken, child_id: opts.child_id, kind: opts.kind }),
+  })
+  return {
+    url: blob.url,
+    filename: file.name,
+    mime_type: file.type || 'application/octet-stream',
+    size_bytes: file.size,
+  }
+}
+
 // ── PHI Audit Log ─────────────────────────────────────────────
 export function logAudit(action: string, resource_type: string, resource_id?: string) {
   apiFetch<void>('/api/audit', { method: 'POST', body: JSON.stringify({ action, resource_type, resource_id }) })
