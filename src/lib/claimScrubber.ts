@@ -229,23 +229,27 @@ export function scrubClaim(claim: ScrubbableClaim, ctx: ScrubContext = {}): Scru
     }
   }
 
-  // Eligibility freshness
-  if (ctx.lastEligibilityCheckAt) {
-    const last = new Date(ctx.lastEligibilityCheckAt)
-    if (!isNaN(last.getTime())) {
-      const age = daysBetween(last, new Date())
-      if (age > ELIGIBILITY_STALENESS_DAYS) {
-        warnings.push({
-          code: 'STALE_ELIGIBILITY',
-          message: `Eligibility was last verified ${age} days ago. If the patient's insurance has changed since, this claim will be denied. Re-run eligibility before submitting.`,
-        })
+  // Eligibility freshness — skip for self-pay. There's no insurance to
+  // verify, so flagging "no eligibility on file" is noise. Sara 2026-10-05.
+  const isSelfPay = claim.payer_id === 'PP' || /self[\s-]*pay/i.test(claim.payer_name ?? '')
+  if (!isSelfPay) {
+    if (ctx.lastEligibilityCheckAt) {
+      const last = new Date(ctx.lastEligibilityCheckAt)
+      if (!isNaN(last.getTime())) {
+        const age = daysBetween(last, new Date())
+        if (age > ELIGIBILITY_STALENESS_DAYS) {
+          warnings.push({
+            code: 'STALE_ELIGIBILITY',
+            message: `Eligibility was last verified ${age} days ago. If the patient's insurance has changed since, this claim will be denied. Re-run eligibility before submitting.`,
+          })
+        }
       }
+    } else {
+      warnings.push({
+        code: 'NO_ELIGIBILITY_CHECK',
+        message: 'No eligibility check on file for this patient. If their insurance has changed, this will be denied. Re-verify eligibility before submitting.',
+      })
     }
-  } else {
-    warnings.push({
-      code: 'NO_ELIGIBILITY_CHECK',
-      message: 'No eligibility check on file for this patient. If their insurance has changed, this will be denied. Re-verify eligibility before submitting.',
-    })
   }
 
   return { errors, warnings }

@@ -1389,10 +1389,12 @@ export function AdminClaims() {
                       <div className="flex items-center gap-2">
                         {readyForBiller && (
                           <span
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"
                             title={`Marked by ${c.ready_for_biller_by ?? 'Unknown'} on ${fmtDate(c.ready_for_biller_at)}`}
                           >
+                            {c.ready_for_biller_by === 'System (auto)' && <Zap size={10} />}
                             Ready for biller
+                            {c.ready_for_biller_by === 'System (auto)' && <span className="opacity-70">· auto</span>}
                           </span>
                         )}
                         {isOpen ? <ChevronUp size={15} className="text-[#1A1A2E] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#1A1A2E] flex-shrink-0" />}

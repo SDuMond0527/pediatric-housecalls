@@ -285,6 +285,126 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     }
   }
 
+  // ─── Auto-ready for biller ─────────────────────────────────────────────
+  // If the just-generated claim passes the full scrubber with zero
+  // errors AND zero warnings, mark it ready-for-biller automatically.
+  // Pam's queue becomes exceptions-only. Mirrors src/lib/claimScrubber.ts;
+  // keep the two in sync.
+  //
+  // Kill switch: AUTO_READY_CLEAN_CLAIMS=false in Vercel env disables.
+  // Guard: only runs on claims not already marked ready (idempotent on
+  // re-sign of an existing editable claim).
+  //
+  // Sara 2026-10-05.
+  const AUTO_READY_ENABLED = String(process.env.AUTO_READY_CLEAN_CLAIMS ?? 'true').toLowerCase() !== 'false'
+  if (AUTO_READY_ENABLED && claim?.id && !claim.ready_for_biller_at) {
+    const dxList  = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
+    const cptList = Array.isArray(claim.cpt_codes) ? claim.cpt_codes : []
+    const npiDigits = String(claim.rendering_provider_npi ?? '').replace(/\D/g, '')
+    const hasZeroLine = cptList.some((c: any) => {
+      const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
+      const units  = parseInt(String(c.units ?? 1), 10) || 1
+      return charge * units <= 0
+    })
+    const isSelfPay = claim.payer_id === 'PP' || /self[\s-]*pay/i.test(claim.payer_name ?? '')
+
+    // Timely filing — only auto-ready if we're > 14 days from the window.
+    let withinFilingWindow = true
+    if (claim.service_date) {
+      const dos = new Date(claim.service_date)
+      if (!isNaN(dos.getTime())) {
+        const daysSince = Math.floor((Date.now() - dos.getTime()) / 86400000)
+        const payerLc = String(claim.payer_name ?? '').toLowerCase()
+        let window = 90
+        if (/aetna/.test(payerLc))                              window = 120
+        else if (/medicare|medicaid/.test(payerLc))             window = 365
+        if (window - daysSince <= 14) withinFilingWindow = false
+      }
+    }
+
+    // Eligibility freshness — skip for self-pay (no insurance to verify).
+    let eligFresh = true
+    if (!isSelfPay) {
+      const lastEligCheck = child?.last_eligibility_check_at
+      if (!lastEligCheck) {
+        eligFresh = false
+      } else {
+        const age = Math.floor((Date.now() - new Date(lastEligCheck).getTime()) / 86400000)
+        if (age > 30) eligFresh = false
+      }
+    }
+
+    // Duplicate submission check — don't auto-ready if a sibling claim
+    // for the same patient on the same DOS has already been submitted
+    // with any overlapping CPT.
+    let noDuplicate = true
+    if (claim.child_id && claim.service_date) {
+      try {
+        const sibs = await sql`
+          SELECT cpt_codes FROM claims
+          WHERE practice_id = ${practiceId}::uuid
+            AND child_id = ${claim.child_id}::uuid
+            AND service_date = ${claim.service_date}::date
+            AND id != ${claim.id}::uuid
+            AND status = 'submitted'
+        `
+        if (sibs.length > 0) {
+          const thisCpts = new Set(cptList.map((c: any) => String(c.code).toUpperCase()))
+          for (const s of sibs) {
+            const otherCpts = Array.isArray(s.cpt_codes) ? s.cpt_codes : []
+            if (otherCpts.some((c: any) => thisCpts.has(String(c.code).toUpperCase()))) {
+              noDuplicate = false
+              break
+            }
+          }
+        }
+      } catch { /* non-fatal; err on side of not auto-readying */ noDuplicate = false }
+    }
+
+    const isClean =
+      dxList.length > 0 &&
+      cptList.length > 0 &&
+      npiDigits.length === 10 &&
+      !!claim.patient_dob &&
+      !hasZeroLine &&
+      withinFilingWindow &&
+      eligFresh &&
+      noDuplicate
+
+    if (isClean) {
+      try {
+        await sql`
+          UPDATE claims SET
+            ready_for_biller_at = NOW(),
+            ready_for_biller_by = ${'System (auto)'},
+            updated_at = NOW()
+          WHERE id = ${claim.id}::uuid
+            AND practice_id = ${practiceId}::uuid
+            AND ready_for_biller_at IS NULL
+        `
+        await sql`
+          CREATE TABLE IF NOT EXISTS claim_activity_log (
+            id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            claim_id        uuid NOT NULL,
+            created_at      timestamptz NOT NULL DEFAULT NOW(),
+            created_by      uuid,
+            created_by_name text,
+            kind            text NOT NULL DEFAULT 'note',
+            body            text NOT NULL
+          )`
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+          VALUES (
+            ${claim.id}::uuid, NULL, 'System (auto)', 'auto_ready',
+            'Auto-marked ready for biller — scrubber passed with no errors or warnings.'
+          )
+        `
+      } catch (e: any) {
+        console.error('auto-ready failed (non-fatal):', e?.message)
+      }
+    }
+  }
+
   return { claim }
 }
 
