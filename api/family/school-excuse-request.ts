@@ -288,7 +288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Please tell us which dates need to be excused.' })
     }
 
-    const [fam] = await sql`SELECT id, email, parent_name, display_name, phone, practice_id FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
+    const [fam] = await sql`SELECT id, email, display_name, phone, practice_id FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
     if (!fam) return res.status(403).json({ error: 'Family not found' })
     if (!fam.email) return res.status(400).json({ error: 'No email address on file. Please update your profile first.' })
 
@@ -371,7 +371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       VALUES (
         ${fam.practice_id}::uuid, ${row.child_id}::uuid, ${appointment_id}::uuid,
-        ${fam.id}::uuid, ${fam.parent_name ?? fam.display_name ?? fam.email ?? 'Family'},
+        ${fam.id}::uuid, ${fam.display_name ?? fam.email ?? 'Family'},
         ${excuseDatesStr}, ${notesStr || null},
         ${row.prov_id}::uuid, ${row.prov_name}, ${row.prov_npi ?? null},
         ${blob.url}, ${filename}, ${sentAt ? fam.email : null}, ${sentAt}, ${sendError ? 'send_failed' : 'sent'}
