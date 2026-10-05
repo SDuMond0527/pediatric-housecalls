@@ -81,6 +81,64 @@ function normalizePayerFamily(payerName: string | null): keyof typeof TIMELY_FIL
 
 const ELIGIBILITY_STALENESS_DAYS = 30
 
+/**
+ * Persistent badge for the claim card in Pending Review / Rework / Draft
+ * tabs so Andrea sees timely-filing urgency without having to click
+ * into Submit. Returns null when the claim is already submitted, has
+ * an ERA back, or is still comfortably far from the filing deadline.
+ *
+ * `urgent`  = ≤ 14 days left — orange
+ * `expired` = past the deadline — red
+ */
+export type FilingBadge = {
+  variant: 'urgent' | 'expired'
+  daysLeft: number
+  window: number
+  payerFamily: string
+  label: string
+}
+
+export function getFilingBadge(claim: {
+  service_date: string | Date | null
+  payer_name: string | null
+  status?: string | null
+  era_received_at?: string | Date | null
+}): FilingBadge | null {
+  // Already submitted or already adjudicated — timely filing concern
+  // is in the past.
+  if (!claim.service_date) return null
+  if (claim.status === 'submitted') return null
+  if (claim.era_received_at) return null
+
+  const dos = new Date(claim.service_date)
+  if (isNaN(dos.getTime())) return null
+
+  const daysSince = daysBetween(dos, new Date())
+  const family = normalizePayerFamily(claim.payer_name)
+  const window = family ? TIMELY_FILING_DAYS[family] : 90
+  const daysLeft = window - daysSince
+
+  if (daysLeft < 0) {
+    return {
+      variant: 'expired',
+      daysLeft,
+      window,
+      payerFamily: family ?? 'Payer',
+      label: 'FILING EXPIRED',
+    }
+  }
+  if (daysLeft <= 14) {
+    return {
+      variant: 'urgent',
+      daysLeft,
+      window,
+      payerFamily: family ?? 'Payer',
+      label: daysLeft === 0 ? 'FILE TODAY' : `${daysLeft}d TO FILE`,
+    }
+  }
+  return null
+}
+
 export function scrubClaim(claim: ScrubbableClaim, ctx: ScrubContext = {}): ScrubResult {
   const errors: ScrubIssue[] = []
   const warnings: ScrubIssue[] = []

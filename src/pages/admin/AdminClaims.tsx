@@ -6,7 +6,7 @@ import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send,
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
-import { scrubClaim, type ScrubResult } from '../../lib/claimScrubber'
+import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
 
@@ -1329,6 +1329,28 @@ export function AdminClaims() {
                                 ↻ REOPENED{c.reopen_reason ? ` — ${(REOPEN_REASON_LABELS[c.reopen_reason] ?? c.reopen_reason).toUpperCase()}` : ''}
                               </span>
                             )}
+                            {/* Timely-filing countdown. Fires once a claim is
+                                ≤ 14 days from the payer's filing window; red
+                                once past the deadline. Hidden on submitted or
+                                ERA-received claims. See src/lib/claimScrubber.ts. */}
+                            {(() => {
+                              const fb = getFilingBadge(c)
+                              if (!fb) return null
+                              const cls = fb.variant === 'expired'
+                                ? 'bg-[#FEE2E2] text-[#991B1B]'
+                                : 'bg-[#FEF3C7] text-[#92400E]'
+                              const title = fb.variant === 'expired'
+                                ? `${fb.payerFamily} timely filing window (${fb.window} days) has passed by ${Math.abs(fb.daysLeft)} days. Claim will likely be denied.`
+                                : `${fb.payerFamily} timely filing window closes in ${fb.daysLeft} days (${fb.window}-day limit from service date).`
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}
+                                  title={title}
+                                >
+                                  ⏱ {fb.label}
+                                </span>
+                              )
+                            })()}
                             {/* Denial + 277 REJECTED badges were removed 2026-09-23
                                 when the Rework tab shipped. A claim in Rework
                                 lives on that tab; the badge became redundant
@@ -2059,6 +2081,29 @@ export function AdminClaims() {
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                             {renderPcnPill(c)}
+                            {/* Timely-filing countdown. getFilingBadge returns
+                                null when the claim is already submitted or has
+                                an ERA, so Submitted/Completed cards show
+                                nothing. Rework cards still in error / 277-
+                                rejected states will surface it. */}
+                            {(() => {
+                              const fb = getFilingBadge(c)
+                              if (!fb) return null
+                              const cls = fb.variant === 'expired'
+                                ? 'bg-[#FEE2E2] text-[#991B1B]'
+                                : 'bg-[#FEF3C7] text-[#92400E]'
+                              const title = fb.variant === 'expired'
+                                ? `${fb.payerFamily} timely filing window (${fb.window} days) has passed by ${Math.abs(fb.daysLeft)} days.`
+                                : `${fb.payerFamily} timely filing window closes in ${fb.daysLeft} days (${fb.window}-day limit from service date).`
+                              return (
+                                <span
+                                  className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}
+                                  title={title}
+                                >
+                                  ⏱ {fb.label}
+                                </span>
+                              )
+                            })()}
                             {c.era_received_at && !c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA
