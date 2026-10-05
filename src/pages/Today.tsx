@@ -1050,9 +1050,15 @@ export function Today() {
                             <Button variant="secondary" size="sm" onClick={() => { setNoteTarget(appt); setNoteText((provider as any)?.secure_text_number ? `\n\nIf you have questions, you can reach me securely at ${(provider as any).secure_text_number}.` : ''); setNoteSent(false) }}>
                               Send note
                             </Button>
-                            <Button variant="secondary" size="sm" onClick={() => openChartNote(appt)}>
-                              <FileText size={13} /> Chart note
-                            </Button>
+                            {/* CMAs don't document in chart notes — per Sara 2026-10-05,
+                                they send in-home observations via the HIPAA-compliant
+                                texting line. Hiding the button entirely removes an
+                                option they shouldn't be using. */}
+                            {provider?.role !== 'CMA' && (
+                              <Button variant="secondary" size="sm" onClick={() => openChartNote(appt)}>
+                                <FileText size={13} /> Chart note
+                              </Button>
+                            )}
                             {appt.status !== 'cancelled' && (
                               chargedCents != null ? (
                                 <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#E1F5EE] text-[#1D9E75] text-[12px] font-medium border border-[#1D9E75]/20">
