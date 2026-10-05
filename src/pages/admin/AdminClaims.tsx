@@ -789,6 +789,16 @@ export function AdminClaims() {
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length
+  // Silent-match canary — claims where Stedi tagged a payer_claim_control_number
+  // (meaning the webhook or refetch did see an ERA for this claim) but
+  // era_received_at is still NULL. That's the exact fingerprint of the
+  // Wade Knight / Baylus Browder bug fixed 2026-10-05. Should normally
+  // be zero; if non-zero, something slipped past both the webhook's
+  // initial-match path and the X12 enrichment loop. Clicking "Refetch
+  // known ERAs" from Admin resolves them.
+  const silentEraMatches = baseVisibleClaims.filter((c: any) =>
+    c.status === 'submitted' && !!c.stedi_payer_claim_control_number && !c.era_received_at
+  )
 
   const tabCls = (t: Tab) =>
     `px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E] hover:text-[#555]'}`
@@ -1210,6 +1220,18 @@ export function AdminClaims() {
             className="ml-auto text-[12px] font-medium px-3 py-1 rounded-lg bg-white border border-[#DC2626] text-[#7F1D1D] hover:bg-[#FEE2E2] transition-colors">
             Go to Rework
           </button>
+        </div>
+      )}
+
+      {silentEraMatches.length > 0 && (
+        <div className="mb-4 flex items-start gap-2 bg-[#FCEBEB] border border-[#D97373] text-[#791F1F] px-4 py-2.5 rounded-xl">
+          <AlertOctagon size={14} className="mt-0.5 flex-shrink-0" />
+          <div className="text-[13px] font-medium leading-relaxed">
+            <strong>{silentEraMatches.length} silent ERA match{silentEraMatches.length === 1 ? '' : 'es'}:</strong>{' '}
+            Stedi tagged a payer control number on {silentEraMatches.length === 1 ? 'this claim' : 'these claims'} but the ERA data didn't fully land.
+            Click "Refetch known ERAs" to hydrate{silentEraMatches.length === 1 ? '' : ' them'}.
+            {' '}<span className="text-[12px] opacity-80">({silentEraMatches.slice(0, 3).map(c => `${c.patient_first_name} ${c.patient_last_name}`).join(', ')}{silentEraMatches.length > 3 ? `, +${silentEraMatches.length - 3} more` : ''})</span>
+          </div>
         </div>
       )}
 
