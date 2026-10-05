@@ -1361,6 +1361,32 @@ export const createRadiologyOrder = (body: {
 export const emailRadiologyOrder = (orderId: string) =>
   apiFetch<{ sent: boolean; to: string }>(`/api/radiology/${orderId}/email`, { method: 'POST' })
 
+// ── School notes (admin audit) ───────────────────────────────
+export interface SchoolNoteRow {
+  id: string
+  excuse_dates_text: string
+  parent_additional_notes: string | null
+  rendering_provider_name: string | null
+  rendering_provider_npi: string | null
+  blob_url: string
+  filename: string
+  sent_to_email: string | null
+  sent_at: string | null
+  status: string
+  created_at: string
+  requested_by_name: string | null
+  child_id: string
+  child_first_name: string | null
+  child_last_name: string | null
+  child_dob: string | null
+  chart_number: number | null
+  visit_date: string | null
+  visit_type: string | null
+}
+
+export const getAdminSchoolNotes = () =>
+  apiFetch<SchoolNoteRow[]>('/api/admin/school-notes')
+
 // ── Patient Reports (lab + radiology report file uploads) ────
 export interface PatientReport {
   id: string

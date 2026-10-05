@@ -28,6 +28,7 @@ import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminProvision } from './pages/admin/AdminProvision'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
+import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
 import { AdminStatements } from './pages/admin/AdminStatements'
 import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
@@ -137,7 +138,8 @@ export default function App() {
                 <Route path="availability"   element={<Availability />} />
                 <Route path="provision"  element={<AdminProvision />} />
                 <Route path="settings"   element={<Settings />} />
-                <Route path="audit-log"   element={<AdminAuditLog />} />
+                <Route path="audit-log"    element={<AdminAuditLog />} />
+                <Route path="school-notes" element={<AdminSchoolNotes />} />
                 <Route path="statements" element={<AdminStatements />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
