@@ -295,14 +295,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // claim in the ERA payload. Only include claims we care about
     // (submitted or error), scoped to this practice.
     const claims = await sql`
-      SELECT id, payer_id, payer_name
+      SELECT id, payer_id, payer_name, payer_control_number
       FROM claims
       WHERE practice_id = ${practiceId}::uuid
     `
+    // Key under BOTH UUID-prefix (legacy, pre-2026-09-23) AND short
+    // PEDS##### (every claim after commit 1c66fee). Payer echoes back
+    // whatever PCN we sent, so we need to be able to look up either
+    // format. Sara 2026-10-05.
     const pcnToClaim = new Map<string, { id: string; payer_id: string | null; payer_name: string | null }>()
     for (const c of claims) {
-      const pcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
-      pcnToClaim.set(pcn, { id: c.id as string, payer_id: c.payer_id ?? null, payer_name: c.payer_name ?? null })
+      const entry = { id: c.id as string, payer_id: c.payer_id ?? null, payer_name: c.payer_name ?? null }
+      const uuidPcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
+      pcnToClaim.set(uuidPcn, entry)
+      if (c.payer_control_number) {
+        const shortPcn = String(c.payer_control_number).toUpperCase()
+        if (shortPcn !== uuidPcn) pcnToClaim.set(shortPcn, entry)
+      }
     }
 
     // Group our claims by tradingPartnerId (payer_id). Stedi's /eras

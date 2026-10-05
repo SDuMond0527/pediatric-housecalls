@@ -882,12 +882,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Pull all claims' payer_ids so we can scope the /eras list. Small
     // practice — cheap query.
-    const allClaims: any = await sql`SELECT id, payer_id FROM claims WHERE payer_id IS NOT NULL`
+    //
+    // The lookup map keys the claim under BOTH its UUID-prefix PCN (legacy
+    // claims submitted before 2026-09-23, commit 1c66fee) AND its short
+    // PEDS##### PCN (every claim after that). Keying on UUID-prefix
+    // alone meant every PEDS-format claim silently failed to match in
+    // the enrichment loop — the payer echoes back the PCN it was sent,
+    // and PEDS00017 was nowhere in the map. Caught via Wade Knight's
+    // Cigna claim (Sara 2026-10-05).
+    const allClaims: any = await sql`SELECT id, payer_id, payer_control_number FROM claims WHERE payer_id IS NOT NULL`
     const pcnToClaim = new Map<string, string>()
     const payerIds = new Set<string>()
     for (const c of allClaims) {
-      const pcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
-      pcnToClaim.set(pcn, c.id as string)
+      const uuidPcn = String(c.id).replace(/-/g, '').slice(0, 20).toUpperCase()
+      pcnToClaim.set(uuidPcn, c.id as string)
+      if (c.payer_control_number) {
+        const shortPcn = String(c.payer_control_number).toUpperCase()
+        if (shortPcn !== uuidPcn) pcnToClaim.set(shortPcn, c.id as string)
+      }
       payerIds.add(c.payer_id as string)
     }
 
