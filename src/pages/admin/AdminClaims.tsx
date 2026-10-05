@@ -193,23 +193,14 @@ export function AdminClaims() {
     }
   }
 
-  // Auto-mark ERA as seen when the biller expands a claim card that has
-  // era_received_at but no era_seen_at yet. Optimistic — updates local
-  // state first then persists.
+  // Expanding a claim card used to auto-mark its ERA as seen. That
+  // decremented the "N new ERA payments posted" banner just because the
+  // biller glanced at the card to verify the number, before she had
+  // actually processed it (sent statement, written off, etc.). Now the
+  // badge only decrements when she clicks "Mark all as seen" or a
+  // per-claim action resolves it. Sara 2026-10-05.
   function setExpanded(nextId: string | null) {
     setExpandedRaw(nextId)
-    if (!nextId) return
-    const target = claims.find(c => c.id === nextId)
-    if (target?.era_received_at && !target?.era_seen_at) {
-      const nowIso = new Date().toISOString()
-      setClaims(prev => prev.map(c => c.id === nextId ? { ...c, era_seen_at: nowIso } : c))
-      updateClaim(nextId, { era_seen_at: nowIso }).catch(e => {
-        // Roll back local state if the persist failed so the badge count
-        // stays accurate.
-        console.error('[AdminClaims] mark era_seen_at failed:', e)
-        setClaims(prev => prev.map(c => c.id === nextId ? { ...c, era_seen_at: null } : c))
-      })
-    }
   }
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
