@@ -386,8 +386,16 @@ async function findClaim(sql: any, pcn: string | null, payerClaimControlNumber: 
 }
 
 async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, payerClaimControlNumber: string | null) {
+  // Mark era_received_at here, not just in the X12-enrichment phase
+  // below. Previously the initial match path (summary-only ERAs that
+  // never make it into the per-payer /eras list) wrote CAS buckets +
+  // PCCN but left era_received_at NULL — so the UI showed the claim
+  // as still "awaiting ERA" even though the ERA had been processed.
+  // Wade Knight / Cigna PEDS00017 was the one that surfaced it
+  // (Sara 2026-10-05).
   await sql`
     UPDATE claims SET
+      era_received_at            = COALESCE(era_received_at, NOW()),
       patient_deductible_era     = ${cas.patient_deductible},
       patient_coinsurance_era    = ${cas.patient_coinsurance},
       patient_copay_era          = ${cas.patient_copay},
