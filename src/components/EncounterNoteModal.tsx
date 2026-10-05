@@ -961,6 +961,36 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           if (t.assessment != null) setAssessment(t.assessment)
           if (t.plan) setPlan(t.plan)
         }
+
+        // Default CPT codes to pre-fill per visit type. Only applies to
+        // BRAND-NEW notes (this `else` branch means no existing note was
+        // loaded). Provider edits/removes freely if the visit was higher/
+        // lower complexity than the default. Sara 2026-10-05: removes
+        // the "forgot to add the CPT" failure mode entirely.
+        //
+        // Paired visits (CMA + telemedicine, RN in-home IV fluids, Video
+        // telemedicine screening for IV fluids) are intentionally omitted —
+        // the paired-visit billing rule is pending Sara's input on
+        // detection logic (task #21), so we don't want to pre-fill a code
+        // that could end up on the wrong side of the pair.
+        const DEFAULT_CPTS_FOR_VISIT_TYPE: Record<string, string[]> = {
+          'In-home sick visit':              ['99349'],
+          'Video telemedicine':              ['99213'],
+          'In-home vaccine administration':  ['90471'],
+        }
+        const defaultCodes = DEFAULT_CPTS_FOR_VISIT_TYPE[appointment.visit_type] ?? []
+        if (defaultCodes.length > 0) {
+          const defaultsFromSchedule = defaultCodes
+            .map(code => schedule.find((s: any) => String(s.code) === code))
+            .filter(Boolean)
+            .map((s: any) => applyAutoModifier({
+              ...s,
+              charge_amount: parseFloat(s.charge_amount),
+            }))
+          if (defaultsFromSchedule.length > 0) {
+            setCptCodes(defaultsFromSchedule)
+          }
+        }
       }
       if (vitalsData) {
         setVitals({
