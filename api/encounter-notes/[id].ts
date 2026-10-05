@@ -104,7 +104,43 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     : [null]
   const renderingProvider = supervisingMd ?? provider
 
-  const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+  const rawCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+
+  // Aetna POC-test self-pay swap — Sara 2026-10-05.
+  // Aetna's benefits policy excludes in-home point-of-care tests. Billing
+  // them produces CARC 96 (non-covered) every time; the family ends up
+  // paying anyway. Swap the test CPT to its self-pay equivalent BEFORE
+  // the claim is written so downstream totals / insurance filtering /
+  // forceSelfPay logic see the post-swap list. See
+  // project_aetna_poc_self_pay_swap.md for the full policy.
+  const AETNA_POC_SWAP: Record<string, { code: string; description: string; charge_amount: number }> = {
+    '87880': { code: 'SelfStre', description: 'Self-pay rapid strep test',                       charge_amount: 10 },
+    '87812': { code: 'SelfFluC', description: 'Self-pay rapid flu/COVID test',                   charge_amount: 35 },
+    '81002': { code: 'SLFUrine', description: 'Self-pay urine dipstick and lab handling fee',    charge_amount: 10 },
+  }
+  const isAetna = String(child?.insurance_provider ?? '').toLowerCase().trim() === 'aetna'
+  const aetnaSwapRecords: Array<{ from: string; to: string }> = []
+  let swappedCpts = rawCptCodes
+  if (isAetna && rawCptCodes.length > 0) {
+    // Idempotency guard: if the self-pay equivalent is already in the
+    // list (biller manually swapped on a prior review), skip. Prevents
+    // double-ups on re-signed notes with existing editable claims.
+    const existingCodes = new Set(rawCptCodes.map((c: any) => String(c.code)))
+    swappedCpts = rawCptCodes.map((c: any) => {
+      const swap = AETNA_POC_SWAP[String(c.code)]
+      if (!swap) return c
+      if (existingCodes.has(swap.code)) return c
+      aetnaSwapRecords.push({ from: String(c.code), to: swap.code })
+      return {
+        ...c,
+        code: swap.code,
+        description: swap.description,
+        charge_amount: swap.charge_amount,
+        category: 'Non-Covered Services',
+      }
+    })
+  }
+
   // Include ALL codes on the stored claim (convenience fees visible for admin
   // review). Non-Covered Services get stripped from the Stedi payload at
   // submission time by api/claims/[id].ts. Matches api/claims/index.ts:63.
@@ -112,6 +148,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   // (created when a provider signs a note) never had the convenience fee,
   // even though manually-generated claims did — because the Sept 1 fix
   // (88fe14d) was applied to only one of the two claim-generation paths.
+  const allCptCodes = swappedCpts
   const cptCodes = allCptCodes
   const total = cptCodes.reduce((s: number, c: any) => {
     const charge = parseFloat(c.charge_amount) || 0
@@ -170,6 +207,33 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         ${resolvedAddr.line1}, ${resolvedAddr.city}, ${resolvedAddr.state}, ${resolvedAddr.zip}
       )
       RETURNING *`
+  }
+
+  // Write audit trail for any Aetna POC swap that fired. Non-fatal if
+  // the log insert fails — the swap itself is already persisted on the
+  // claim's cpt_codes. Pam/Andrea will still see the swapped line in
+  // the claim view; they just won't see the explanatory activity entry.
+  if (claim?.id && aetnaSwapRecords.length > 0) {
+    const swapSummary = aetnaSwapRecords.map(s => `${s.from} → ${s.to}`).join(', ')
+    const body = `Auto-swapped POC test code(s) to self-pay (${swapSummary}) — Aetna does not cover in-home POC testing. Provider's note is unchanged; this swap only affects what gets billed. Patient will owe the self-pay amount.`
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS claim_activity_log (
+          id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          claim_id        uuid NOT NULL,
+          created_at      timestamptz NOT NULL DEFAULT NOW(),
+          created_by      uuid,
+          created_by_name text,
+          kind            text NOT NULL DEFAULT 'note',
+          body            text NOT NULL
+        )`
+      await sql`
+        INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+        VALUES (${claim.id}::uuid, NULL, 'System (auto)', 'aetna_poc_swap', ${body})
+      `
+    } catch (logErr: any) {
+      console.error('aetna poc swap activity log failed (non-fatal):', logErr?.message)
+    }
   }
 
   return { claim }
