@@ -46,6 +46,7 @@ import { FamilyForgotPassword } from './pages/family/FamilyForgotPassword'
 import { FamilyResetPassword } from './pages/family/FamilyResetPassword'
 import { FamilyVisitHistory } from './pages/family/FamilyVisitHistory'
 import { FamilySchoolExcuseRequest } from './pages/family/FamilySchoolExcuseRequest'
+import { FamilySchoolNotePicker } from './pages/family/FamilySchoolNotePicker'
 import { FamilyVaccines } from './pages/family/FamilyVaccines'
 import { FamilyLabs } from './pages/family/FamilyLabs'
 import { FamilyRadiology } from './pages/family/FamilyRadiology'
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="labs"      element={<FamilyLabs />} />
                 <Route path="radiology" element={<FamilyRadiology />} />
                 <Route path="school-excuse-request" element={<FamilySchoolExcuseRequest />} />
+                <Route path="school-note"           element={<FamilySchoolNotePicker />} />
               </Route>
             </Routes>
           </FamilyAuthProvider>
