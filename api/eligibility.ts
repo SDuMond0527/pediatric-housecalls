@@ -95,6 +95,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // reads null on a missing column and skips the BCBS NC dep-code
   // concat. Same ALTER lives on api/claims/[id].ts and children/[id].ts.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
+  // Timestamp of the most recent successful eligibility check for this
+  // child. Read by the pre-submit claim scrubber (src/lib/claimScrubber.ts)
+  // to warn on stale eligibility (> 30 days). Column added to children,
+  // not claims, so one check covers every claim for that patient.
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS last_eligibility_check_at timestamptz` } catch {}
   const { appointment_id, child_id } = req.body ?? {}
   if (!appointment_id && !child_id) return res.status(400).json({ error: 'appointment_id or child_id required' })
 
@@ -236,6 +241,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     childDob: fmtDate8(child.date_of_birth),
     stediBenefitCodes: (stediData?.benefitsInformation ?? []).map((b: any) => b.code).slice(0, 8),
     stediMessage: stediData?.errors?.[0]?.description || stediData?.message || null,
+  }
+
+  // Stamp the child record so the pre-submit scrubber knows how fresh
+  // the eligibility info is. Failures here are non-fatal — the check
+  // itself already succeeded; we just don't get the staleness warning
+  // benefit on this one child.
+  try {
+    await sql`UPDATE children SET last_eligibility_check_at = NOW() WHERE id = ${child.id}::uuid`
+  } catch (e: any) {
+    console.error('[eligibility] stamp failed (non-fatal):', e?.message)
   }
 
   return res.json({

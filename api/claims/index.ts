@@ -158,6 +158,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_at timestamptz` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handled_by_name text` } catch {}
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_handling_notes text` } catch {}
+      // Pre-submit scrubber reads children.last_eligibility_check_at to
+      // warn on stale eligibility. Bootstrap here too so a fresh branch
+      // can still SELECT it in the join below without blowing up.
+      try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS last_eligibility_check_at timestamptz` } catch {}
       // Rework resolve columns — biller manual "I'm done" signal
       // that pulls the claim out of Rework tab into Completed.
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_at timestamptz` } catch {}
@@ -200,6 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
               c.chart_number AS chart_number,
+              c.last_eligibility_check_at AS last_eligibility_check_at,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at
@@ -214,6 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             SELECT cl.*, COALESCE(cl.child_id, a.child_id) AS effective_child_id,
               c.first_name AS child_first_name, c.last_name AS child_last_name,
               c.chart_number AS chart_number,
+              c.last_eligibility_check_at AS last_eligibility_check_at,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
               ps.status AS statement_status, ps.sent_at AS statement_sent_at

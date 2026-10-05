@@ -206,6 +206,22 @@ const CHECKS = [
     },
   },
   {
+    name: 'children.last_eligibility_check_at exists + joinable in claims GET',
+    run: async () => {
+      // Belt-and-suspenders schema check for the pre-submit scrubber.
+      // Replays the join + SELECT in api/claims/index.ts so a renamed
+      // or dropped column fails here, not under Andrea's cursor.
+      const [p] = await sql`SELECT practice_id FROM providers WHERE is_active = true LIMIT 1`
+      await sql`
+        SELECT cl.id, c.last_eligibility_check_at
+        FROM claims cl
+        LEFT JOIN appointments a ON a.id = cl.appointment_id
+        LEFT JOIN children c ON c.id = COALESCE(cl.child_id, a.child_id)
+        WHERE cl.practice_id = ${p.practice_id}::uuid
+        LIMIT 1`
+    },
+  },
+  {
     name: 'patient_reports bootstrap + GET (lab + radiology report uploads)',
     run: async () => {
       await sql`
