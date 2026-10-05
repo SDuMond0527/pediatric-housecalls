@@ -29,7 +29,15 @@ const PAYER_IDS: Record<string, string> = {
 
 function resolvePayer(name: string | null): string | null {
   if (!name) return null
-  return PAYER_IDS[name.toLowerCase().trim()] ?? null
+  const normalized = name.toLowerCase().trim()
+  // Anthem routing per Sara 2026-10-05: see api/claims/index.ts for the
+  // canonical rule. Virginia Anthem → VABLS; every other Anthem → UPICO.
+  // Keep this in sync when the mapping changes.
+  if (/anthem/.test(normalized)) {
+    if (/\b(va|virginia)\b/.test(normalized)) return 'VABLS'
+    return 'UPICO'
+  }
+  return PAYER_IDS[normalized] ?? null
 }
 
 function parseEligibility(data: any) {

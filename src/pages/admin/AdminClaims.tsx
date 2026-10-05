@@ -78,7 +78,11 @@ const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = 
 
 const KNOWN_PAYERS: Record<string, string> = {
   'Self Pay': 'PP',
-  'BCBS of NC': 'UPICO', 'Anthem BCBS of VA': 'VABLS',
+  'BCBS of NC': 'UPICO',
+  // Anthem BCBS NC branches route to UPICO; Virginia Anthem has its own
+  // payer ID. Mirrors the resolvePayer logic in api/claims/index.ts.
+  'Anthem': 'UPICO', 'Anthem BCBS': 'UPICO', 'Anthem Blue Cross Blue Shield': 'UPICO',
+  'Anthem BCBS of VA': 'VABLS',
   'Aetna': '60054', 'Cigna': '62308',
   'United Healthcare': '87726', 'UMR': '39026', 'Humana': '61101',
   'PHCS / MultiPlan': '52133', 'Coventry': '38217',

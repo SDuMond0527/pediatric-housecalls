@@ -45,7 +45,14 @@ const PAYER_IDS_INLINE: Record<string, string> = {
 }
 function resolvePayer(name: string | null): string | null {
   if (!name) return null
-  return PAYER_IDS_INLINE[name.toLowerCase().trim()] ?? null
+  const normalized = name.toLowerCase().trim()
+  // Anthem routing per Sara 2026-10-05: see api/claims/index.ts for the
+  // canonical rule. Virginia Anthem → VABLS; every other Anthem → UPICO.
+  if (/anthem/.test(normalized)) {
+    if (/\b(va|virginia)\b/.test(normalized)) return 'VABLS'
+    return 'UPICO'
+  }
+  return PAYER_IDS_INLINE[normalized] ?? null
 }
 
 async function generateClaimForNote(sql: any, encounterNoteId: string, practiceId: string) {

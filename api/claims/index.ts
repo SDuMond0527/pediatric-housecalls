@@ -34,7 +34,17 @@ const PAYER_IDS: Record<string, string> = {
 }
 function resolvePayer(name: string | null): string | null {
   if (!name) return null
-  return PAYER_IDS[name.toLowerCase().trim()] ?? null
+  const normalized = name.toLowerCase().trim()
+  // Anthem routing per Sara 2026-10-05: Virginia Anthem has its own
+  // payer ID (VABLS); every other Anthem variant routes to BCBS of NC
+  // (UPICO). Check VA FIRST so "Anthem Blue Cross Blue Shield of VA"
+  // doesn't fall into the generic Anthem bucket. See
+  // project_anthem_payer_id_normalization.md.
+  if (/anthem/.test(normalized)) {
+    if (/\b(va|virginia)\b/.test(normalized)) return 'VABLS'
+    return 'UPICO'
+  }
+  return PAYER_IDS[normalized] ?? null
 }
 
 async function generateClaim(sql: any, encounterNoteId: string, practiceId: string) {
