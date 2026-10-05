@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, NavLink } from 'react-router-dom'
+import { Outlet, useNavigate, NavLink, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { CalendarPlus, Home, User, LogOut, ClipboardList, Shield, FlaskConical, Activity } from 'lucide-react'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
@@ -8,9 +8,17 @@ import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 export function FamilyLayout() {
   const { user, family, loading, signOut } = useFamilyAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
-    if (!loading && !user) navigate('/family/login')
+    if (!loading && !user) {
+      // Preserve the intended destination so a parent arriving via the
+      // marketing-site school-note button lands back on
+      // /family/school-note after login (not the generic dashboard).
+      const dest = location.pathname + location.search
+      const skipReturn = dest === '/family/' || dest === '/family/login' || dest === '/family/dashboard'
+      navigate(skipReturn ? '/family/login' : `/family/login?returnTo=${encodeURIComponent(dest)}`)
+    }
   }, [user, loading])
 
   useEffect(() => {

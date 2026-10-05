@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -10,10 +10,26 @@ import { PracticeLogo, PRACTICE_TAGLINE, DEMO_MODE, DEMO_CREDS } from '../../lib
 export function FamilyLogin() {
   const { signIn } = useFamilyAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // If the user was bounced here from an authenticated page (e.g. the
+  // marketing-site school-note button → /family/school-note), send
+  // them back there after login instead of the generic dashboard.
+  // Validated against known-safe prefixes so a crafted ?returnTo=
+  // can't bounce them off-site.
+  function safeReturnTo(): string {
+    const raw = params.get('returnTo') ?? ''
+    if (!raw) return '/family/dashboard'
+    try {
+      const decoded = decodeURIComponent(raw)
+      if (!decoded.startsWith('/family/')) return '/family/dashboard'
+      return decoded
+    } catch { return '/family/dashboard' }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -21,7 +37,7 @@ export function FamilyLogin() {
     setLoading(true)
     const { error } = await signIn(email, password)
     if (error) { setError('Invalid email or password.'); setLoading(false) }
-    else navigate('/family/dashboard')
+    else navigate(safeReturnTo())
   }
 
   return (
@@ -34,6 +50,15 @@ export function FamilyLogin() {
               <PracticeLogo />
             </div>
             {PRACTICE_TAGLINE && <div className="text-[13px] text-[#1A1A2E]">{PRACTICE_TAGLINE}</div>}
+            {/* Contextual banner — if the parent arrived with ?returnTo=
+                pointing at the school-note picker, tell them WHY they're
+                being asked to log in. Otherwise the login page is a dead
+                end that looks like a mistake. */}
+            {params.get('returnTo')?.includes('/family/school-note') && (
+              <div className="mt-4 mx-auto max-w-xs bg-[#EEEDFE] border border-[#C7C3F4] text-[#3C3489] rounded-xl px-4 py-3 text-[13px] leading-relaxed">
+                Log in or sign up to request your school absence note. We'll email you the PDF right away.
+              </div>
+            )}
             <div className="flex justify-center gap-1.5 mt-3 flex-wrap">
               {[['#EEEDFE','#3C3489','In-home visits'],['#E1F5EE','#085041','Telemedicine'],['#FAEEDA','#633806','Sports physicals']].map(([bg,tc,label]) => (
                 <span key={label} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: bg, color: tc }}>{label}</span>
