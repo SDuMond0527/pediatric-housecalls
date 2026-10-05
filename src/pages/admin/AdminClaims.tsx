@@ -6,6 +6,7 @@ import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send,
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
+import { scrubClaim, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { Ban } from 'lucide-react'
 
@@ -380,6 +381,14 @@ export function AdminClaims() {
     sentDependent?: any
   } | null>(null)
 
+  // Pre-submit scrubber modal. Shown when scrubClaim() finds errors or
+  // warnings on the target claim. Errors block the submit entirely;
+  // warnings require explicit "Submit anyway" acknowledgement.
+  const [scrubModal, setScrubModal] = useState<{
+    claimId: string
+    result: ScrubResult
+  } | null>(null)
+
   async function load() {
     setLoading(true)
     try {
@@ -503,17 +512,13 @@ export function AdminClaims() {
     }
   }
 
-  async function handleSubmit(claimId: string) {
-    if (!confirm('Submit this claim to insurance? This cannot be undone.')) return
+  // Internal: actual submit after any scrubber errors/warnings cleared.
+  async function performSubmit(claimId: string) {
     setSubmitting(claimId)
     try {
       await submitClaim(claimId)
       await load()
     } catch (e: any) {
-      // Show the FULL Stedi response in a scrollable modal — the
-      // browser's alert() truncates and the actual field-level reason
-      // hides in the tail of the JSON. Extract a bold summary and
-      // dump the raw response for copy/paste.
       const details = e.details
       const summary = extractStediErrorSummary(details) || e.message || 'Submission failed'
       setRejectionModal({
@@ -526,6 +531,47 @@ export function AdminClaims() {
     } finally {
       setSubmitting(null)
     }
+  }
+
+  async function handleSubmit(claimId: string) {
+    const claim = claims.find(c => c.id === claimId)
+    if (!claim) return
+
+    // Build scrubber context from the already-loaded claim list so we
+    // don't need a round-trip. We check this child's other submitted
+    // claims for duplicate CPT+DOS overlaps, and look at a possible
+    // `last_eligibility_check_at` column if present on the claim row.
+    const otherSubmittedClaims = claim.child_id
+      ? claims
+          .filter(c => c.child_id === claim.child_id && c.id !== claimId)
+          .map(c => ({ id: c.id, service_date: c.service_date, cpt_codes: c.cpt_codes ?? [], status: c.status }))
+      : []
+
+    const result = scrubClaim(
+      {
+        id: claim.id,
+        service_date: claim.service_date,
+        diagnoses: claim.diagnoses ?? [],
+        cpt_codes: claim.cpt_codes ?? [],
+        patient_dob: claim.patient_dob ?? null,
+        rendering_provider_npi: claim.rendering_provider_npi ?? null,
+        payer_id: claim.payer_id ?? null,
+        payer_name: claim.payer_name ?? null,
+        child_id: claim.child_id ?? null,
+      },
+      {
+        otherSubmittedClaims,
+        lastEligibilityCheckAt: claim.last_eligibility_check_at ?? null,
+      },
+    )
+
+    if (result.errors.length > 0 || result.warnings.length > 0) {
+      setScrubModal({ claimId, result })
+      return
+    }
+
+    if (!confirm('Submit this claim to insurance? This cannot be undone.')) return
+    await performSubmit(claimId)
   }
 
   async function handleDelete(claimId: string) {
@@ -2667,6 +2713,56 @@ export function AdminClaims() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scrubModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setScrubModal(null)}>
+          <div className="bg-white rounded-lg max-w-xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#1A1A2E]">
+                {scrubModal.result.errors.length > 0 ? <AlertOctagon size={18} className="text-[#B91C1C]" /> : <AlertCircle size={18} className="text-[#B45309]" />}
+                <h3 className="font-semibold">
+                  {scrubModal.result.errors.length > 0 ? 'Fix these problems before submitting' : 'Review before submitting'}
+                </h3>
+              </div>
+              <button onClick={() => setScrubModal(null)} className="text-neutral-500 hover:text-neutral-900">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto space-y-3">
+              {scrubModal.result.errors.map(e => (
+                <div key={e.code} className="bg-[#FEE2E2] border border-[#FCA5A5] text-[#7F1D1D] rounded p-3 text-sm">
+                  <div className="font-semibold text-xs uppercase tracking-wide mb-1">Must fix</div>
+                  {e.message}
+                </div>
+              ))}
+              {scrubModal.result.warnings.map(w => (
+                <div key={w.code} className="bg-[#FEF3C7] border border-[#FCD34D] text-[#78350F] rounded p-3 text-sm">
+                  <div className="font-semibold text-xs uppercase tracking-wide mb-1">Heads-up</div>
+                  {w.message}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t flex items-center gap-2 justify-end">
+              <button
+                onClick={() => setScrubModal(null)}
+                className="px-3 py-2 text-[13px] text-[#555] border border-[#E8E8E4] rounded-md hover:bg-[#F1EFE8]"
+              >Cancel</button>
+              {scrubModal.result.errors.length === 0 && (
+                <button
+                  onClick={async () => {
+                    const id = scrubModal.claimId
+                    setScrubModal(null)
+                    await performSubmit(id)
+                  }}
+                  className="px-3 py-2 text-[13px] bg-[#7F77DD] text-white rounded-md hover:bg-[#6C64C8] font-medium"
+                >I know — submit anyway</button>
+              )}
             </div>
           </div>
         </div>

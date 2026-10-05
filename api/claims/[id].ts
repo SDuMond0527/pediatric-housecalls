@@ -414,6 +414,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (claim.status === 'submitted') return res.status(400).json({ error: 'Already submitted' })
       if (!claim.payer_id) return res.status(400).json({ error: 'No payer ID — cannot submit. Verify payer and update claim.' })
 
+      // Server-side Tier-1 scrubber — mirrors the client scrubber in
+      // src/lib/claimScrubber.ts. The client blocks the submit button
+      // but we re-check here so a crafted request can't bypass. See
+      // CLAUDE.md pre-push discipline rule 3 (safety nets before
+      // features): these catch classes of errors that otherwise bounce
+      // off Stedi as cryptic field-level rejections (e.g. "patientInfo
+      // dateOfBirth is required").
+      const scrubDxs  = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
+      const scrubCpts = Array.isArray(claim.cpt_codes) ? claim.cpt_codes : []
+      if (scrubDxs.length === 0) {
+        return res.status(400).json({ error: 'Claim has no diagnoses. Add at least one ICD-10 code before submitting.' })
+      }
+      if (scrubCpts.length === 0) {
+        return res.status(400).json({ error: 'Claim has no CPT codes. Add at least one procedure before submitting.' })
+      }
+      const scrubNpi = String(claim.rendering_provider_npi ?? '').replace(/\D/g, '')
+      if (scrubNpi.length !== 10) {
+        return res.status(400).json({ error: `Rendering provider NPI is missing or malformed (got "${claim.rendering_provider_npi ?? ''}"). NPI must be exactly 10 digits.` })
+      }
+      if (!claim.patient_dob) {
+        return res.status(400).json({ error: 'Patient date of birth is missing. Fix the chart record before submitting.' })
+      }
+      const scrubZeroLines = scrubCpts.filter((c: any) => {
+        const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
+        const units = parseInt(String(c.units ?? 1), 10) || 1
+        return charge * units <= 0
+      })
+      if (scrubZeroLines.length > 0) {
+        const codes = scrubZeroLines.map((c: any) => c.code).join(', ')
+        return res.status(400).json({ error: `Line(s) ${codes} have a $0 charge. Set a valid charge amount before submitting.` })
+      }
+
       // If the claim's snapshot of patient address or subscriber info
       // is stale, refresh from the linked child/family record at
       // submit time and persist. This prevents Stedi rejections like
