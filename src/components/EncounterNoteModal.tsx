@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
@@ -572,6 +572,13 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     && !/screening/i.test(appointment.visit_type || '')
   const requiresSupervisingSigner = isVaccineVisit || isRnIvFluidsVisit
   const canSignVaccineNote = !requiresSupervisingSigner || currentProvider?.name === 'Dr. Sara DuMond'
+  // CMAs can draft notes (vitals, in-home observations) but never
+  // sign them. On a paired CMA + telemedicine visit, only the MD/NP's
+  // tele note is a billable encounter — the CMA's note is support
+  // documentation that lives in the chart but should never trigger
+  // claim-gen. Sara 2026-10-05.
+  const isCmaSigner = currentProvider?.role === 'CMA'
+  const canSign = !isCmaSigner && canSignVaccineNote
 
   // Note type + template
   const [noteType, setNoteType] = useState<NoteType>(visitTypeToNoteType(appointment.visit_type))
@@ -968,14 +975,19 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         // lower complexity than the default. Sara 2026-10-05: removes
         // the "forgot to add the CPT" failure mode entirely.
         //
-        // Paired visits (CMA + telemedicine, RN in-home IV fluids, Video
-        // telemedicine screening for IV fluids) are intentionally omitted —
-        // the paired-visit billing rule is pending Sara's input on
-        // detection logic (task #21), so we don't want to pre-fill a code
-        // that could end up on the wrong side of the pair.
+        // Paired visits: Sara 2026-10-05 confirmed CMAs can't sign notes,
+        // so any CMA + telemedicine note that reaches this modal is the
+        // MD/NP side — same E/M as a solo tele visit. The CVTech $50
+        // convenience fee is attached silently at claim-gen time (see
+        // api/encounter-notes/[id].ts), NOT in this pre-fill, so the
+        // provider isn't dragged into billing-side convenience codes.
+        //
+        // RN in-home IV fluids pairs still skipped — waiting on Sara to
+        // validate IV-side billing before pre-filling anything there.
         const DEFAULT_CPTS_FOR_VISIT_TYPE: Record<string, string[]> = {
           'In-home sick visit':              ['99349'],
           'Video telemedicine':              ['99213'],
+          'CMA + telemedicine':              ['99213'],  // MD/NP paired side (CMA can't sign)
           'In-home vaccine administration':  ['90471'],
         }
         const defaultCodes = DEFAULT_CPTS_FOR_VISIT_TYPE[appointment.visit_type] ?? []
@@ -2614,13 +2626,51 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         {/* Footer */}
         {!loading && !readOnly && (
           <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-[#E8E8E4] bg-white flex-shrink-0">
-            <div className="flex-1">
+            <div className="flex-1 flex items-center gap-4">
+              {/* Live billing-readiness indicators — provider-focused subset
+                  of the pre-submit scrubber (src/lib/claimScrubber.ts).
+                  Shows only what the provider can fix: at-least-one diagnosis,
+                  at-least-one CPT code, no $0 charge lines. Icons only per
+                  Sara 2026-10-05 (providers won't understand "will skip
+                  review" / "will go to Pam" labels — they just see ✓ / ⚠). */}
+              {(() => {
+                const hasDx = diagnoses.length > 0
+                const hasCpt = cptCodes.length > 0
+                const noZeroLines = cptCodes.every(c => {
+                  const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
+                  const units = parseInt(String((c as any).units ?? 1), 10) || 1
+                  return charge * units > 0
+                })
+                const Row = ({ ok, label, hint }: { ok: boolean; label: string; hint: string }) => (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11px] ${ok ? 'text-[#1D9E75]' : 'text-[#B45309]'}`}
+                    title={ok ? `${label} — looks good` : hint}
+                  >
+                    {ok
+                      ? <CheckCircle2 size={13} />
+                      : <AlertTriangle size={13} />}
+                    {label}
+                  </span>
+                )
+                return (
+                  <div className="flex items-center gap-3">
+                    <Row ok={hasDx}       label="Diagnoses" hint="Add at least one ICD-10 diagnosis before signing" />
+                    <Row ok={hasCpt}      label="CPT codes" hint="Add at least one CPT code before signing" />
+                    <Row ok={noZeroLines} label="Charges"   hint="One or more CPT lines has a $0 charge — set a valid amount" />
+                  </div>
+                )
+              })()}
               {signError && <div className="text-[12px] text-[#DC2626]">{signError}</div>}
               {saveError && <div className="text-[12px] text-[#DC2626]">{saveError}</div>}
               {saveSuccess && <div className="text-[12px] text-[#1D9E75]">{saveSuccess}</div>}
               {!canSignVaccineNote && (
                 <div className="text-[12px] text-[#B45309]">
                   Vaccine encounter notes can only be signed by Dr. Sara DuMond. Save as draft when finished.
+                </div>
+              )}
+              {isCmaSigner && (
+                <div className="text-[12px] text-[#B45309]">
+                  CMAs can save notes as a draft but can't sign them. The MD/NP on the paired telemedicine visit signs for billing.
                 </div>
               )}
             </div>
@@ -2632,8 +2682,8 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 variant="teal"
                 onClick={signNote}
                 loading={signing}
-                disabled={saving || !canSignVaccineNote}
-                title={!canSignVaccineNote ? 'Vaccine encounter notes can only be signed by Dr. Sara DuMond' : undefined}
+                disabled={saving || !canSign}
+                title={isCmaSigner ? "CMAs can't sign encounter notes — save as draft and the MD/NP will sign the paired tele visit" : (!canSignVaccineNote ? 'Vaccine encounter notes can only be signed by Dr. Sara DuMond' : undefined)}
               >
                 Sign &amp; lock note
               </Button>

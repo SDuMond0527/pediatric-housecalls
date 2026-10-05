@@ -141,6 +141,30 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     })
   }
 
+  // CVTech auto-attach for the MD/NP side of a CMA + telemedicine paired
+  // visit. Sara 2026-10-05. By convention, BOTH sides of the pair carry
+  // visit_type = "CMA + telemedicine" with different providers assigned.
+  // Since CMAs are locked from signing (see api/encounter-notes/[id].ts
+  // PUT handler), any CMA+tele visit that reaches claim-gen is the MD/NP
+  // side by elimination — and that side is the single billable claim,
+  // which must carry the $50 "Convenience fee - in-home tech diagnostic
+  // visit" (CVTech) as a self-pay line. Idempotent: skips if CVTech is
+  // already present. See project_hybrid_telemed_billing_rule.md.
+  let cvtechAttached = false
+  if (appt?.visit_type === 'CMA + telemedicine') {
+    const alreadyHasCvtech = swappedCpts.some((c: any) => String(c.code) === 'CVTech')
+    if (!alreadyHasCvtech) {
+      swappedCpts = [...swappedCpts, {
+        code: 'CVTech',
+        description: 'Convenience fee - in-home tech diagnostic visit',
+        charge_amount: 50,
+        category: 'Non-Covered Services',
+        place_of_service: '12',
+      }]
+      cvtechAttached = true
+    }
+  }
+
   // Include ALL codes on the stored claim (convenience fees visible for admin
   // review). Non-Covered Services get stripped from the Stedi payload at
   // submission time by api/claims/[id].ts. Matches api/claims/index.ts:63.
@@ -207,6 +231,31 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         ${resolvedAddr.line1}, ${resolvedAddr.city}, ${resolvedAddr.state}, ${resolvedAddr.zip}
       )
       RETURNING *`
+  }
+
+  // Write audit trail for CVTech auto-attach. Non-fatal if log fails —
+  // the fee itself is already on the claim; biller just doesn't see the
+  // explanatory activity entry.
+  if (claim?.id && cvtechAttached) {
+    const body = 'Auto-attached CVTech ($50 in-home diagnostic tech convenience fee) — paired with CMA visit for this patient.'
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS claim_activity_log (
+          id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          claim_id        uuid NOT NULL,
+          created_at      timestamptz NOT NULL DEFAULT NOW(),
+          created_by      uuid,
+          created_by_name text,
+          kind            text NOT NULL DEFAULT 'note',
+          body            text NOT NULL
+        )`
+      await sql`
+        INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+        VALUES (${claim.id}::uuid, NULL, 'System (auto)', 'cvtech_auto_attach', ${body})
+      `
+    } catch (logErr: any) {
+      console.error('cvtech auto-attach activity log failed (non-fatal):', logErr?.message)
+    }
   }
 
   // Write audit trail for any Aetna POC swap that fired. Non-fatal if
@@ -417,10 +466,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
-  const providerRows = await sql`SELECT practice_id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  const providerRows = await sql`SELECT practice_id, name, role FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
   const practiceId    = providerRows[0].practice_id as string
   const currentProviderName = providerRows[0].name as string
+  const currentProviderRole = providerRows[0].role as string | null
 
   // Idempotent column bootstrap for the freeze-at-sign medical
   // history snapshot. Safe on every request.
@@ -550,6 +600,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
 
       const signing = is_signed === true
+
+      // CMAs may never sign ANY encounter note. On a paired CMA +
+      // telemedicine visit, only the MD/NP's tele note is the billable
+      // encounter; the CMA's note is support documentation only. Sara
+      // 2026-10-05. UI already blocks the Sign button for CMAs — this
+      // is server-side belt-and-suspenders so a crafted request can't
+      // bypass.
+      if (signing && currentProviderRole === 'CMA') {
+        return res.status(403).json({ error: "CMAs can't sign encounter notes. Save as draft and the MD/NP on the paired tele visit will sign for billing." })
+      }
 
       // Vaccine encounters may only be signed by Dr. Sara DuMond. She is the
       // supervising physician on all vaccine claims (the RN/CMA who runs the
