@@ -111,7 +111,20 @@ export function AdminAnalytics() {
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const thisMonthPrefix = format(new Date(), 'yyyy-MM')
-  const totalDone     = appts.filter(a => a.status === 'done').length
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+
+  // "Delivered" = scheduled date has passed AND the row wasn't
+  // cancelled. House-call visits don't typically no-show (the provider
+  // drives to the family), so if nobody cancelled by the time the
+  // appointment date rolls around, the visit happened — whether or not
+  // the provider remembered to click "Mark complete." Sara 2026-10-05.
+  //
+  // Using this instead of status === 'done' everywhere a chart or tile
+  // is trying to measure "what did we actually deliver."
+  const wasDelivered = (a: { status: string; scheduled_date: string }) =>
+    a.status !== 'cancelled' && !!a.scheduled_date && a.scheduled_date <= todayStr
+
+  const totalDone     = appts.filter(wasDelivered).length
   const thisMonth     = appts.filter(a => a.scheduled_date.startsWith(thisMonthPrefix)).length
   const openWaitlist  = waitlist.filter(w => w.status === 'waiting').length
   const converted     = waitlist.filter(w => w.status === 'converted').length
@@ -121,8 +134,9 @@ export function AdminAnalytics() {
   // future. Rows whose scheduled_date has passed but were never
   // manually flipped to done/cancelled are stale and roll into a
   // separate "past due" bucket so they don't inflate what's actually
-  // on the schedule.
-  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  // on the schedule. (Note: those past_due rows ARE still counted as
+  // delivered above — this bucket is just informational so Sara can
+  // see how often providers forget to click Mark complete.)
   const statusMap: Record<string, number> = { done: 0, upcoming: 0, 'in-progress': 0, cancelled: 0, past_due: 0 }
   appts.forEach(a => {
     if (a.status === 'upcoming' && a.scheduled_date && a.scheduled_date < todayStr) {
@@ -132,25 +146,26 @@ export function AdminAnalytics() {
     }
   })
   const totalAppts = appts.length
-  const nonUpcoming = totalAppts - statusMap.upcoming - statusMap.past_due
-  const completionRate = nonUpcoming > 0 ? Math.round((statusMap.done / nonUpcoming) * 100) : 0
+  // Completion rate reframed as "of past appointments, how many
+  // weren't cancelled" — matches the new wasDelivered definition.
+  const pastCount = appts.filter(a => !!a.scheduled_date && a.scheduled_date <= todayStr).length
+  const pastCancelled = appts.filter(a => a.status === 'cancelled' && !!a.scheduled_date && a.scheduled_date <= todayStr).length
+  const completionRate = pastCount > 0 ? Math.round(((pastCount - pastCancelled) / pastCount) * 100) : 0
 
-  // Visit type breakdown — only completed visits, so the chart reflects
-  // what was actually delivered (matches the "Completed visits" tile).
-  // Counting every appointment regardless of status pulled in cancels,
-  // no-shows, upcoming bookings, and test rows and made the chart useless.
-  // Filtered by the "Completed visits by type" date range (uses
-  // scheduled_date). Sara 2026-09-21.
+  // Visit type breakdown — delivered visits only (past & not cancelled),
+  // not just the ones a provider remembered to flip to 'done'. Also
+  // clamped to today so a date range that extends into the future
+  // doesn't include unseen visits.
   const vtMap: Record<string, number> = {}
   appts
-    .filter(a => a.status === 'done' && a.scheduled_date >= vtStart && a.scheduled_date <= vtEnd)
+    .filter(a => wasDelivered(a) && a.scheduled_date >= vtStart && a.scheduled_date <= vtEnd)
     .forEach(a => { vtMap[a.visit_type] = (vtMap[a.visit_type] ?? 0) + 1 })
 
   // Completed visits by month × visit type — matrix table showing which
-  // service mix Sara actually delivered each month. Uses scheduled_date
-  // month bucket (YYYY-MM) and only counts status === 'done'.
+  // service mix Sara actually delivered each month. Uses the same
+  // "past & not cancelled" definition.
   const monthVtMap: Record<string, Record<string, number>> = {}
-  appts.filter(a => a.status === 'done').forEach(a => {
+  appts.filter(wasDelivered).forEach(a => {
     const month = a.scheduled_date?.slice(0, 7)
     if (!month) return
     monthVtMap[month] = monthVtMap[month] ?? {}
@@ -189,25 +204,30 @@ export function AdminAnalytics() {
   // "Appointment status" chart so a provider's "Upcoming" only counts
   // visits still in the future. Rows whose scheduled_date has already
   // passed but were never flipped done/cancelled land in past_due
-  // instead of inflating the provider's upcoming column. Completion
-  // rate uses done vs. non-upcoming (excludes past_due too, since
-  // those aren't legitimately "closed" — they're just stale).
+  // instead of inflating the provider's upcoming column. past_due is
+  // now a SUBSET of done (we count them as delivered automatically)
+  // so Sara can still see which providers forget to click Mark
+  // complete without the number penalising them.
   type PStats = { done: number; upcoming: number; past_due: number; cancelled: number }
   const pMap: Record<string, PStats> = {}
   appts.forEach(a => {
     if (!pMap[a.provider_id]) pMap[a.provider_id] = { done: 0, upcoming: 0, past_due: 0, cancelled: 0 }
-    if (a.status === 'done') pMap[a.provider_id].done++
-    else if (a.status === 'upcoming' || a.status === 'in-progress') {
-      if (a.scheduled_date && a.scheduled_date < todayStr) pMap[a.provider_id].past_due++
-      else pMap[a.provider_id].upcoming++
+    if (wasDelivered(a)) {
+      pMap[a.provider_id].done++
+      if (a.status !== 'done') pMap[a.provider_id].past_due++
+    } else if (a.status === 'cancelled') {
+      pMap[a.provider_id].cancelled++
+    } else {
+      // Future / in-progress-today / rows with no date.
+      pMap[a.provider_id].upcoming++
     }
-    else if (a.status === 'cancelled') pMap[a.provider_id].cancelled++
   })
   const providerRows = providers
     .filter(p => p.role !== 'admin')
     .map(p => {
       const s = pMap[p.id] ?? { done: 0, upcoming: 0, past_due: 0, cancelled: 0 }
-      const total = s.done + s.upcoming + s.past_due + s.cancelled
+      // past_due ⊂ done, so don't add it to total — would double-count.
+      const total = s.done + s.upcoming + s.cancelled
       const closed = s.done + s.cancelled
       const rate  = closed > 0 ? Math.round((s.done / closed) * 100) : 0
       return { ...p, ...s, total, rate }
@@ -259,9 +279,9 @@ export function AdminAnalytics() {
   const stillOpen         = broadcasts.filter(b => b.is_open).length
   const pickupRate        = totalBroadcasts > 0 ? Math.round((pickedUp / totalBroadcasts) * 100) : 0
 
-  // Zone breakdown of completed visits
+  // Zone breakdown of delivered visits (same past & not cancelled rule)
   const zoneMap: Record<string, number> = {}
-  appts.filter(a => a.status === 'done' && a.zone).forEach(a => {
+  appts.filter(a => wasDelivered(a) && a.zone).forEach(a => {
     const z = a.zone!
     zoneMap[z] = (zoneMap[z] ?? 0) + 1
   })
@@ -380,7 +400,7 @@ export function AdminAnalytics() {
           {/* By visit type */}
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by type</h3>
-            <p className="text-[11px] text-[#555] mb-3">Only visits marked done — cancels, no-shows, and upcoming appointments excluded.</p>
+            <p className="text-[11px] text-[#555] mb-3">Any visit scheduled on or before today that wasn't cancelled — doesn't depend on providers clicking "Mark complete."</p>
             <div className="flex items-end gap-2 mb-4 flex-wrap">
               <div>
                 <label className="text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide block mb-0.5">Start</label>
@@ -431,7 +451,7 @@ export function AdminAnalytics() {
                   })}
                 </div>
                 <div className="mt-4 pt-4 border-t border-[#E8E8E4] flex justify-between text-[13px]">
-                  <span className="text-[#555]">Completion rate (of closed visits)</span>
+                  <span className="text-[#555]">Delivered rate (past visits not cancelled)</span>
                   <span className="font-semibold text-[#1D9E75]">{completionRate}%</span>
                 </div>
               </>
@@ -443,7 +463,7 @@ export function AdminAnalytics() {
         {matrixColumns.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm overflow-x-auto">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Completed visits by month</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-5">Only visits marked done, broken out by type and month. Last 12 months. Every service the practice offers shows as a column even if it has no completed visits yet.</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-5">Any past visit that wasn't cancelled, broken out by type and month. Last 12 months. Every service the practice offers shows as a column even if it has no visits yet.</p>
             <table className="w-full text-[13px] min-w-[520px]">
               <thead>
                 <tr className="border-b border-[#E8E8E4]">
