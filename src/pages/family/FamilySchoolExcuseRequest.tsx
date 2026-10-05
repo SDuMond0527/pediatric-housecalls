@@ -106,9 +106,9 @@ export function FamilySchoolExcuseRequest() {
       <div className="max-w-xl mx-auto">
         <div className="bg-white border border-[#A9DFBF] rounded-2xl p-8 text-center shadow-sm">
           <CheckCircle2 size={40} className="text-[#1D9E75] mx-auto mb-3" />
-          <h2 className="font-display text-[20px] font-semibold text-[#1A1A2E] mb-2">Request received</h2>
+          <h2 className="font-display text-[20px] font-semibold text-[#1A1A2E] mb-2">School note sent</h2>
           <p className="text-[14px] text-[#1A1A2E]/80 leading-relaxed">
-            Thanks! We'll email your school note within 24 hours.
+            We just emailed your school note. Check your inbox (and spam folder, just in case) — the note is attached as a PDF.
           </p>
           <Button onClick={() => navigate('/family/dashboard')} className="mt-6">
             Back to dashboard
@@ -129,7 +129,7 @@ export function FamilySchoolExcuseRequest() {
       <div className="mb-6">
         <h1 className="font-display text-[22px] font-semibold text-[#1A1A2E]">Request a school note</h1>
         <p className="text-[13px] text-[#1A1A2E] mt-1">
-          Fill in the dates you need excused. We'll email your school note within 24 hours.
+          Fill in the dates you need excused. We'll email your school note right away as a PDF.
         </p>
       </div>
 
@@ -175,13 +175,16 @@ export function FamilySchoolExcuseRequest() {
 
           <div>
             <label className="block text-[12px] font-semibold text-[#555] mb-1.5 uppercase tracking-wider">
-              Any other notes to include on the school excuse?
+              Anything else specific to include on the school note?
             </label>
+            <p className="text-[12px] text-[#1A1A2E]/70 mb-2 leading-relaxed">
+              For example: that they were tested for COVID and it was negative, that your child needs to use an inhaler or other medication at school, activity or gym restrictions, or any other instructions for the school. What you type here will appear on the school note exactly as written, in a section labeled <em>“Additional information provided by parent.”</em>
+            </p>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              rows={4}
-              placeholder="e.g. Please include activity restrictions, gym exemption, etc."
+              rows={5}
+              placeholder="Leave blank if you don't need anything beyond the dates excused."
               className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] outline-none focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/10 resize-y"
             />
           </div>
@@ -197,7 +200,7 @@ export function FamilySchoolExcuseRequest() {
               Cancel
             </Button>
             <Button type="submit" loading={submitting}>
-              Send request
+              Generate & email school note
             </Button>
           </div>
         </form>

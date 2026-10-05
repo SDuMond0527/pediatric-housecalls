@@ -206,6 +206,40 @@ const CHECKS = [
     },
   },
   {
+    name: 'school_notes bootstrap + join to child',
+    run: async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS school_notes (
+          id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          practice_id            uuid NOT NULL REFERENCES practices(id),
+          child_id               uuid NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+          appointment_id         uuid REFERENCES appointments(id),
+          requested_by_family_id uuid REFERENCES family_profiles(id),
+          requested_by_name      text,
+          excuse_dates_text      text NOT NULL,
+          parent_additional_notes text,
+          rendering_provider_id  uuid REFERENCES providers(id),
+          rendering_provider_name text,
+          rendering_provider_npi text,
+          blob_url               text NOT NULL,
+          filename               text NOT NULL,
+          sent_to_email          text,
+          sent_at                timestamptz,
+          status                 text NOT NULL DEFAULT 'generated',
+          created_at             timestamptz NOT NULL DEFAULT NOW()
+        )`
+      const [p] = await sql`SELECT practice_id FROM providers WHERE is_active = true LIMIT 1`
+      await sql`
+        SELECT sn.id, sn.excuse_dates_text, sn.sent_at, sn.status,
+               c.first_name, c.last_name
+        FROM school_notes sn
+        JOIN children c ON c.id = sn.child_id
+        WHERE sn.practice_id = ${p.practice_id}::uuid
+        ORDER BY sn.created_at DESC
+        LIMIT 5`
+    },
+  },
+  {
     name: 'children.last_eligibility_check_at exists + joinable in claims GET',
     run: async () => {
       // Belt-and-suspenders schema check for the pre-submit scrubber.
