@@ -34,6 +34,16 @@ function getFacilityAddress(renderingProviderName: string | null) {
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
   const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
+  // Codes that are universally bundled by payers and never pay out when
+  // billed alongside a procedure. Keeping them on the encounter note
+  // for internal tracking / self-pay collection is fine; sending them
+  // to Stedi just wastes a line and produces noise in the ERA.
+  //   99001 — Lab handling fee. Observed denied CARC 97 (bundled) by
+  //           BCBS, BCBS NC, and Cigna in Sept 2026 (every single
+  //           time). CIGNA also denied once with CARC 246 ("non-payable,
+  //           for reporting only") — same practical outcome. Sara
+  //           confirmed 2026-10-05.
+  const NEVER_BILL_TO_INSURANCE = new Set(['99001'])
   // Strip every convenience / self-pay / internal code before the
   // Stedi payload is built. Filter on category — matches the post-
   // submit stored-claim filter at the bottom of this file
@@ -46,6 +56,7 @@ function buildStediPayload(claim: any, testMode = false): object {
   // corruption we shouldn't silently ship.
   const cptCodes  = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
     .filter((c: any) => c.category !== 'Non-Covered Services')
+    .filter((c: any) => !NEVER_BILL_TO_INSURANCE.has(String(c.code ?? '')))
     .filter((c: any) => /^[A-Z0-9]{5}$/i.test(String(c.code ?? '')))
     .map((c: any) => AUTO_MODIFIERS[String(c.code)] ? { ...c, modifier: AUTO_MODIFIERS[String(c.code)] } : c)
   const billableTotal = cptCodes.reduce((s: number, c: any) => {
@@ -623,9 +634,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json({ test: true, accepted: true, acknowledgment: stediData })
       }
 
-      // Strip convenience / non-covered codes from the claim now that it's submitted to insurance
+      // Strip convenience / non-covered codes from the claim now that
+      // it's submitted to insurance. Must mirror the NEVER_BILL_TO_INSURANCE
+      // + Non-Covered Services + format filter above in buildStediPayload,
+      // or the stored total_charge won't match what Stedi actually billed
+      // and the ERA matcher will see a mismatch.
+      const NEVER_BILL_TO_INSURANCE_POST = new Set(['99001'])
       const insuranceCodes = (Array.isArray(claim.cpt_codes) ? claim.cpt_codes : [])
         .filter((c: any) => c.category !== 'Non-Covered Services')
+        .filter((c: any) => !NEVER_BILL_TO_INSURANCE_POST.has(String(c.code ?? '')))
       const insuranceTotal = insuranceCodes.reduce((s: number, c: any) => {
         const charge = parseFloat(c.charge_amount) || 0
         const units = parseInt(c.units, 10) || 1
