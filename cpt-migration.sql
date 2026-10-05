@@ -40,7 +40,8 @@ INSERT INTO fee_schedule (code, description, category, charge_amount, place_of_s
 ('82948','Fingerstick glucose','Procedure',50.00,'12'),
 ('S0119','Ondansetron oral 4mg','Procedure',75.00,'12'),
 ('J7620','DuoNeb','Procedure',75.00,'12'),
-('99001','Lab handling fee','Procedure',15.00,'12'),
+-- 99001 (Lab handling fee) removed 2026-10-05 — insurance always bundles it
+-- with the lab CPT, so it never pays out. Seeded practices should not get it.
 ('12001','Simple repair of superficial wounds - less than 2.5 cm','Procedure',275.00,'12'),
 ('12002','Simple repair of superficial wounds - 2.6-7.5 cm','Procedure',301.00,'12'),
 ('12004','Simple repair of superficial wounds - 7.6-12.5 cm','Procedure',342.91,'12'),
