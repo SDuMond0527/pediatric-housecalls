@@ -2207,10 +2207,11 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
-                            {/* Ready-for-biller pill — surfaces on every tab now
-                                (not just the removed Convenience Fee Review tab).
+                            {/* Ready-for-biller pill — pre-submission only.
+                                Once a claim has been submitted to the payer,
+                                "ready for biller" is a stale signal — hide it.
                                 Sara 2026-10-06. */}
-                            {c.ready_for_biller_at && (
+                            {c.ready_for_biller_at && !c.submitted_at && (
                               <span
                                 className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"
                                 title={`Marked by ${c.ready_for_biller_by ?? 'Unknown'} on ${fmtDate(c.ready_for_biller_at)}`}
