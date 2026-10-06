@@ -379,6 +379,12 @@ export function BookVisit() {
   const [firstAvailResult, setFirstAvailResult] = useState<{ provider: string; time: string } | null>(null)
   const [findingFirstAvail, setFindingFirstAvail] = useState(false)
   const [cmaAvailResult, setCmaAvailResult] = useState<{ name: string; firstSlot: string } | null>(null)
+  // Mirror of cmaAvailResult but for the reverse direction: when a parent
+  // picked CMA+telemedicine and no CMA is available on the chosen date,
+  // we look for a regular MD/NP in-person sick visit as the alternative.
+  // Sara 2026-10-06 — Evelyn Elmore 28269 case where UI silently booked
+  // Megan solo instead of showing the real alternative.
+  const [mdSickFallbackResult, setMdSickFallbackResult] = useState<{ name: string; firstSlot: string } | null>(null)
   const [cmaProvidersForZone, setCmaProvidersForZone] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   const [regularZoneProviders, setRegularZoneProviders] = useState<{ name: string; role: string; initials: string; color: string; textColor: string; photo_url?: string | null }[]>([])
   // Melissa's weekly working schedule was previously used for helper
@@ -559,6 +565,16 @@ export function BookVisit() {
     if (!booking.date || !booking.zone || isCmaTelePair(booking.visitType)) return
     const noLeadSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     if (noLeadSlots) findCmaAvailability(booking.date, booking.zone)
+  }, [booking.date, booking.zone, booking.visitType])
+
+  // Reverse direction: parent picked CMA+tele, no CMA has availability on
+  // this date → check if an MD/NP is available for in-person sick visit
+  // so we can offer the switch instead of a dead-end "no availability"
+  // screen. Sara 2026-10-06.
+  useEffect(() => {
+    setMdSickFallbackResult(null)
+    if (!booking.date || !booking.zone || !isCmaTelePair(booking.visitType)) return
+    findMdSickFallback(booking.date, booking.zone)
   }, [booking.date, booking.zone, booking.visitType])
 
   useEffect(() => {
@@ -991,6 +1007,64 @@ export function BookVisit() {
     }
   }
 
+  // Mirror of findCmaAvailability for the reverse flow: parent picked
+  // CMA+tele but no CMA has availability on the chosen date. If a regular
+  // MD/NP is available in-person for 'In-home sick visit', surface that
+  // slot so the parent gets a real option instead of a dead end.
+  // Sara 2026-10-06.
+  async function findMdSickFallback(date: string, zone: string) {
+    if (!date || !zone) return
+    const mdRows = await getProvidersByZone(zone).catch(() => [])
+    const mdFiltered = (mdRows ?? []).filter((p: any) => p.role !== 'RN' && p.role !== 'CMA')
+    if (mdFiltered.length === 0) return
+
+    const sickVisitTypeKey = 'In-home sick visit'
+    const leadTimeSlots = getAvailableSlots(byType[sickVisitTypeKey]?.lead_minutes ?? 60, date)
+    if (leadTimeSlots.length === 0) return
+
+    const slotMin = (slot: string) => {
+      const [t, ampm] = slot.split(' ')
+      let [h, m] = t.split(':').map(Number)
+      if (ampm === 'PM' && h !== 12) h += 12
+      if (ampm === 'AM' && h === 12) h = 0
+      return h * 60 + m
+    }
+
+    const results = await Promise.all(mdFiltered.map(async (p: any) => {
+      const name = p.name as string
+      const provRow = await getProviderByName(name)
+      if (!provRow) return null
+      const dayWindow = await getProviderDayWindow(provRow.id, date)
+      if (!dayWindow) return null
+      const sched = await getSchedulingData(provRow.id, { date, visit_type: sickVisitTypeKey })
+      const vtaRow = sched?.visitTypeAvail
+      const vtaWindow = vtaRow?.is_active && vtaRow.start_time && vtaRow.end_time
+        ? { start: vtaRow.start_time as string, end: vtaRow.end_time as string }
+        : null
+      const window = intersectWindows(dayWindow, vtaWindow)
+      if (!window) return null
+      const bookedList = sched?.bookedSlots ?? []
+      const sickVisitDur = byType[sickVisitTypeKey]?.duration_minutes ?? 60
+      const free = leadTimeSlots.filter(slot => {
+        const sm = slotMin(slot)
+        const [wsh, wsm] = window.start.split(':').map(Number)
+        const [weh, wem] = window.end.split(':').map(Number)
+        if (sm < wsh * 60 + wsm || sm + sickVisitDur > weh * 60 + wem) return false
+        return !bookedList.some(({ time: bt, duration }: any) => {
+          const bm2 = timeStrToMinutes(bt)
+          return sm < bm2 + duration && sm + sickVisitDur > bm2
+        })
+      })
+      return free.length > 0 ? { name, firstSlot: free[0] } : null
+    }))
+
+    const available = results.filter(Boolean) as { name: string; firstSlot: string }[]
+    if (available.length > 0) {
+      available.sort((a, b) => slotMin(a.firstSlot) - slotMin(b.firstSlot))
+      setMdSickFallbackResult(available[0])
+    }
+  }
+
   async function loadZoneLookahead(providers: typeof regularZoneProviders, visitType: string) {
     if (!providers.length) return
     setZoneLookaheadLoading(true)
@@ -1169,9 +1243,16 @@ export function BookVisit() {
   // family sees a page they can't advance from. Hardcoded fallback
   // means CPR flow never gets stuck even when the fetch fails.
   const CPR_MELISSA_FALLBACK = { name: 'Melissa Jesse', role: 'PNP', initials: 'MJ', color: '#FDEDEC', textColor: '#922B21', photo_url: null }
+  // CMA+tele MUST only ever offer CMAs. Previously this fell through to
+  // regularZoneProviders when no CMA was configured for the zone — which
+  // let an MD/NP appear as a "bookable" slot for a CMA+tele visit, and
+  // the server then created a solo-NP appointment with no CMA twin
+  // (Evelyn Elmore 28269, 2026-10-06). Now returns [] instead, which
+  // trips the no-availability fallback and offers in-person sick visit
+  // via mdSickFallbackResult below.
   const zoneProviders = isIvFluids
     ? ivZoneProviders
-    : isCmaVisit && cmaProvidersForZone.length > 0
+    : isCmaVisit
       ? cmaProvidersForZone
       : isCpr && regularZoneProviders.length === 0
         ? [CPR_MELISSA_FALLBACK]
@@ -2753,13 +2834,24 @@ export function BookVisit() {
           {/* 6. No-availability / waitlist / CMA cards. Never shown for
               CPR — those bookings route to Melissa's approval queue and
               she decides feasibility, so falling back to a CMA visit
-              would be nonsensical (Sara 2026-09-20). */}
+              would be nonsensical (Sara 2026-09-20).
+
+              Also fires for CMA+tele visits with ZERO cma providers in
+              the zone (zoneProviders.length === 0) — otherwise the
+              family would see nothing after my fix that stops the fall-
+              through to regularZoneProviders. Sara 2026-10-06. */}
           {!isCpr && booking.zone && !waitlistZones.includes(booking.zone) && !waitlistDone &&
-           ((booking.date && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked)) || (cmaOnlyZone && cmaProvidersForZone.length > 0)) && (
+           ((booking.date && zoneProviders.length > 0 && (noAvailableSlots || allSlotsBooked))
+            || (cmaOnlyZone && cmaProvidersForZone.length > 0)
+            || (isCmaVisit && booking.date && zoneProviders.length === 0)) && (
             <div className="mb-4 space-y-2">
               {!cmaOnlyZone && (
                 <p className="text-[13px] font-semibold text-[#633806]">
-                  {booking.provider && booking.provider !== '__first_available__' ? `No availability with ${booking.provider} on this date.` : 'No availability on this date.'}
+                  {isCmaVisit
+                    ? 'No in-home tech available on this date in your area.'
+                    : booking.provider && booking.provider !== '__first_available__'
+                      ? `No availability with ${booking.provider} on this date.`
+                      : 'No availability on this date.'}
                 </p>
               )}
               <div className="flex gap-3 items-stretch">
@@ -2778,7 +2870,37 @@ export function BookVisit() {
                   </div>
                 )}
 
-                {cmaProvidersForZone.length > 0 && !isIvFluids && (
+                {/* Mirror panel: parent picked CMA+tele but no CMA has
+                    hours on this date → offer the in-person sick visit
+                    alternative with the MD/NP that IS available. If
+                    neither CMA nor MD/NP is available, both panels sit
+                    dark and the family only sees the waitlist. Sara 2026-10-06. */}
+                {isCmaVisit && mdSickFallbackResult && (
+                  <div className="flex-1 bg-[#EEEDFE] border border-[#AFA9EC] rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#3C3489]">In-person sick visit</p>
+                      <p className="text-[12px] text-[#1A1A2E] mt-1 leading-relaxed">
+                        Our provider comes to you for an in-person visit — same at-home convenience, with the exam done directly by the clinician.
+                      </p>
+                      <p className="text-[12px] text-[#1A1A2E] mt-2">
+                        <strong>{mdSickFallbackResult.name}</strong> available at <strong>{mdSickFallbackResult.firstSlot}</strong>.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const result = mdSickFallbackResult
+                        if (!result) return
+                        setMdSickFallbackResult(null)
+                        setBooking(b => ({ ...b, visitType: 'In-home sick visit', provider: result.name, time: result.firstSlot }))
+                        loadBookedTimes(result.name, booking.date)
+                      }}
+                      className="mt-auto w-full py-2.5 bg-[#3C3489] text-white rounded-xl text-[13px] font-semibold hover:bg-[#2a2560] transition-colors">
+                      Switch to in-person
+                    </button>
+                  </div>
+                )}
+
+                {!isCmaVisit && cmaProvidersForZone.length > 0 && !isIvFluids && (
                   <div className={`${cmaOnlyZone ? 'w-full' : 'flex-1'} bg-[#E6F1FB] border border-[#A3C4E8] rounded-xl p-4 flex flex-col gap-3`}>
                     <div>
                       <p className="text-[13px] font-semibold text-[#0C447C]">CMA + telemedicine visit</p>

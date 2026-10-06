@@ -88,6 +88,21 @@ async function createAppointmentCore(
     const primaryRole = ((primaryProvRow as any)?.role ?? '') as string
     const primaryName = ((primaryProvRow as any)?.name ?? '') as string
     const primaryIsInHome = primaryRole === 'CMA' || primaryRole === 'RN'
+    // Defensive: a paired visit type (CMA+tele, IV fluids) with an MD/NP
+    // primary would skip the pairing block below and silently create a
+    // solo MD/NP appointment with the paired visit type — exactly what
+    // happened with Evelyn Elmore on 2026-10-06. Reject here before any
+    // row is inserted. Client-side fix in BookVisit.tsx covers the
+    // happy path; this is the last-ditch guard against stale caches /
+    // direct-API callers / anyone bypassing the form.
+    if (!primaryIsInHome) {
+      return {
+        primary: null,
+        secondary: null,
+        error: `${visit_type} requires a CMA or RN as the primary provider — got ${primaryRole || 'unknown role'} (${primaryName || 'unknown'}). Pick an in-home provider or choose a non-paired visit type.`,
+        errorCode: 'paired_visit_needs_in_home_primary',
+      }
+    }
     const [primaryRow] = await sql`
       INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
       VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
