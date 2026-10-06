@@ -1509,6 +1509,10 @@ export interface SchoolNoteRow {
   status: string
   created_at: string
   requested_by_name: string | null
+  // 'family' = parent clicked the post-visit email link.
+  // 'provider' = provider hit the School note button in the encounter note.
+  source: 'family' | 'provider'
+  requested_by_provider_name: string | null
   child_id: string
   child_first_name: string | null
   child_last_name: string | null

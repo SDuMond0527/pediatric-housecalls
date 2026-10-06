@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, Download, Search, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { FileText, Download, Search, CheckCircle2, AlertTriangle, Stethoscope, Users } from 'lucide-react'
 import { getAdminSchoolNotes, type SchoolNoteRow } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 
@@ -43,7 +43,8 @@ export function AdminSchoolNotes() {
         (r.sent_to_email ?? '').toLowerCase().includes(q) ||
         (r.excuse_dates_text ?? '').toLowerCase().includes(q) ||
         (r.parent_additional_notes ?? '').toLowerCase().includes(q) ||
-        (r.rendering_provider_name ?? '').toLowerCase().includes(q)
+        (r.rendering_provider_name ?? '').toLowerCase().includes(q) ||
+        (r.requested_by_provider_name ?? '').toLowerCase().includes(q)
       )
     })
   }, [rows, search])
@@ -128,12 +129,36 @@ export function AdminSchoolNotes() {
                             <CheckCircle2 size={10} /> SENT
                           </span>
                         )}
+                        {/* Source badge — distinguish provider-initiated
+                            (via the School note button in the encounter note
+                            modal) from family-initiated (via the parent's
+                            post-visit email link). Sara 2026-10-06. */}
+                        {r.source === 'provider' ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEEDFE] text-[#4C1D95] text-[10px] rounded-full font-semibold"
+                            title={r.requested_by_provider_name
+                              ? `Provider-initiated by ${r.requested_by_provider_name}`
+                              : 'Provider-initiated from the encounter note'}>
+                            <Stethoscope size={10} /> PROVIDER
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEF6FB] text-[#2D7BA6] text-[10px] rounded-full font-semibold"
+                            title={r.requested_by_name
+                              ? `Family-initiated by ${r.requested_by_name}`
+                              : 'Family-initiated from the post-visit email link'}>
+                            <Users size={10} /> FAMILY
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-[12px] text-[#555] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                         <span>Visit: {fmtDate(r.visit_date)}{r.visit_type ? ` · ${r.visit_type}` : ''}</span>
                         <span>Issued {fmtDateTime(r.sent_at ?? r.created_at)}</span>
                         {r.rendering_provider_name && <span>Signed by {r.rendering_provider_name}</span>}
+                        {r.source === 'provider' && r.requested_by_provider_name && (
+                          <span>Requested by {r.requested_by_provider_name}</span>
+                        )}
                         {r.sent_to_email && <span>→ {r.sent_to_email}</span>}
                       </div>
 
@@ -144,7 +169,9 @@ export function AdminSchoolNotes() {
 
                       {r.parent_additional_notes && (
                         <div className="mt-2 bg-[#FAFAF8] border border-[#E8E8E4] rounded-md p-2 text-[12px] text-[#1A1A2E]">
-                          <div className="text-[10px] font-semibold text-[#555] uppercase tracking-wider mb-1">Parent-provided additional notes</div>
+                          <div className="text-[10px] font-semibold text-[#555] uppercase tracking-wider mb-1">
+                            {r.source === 'provider' ? 'Additional information' : 'Parent-provided additional notes'}
+                          </div>
                           <div className="whitespace-pre-wrap italic">{r.parent_additional_notes}</div>
                         </div>
                       )}

@@ -55,6 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status                 text NOT NULL DEFAULT 'generated',
         created_at             timestamptz NOT NULL DEFAULT NOW()
       )`
+    // Provider-initiated columns (shipped 2026-10-06). Bootstrapped here
+    // too so the SELECT below never 500s on a cold deploy.
+    await sql`ALTER TABLE school_notes ADD COLUMN IF NOT EXISTS requested_by_provider_id uuid REFERENCES providers(id)`
+    await sql`ALTER TABLE school_notes ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'family'`
   } catch (e: any) { console.error('school_notes bootstrap failed:', e?.message) }
 
   const rows = await sql`
@@ -71,6 +75,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sn.status,
       sn.created_at,
       sn.requested_by_name,
+      COALESCE(sn.source, 'family') AS source,
+      prov.name AS requested_by_provider_name,
       c.id          AS child_id,
       c.first_name  AS child_first_name,
       c.last_name   AS child_last_name,
@@ -81,6 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     FROM school_notes sn
     JOIN children c ON c.id = sn.child_id
     LEFT JOIN appointments a ON a.id = sn.appointment_id
+    LEFT JOIN providers prov ON prov.id = sn.requested_by_provider_id
     WHERE sn.practice_id = ${prov.practice_id}::uuid
     ORDER BY sn.created_at DESC
     LIMIT 500
