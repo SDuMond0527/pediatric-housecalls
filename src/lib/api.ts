@@ -521,12 +521,44 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+// Fetches the appointment + child + provider for a single appointment id
+// owned by this family. Primary data source for FamilySchoolExcuseRequest
+// so the UI can render even if the provider hasn't signed the encounter
+// note yet (2026-10-06 fix).
+export const familyGetAppointmentForSchoolNote = (id: string) =>
+  familyApiFetch<{
+    appointment_id: string
+    scheduled_date: string
+    visit_type: string | null
+    appointment_status: string | null
+    child_id: string
+    child_first_name: string | null
+    child_last_name: string | null
+    child_dob: string | null
+    provider_id: string | null
+    provider_name: string | null
+    provider_role: string | null
+  }>(`/api/family/appointment-lookup?id=${encodeURIComponent(id)}`)
+
 export const familySubmitSchoolExcuseRequest = (body: {
   appointment_id: string
   excuse_dates: string
   additional_notes?: string
 }) =>
   familyApiFetch<{ ok: true }>('/api/family/school-excuse-request', { method: 'POST', body: JSON.stringify(body) })
+
+// Provider-initiated school note. Posts to the provider endpoint which
+// duplicates the PDF + email pipeline (no cross-file imports in api/ per
+// Vercel bundling constraints). Admin can also use this.
+export const providerGenerateSchoolNote = (body: {
+  appointment_id: string
+  excuse_dates: string
+  additional_notes?: string
+  parent_email_override?: string
+}) =>
+  apiFetch<{ ok: true; sent_to: string | null; blob_url: string }>(
+    '/api/providers/school-note', { method: 'POST', body: JSON.stringify(body) }
+  )
 
 // Fetches a signed encounter note as HTML (scoped to the family's own
 // children — server enforces child ownership) and opens it in a new tab

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { CheckCircle2, ArrowLeft } from 'lucide-react'
-import { familyGetEncounterNotes, familyGetBookingRequests, familySubmitSchoolExcuseRequest } from '../../lib/api'
+import { familyGetEncounterNotes, familyGetBookingRequests, familySubmitSchoolExcuseRequest, familyGetAppointmentForSchoolNote } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 
@@ -34,9 +34,35 @@ export function FamilySchoolExcuseRequest() {
     async function load() {
       if (!appointmentId) { setLoading(false); return }
       try {
-        // Pull the family's booking requests + notes so we can locate
-        // the appointment context. Both endpoints are already family-
-        // scoped by Cognito; server re-checks ownership on submit.
+        // PRIMARY: query appointments table directly via the new
+        // family lookup endpoint. Covers every path — self-booked,
+        // waitlist-accepted, provider manual-add — regardless of
+        // whether the encounter note has been signed yet. Fixes the
+        // 2026-10-06 "visit not showing" bug a parent reported.
+        try {
+          const row = await familyGetAppointmentForSchoolNote(appointmentId)
+          if (!cancelled && row) {
+            const kid = children?.find(c => c.id === row.child_id) ?? {
+              id: row.child_id,
+              first_name: row.child_first_name,
+              last_name: row.child_last_name,
+              date_of_birth: row.child_dob,
+            }
+            setAppointment({
+              appointment_id: row.appointment_id,
+              scheduled_date: row.scheduled_date,
+              visit_type: row.visit_type,
+              child_id: row.child_id,
+            })
+            setChild(kid)
+            return
+          }
+        } catch { /* fall through to legacy sources below */ }
+
+        // FALLBACK (legacy): if the primary lookup somehow misses — e.g.
+        // appointment pre-dates the field we now join on — try the
+        // encounter-notes + booking-requests sources the UI used before
+        // the 2026-10-06 fix.
         const [notes, brs] = await Promise.all([
           familyGetEncounterNotes().catch(() => []),
           familyGetBookingRequests().catch(() => []),

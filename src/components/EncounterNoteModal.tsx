@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
@@ -515,6 +515,48 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [dsLaunching, setDsLaunching] = useState(false)
+
+  // Provider-initiated school note (shipped 2026-10-06). Opens a small
+  // modal; provider types excuse dates + optional notes; POST to
+  // /api/providers/school-note which generates the PDF + emails parent.
+  const [schoolNoteOpen, setSchoolNoteOpen] = useState(false)
+  const [schoolNoteDates, setSchoolNoteDates] = useState('')
+  const [schoolNoteNotes, setSchoolNoteNotes] = useState('')
+  const [schoolNoteEmailOverride, setSchoolNoteEmailOverride] = useState('')
+  const [schoolNoteSubmitting, setSchoolNoteSubmitting] = useState(false)
+  const [schoolNoteError, setSchoolNoteError] = useState<string | null>(null)
+  const [schoolNoteSentTo, setSchoolNoteSentTo] = useState<string | null>(null)
+
+  async function submitSchoolNote() {
+    if (!schoolNoteDates.trim()) {
+      setSchoolNoteError('Which dates need to be excused?')
+      return
+    }
+    setSchoolNoteSubmitting(true)
+    setSchoolNoteError(null)
+    try {
+      const result = await providerGenerateSchoolNote({
+        appointment_id: appointment.id,
+        excuse_dates: schoolNoteDates.trim(),
+        additional_notes: schoolNoteNotes.trim() || undefined,
+        parent_email_override: schoolNoteEmailOverride.trim() || undefined,
+      })
+      setSchoolNoteSentTo(result.sent_to ?? null)
+    } catch (e: any) {
+      setSchoolNoteError(e?.message ?? 'Failed to generate school note')
+    } finally {
+      setSchoolNoteSubmitting(false)
+    }
+  }
+
+  function closeSchoolNoteModal() {
+    setSchoolNoteOpen(false)
+    setSchoolNoteDates('')
+    setSchoolNoteNotes('')
+    setSchoolNoteEmailOverride('')
+    setSchoolNoteError(null)
+    setSchoolNoteSentTo(null)
+  }
 
   async function launchDoseSpot() {
     if (!linkedChildId) return
@@ -1391,6 +1433,15 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             >
               <FlaskConical size={13} />
               {dsLaunching ? 'Opening…' : 'Prescribe'}
+            </button>
+            <button
+              onClick={() => setSchoolNoteOpen(true)}
+              disabled={!linkedChildId}
+              title={!linkedChildId ? 'Link a patient to generate a school note' : 'Generate a school absence note and email it to the parent'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FileText size={13} />
+              School note
             </button>
             <button
               onClick={openRnIvOrder}
@@ -2806,6 +2857,85 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             setTimeout(() => setSaveSuccess(null), 4000)
           }}
         />
+      )}
+      {/* Provider-initiated school note modal. Reuses the family-side
+          PDF template; emails the parent on file (or override) + BCCs
+          Pam. Audit row written with source='provider'. Sara 2026-10-06. */}
+      {schoolNoteOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={() => !schoolNoteSubmitting && closeSchoolNoteModal()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            {schoolNoteSentTo ? (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={18} className="text-[#1D9E75]" />
+                    <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">School note sent</h2>
+                  </div>
+                  <button onClick={closeSchoolNoteModal} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+                </div>
+                <p className="text-[13px] text-[#1A1A2E] leading-relaxed">
+                  Sent to <strong>{schoolNoteSentTo}</strong> (BCC Pam). The parent gets it as a PDF attachment.
+                </p>
+                <div className="flex justify-end mt-5">
+                  <Button variant="teal" size="sm" onClick={closeSchoolNoteModal}>Done</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText size={18} className="text-[#7F77DD]" />
+                    <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Generate school note</h2>
+                  </div>
+                  <button onClick={closeSchoolNoteModal} disabled={schoolNoteSubmitting} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+                </div>
+                <p className="text-[12px] text-[#555] mb-3 leading-relaxed">
+                  Emails the parent on file a PDF school absence note signed by the rendering provider. BCCs Pam. Logged on the admin School Notes page.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] text-[#555] block mb-1">Dates to be excused <span className="text-[#DC2626]">*</span></label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                      value={schoolNoteDates}
+                      onChange={e => setSchoolNoteDates(e.target.value)}
+                      disabled={schoolNoteSubmitting}
+                      placeholder="e.g. Monday, Oct 6 and Tuesday, Oct 7" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#555] block mb-1">Additional notes <span className="text-[#777]">(optional)</span></label>
+                    <textarea
+                      className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[60px]"
+                      value={schoolNoteNotes}
+                      onChange={e => setSchoolNoteNotes(e.target.value)}
+                      disabled={schoolNoteSubmitting}
+                      placeholder="Any extra info to show on the note (appears in a boxed 'Additional information' section)" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#555] block mb-1">Send to a different email <span className="text-[#777]">(optional)</span></label>
+                    <input
+                      type="email"
+                      className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                      value={schoolNoteEmailOverride}
+                      onChange={e => setSchoolNoteEmailOverride(e.target.value)}
+                      disabled={schoolNoteSubmitting}
+                      placeholder="Leave blank to use the parent's email on file" />
+                  </div>
+                  {schoolNoteError && (
+                    <div className="text-[12px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-2.5 py-1.5 rounded-lg">{schoolNoteError}</div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2 mt-5">
+                  <Button variant="secondary" size="sm" onClick={closeSchoolNoteModal} disabled={schoolNoteSubmitting}>Cancel</Button>
+                  <Button variant="teal" size="sm" loading={schoolNoteSubmitting} onClick={submitSchoolNote}>
+                    Generate &amp; send
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
