@@ -803,45 +803,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Attempt 3 — assumed report URL pattern (parallel to 835).
+    // Attempt 3 — probe every plausible Stedi URL in parallel for the
+    // first one that returns ISA-headed X12 (or JSON wrapping X12).
+    // Original /reports/v2/{id}/277 was guessed by parallel-to-835 and
+    // has returned 0/97 in prod over 2 weeks (Sara 2026-10-06). This
+    // list covers every URL shape visible in Stedi's current docs so
+    // we self-heal the moment the right one is confirmed; the winning
+    // URL is logged and surfaced in stedi_transactions_processed so
+    // we can trim this list once the right one is proven in prod.
     if (!rawX12) {
-      try {
-        const reportRes = await fetch(STEDI_277_REPORT_URL(transactionId), {
-          headers: { Authorization: `Key ${STEDI_API_KEY}`, 'Content-Type': 'application/json' },
-        })
-        if (reportRes.ok) {
-          const rawText = (await reportRes.text()).trim()
-          if (rawText.startsWith('ISA')) {
-            rawX12 = rawText; x12Source = 'report-endpoint-x12'
-          } else {
-            try {
-              const body = JSON.parse(rawText)
-              const embedded = body?.x12 ?? body?.body ?? body?.content
-              if (typeof embedded === 'string' && embedded.trim().startsWith('ISA')) {
-                rawX12 = embedded; x12Source = 'report-endpoint-json'
-              } else {
-                console.error('[stedi-transaction] report endpoint JSON had no x12. keys:', Object.keys(body ?? {}))
-              }
-            } catch {
-              console.error('[stedi-transaction] report endpoint returned non-JSON non-X12. head:', rawText.slice(0, 300))
+      const probeCandidates = [
+        // Original guess — kept so historical path still works if docs
+        // regress.
+        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/277`,
+        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/x12`,
+        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}`,
+        // Transaction endpoints under /transactions/{id}.
+        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/transactions/${transactionId}/x12`,
+        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/transactions/${transactionId}`,
+        // claims-manager parallel URLs (works for ERAs at /eras/{id}/x12,
+        // so by analogy these shapes exist for 277s).
+        `https://claims-manager.us.stedi.com/2025-09-01/claim-statuses/${transactionId}/x12`,
+        `https://claims-manager.us.stedi.com/2025-09-01/claim-statuses/${transactionId}`,
+        `https://claims-manager.us.stedi.com/2025-09-01/responses/${transactionId}/x12`,
+        `https://claims-manager.us.stedi.com/2025-09-01/responses/${transactionId}`,
+        `https://claims-manager.us.stedi.com/2025-09-01/277s/${transactionId}/x12`,
+        `https://claims-manager.us.stedi.com/2025-09-01/277s/${transactionId}`,
+      ]
+      const probeOne = async (url: string): Promise<{ url: string; x12: string | null; status: number }> => {
+        try {
+          const r = await fetch(url, {
+            headers: {
+              Authorization: `Key ${STEDI_API_KEY}`,
+              Accept: 'application/edi-x12, text/plain, application/json',
+            },
+          })
+          if (!r.ok) return { url, x12: null, status: r.status }
+          const text = (await r.text()).trim()
+          if (text.startsWith('ISA')) return { url, x12: text, status: r.status }
+          try {
+            const j = JSON.parse(text)
+            const inner = j?.x12 ?? j?.body ?? j?.content ?? j?.rawX12
+            if (typeof inner === 'string' && inner.trim().startsWith('ISA')) {
+              return { url, x12: inner.trim(), status: r.status }
             }
-          }
-        } else {
-          console.error('[stedi-transaction] report endpoint failed:', reportRes.status, (await reportRes.text().catch(() => '')).slice(0, 500))
+          } catch {}
+          return { url, x12: null, status: r.status }
+        } catch (e: any) {
+          console.error('[stedi-transaction] probe threw', url, e?.message)
+          return { url, x12: null, status: 0 }
         }
-      } catch (rptErr: any) {
-        console.error('[stedi-transaction] report endpoint threw:', rptErr?.message)
+      }
+      // Fire all in parallel so a slow endpoint doesn't block Stedi's
+      // webhook timeout. First successful response wins.
+      const results = await Promise.all(probeCandidates.map(probeOne))
+      const winner = results.find(r => r.x12)
+      if (winner) {
+        rawX12 = winner.x12 as string
+        x12Source = `probe:${winner.url}`
+        console.log('[stedi-transaction] 277 X12 obtained via probe. transactionId:', transactionId, 'url:', winner.url, 'len:', rawX12.length)
+      } else {
+        console.error('[stedi-transaction] 277 probe swept all variants. results:',
+          JSON.stringify(results.map(r => ({ url: r.url, status: r.status }))))
       }
     }
 
     if (!rawX12) {
+      // Stash the full webhook payload to a diagnostic table so we can
+      // inspect what Stedi is actually sending without hunting Vercel
+      // logs. Pruned manually once the right endpoint is proven and
+      // extraction is stable.
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS stedi_277_unresolved (
+            transaction_id text PRIMARY KEY,
+            received_at timestamptz NOT NULL DEFAULT NOW(),
+            payload jsonb NOT NULL
+          )`
+        await sql`
+          INSERT INTO stedi_277_unresolved (transaction_id, payload)
+          VALUES (${transactionId}, ${JSON.stringify(payload)}::jsonb)
+          ON CONFLICT (transaction_id) DO NOTHING`
+      } catch (dbErr: any) {
+        console.error('[stedi-transaction] stash payload failed:', dbErr?.message)
+      }
       console.error('[stedi-transaction] 277 X12 extraction FAILED after all attempts. transactionId:', transactionId,
         'payload (first 3000 chars):', JSON.stringify(payload).slice(0, 3000))
       await sql`
         INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
         VALUES (${transactionId}, 0, '277-webhook-no-x12')
         ON CONFLICT (transaction_id) DO NOTHING`
-      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'could not extract X12 from webhook payload, related resources, or report endpoint. See Vercel logs.' })
+      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'could not extract X12 after probing all endpoints. Full payload stashed in stedi_277_unresolved.' })
     }
     console.log('[stedi-transaction] 277 X12 obtained via:', x12Source, 'transactionId:', transactionId, 'len:', rawX12.length)
 
