@@ -233,19 +233,43 @@ async function ensureStatementForClaim(
     RETURNING id
   `
   const stmtId = row?.id as string
-  // ── Auto-send clean statements (Sara 2026-10-06) ─────────────────────
-  // When insurance paid AND patient owes AND no denial codes, fire the
-  // existing send endpoint internally (service-token auth, same code
-  // path as a manual send so the parent sees the same template). Gate
-  // mirrors the parallel copies in refetch-known-eras.ts and
+  // ── Auto-send clean statements (Sara 2026-10-06, revised) ───────────
+  // When patient owes AND the ERA adjudication is CLEAN (nothing beyond
+  // contractual write-offs CO-45/97/24/131/137 and normal patient-resp
+  // PR-* entries), fire the existing send endpoint internally. Block
+  // on actual denials (CO-16/50/96/109 etc.) and documentation-needed
+  // CARCs (CO-17/19/20/107/226/227/251/252) — those need Pam's eyes.
+  // Does NOT require insurance_payment > 0 — a visit where insurance
+  // paid $0 because deductible wasn't met is still a clean adjudication
+  // and the patient legitimately owes the full non-contractual portion.
+  // Mirrors parallel copies in refetch-known-eras.ts and
   // cron/stedi-era-poll.ts — keep in sync.
-  if (stmtId && !autoPaid && (insurancePayment ?? 0) > 0 && patientResp > 0) {
+  if (stmtId && !autoPaid && patientResp > 0) {
     const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
     if (autoSendEnabled) {
       try {
         const [cs] = await sql`SELECT denial_codes FROM claims WHERE id = ${claimId}::uuid LIMIT 1`
         const denials = Array.isArray((cs as any)?.denial_codes) ? (cs as any).denial_codes : []
-        if (denials.length === 0) {
+        // Classify CARC entries. CO-45/97/24/131/137 are contractual
+        // write-offs (not denials). PR-* are patient responsibility
+        // (deductible/coins/copay — normal, not denials). CO-17/19/20/
+        // 107/226/227/251/252 are documentation-needed (block). Any
+        // other CO/OA/PI code = actionable denial (block). Mirrors
+        // detectErraOutcome in src/lib/carcCodes.ts. Sara 2026-10-06
+        // — fix for Wade Knight / Baylus Browder which had CO-45 + PR-1
+        // (totally clean deductible case) being wrongly treated as a
+        // denial by the old `.length > 0` gate.
+        const CONTRACTUAL_CO = new Set(['45', '97', '24', '131', '137'])
+        const DOCS_CO = new Set(['17', '19', '20', '107', '226', '227', '251', '252'])
+        const isClean = denials.every((c: any) => {
+          const group  = String(c?.group_code ?? '').toUpperCase()
+          const reason = String(c?.reason_code ?? '')
+          if (group === 'PR') return true
+          if (group === 'CO') return CONTRACTUAL_CO.has(reason) && !DOCS_CO.has(reason)
+          if (group === 'OA' || group === 'PI') return CONTRACTUAL_CO.has(reason)
+          return false
+        })
+        if (isClean) {
           const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''
           const base = process.env.PORTAL_URL || 'https://phc-team.com'
           if (svcToken) {

@@ -544,13 +544,24 @@ async function ensureStatementForClaim(
   const stmtId = row?.id as string
   // Auto-send gate — kept in sync with webhooks/stedi-transaction.ts
   // and admin/refetch-known-eras.ts. See comment in webhook. Sara 2026-10-06.
-  if (stmtId && !autoPaid && (insurancePayment ?? 0) > 0 && patientResp > 0) {
+  if (stmtId && !autoPaid && patientResp > 0) {
     const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
     if (autoSendEnabled) {
       try {
         const [cs] = await sql`SELECT denial_codes FROM claims WHERE id = ${claimId}::uuid LIMIT 1`
         const denials = Array.isArray((cs as any)?.denial_codes) ? (cs as any).denial_codes : []
-        if (denials.length === 0) {
+        // See stedi-transaction.ts for the full comment. Clean = CO-45/
+        // 97/24/131/137 (contractual) and PR-* (patient resp) only.
+        const CONTRACTUAL_CO = new Set(['45', '97', '24', '131', '137'])
+        const isClean = denials.every((c: any) => {
+          const group  = String(c?.group_code ?? '').toUpperCase()
+          const reason = String(c?.reason_code ?? '')
+          if (group === 'PR') return true
+          if (group === 'CO') return CONTRACTUAL_CO.has(reason)
+          if (group === 'OA' || group === 'PI') return CONTRACTUAL_CO.has(reason)
+          return false
+        })
+        if (isClean) {
           const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''
           const base = process.env.PORTAL_URL || 'https://phc-team.com'
           if (svcToken) {
