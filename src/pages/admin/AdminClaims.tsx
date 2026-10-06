@@ -783,10 +783,13 @@ export function AdminClaims() {
   // that she hasn't yet charged the CV in Square for. One-click checkbox
   // on each row sets convenience_fee_handled=true and drops the claim
   // off this tab (doesn't touch Andrea's Ready for Biller view).
-  // Sara 2026-10-06.
+  //
+  // Deliberately does NOT exclude submitted_at claims — Pam's CV charge
+  // can be owed even after Andrea has already sent the insurance claim
+  // (common on the backfilled 19 from last night where auto-ready + auto-
+  // submit happened without Pam ever seeing the claim). Sara 2026-10-06.
   const reviewClaims    = visibleClaims.filter(c =>
     !isInRework(c)
-    && !c.submitted_at
     && !isSelfPayClaim(c)
     && String(c.ready_for_biller_by ?? '').startsWith('System')
     && !c.convenience_fee_handled
