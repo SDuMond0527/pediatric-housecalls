@@ -175,10 +175,14 @@ export function AdminStatements() {
                       </div>
                       {stmt.family_email && <div className="text-[11px] text-[#1A1A2E] mt-0.5">{stmt.family_email}</div>}
                     </td>
-                    <td className="px-4 py-3 text-[#555] tabular-nums">{fmtDate(stmt.date_of_service)}</td>
+                    <td className="px-4 py-3 text-[#555] tabular-nums">{fmtDate(stmt.service_date)}</td>
                     <td className="px-4 py-3 text-[#555]">{stmt.payer_name ?? '—'}</td>
                     <td className="px-4 py-3 text-right font-semibold text-[#1A1A2E] tabular-nums">
-                      {fmtMoney(stmt.total_amount_due)}
+                      {/* Once a statement is paid, show $0.00 in the Amount
+                          Due column — the original amount is still on the
+                          row via the fuller statement modal if Pam needs
+                          to see the pre-payment total. Sara 2026-10-06. */}
+                      {stmt.status === 'paid' ? fmtMoney(0) : fmtMoney(stmt.total_amount_due)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${badge.cls}`}>
