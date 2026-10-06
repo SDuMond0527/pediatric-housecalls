@@ -82,9 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
       WHERE ps.practice_id = ${provider.practice_id}::uuid
         AND (${status ?? null}::text IS NULL OR ps.status = ${status ?? null})
-      -- Drafts (sent_at IS NULL) float to top so Pam sees unsent first.
-      -- Below that, most recently sent → oldest sent. Sara 2026-10-06.
-      ORDER BY ps.sent_at DESC NULLS FIRST, ps.created_at DESC
+      -- Order by most recent activity: sent_at if present, else paid_at
+      -- (autopaid rows never had a sent event), else created_at (drafts).
+      -- Every row gets a non-null sort key, so the All tab stays
+      -- consistently ordered across mixed statuses. The Sent/Unpaid tab
+      -- inherits newest-sent-at-top for free. Sara 2026-10-06.
+      ORDER BY COALESCE(ps.sent_at, ps.paid_at, ps.created_at) DESC
       LIMIT 500
     `
 
