@@ -214,13 +214,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const sub = await verifyToken(req.headers.authorization)
     const sql = neon(process.env.DATABASE_URL!)
+    let practiceId: string
 
-    // Look up provider's practice_id
-    const [provider] = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
-    if (!provider) return res.status(403).json({ error: 'Provider not found' })
-    const practiceId = provider.practice_id
+    // Internal service-token path for auto-send from the ERA ingest flow
+    // (webhook/cron/refetch). The caller already knows practice_id and
+    // sends it in the X-Practice-Id header; the service token is a shared
+    // secret in env to prevent arbitrary callers from forging it.
+    // Sara 2026-10-06 — "auto-send clean statements" automation.
+    const svcToken = req.headers['x-internal-service-token'] as string | undefined
+    const expectedSvcToken = process.env.INTERNAL_SERVICE_TOKEN
+    if (svcToken && expectedSvcToken && svcToken === expectedSvcToken) {
+      const headerPractice = req.headers['x-practice-id'] as string | undefined
+      if (!headerPractice) return res.status(400).json({ error: 'X-Practice-Id required for internal service call' })
+      practiceId = headerPractice
+    } else {
+      const sub = await verifyToken(req.headers.authorization)
+      const [provider] = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      if (!provider) return res.status(403).json({ error: 'Provider not found' })
+      practiceId = provider.practice_id
+    }
 
     const statementId = req.query.id as string
     if (!statementId) return res.status(400).json({ error: 'id required' })

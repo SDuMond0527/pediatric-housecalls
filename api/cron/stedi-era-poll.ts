@@ -541,7 +541,34 @@ async function ensureStatementForClaim(
     )
     RETURNING id
   `
-  return { created: true, statementId: row?.id as string }
+  const stmtId = row?.id as string
+  // Auto-send gate — kept in sync with webhooks/stedi-transaction.ts
+  // and admin/refetch-known-eras.ts. See comment in webhook. Sara 2026-10-06.
+  if (stmtId && !autoPaid && (insurancePayment ?? 0) > 0 && patientResp > 0) {
+    const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
+    if (autoSendEnabled) {
+      try {
+        const [cs] = await sql`SELECT denial_codes FROM claims WHERE id = ${claimId}::uuid LIMIT 1`
+        const denials = Array.isArray((cs as any)?.denial_codes) ? (cs as any).denial_codes : []
+        if (denials.length === 0) {
+          const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''
+          const base = process.env.PORTAL_URL || 'https://phc-team.com'
+          if (svcToken) {
+            await fetch(`${base}/api/patient-statements/${stmtId}/send`, {
+              method: 'POST',
+              headers: {
+                'X-Internal-Service-Token': svcToken,
+                'X-Practice-Id': String(claim.practice_id),
+              },
+            }).catch(e => { console.error('[auto-send statement] fetch failed:', e?.message) })
+          }
+        }
+      } catch (e: any) {
+        console.error('[auto-send statement] gate check failed:', e?.message)
+      }
+    }
+  }
+  return { created: true, statementId: stmtId }
 }
 
 type ParsedX12Claim_Cron = {
