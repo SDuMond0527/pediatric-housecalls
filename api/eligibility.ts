@@ -179,14 +179,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { first: subscriberFirst, last: subscriberLast } = parseSubName(child.insurance_subscriber_name ?? '')
 
   // BCBS NC requires the 14-position member ID (12-char base +
-  // 2-digit dependent suffix concatenated). Same rule as claim
-  // submission in api/claims/[id].ts — dep code is stored separately
-  // on the child record for clarity, joined here at eligibility-check
-  // time. Other payers get the base ID untouched.
+  // 2-digit dependent suffix concatenated). Same rule and same bug
+  // fix as api/claims/[id].ts (2026-10-06): the dep code is stored
+  // separately on the child record, but parents frequently paste the
+  // full 14-char ID from their card into the member_id field, so we
+  // need to detect "already includes suffix" and NOT double-append.
+  // Blindly appending produced 16-char IDs that BCBS rejected (4
+  // historical rejections caught during the 277 pipeline recovery).
   const depCode = String(child.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
-  const transmittedMemberId = (payerId === 'UPICO' && depCode)
-    ? String(child.insurance_member_id) + depCode
-    : String(child.insurance_member_id)
+  const transmittedMemberId = (() => {
+    const raw = String(child.insurance_member_id ?? '').trim()
+    if (payerId !== 'UPICO') return raw
+    if (!depCode) return raw
+    // Always strip to the 12-char base and append THIS patient's dep
+    // code — the suffix at the end of a parent-entered 14-char ID is
+    // the subscriber's own suffix (often "01"), not the dependent we're
+    // checking eligibility for. Same logic as api/claims/[id].ts.
+    if (raw.length === 14 || raw.length === 12) return raw.slice(0, 12) + depCode
+    return raw
+  })()
 
   const payload = {
     controlNumber: Date.now().toString().slice(-9),

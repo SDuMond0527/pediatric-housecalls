@@ -254,17 +254,34 @@ function buildStediPayload(claim: any, testMode = false): object {
     },
     receiver: { organizationName: claim.payer_name ?? '' },
     subscriber: {
-      // BCBS NC requires 14-position member IDs — the 12-char base (3
-      // alpha + 9 digits) on the card plus a 2-digit dependent suffix
-      // that identifies which family member the claim is for. We store
-      // the base ID as member_id and the suffix as insurance_dependent_code
-      // separately so the biller/parent enters the ID they see on the
-      // card, and we concatenate at submit time. Other payers ignore
-      // the suffix — safe to only apply for UPICO.
+      // BCBS NC requires exactly 14-position member IDs — the 12-char
+      // base (3 alpha + 9 digits) on the card plus a 2-digit dependent
+      // suffix that identifies which family member the claim is for.
+      //
+      // Parents / billers enter either (a) just the 12-char base from
+      // the card with the dep code stored separately, or (b) the full
+      // 14-char ID that already includes the suffix. Old code assumed
+      // (a) always and blindly concatenated — any (b) entry got a 16-char
+      // ID with the suffix duplicated at the end, which BCBS rejected
+      // with "FULL 14 POSITION BCBSNC MEMBER ID REQUIRED". Hit 4 claims
+      // (Claire Nelson, Graham Gerloff x2, Sean Doyle) 2026-09-21..30
+      // before Sara noticed.
+      //
+      // Fix: BCBS NC output must always be 12-char base + 2-char dep.
+      // The suffix at the end of a parent-entered 14-char ID is the
+      // SUBSCRIBER's own suffix (e.g. "01" for self) — not the right
+      // one for this patient's claim. So: for UPICO with a dep code,
+      // always strip to the first 12 chars and append the stored dep
+      // code. First attempt only de-duplicated when the suffix matched
+      // and left Graham Gerloff still broken because his dad's "01"
+      // suffix is different from Graham's "04". Caught by smoke test.
       memberId: (() => {
-        const base = String(claim.member_id ?? '')
-        const dep  = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
-        return claim.payer_id === 'UPICO' && dep ? base + dep : base
+        const raw = String(claim.member_id ?? '').trim()
+        if (claim.payer_id !== 'UPICO') return raw
+        const dep = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+        if (!dep) return raw
+        if (raw.length === 14 || raw.length === 12) return raw.slice(0, 12) + dep
+        return raw
       })(),
       paymentResponsibilityLevelCode: 'P',
       ...(subFirstName ? { firstName: subFirstName } : {}),
