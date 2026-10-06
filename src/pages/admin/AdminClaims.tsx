@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check } from 'lucide-react'
+import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
@@ -205,6 +205,9 @@ export function AdminClaims() {
   // per-claim action resolves it. Sara 2026-10-05.
   function setExpanded(nextId: string | null) {
     setExpandedRaw(nextId)
+    // Lazy-load the claim's attachment list the first time its card
+    // expands. Cached per-claim so subsequent expands are a no-op.
+    if (nextId) { loadAttachments(nextId) }
   }
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
@@ -295,32 +298,27 @@ export function AdminClaims() {
   // entry, moves claim to Completed via filter. If a fresh trigger
   // arrives after, isInRework re-picks it up automatically.
   const [resolvingReworkId, setResolvingReworkId] = useState<string | null>(null)
-  async function markReworkResolved(claim: any) {
-    if (!window.confirm(`Mark "${[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ')}" as worked and move to Completed?\n\nIf a new denial or rejection lands later, it will move back to Rework automatically.`)) return
-    setResolvingReworkId(claim.id)
-    try {
-      await resolveRework(claim.id)
-      await load()
-    } catch (e: any) {
-      alert(e?.message ?? 'Failed to mark as worked')
-    } finally {
-      setResolvingReworkId(null)
-    }
-  }
+  // markReworkResolved (resolve without statement) was removed 2026-10-06
+  // along with the "Mark as worked → Completed" button — consolidated to
+  // the single "generate + auto-send statement" path per Sara.
 
   async function markReworkResolvedWithStatement(claim: any) {
-    if (!window.confirm(`Mark "${[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ')}" as worked, move to Completed, AND generate a draft patient statement?\n\nThe draft statement will appear on the Statements page for Andrea to edit + send.`)) return
+    if (!window.confirm(`Mark "${[(claim.child_first_name ?? claim.patient_first_name), (claim.child_last_name ?? claim.patient_last_name)].filter(Boolean).join(' ')}" as worked, move to Completed, AND auto-send a patient statement to the family?\n\nThe statement will be sent immediately (email + SMS). No draft step.`)) return
     setResolvingReworkId(claim.id)
     try {
       const result = await resolveReworkWithStatement(claim.id)
       await load()
-      if (result?.statement_created) {
-        alert('Done. Draft statement created — find it on the Statements page.')
+      if (result?.statement_created && result?.statement_sent) {
+        alert('Done. Patient statement generated and auto-sent (email + SMS).')
+      } else if (result?.statement_created && !result?.statement_sent) {
+        alert('Statement generated but auto-send failed — go to the Statements page to send manually.')
+      } else if (result?.statement_sent) {
+        alert('Marked as worked. Statement was already sent/paid for this claim.')
       } else {
-        alert('Marked as worked. A draft statement already existed for this claim.')
+        alert('Marked as worked. A draft statement already existed for this claim — no auto-send fired. Check the Statements page.')
       }
     } catch (e: any) {
-      alert(e?.message ?? 'Failed to mark as worked + create statement')
+      alert(e?.message ?? 'Failed to mark as worked + auto-send statement')
     } finally {
       setResolvingReworkId(null)
     }
@@ -349,6 +347,89 @@ export function AdminClaims() {
   const [reopenNote, setReopenNote]       = useState<string>('')
   const [reopenError, setReopenError]     = useState<string | null>(null)
   const [reopenSubmitting, setReopenSubmitting] = useState<boolean>(false)
+
+  // Fix + resubmit modal (shipped 2026-10-06). Rework-tab shortcut
+  // that clears denial/rejection, flips the claim to pending_review +
+  // ready_for_biller in one call, then flips the UI to the Ready tab
+  // so Andrea can edit + resubmit immediately.
+  const [fixResubmitTarget, setFixResubmitTarget]       = useState<any | null>(null)
+  const [fixResubmitNote,   setFixResubmitNote]         = useState<string>('')
+  const [fixResubmitError,  setFixResubmitError]        = useState<string | null>(null)
+  const [fixResubmitSubmitting, setFixResubmitSubmitting] = useState<boolean>(false)
+
+  async function confirmFixResubmit() {
+    if (!fixResubmitTarget) return
+    setFixResubmitSubmitting(true)
+    setFixResubmitError(null)
+    try {
+      const updated = await fixResubmitClaim(fixResubmitTarget.id, { note: fixResubmitNote.trim() || undefined })
+      setClaims(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
+      const claimId = updated.id
+      // Close modal, flip to Ready tab, scroll to and expand the claim.
+      setFixResubmitTarget(null)
+      setFixResubmitNote('')
+      setTab('ready')
+      setExpanded(claimId)
+      // Scroll after render so the card is in the DOM.
+      setTimeout(() => {
+        const el = document.getElementById(`claim-card-${claimId}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 150)
+    } catch (e: any) {
+      setFixResubmitError(e?.message ?? 'Failed to start resubmit')
+    } finally {
+      setFixResubmitSubmitting(false)
+    }
+  }
+
+  // Claim attachments (shipped 2026-10-06). Fetched lazily when a
+  // card expands, cached per-claim. The claims list GET already
+  // includes attachment_count so collapsed cards show the pill.
+  const [attachmentsByClaim, setAttachmentsByClaim] = useState<Record<string, Awaited<ReturnType<typeof getClaimAttachments>>>>({})
+  const [attachmentsLoading, setAttachmentsLoading] = useState<Record<string, boolean>>({})
+  const [attachmentUploading, setAttachmentUploading] = useState<Record<string, boolean>>({})
+
+  async function loadAttachments(claimId: string) {
+    if (attachmentsByClaim[claimId]) return
+    setAttachmentsLoading(s => ({ ...s, [claimId]: true }))
+    try {
+      const rows = await getClaimAttachments(claimId)
+      setAttachmentsByClaim(s => ({ ...s, [claimId]: rows }))
+    } catch (e: any) {
+      console.error('[loadAttachments]', e?.message)
+    } finally {
+      setAttachmentsLoading(s => ({ ...s, [claimId]: false }))
+    }
+  }
+
+  async function handleAttachmentUpload(claimId: string, file: File, note: string) {
+    setAttachmentUploading(s => ({ ...s, [claimId]: true }))
+    try {
+      const row = await uploadClaimAttachment(claimId, file, note.trim() || undefined)
+      setAttachmentsByClaim(s => ({ ...s, [claimId]: [row, ...(s[claimId] ?? [])] }))
+      // Bump the count on the collapsed card too.
+      setClaims(prev => prev.map(c => c.id === claimId
+        ? { ...c, attachment_count: (c.attachment_count ?? 0) + 1 }
+        : c))
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to upload attachment')
+    } finally {
+      setAttachmentUploading(s => ({ ...s, [claimId]: false }))
+    }
+  }
+
+  async function handleAttachmentDelete(claimId: string, attachmentId: string, fileName: string) {
+    if (!window.confirm(`Remove "${fileName}" from this claim? The file will be deleted from storage.`)) return
+    try {
+      await deleteClaimAttachment(claimId, attachmentId)
+      setAttachmentsByClaim(s => ({ ...s, [claimId]: (s[claimId] ?? []).filter(a => a.id !== attachmentId) }))
+      setClaims(prev => prev.map(c => c.id === claimId
+        ? { ...c, attachment_count: Math.max(0, (c.attachment_count ?? 1) - 1) }
+        : c))
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to remove attachment')
+    }
+  }
   const [deleting, setDeleting] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [markingReady, setMarkingReady] = useState<string | null>(null)
@@ -745,6 +826,24 @@ export function AdminClaims() {
   const isInRework = (c: any): boolean => {
     if (!c) return false
     if (c.status === 'written_off') return false
+
+    // Fix + resubmit short-circuit (shipped 2026-10-06): clicking
+    // "Fix + resubmit" on a Rework card clears every rework trigger
+    // AND sets ready_for_biller_at, hand-off to Andrea for editing +
+    // resubmit from the Ready tab. If a claim is in that handed-off
+    // state (pending_review + ready_for_biller_at set + no active
+    // denial/rejection), it should NOT be in Rework — it's actively
+    // being worked in Ready. Any later payer response (277/835) will
+    // repopulate denial_codes/claim_rejection_at and re-enter it here.
+    if (
+      c.status === 'pending_review'
+      && c.ready_for_biller_at
+      && !c.denial_codes
+      && !c.claim_rejection_at
+      && !c.submission_error
+    ) {
+      return false
+    }
 
     // Collect timestamps of active rework triggers. If a trigger is
     // active AND (biller hasn't marked resolved OR trigger arrived
@@ -2594,28 +2693,123 @@ export function AdminClaims() {
                           </div>
                         )}
 
+                        {/* Resubmission history — shown when at least one
+                            Fix + resubmit has been clicked for this claim.
+                            Newest first; author + note + timestamp. Sara
+                            2026-10-06. */}
+                        {Array.isArray(c.resubmission_log) && c.resubmission_log.length > 0 && (
+                          <div className="bg-[#EEEDFE] border border-[#A9A4F0] rounded-lg p-3">
+                            <div className="text-[12px] font-semibold text-[#4C1D95] mb-2 flex items-center gap-1">
+                              <RefreshCw size={12} /> Resubmission history ({c.resubmission_log.length})
+                            </div>
+                            <ol className="space-y-1.5">
+                              {[...c.resubmission_log].reverse().map((entry: any, idx: number) => (
+                                <li key={idx} className="text-[12px] text-[#1A1A2E] bg-white border border-[#D4D1F5] rounded-md px-2.5 py-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-medium">{entry.by_name ?? 'Biller'}</span>
+                                    <span className="text-[11px] text-[#555]">{entry.at ? new Date(entry.at).toLocaleString() : ''}</span>
+                                  </div>
+                                  {entry.note && <div className="mt-0.5">{entry.note}</div>}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {/* Supporting documentation (payer-portal uploads,
+                            operative notes, prior auth letters, etc.). Not
+                            sent through Stedi — stored on the claim so Andrea
+                            can grab them when she needs to re-upload to the
+                            payer portal, or for audit. Sara 2026-10-06. */}
+                        <div className="bg-white border border-[#E8E8E4] rounded-lg p-3">
+                          <div className="text-[12px] font-semibold text-[#1A1A2E] mb-2 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1">
+                              <Paperclip size={12} /> Supporting documentation
+                              {(attachmentsByClaim[c.id]?.length ?? c.attachment_count ?? 0) > 0 && (
+                                <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#EEEDFE] text-[#4C1D95]">
+                                  {attachmentsByClaim[c.id]?.length ?? c.attachment_count ?? 0}
+                                </span>
+                              )}
+                            </span>
+                            <label className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline font-medium cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept=".pdf,image/*,.doc,.docx,.txt"
+                                disabled={!!attachmentUploading[c.id]}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  const note = window.prompt(`Add a note for "${file.name}" (optional)`, '') ?? ''
+                                  await handleAttachmentUpload(c.id, file, note)
+                                  e.target.value = ''
+                                }}
+                              />
+                              {attachmentUploading[c.id] ? 'Uploading…' : <><Paperclip size={11} /> Attach document</>}
+                            </label>
+                          </div>
+                          {attachmentsLoading[c.id] ? (
+                            <div className="text-[11px] text-[#555]">Loading attachments…</div>
+                          ) : (attachmentsByClaim[c.id]?.length ?? 0) === 0 ? (
+                            <div className="text-[11px] text-[#555]">No documents attached yet. Upload PDFs, images, operative notes, EOBs, prior-auth letters, etc. — stored on the claim for payer-portal re-upload or audit.</div>
+                          ) : (
+                            <ul className="space-y-1">
+                              {attachmentsByClaim[c.id]!.map(att => (
+                                <li key={att.id} className="flex items-center justify-between gap-2 text-[12px] bg-[#FAFAF8] border border-[#E8E8E4] rounded-md px-2.5 py-1.5">
+                                  <div className="min-w-0 flex-1">
+                                    <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                                      className="text-[#7F77DD] hover:underline font-medium truncate inline-flex items-center gap-1">
+                                      <Download size={11} /> {att.file_name}
+                                    </a>
+                                    {att.note && <div className="text-[11px] text-[#555] mt-0.5">{att.note}</div>}
+                                    <div className="text-[11px] text-[#777] mt-0.5">
+                                      {att.uploaded_by_name ?? 'Unknown'} · {new Date(att.uploaded_at).toLocaleString()}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleAttachmentDelete(c.id, att.id, att.file_name)}
+                                    className="text-[11px] text-[#DC2626] hover:underline">
+                                    Remove
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
                         {/* Actions */}
                         <div className="flex items-center gap-3 flex-wrap">
-                          {/* Rework-only: biller says "I'm done working this,
-                              move it to Completed." Only shows on Rework tab —
-                              nowhere else. Sara + Andrea 2026-09-23. */}
+                          {/* Rework-only PRIMARY CTA: biller has fixed
+                              whatever caused the denial/rejection and
+                              wants to resubmit through Stedi. Clears
+                              every rework trigger, flips status to
+                              pending_review + ready_for_biller, moves
+                              the claim to the Ready tab for inline
+                              editing + submit. Sara 2026-10-06. */}
                           {tab === 'rework' && (
                             <Button size="sm" variant="teal"
-                              loading={resolvingReworkId === c.id}
-                              onClick={() => markReworkResolved(c)}
-                              title="Marks this claim as worked and moves it to the Completed tab. If a new denial or rejection lands later, it moves back to Rework automatically.">
-                              Mark as worked → Completed
+                              onClick={() => {
+                                setFixResubmitTarget(c)
+                                setFixResubmitNote('')
+                                setFixResubmitError(null)
+                              }}
+                              title="Fix any field (CPT, Dx pointers, modifiers, POS, member info, etc.) and resubmit through Stedi. One click: clears the denial/rejection flags and routes the claim to Ready for Biller for editing + submit.">
+                              Fix + resubmit
                             </Button>
                           )}
-                          {/* Same as above but ALSO creates a draft patient
-                              statement so Andrea can bill the patient for
-                              any remaining balance. Sara 2026-09-24. */}
+                          {/* Rework-only: biller signals "I'm done fighting
+                              this claim with insurance" — the system
+                              generates a patient statement AND auto-sends
+                              it to the family in one click. Previously two
+                              buttons (Completed only + Draft statement);
+                              consolidated 2026-10-06 since Pam signed off
+                              on auto-send across all statement surfaces. */}
                           {tab === 'rework' && (
-                            <Button size="sm" variant="teal"
+                            <Button size="sm" variant="secondary"
                               loading={resolvingReworkId === c.id}
                               onClick={() => markReworkResolvedWithStatement(c)}
-                              title="Marks this claim as worked, moves it to Completed, and creates a draft patient statement so you can bill the patient. Find the draft on the Statements page.">
-                              Mark as worked → Generate patient statement draft
+                              title="Marks this claim as worked, moves it to Completed, generates a patient statement AND auto-sends it to the family (email + SMS). No draft step — the family gets the bill immediately.">
+                              Mark as worked → Generate and auto-send patient statement
                             </Button>
                           )}
                           <Button size="sm" variant="secondary"
@@ -2625,8 +2819,8 @@ export function AdminClaims() {
                               setReopenNote('')
                               setReopenError(null)
                             }}
-                            title="Reopen this claim for correction + resubmission. Requires a reason and a note; logged for audit.">
-                            Reopen for correction
+                            title="Formal audit-trail reopen. Requires a categorized reason + a long note. Use when the correction needs documentation; otherwise prefer Fix + resubmit.">
+                            Reopen for correction (audit trail)
                           </Button>
                           {/* Retroactive 277 attachment — for rejections that
                               arrived before the webhook was configured to
@@ -2790,6 +2984,59 @@ export function AdminClaims() {
             <div className="flex justify-end gap-2 mt-5">
               <Button variant="secondary" size="sm" onClick={() => setWriteOffTarget(null)}>Cancel</Button>
               <Button variant="danger" size="sm" loading={writingOff} onClick={confirmWriteOff}>Write off</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fix + resubmit modal (shipped 2026-10-06). Rework-tab shortcut:
+          clears denial/rejection flags, routes claim to Ready for Biller
+          with the full editor + submit button. Optional note gets logged
+          to resubmission_log. */}
+      {fixResubmitTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => !fixResubmitSubmitting && setFixResubmitTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw size={18} className="text-[#085041]" />
+                <h2 className="font-display text-[16px] font-medium text-[#1A1A2E]">Fix + resubmit</h2>
+              </div>
+              <button onClick={() => !fixResubmitSubmitting && setFixResubmitTarget(null)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            </div>
+            <div className="text-[12px] text-[#1A1A2E] mb-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-2.5">
+              <div className="font-medium">
+                {[(fixResubmitTarget.child_first_name ?? fixResubmitTarget.patient_first_name), (fixResubmitTarget.child_last_name ?? fixResubmitTarget.patient_last_name)].filter(Boolean).join(' ')}
+              </div>
+              <div className="text-[#555] mt-0.5">
+                {fixResubmitTarget.payer_name} · {fmtDate(fixResubmitTarget.service_date)} · {fmtMoney(fixResubmitTarget.total_charge)}
+              </div>
+            </div>
+            <p className="text-[12px] text-[#1A1A2E] mb-3 leading-relaxed">
+              This moves the claim to the <strong>Ready for Biller</strong> tab, clears the denial/rejection flags, and gives you the full editor (CPT, Dx + pointers, modifiers, POS, member info). Submit from there to send a fresh claim through Stedi.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-[#555] block mb-1">Resubmission note <span className="text-[#777]">(optional — shows in the resubmission history)</span></label>
+                <textarea
+                  className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white min-h-[70px]"
+                  value={fixResubmitNote}
+                  onChange={e => setFixResubmitNote(e.target.value)}
+                  disabled={fixResubmitSubmitting}
+                  placeholder="e.g. Added modifier 25 to 99213 after CO-97 denial. Also attached encounter note PDF." />
+              </div>
+              {fixResubmitError && (
+                <div className="text-[12px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-2.5 py-1.5 rounded-lg">{fixResubmitError}</div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <Button variant="secondary" size="sm" onClick={() => setFixResubmitTarget(null)} disabled={fixResubmitSubmitting}>Cancel</Button>
+              <Button
+                variant="teal"
+                size="sm"
+                loading={fixResubmitSubmitting}
+                onClick={confirmFixResubmit}>
+                Move to Ready for Biller
+              </Button>
             </div>
           </div>
         </div>

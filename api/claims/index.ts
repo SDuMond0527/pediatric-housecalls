@@ -191,6 +191,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // deleted from AdminClaims in this same commit. Sara 2026-10-06.
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS convenience_fee_handled boolean NOT NULL DEFAULT false` } catch {}
 
+      // Resubmission log — jsonb array of entries, one per Fix+resubmit
+      // click from the Rework tab. Shape:
+      //   [{ at: iso, by: uuid, by_name: text, note: text|null,
+      //      prior_denial_codes: jsonb|null, prior_claim_rejection_at: iso|null }]
+      // Bootstrapped here (read path) in addition to the fix-resubmit
+      // endpoint so a cold reader can SELECT the column even if the
+      // endpoint hasn't been hit yet. Sara 2026-10-06.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS resubmission_log jsonb DEFAULT '[]'::jsonb` } catch {}
+
+      // Attachments table (bootstrap on every read path per the
+      // "bootstrap on every read path" rule — the claims list
+      // response doesn't query this table, but the attachments
+      // endpoint hangs off every claim card, so an empty cold-start
+      // can't 500 on the first attach click).
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS claim_attachments (
+            id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            claim_id         uuid NOT NULL,
+            practice_id      uuid NOT NULL,
+            file_name        text NOT NULL,
+            file_url         text NOT NULL,
+            mime_type        text,
+            size_bytes       bigint,
+            note             text,
+            uploaded_at      timestamptz NOT NULL DEFAULT NOW(),
+            uploaded_by      uuid,
+            uploaded_by_name text
+          )`
+        await sql`CREATE INDEX IF NOT EXISTS claim_attachments_claim_id_idx ON claim_attachments(claim_id)`
+      } catch {}
+
       // Dedicated audit + action table for every convenience fee event.
       // One row per claim with a CV charge. Pam's /admin/convenience-fees
       // page is the single surface where she sees pending / charged /
@@ -276,12 +308,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               c.last_eligibility_check_at AS last_eligibility_check_at,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
-              ps.status AS statement_status, ps.sent_at AS statement_sent_at
+              ps.status AS statement_status, ps.sent_at AS statement_sent_at,
+              -- Doc-attachment count surfaced on each card so the biller
+              -- can see at a glance whether this claim has supporting
+              -- docs stored (payer-portal re-upload, audit trail, etc.).
+              -- Full list is fetched via /api/claims/[id]/attachments
+              -- when the card expands. Sara 2026-10-06.
+              COALESCE(att.attachment_count, 0) AS attachment_count
             FROM claims cl
             LEFT JOIN appointments a ON a.id = cl.appointment_id
             LEFT JOIN children c ON c.id = COALESCE(cl.child_id, a.child_id)
             LEFT JOIN family_profiles fp ON fp.id = c.family_id
             LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+            LEFT JOIN (
+              SELECT claim_id, COUNT(*)::int AS attachment_count
+              FROM claim_attachments
+              GROUP BY claim_id
+            ) att ON att.claim_id = cl.id
             WHERE cl.status = ${status} AND cl.practice_id = ${practiceId}::uuid
             ORDER BY cl.created_at DESC`
         : await sql`
@@ -291,12 +334,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               c.last_eligibility_check_at AS last_eligibility_check_at,
               fp.email AS family_email,
               COALESCE(fp.phone, c.parent_phone) AS family_phone,
-              ps.status AS statement_status, ps.sent_at AS statement_sent_at
+              ps.status AS statement_status, ps.sent_at AS statement_sent_at,
+              -- Doc-attachment count surfaced on each card so the biller
+              -- can see at a glance whether this claim has supporting
+              -- docs stored (payer-portal re-upload, audit trail, etc.).
+              -- Full list is fetched via /api/claims/[id]/attachments
+              -- when the card expands. Sara 2026-10-06.
+              COALESCE(att.attachment_count, 0) AS attachment_count
             FROM claims cl
             LEFT JOIN appointments a ON a.id = cl.appointment_id
             LEFT JOIN children c ON c.id = COALESCE(cl.child_id, a.child_id)
             LEFT JOIN family_profiles fp ON fp.id = c.family_id
             LEFT JOIN patient_statements ps ON ps.claim_id = cl.id
+            LEFT JOIN (
+              SELECT claim_id, COUNT(*)::int AS attachment_count
+              FROM claim_attachments
+              GROUP BY claim_id
+            ) att ON att.claim_id = cl.id
             WHERE cl.practice_id = ${practiceId}::uuid
             ORDER BY cl.created_at DESC`
       const CLIA_CPT_CODES = new Set(['87880', '87812', '81002', '82962'])

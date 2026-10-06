@@ -17,18 +17,20 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
  * POST /api/claims/[id]/resolve-with-statement
  *
  * Two-in-one action for the Rework tab: biller signals she's done
- * working the claim AND wants a draft patient statement created so
- * she can bill the patient for any remaining balance.
+ * working the claim AND wants a patient statement generated + auto-sent
+ * so the family gets billed immediately for any remaining balance.
  *
  * 1. Stamps rework_resolved_at (moves claim Rework → Completed via filter)
- * 2. Creates a draft patient_statements row if one doesn't already exist
+ * 2. Creates a patient_statements row if one doesn't already exist
  *    - Uses whatever CAS/ERA data is on the claim (may be empty for 277
  *      rejection cases where no ERA was received)
- *    - Andrea edits + sends from the Statements page later
- * 3. Auto-logs to claim_activity_log
+ *    - Status starts as 'draft' then flips to 'sent' via the send call
+ * 3. Fires /api/patient-statements/{id}/send via internal service token
+ *    so the family gets the email + SMS without Andrea leaving the tab
+ * 4. Auto-logs to claim_activity_log
  *
- * Idempotent — safe to click twice. If a statement already exists,
- * returns the existing one.
+ * Idempotent — safe to click twice. If a statement already exists in
+ * 'draft', it'll be sent; if already 'sent'/'paid', nothing to do.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -137,10 +139,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       statementCreated = true
     }
 
-    // 3. Activity log entry.
+    // 3. Auto-send the statement — same pattern as self-pay auto-send
+    // (encounter-notes/[id].ts) and clean-ERA auto-send (stedi-transaction.ts).
+    // Only sends if currently in 'draft' status; existing sent/paid rows
+    // are left alone (idempotent).
+    let statementSent = false
+    if (statementId) {
+      const [existingState] = await sql`SELECT status FROM patient_statements WHERE id = ${statementId}::uuid LIMIT 1`
+      if (existingState?.status === 'draft') {
+        const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
+        if (autoSendEnabled) {
+          const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''
+          const base = process.env.PORTAL_URL || 'https://phc-team.com'
+          if (svcToken) {
+            try {
+              const sendRes = await fetch(`${base}/api/patient-statements/${statementId}/send`, {
+                method: 'POST',
+                headers: {
+                  'X-Internal-Service-Token': svcToken,
+                  'X-Practice-Id': String(claim.practice_id),
+                },
+              })
+              statementSent = sendRes.ok
+              if (!sendRes.ok) {
+                console.error('[resolve-with-statement] send call non-OK:', sendRes.status)
+              }
+            } catch (e: any) {
+              console.error('[resolve-with-statement] send fetch failed:', e?.message)
+            }
+          }
+        }
+      } else if (existingState?.status === 'sent' || existingState?.status === 'paid') {
+        statementSent = true
+      }
+    }
+
+    // 4. Activity log entry.
     const activityBody = statementCreated
-      ? 'Marked rework complete — moved to Completed and generated a draft patient statement.'
-      : 'Marked rework complete — moved to Completed. (Draft statement already existed.)'
+      ? (statementSent
+          ? 'Marked rework complete — moved to Completed, generated AND auto-sent patient statement.'
+          : 'Marked rework complete — moved to Completed, generated patient statement (auto-send failed — check logs).')
+      : (statementSent
+          ? 'Marked rework complete — moved to Completed. Statement was already sent/paid.'
+          : 'Marked rework complete — moved to Completed. (Draft statement already existed; no auto-send fired.)')
     try {
       await sql`
         INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
@@ -154,6 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       claim_id: claimId,
       statement_id: statementId,
       statement_created: statementCreated,
+      statement_sent: statementSent,
     })
   } catch (e: any) {
     console.error('claims/[id]/resolve-with-statement error:', e)

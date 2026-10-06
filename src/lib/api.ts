@@ -1300,14 +1300,64 @@ export const addClaimActivity = (id: string, body: string) =>
 export const resolveRework = (id: string, body: { note?: string } = {}) =>
   apiFetch<any>(`/api/claims/${id}/resolve-rework`, { method: 'POST', body: JSON.stringify(body) })
 
-// Same as resolveRework but ALSO creates a draft patient_statements
-// row (if none exists yet) so Andrea can send a bill to the patient.
-// Used when the biller worked the rework outside GoRoam AND needs to
-// bill the patient for a remaining balance.
+// Same as resolveRework but ALSO generates a patient_statements row
+// (if none exists yet) AND auto-sends it. Used when the biller worked
+// the rework outside GoRoam AND needs the family billed for a
+// remaining balance. Previously created only a draft; auto-send added
+// 2026-10-06 after Pam signed off on auto-send across statement surfaces.
 export const resolveReworkWithStatement = (id: string) =>
-  apiFetch<{ ok: boolean; claim_id: string; statement_id?: string; statement_created: boolean }>(
+  apiFetch<{ ok: boolean; claim_id: string; statement_id?: string; statement_created: boolean; statement_sent: boolean }>(
     `/api/claims/${id}/resolve-with-statement`, { method: 'POST', body: '{}' }
   )
+
+// One-click "Fix + resubmit" from the Rework tab. Clears every rework
+// trigger (denial_codes, claim_rejection_at, 277 x12, submission_error),
+// resets status to pending_review, stamps reopened_at + reopen_reason,
+// and sets ready_for_biller_at so the claim lands on the Ready tab for
+// editing + resubmit. Appends an entry to claims.resubmission_log.
+// Returns the updated claim row.
+export const fixResubmitClaim = (id: string, body: { note?: string } = {}) =>
+  apiFetch<any>(`/api/claims/${id}/fix-resubmit`, { method: 'POST', body: JSON.stringify(body) })
+
+// Upload a documentation PDF/image to a claim. The file is stored in
+// Vercel Blob and a claim_attachments row is written with the URL.
+// Not sent through Stedi — purely for Andrea's records / payer-portal
+// re-upload. Call sites: Rework-tab card attach-doc button.
+export async function uploadClaimAttachment(
+  claimId: string,
+  file: File,
+  note?: string,
+): Promise<any> {
+  const headers = await authHeaders()
+  const url = `/api/claims/${claimId}/attachments?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type || 'application/octet-stream')}${note ? `&note=${encodeURIComponent(note)}` : ''}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: file,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(body.error || res.statusText || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export const deleteClaimAttachment = (claimId: string, attachmentId: string) =>
+  apiFetch<{ ok: boolean }>(`/api/claims/${claimId}/attachments?attachment_id=${encodeURIComponent(attachmentId)}`, { method: 'DELETE' })
+
+export const getClaimAttachments = (claimId: string) =>
+  apiFetch<Array<{
+    id: string
+    claim_id: string
+    file_name: string
+    file_url: string
+    mime_type: string | null
+    size_bytes: number | null
+    note: string | null
+    uploaded_at: string
+    uploaded_by: string | null
+    uploaded_by_name: string | null
+  }>>(`/api/claims/${claimId}/attachments`)
 
 export const refetchKnownEras = () =>
   apiFetch<{
