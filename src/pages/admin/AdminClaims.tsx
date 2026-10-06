@@ -125,6 +125,9 @@ export function AdminClaims() {
   const [refetchResult, setRefetchResult] = useState<Awaited<ReturnType<typeof refetchKnownEras>> | null>(null)
   const [sweep277Running, setSweep277Running] = useState(false)
   const [sweep277Result, setSweep277Result] = useState<Awaited<ReturnType<typeof sweepStuck277s>> | null>(null)
+  // Patient-name search on the Submitted tab. Scrolling through all
+  // submitted claims to find one is tedious — Sara 2026-10-06.
+  const [submittedSearch, setSubmittedSearch] = useState('')
 
   const { provider: currentProvider } = useAuth()
   const [providerList, setProviderList] = useState<any[]>([])
@@ -2356,18 +2359,49 @@ export function AdminClaims() {
               Ready for biller renders via the reviewClaims block above
               (not here) so Andrea gets the full edit UI. */}
           {(tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
-            const list = tab === 'completed'
+            const rawList = tab === 'completed'
               ? completedClaims
               : tab === 'rework'
                 ? reworkClaims
                 : submittedClaims
+            // Submitted-tab-only patient-name filter. Matches first OR last
+            // name, chart number, and PCN (case-insensitive, substring).
+            const q = tab === 'submitted' ? submittedSearch.trim().toLowerCase() : ''
+            const list = q
+              ? rawList.filter((c: any) => {
+                  const first = String(c.child_first_name ?? c.patient_first_name ?? '').toLowerCase()
+                  const last  = String(c.child_last_name  ?? c.patient_last_name  ?? '').toLowerCase()
+                  const chart = String(c.chart_number ?? '').toLowerCase()
+                  const pcn   = String(c.id ?? '').toLowerCase()
+                  return first.includes(q) || last.includes(q) || chart.includes(q) || pcn.includes(q)
+                })
+              : rawList
             const emptyMsg = tab === 'completed'
               ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
               : tab === 'rework'
                 ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
-                : 'No submitted claims yet.'
+                : q
+                  ? `No submitted claims match "${submittedSearch}".`
+                  : 'No submitted claims yet.'
             return (
             <div className="space-y-2">
+              {tab === 'submitted' && (
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+                  <input
+                    value={submittedSearch}
+                    onChange={e => setSubmittedSearch(e.target.value)}
+                    placeholder="Search by patient name, chart number, or PCN…"
+                    className="w-full pl-9 pr-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30 bg-white"
+                  />
+                  {submittedSearch && (
+                    <div className="text-[11px] text-[#555] mt-1 ml-1">
+                      {list.length} of {rawList.length} match
+                      <button onClick={() => setSubmittedSearch('')} className="ml-2 text-[#7F77DD] hover:underline">Clear</button>
+                    </div>
+                  )}
+                </div>
+              )}
               {list.length === 0 && (
                 <div className="text-center py-12 text-[#1A1A2E] text-[13px]">{emptyMsg}</div>
               )}
