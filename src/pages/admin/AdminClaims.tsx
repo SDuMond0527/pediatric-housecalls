@@ -701,7 +701,15 @@ export function AdminClaims() {
     !!c.statement_sent_at ||
     c.status === 'written_off'
   const isReady = (c: any) => !!c.ready_for_biller_at
-  const baseVisibleClaims = claims.filter(c => !hasReachedTerminalState(c))
+  // Self-pay claims never belong on AdminClaims at all. Per
+  // project_self_pay_bypasses_claim_review: sign → auto-draft statement →
+  // Pam's statements queue. The claim exists as an accounting stub but
+  // is invisible on every claim-review surface (tabs, counters, badges,
+  // Ready-for-biller view). Filtering at baseVisibleClaims propagates
+  // the exclusion to every downstream list — review, rework, submitted,
+  // completed, readyCount, unseenEraCount, silentEraMatches. Sara 2026-10-06.
+  const isSelfPayClaimRow = (c: any) => c.payer_id === 'PP' || /self[\s-]*pay/i.test(String(c.payer_name ?? ''))
+  const baseVisibleClaims = claims.filter(c => !hasReachedTerminalState(c) && !isSelfPayClaimRow(c))
   const visibleClaims  = readyOnly ? baseVisibleClaims.filter(isReady) : baseVisibleClaims
 
   // Rework tab — "everything in flight" per Sara 2026-09-23. Enters
