@@ -96,10 +96,20 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     zip:   family?.zip           ?? child?.parent_zip     ?? null,
   }
 
-  // Vaccine encounters are always billed under Dr. Sara DuMond as the
-  // rendering provider (matches api/lib/generateClaim.ts).
+  // Vaccine encounters AND RN in-home IV fluids visits are always billed
+  // under Dr. Sara DuMond as the rendering provider. RNs can't bill
+  // independently, so the claim must go under the supervising MD. The
+  // regex matches every IV fluids RN-side alias (In-home IV fluids,
+  // RN IV fluids, RN IV fluid visit — paired with MD/NP screening,
+  // RN in-home IV fluids administration) and intentionally excludes the
+  // 'Video telemedicine screening for IV fluids' NP side (which bills
+  // under the NP itself). Sara 2026-10-06.
   const isVaccineVisit = appt?.visit_type === 'In-home vaccine administration'
-  const [supervisingMd] = isVaccineVisit
+  const vt = String(appt?.visit_type ?? '')
+  const isRnIvFluidsVisit = /iv/i.test(vt) && /fluid/i.test(vt)
+    && /(rn|administration|in-home)/i.test(vt)
+    && !/screening/i.test(vt)
+  const [supervisingMd] = (isVaccineVisit || isRnIvFluidsVisit)
     ? await sql`SELECT name, npi, taxonomy_code FROM providers WHERE name = 'Dr. Sara DuMond' AND practice_id = ${practiceId}::uuid LIMIT 1`
     : [null]
   const renderingProvider = supervisingMd ?? provider

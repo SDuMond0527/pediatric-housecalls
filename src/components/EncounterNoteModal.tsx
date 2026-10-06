@@ -982,13 +982,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         // api/encounter-notes/[id].ts), NOT in this pre-fill, so the
         // provider isn't dragged into billing-side convenience codes.
         //
-        // RN in-home IV fluids pairs still skipped — waiting on Sara to
-        // validate IV-side billing before pre-filling anything there.
+        // RN in-home IV fluids (every alias) defaults to 96360 (hydration
+        // IV infusion, initial 31-60 min) and ICD-10 E86.0 (dehydration).
+        // Rendering provider gets forced to Dr. Sara DuMond server-side
+        // (see api/encounter-notes/[id].ts) since RNs can't bill
+        // independently. Sara 2026-10-06.
         const DEFAULT_CPTS_FOR_VISIT_TYPE: Record<string, string[]> = {
           'In-home sick visit':              ['99349'],
           'Video telemedicine':              ['99213'],
           'CMA + telemedicine':              ['99213'],  // MD/NP paired side (CMA can't sign)
           'In-home vaccine administration':  ['90471'],
+          'RN in-home IV fluids administration':             ['96360'],
+          'In-home IV fluids':                               ['96360'],
+          'RN IV fluids':                                    ['96360'],
+          'RN IV fluid visit — paired with MD/NP screening': ['96360'],
         }
         const defaultCodes = DEFAULT_CPTS_FOR_VISIT_TYPE[appointment.visit_type] ?? []
         if (defaultCodes.length > 0) {
@@ -1002,6 +1009,19 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           if (defaultsFromSchedule.length > 0) {
             setCptCodes(defaultsFromSchedule)
           }
+        }
+        // Default diagnosis for IV fluids visits — every one of these is
+        // a dehydration treatment (E86.0). Mirrors the CPT auto-fill
+        // pattern above. Keep in sync with DEFAULT_CPTS_FOR_VISIT_TYPE.
+        const DEFAULT_DX_FOR_VISIT_TYPE: Record<string, Array<{ code: string; name: string }>> = {
+          'RN in-home IV fluids administration':             [{ code: 'E86.0', name: 'Dehydration' }],
+          'In-home IV fluids':                               [{ code: 'E86.0', name: 'Dehydration' }],
+          'RN IV fluids':                                    [{ code: 'E86.0', name: 'Dehydration' }],
+          'RN IV fluid visit — paired with MD/NP screening': [{ code: 'E86.0', name: 'Dehydration' }],
+        }
+        const defaultDx = DEFAULT_DX_FOR_VISIT_TYPE[appointment.visit_type] ?? []
+        if (defaultDx.length > 0) {
+          setDiagnoses(defaultDx)
         }
       }
       if (vitalsData) {

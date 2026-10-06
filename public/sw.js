@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-06-paired-slot-no-ghosts
+// Service worker — deliberate passthrough. Version: 2026-10-06-rn-iv-defaults
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
