@@ -367,12 +367,12 @@ export function AdminClaims() {
       const updated = await fixResubmitClaim(fixResubmitTarget.id, { note: fixResubmitNote.trim() || undefined })
       setClaims(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
       const claimId = updated.id
-      // Close modal, flip to Ready tab, scroll to and expand the claim.
+      // Option B (Sara 2026-10-06): claim stays on the Rework tab.
+      // Just close the modal + expand the claim so the Submit button
+      // is in view.
       setFixResubmitTarget(null)
       setFixResubmitNote('')
-      setTab('ready')
       setExpanded(claimId)
-      // Scroll after render so the card is in the DOM.
       setTimeout(() => {
         const el = document.getElementById(`claim-card-${claimId}`)
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -829,23 +829,13 @@ export function AdminClaims() {
     if (!c) return false
     if (c.status === 'written_off') return false
 
-    // Fix + resubmit short-circuit (shipped 2026-10-06): clicking
-    // "Fix + resubmit" on a Rework card clears every rework trigger
-    // AND sets ready_for_biller_at, hand-off to Andrea for editing +
-    // resubmit from the Ready tab. If a claim is in that handed-off
-    // state (pending_review + ready_for_biller_at set + no active
-    // denial/rejection), it should NOT be in Rework — it's actively
-    // being worked in Ready. Any later payer response (277/835) will
-    // repopulate denial_codes/claim_rejection_at and re-enter it here.
-    if (
-      c.status === 'pending_review'
-      && c.ready_for_biller_at
-      && !c.denial_codes
-      && !c.claim_rejection_at
-      && !c.submission_error
-    ) {
-      return false
-    }
+    // Fix + resubmit used to short-circuit here and route claims out
+    // of Rework into Ready for Biller. Sara 2026-10-06 asked for Option
+    // B instead: claims stay on Rework after Fix+Resubmit until she
+    // actually submits them. Submit button lives on the Rework card
+    // for claims in this prepared-to-resubmit state (reopened_at set,
+    // no active denial). Only an actual Stedi submit (status flips to
+    // 'submitted') moves the claim out of Rework.
 
     // Collect timestamps of active rework triggers. If a trigger is
     // active AND (biller hasn't marked resolved OR trigger arrived
@@ -2859,23 +2849,42 @@ export function AdminClaims() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-3 flex-wrap">
-                          {/* Rework-only PRIMARY CTA: biller has fixed
-                              whatever caused the denial/rejection and
-                              wants to resubmit through Stedi. Clears
-                              every rework trigger, flips status to
-                              pending_review + ready_for_biller, moves
-                              the claim to the Ready tab for inline
-                              editing + submit. Sara 2026-10-06. */}
-                          {tab === 'rework' && (
+                          {/* Rework-only PRIMARY CTA. Opens a modal to
+                              type an optional resubmission note; on
+                              confirm, clears denial/rejection flags and
+                              sets ready_for_biller — then the claim
+                              stays here on Rework with a prominent
+                              Submit button (below). Sara 2026-10-06
+                              (Option B). */}
+                          {tab === 'rework' && !c.ready_for_biller_at && (
                             <Button size="sm" variant="teal"
                               onClick={() => {
                                 setFixResubmitTarget(c)
                                 setFixResubmitNote('')
                                 setFixResubmitError(null)
                               }}
-                              title="Fix any field (CPT, Dx pointers, modifiers, POS, member info, etc.) and resubmit through Stedi. One click: clears the denial/rejection flags and routes the claim to Ready for Biller for editing + submit.">
+                              title="Clears the denial/rejection flags and marks the claim ready to resubmit. Claim stays on Rework; a Submit button will appear.">
                               Fix + resubmit
                             </Button>
+                          )}
+                          {/* Prepared-to-resubmit state — Fix+Resubmit was
+                              clicked, now the biller submits a fresh 837
+                              through Stedi without leaving Rework. If the
+                              new submit succeeds, the claim exits Rework
+                              into Submitted. If it rejects or denies
+                              again, it stays here with the new denial. */}
+                          {tab === 'rework' && c.status === 'pending_review' && c.ready_for_biller_at && !c.denial_codes && !c.claim_rejection_at && (
+                            <>
+                              <Button size="sm" variant="teal"
+                                loading={submitting === c.id}
+                                onClick={() => handleSubmit(c.id)}
+                                title="Submit a fresh 837 to Stedi. Successful submit moves this claim to Submitted.">
+                                Submit to Stedi
+                              </Button>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEEDFE] text-[#4C1D95] text-[10px] rounded-full font-semibold">
+                                ↻ READY TO RESUBMIT
+                              </span>
+                            </>
                           )}
                           {/* Rework-only: biller signals "I'm done fighting
                               this claim with insurance" — the system
@@ -3092,7 +3101,7 @@ export function AdminClaims() {
               </div>
             </div>
             <p className="text-[12px] text-[#1A1A2E] mb-3 leading-relaxed">
-              This moves the claim to the <strong>Ready for Biller</strong> tab, clears the denial/rejection flags, and gives you the full editor (CPT, Dx + pointers, modifiers, POS, member info). Submit from there to send a fresh claim through Stedi.
+              Clears the denial/rejection flags and marks the claim ready to resubmit. The claim <strong>stays on Rework</strong> — a Submit button will appear on the card. Edit CPT / Dx / pointers / modifiers / POS / member info on the card first if needed, then click Submit to send a fresh claim through Stedi.
             </p>
             <div className="space-y-3">
               <div>
@@ -3115,7 +3124,7 @@ export function AdminClaims() {
                 size="sm"
                 loading={fixResubmitSubmitting}
                 onClick={confirmFixResubmit}>
-                Move to Ready for Biller
+                Prepare for resubmit
               </Button>
             </div>
           </div>
