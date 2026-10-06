@@ -360,6 +360,7 @@ export function AdminClaims() {
   const [cptOpen, setCptOpen] = useState<Record<string, boolean>>({})
   const [cptTab, setCptTab] = useState<Record<string, string>>({})
   const [editPayer, setEditPayer] = useState<Record<string, { name: string; id: string }>>({})
+  const [editPos, setEditPos] = useState<Record<string, string>>({})
   const [editCpt, setEditCpt] = useState<Record<string, any[]>>({})
   const [editDx, setEditDx] = useState<Record<string, any[]>>({})
   const [dxQuery, setDxQuery] = useState<Record<string, string>>({})
@@ -1752,6 +1753,55 @@ export function AdminClaims() {
                           )}
                         </div>
 
+                        {/* Place of service */}
+                        <div>
+                          <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Place of service</div>
+                          {editPos[c.id] !== undefined ? (
+                            <div className="flex gap-2 items-end flex-wrap">
+                              <div>
+                                <label className="text-[11px] text-[#555] block mb-1">POS code</label>
+                                <select value={editPos[c.id]}
+                                  onChange={e => setEditPos(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                  className="px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]">
+                                  <option value="10">10 — Telehealth in patient's home</option>
+                                  <option value="12">12 — Home (in-home visit)</option>
+                                  <option value="02">02 — Telehealth (not patient's home)</option>
+                                  <option value="11">11 — Office</option>
+                                  <option value="20">20 — Urgent care facility</option>
+                                  <option value="21">21 — Inpatient hospital</option>
+                                  <option value="22">22 — On-campus outpatient hospital</option>
+                                  <option value="23">23 — Emergency room</option>
+                                  <option value="49">49 — Independent clinic</option>
+                                  <option value="50">50 — Federally qualified health center</option>
+                                  <option value="99">99 — Other</option>
+                                </select>
+                              </div>
+                              <Button size="sm" variant="teal" loading={saving === c.id} onClick={async () => {
+                                setSaving(c.id); setSaveError(null)
+                                try {
+                                  await updateClaim(c.id, { place_of_service: editPos[c.id] })
+                                  setEditPos(prev => { const n = { ...prev }; delete n[c.id]; return n })
+                                  await load()
+                                } catch (e: any) { setSaveError(e?.message ?? 'Failed to save POS') }
+                                finally { setSaving(null) }
+                              }}>Save</Button>
+                              <Button size="sm" variant="secondary" onClick={() => { setEditPos(prev => { const n = { ...prev }; delete n[c.id]; return n }); setSaveError(null) }}>Cancel</Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3">
+                              <span className="text-[13px] text-[#1A1A2E]">
+                                {c.place_of_service || '—'}
+                                {c.place_of_service === '10' && ' (Telehealth in home)'}
+                                {c.place_of_service === '12' && ' (In-home)'}
+                                {c.place_of_service === '02' && ' (Telehealth, not home)'}
+                                {c.place_of_service === '11' && ' (Office)'}
+                              </span>
+                              <button onClick={() => setEditPos(prev => ({ ...prev, [c.id]: c.place_of_service ?? '12' }))}
+                                className="text-[11px] text-[#7F77DD] hover:underline">Edit</button>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Diagnoses + CPT */}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -2205,6 +2255,24 @@ export function AdminClaims() {
                             {c.era_received_at && c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
                                 <Zap size={9} /> ERA received
+                              </span>
+                            )}
+                            {/* Place-of-service pill — visible on every tab so
+                                Andrea can see what POS was submitted. Edit via
+                                the full edit panel on the Ready for biller tab.
+                                Sara 2026-10-06. */}
+                            {c.place_of_service && (
+                              <span
+                                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F3F4F6] text-[#555] whitespace-nowrap"
+                                title={
+                                  c.place_of_service === '10' ? 'POS 10 — Telehealth in patient\'s home'
+                                  : c.place_of_service === '12' ? 'POS 12 — Home (in-home visit)'
+                                  : c.place_of_service === '02' ? 'POS 02 — Telehealth (not patient\'s home)'
+                                  : c.place_of_service === '11' ? 'POS 11 — Office'
+                                  : `POS ${c.place_of_service}`
+                                }
+                              >
+                                POS {c.place_of_service}
                               </span>
                             )}
                             {/* Ready-for-biller pill — pre-submission only.
