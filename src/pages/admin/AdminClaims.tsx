@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
@@ -123,6 +123,8 @@ export function AdminClaims() {
   const [backfillResult, setBackfillResult] = useState<Awaited<ReturnType<typeof backfillStediCas>> | null>(null)
   const [refetchRunning, setRefetchRunning] = useState(false)
   const [refetchResult, setRefetchResult] = useState<Awaited<ReturnType<typeof refetchKnownEras>> | null>(null)
+  const [sweep277Running, setSweep277Running] = useState(false)
+  const [sweep277Result, setSweep277Result] = useState<Awaited<ReturnType<typeof sweepStuck277s>> | null>(null)
 
   const { provider: currentProvider } = useAuth()
   const [providerList, setProviderList] = useState<any[]>([])
@@ -1212,6 +1214,48 @@ export function AdminClaims() {
             className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E6F6F2] transition-colors disabled:opacity-50">
             <Zap size={12} /> {refetchRunning ? 'Refetching…' : 'Refetch known ERAs by ID'}
           </button>
+          {/* Backfill the 277 pipeline. First click runs a dry-run (reads
+              only, no writes) so Sara can preview what rejections will
+              be attached. Second click does the real sweep. Added
+              2026-10-06 after the webhook was fixed to parse Stedi's
+              277CA JSON correctly — 97 historical events were silently
+              dropped before the fix. */}
+          <button
+            onClick={async () => {
+              setSweep277Running(true); setSweep277Result(null)
+              try {
+                const r = await sweepStuck277s({ dry_run: true, limit: 5 })
+                setSweep277Result(r)
+              } catch (e: any) {
+                alert(e?.message ?? String(e))
+              } finally {
+                setSweep277Running(false)
+              }
+            }}
+            disabled={sweep277Running}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#2D7BA6] text-[#2D7BA6] hover:bg-[#EEF6FB] transition-colors disabled:opacity-50"
+            title="DRY RUN of 5 — fetches 5 stuck 277 events from Stedi, parses them, shows what rejections would be attached. No DB writes.">
+            <Search size={12} /> {sweep277Running ? 'Sweeping…' : 'Sweep stuck 277s (dry-run 5)'}
+          </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Run the FULL 277 sweep?\n\nThis will re-fetch every stuck 277 webhook event from Stedi, parse it, and attach rejections to matching claims. The queue of ~97 events will drain. Clicked by mistake? Run dry-run first.')) return
+              setSweep277Running(true); setSweep277Result(null)
+              try {
+                const r = await sweepStuck277s()
+                setSweep277Result(r)
+                await load()
+              } catch (e: any) {
+                alert(e?.message ?? String(e))
+              } finally {
+                setSweep277Running(false)
+              }
+            }}
+            disabled={sweep277Running}
+            className="flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border border-[#DC2626] text-[#DC2626] hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+            title="FULL sweep — fetches every stuck 277, attaches real rejections to claims. Writes to DB.">
+            <Zap size={12} /> {sweep277Running ? 'Sweeping…' : 'Sweep stuck 277s (ALL — writes)'}
+          </button>
           <button
             onClick={async () => {
               setInspectRunning(true)
@@ -1362,6 +1406,42 @@ export function AdminClaims() {
                 </details>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {sweep277Result && (
+        <div className={`mb-4 border rounded-xl px-4 py-3 ${sweep277Result.outcomes.rejections_attached > 0 ? 'bg-[#F0FDF4] border-[#A9DFBF] text-[#0F5F44]' : 'bg-[#EEF6FB] border-[#A0C8DE] text-[#1E4A6F]'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-[13px] font-medium">
+              Sweep stuck 277s{sweep277Result.dry_run ? ' (dry-run)' : ''} — swept {sweep277Result.swept} transaction{sweep277Result.swept === 1 ? '' : 's'}
+            </div>
+            <button onClick={() => setSweep277Result(null)} className="text-[11px] opacity-70 hover:opacity-100 flex-shrink-0">Dismiss</button>
+          </div>
+          <div className="text-[11px] mt-2 grid grid-cols-3 sm:grid-cols-5 gap-x-4 gap-y-1 opacity-90">
+            <div><span className="opacity-70">Rejections attached:</span> <span className="font-semibold">{sweep277Result.outcomes.rejections_attached}</span></div>
+            <div><span className="opacity-70">Ack-only (no rejection):</span> {sweep277Result.outcomes.ack_only}</div>
+            <div><span className="opacity-70">Unmatched PCN:</span> {sweep277Result.outcomes.unmatched_pcn}</div>
+            <div><span className="opacity-70">Fetch errors:</span> {sweep277Result.outcomes.fetch_errors}</div>
+            <div><span className="opacity-70">Still failed:</span> {sweep277Result.outcomes.still_failed}</div>
+          </div>
+          {sweep277Result.per_transaction.length > 0 && (
+            <details className="mt-2 text-[11px]">
+              <summary className="cursor-pointer opacity-80">Per-transaction detail ({sweep277Result.per_transaction.length})</summary>
+              <div className="mt-2 space-y-1 font-mono max-h-96 overflow-y-auto">
+                {sweep277Result.per_transaction.map((t, i) => (
+                  <div key={i} className="border-t border-current opacity-80 pt-1">
+                    <div><span className="opacity-70">tx=</span>{t.transaction_id.slice(0, 12)}… <span className="opacity-70">outcome=</span>{t.outcome}</div>
+                    {t.pcn && <div className="ml-3">pcn={t.pcn} {t.patient ? `· ${t.patient}` : ''} {t.claim_id ? `· claim=${t.claim_id.slice(0, 8)}…` : ''}</div>}
+                    {t.categories && t.categories.length > 0 && <div className="ml-3">categories: {t.categories.join(', ')}</div>}
+                    {t.reasons && t.reasons.length > 0 && (
+                      <div className="ml-3">reasons: {t.reasons.map((r: any) => `${r.category}/${r.code} ${r.message ?? ''}`).join(' | ')}</div>
+                    )}
+                    {t.error && <div className="ml-3 text-[#991B1B]">error: {t.error}</div>}
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       )}

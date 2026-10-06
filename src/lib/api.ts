@@ -1391,6 +1391,40 @@ export const getClaimAttachments = (claimId: string) =>
     uploaded_by_name: string | null
   }>>(`/api/claims/${claimId}/attachments`)
 
+// POST /api/admin/sweep-stuck-277s — walk every stedi_transactions_processed
+// row with source IN ('277-webhook-no-x12', '277-webhook-fetch-failed',
+// '277-webhook-fetch-threw'), re-fetch each via Stedi's 277CA report JSON
+// endpoint, attach rejections to matching claims. One-shot backfill after
+// the 2026-10-06 pipeline fix.
+export const sweepStuck277s = (opts: { dry_run?: boolean; limit?: number } = {}) => {
+  const q = new URLSearchParams()
+  if (opts.dry_run) q.set('dry_run', '1')
+  if (opts.limit) q.set('limit', String(opts.limit))
+  return apiFetch<{
+    ok: boolean
+    dry_run: boolean
+    swept: number
+    outcomes: {
+      rejections_attached: number
+      ack_only: number
+      unmatched_pcn: number
+      fetch_errors: number
+      still_failed: number
+    }
+    per_transaction: Array<{
+      transaction_id: string
+      outcome: string
+      pcn?: string | null
+      claim_id?: string
+      patient?: string
+      categories?: string[]
+      reasons?: any[]
+      status?: number
+      error?: string
+    }>
+  }>(`/api/admin/sweep-stuck-277s${q.toString() ? '?' + q.toString() : ''}`, { method: 'POST', body: '{}' })
+}
+
 export const refetchKnownEras = () =>
   apiFetch<{
     list_http: number
