@@ -513,6 +513,12 @@ async function ensureStatementForClaim(
   const email = claim.parent_email ?? claim.family_email ?? null
   const phone = claim.parent_phone ?? claim.family_phone ?? null
 
+  // Auto-paid shortcut — insurance paid >$0 AND patient owes $0 → create
+  // statement already closed. Kept in sync with the parallel copies in
+  // api/webhooks/stedi-transaction.ts and api/admin/refetch-known-eras.ts.
+  // Sara 2026-10-06.
+  const autoPaid = patientResp === 0 && (insurancePayment ?? 0) > 0
+
   const [row] = await sql`
     INSERT INTO patient_statements (
       practice_id, claim_id,
@@ -522,7 +528,7 @@ async function ensureStatementForClaim(
       amount_billed, insurance_payment, contractual_adjustment,
       patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
       remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, created_at, updated_at
+      status, paid_at, created_at, updated_at
     ) VALUES (
       ${claim.practice_id}::uuid, ${claim.id},
       ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
@@ -531,7 +537,7 @@ async function ensureStatementForClaim(
       ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
       ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
       ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      'draft', NOW(), NOW()
+      ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
     )
     RETURNING id
   `

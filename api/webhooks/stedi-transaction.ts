@@ -202,6 +202,14 @@ async function ensureStatementForClaim(
   const email = claim.parent_email ?? claim.family_email ?? null
   const phone = claim.parent_phone ?? claim.family_phone ?? null
 
+  // Auto-paid shortcut: when the insurance paid >$0 AND the patient owes
+  // nothing (every CAS bucket is 0), there's no action for Pam to take —
+  // the claim is settled. Create the statement as 'paid' instead of
+  // 'draft' so Pam's queue only shows statements that actually need her.
+  // Keep in sync with the parallel helper in api/admin/refetch-known-eras.ts
+  // and api/cron/stedi-era-poll.ts. Sara 2026-10-06.
+  const autoPaid = patientResp === 0 && (insurancePayment ?? 0) > 0
+
   const [row] = await sql`
     INSERT INTO patient_statements (
       practice_id, claim_id,
@@ -211,7 +219,7 @@ async function ensureStatementForClaim(
       amount_billed, insurance_payment, contractual_adjustment,
       patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
       remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, created_at, updated_at
+      status, paid_at, created_at, updated_at
     ) VALUES (
       ${claim.practice_id}::uuid, ${claim.id},
       ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
@@ -220,7 +228,7 @@ async function ensureStatementForClaim(
       ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
       ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
       ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      'draft', NOW(), NOW()
+      ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
     )
     RETURNING id
   `
