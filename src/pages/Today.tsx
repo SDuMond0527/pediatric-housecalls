@@ -1155,12 +1155,56 @@ export function Today() {
 
                         const partner = (appt.notes || '').split('|').find((p: string) => p.startsWith('PARTNER:'))?.replace('PARTNER:', '').trim() ?? ''
 
+                        // Parent-submitted IV fluids intake fields. BookVisit.tsx
+                        // pushes these into notes when the visit is IV fluids
+                        // (see src/pages/family/BookVisit.tsx around the
+                        // isIvFluids block). The field names here must exactly
+                        // match what BookVisit writes. Keep in sync. Sara 2026-10-06.
+                        const IV_FLUIDS_ALIASES = [
+                          'In-home IV fluids',
+                          'RN IV fluids',
+                          'RN IV fluid visit — paired with MD/NP screening',
+                          'RN in-home IV fluids administration',
+                          'Video telemedicine screening for IV fluids',
+                        ]
+                        const isIvFluidsAppt = IV_FLUIDS_ALIASES.includes(String(appt.visit_type ?? ''))
+                        const IV_INTAKE_FIELDS: Array<[string, string]> = [
+                          ['Weight',          'Weight'],
+                          ['Onset',           'Symptom onset'],
+                          ['Symptoms',        'Symptoms'],
+                          ['Fluid intake',    'Fluid intake'],
+                          ['ORS tried',       'Oral rehydration tried'],
+                          ['Last urination',  'Last urination'],
+                          ['Diarrhea',        'Diarrhea'],
+                          ['Vomiting',        'Vomiting'],
+                          ['Activity',        'Activity level'],
+                          ['Mouth dry',       'Mouth dryness'],
+                          ['Tears',           'Tears when crying'],
+                          ['Fever',           'Fever'],
+                          ['Red flags',       'Red flags'],
+                          ['Other conditions','Other conditions'],
+                          ['Recent IV',       'Recent IV fluids'],
+                          ['Available',       'Available times'],
+                        ]
+                        const ivFieldsPresent = isIvFluidsAppt && IV_INTAKE_FIELDS.some(([k]) => noteMap[k])
+
                         return (
                           <div className="mb-3 space-y-2">
                             {partner && (
                               <div className="bg-[#FEF3E8] border border-[#F9C784] rounded-lg px-3 py-2.5 flex items-center gap-2">
                                 <span className="text-[11px] font-semibold text-[#633806] uppercase tracking-wider flex-shrink-0">Partner provider</span>
                                 <span className="text-[13px] font-medium text-[#633806]">{partner}</span>
+                              </div>
+                            )}
+                            {ivFieldsPresent && (
+                              <div className="bg-[#E6F1FB] border border-[#A3C4E8] rounded-lg p-3 space-y-1.5">
+                                <div className="text-[10px] font-semibold text-[#0C447C] uppercase tracking-wider mb-2">IV fluids intake (parent-submitted)</div>
+                                {IV_INTAKE_FIELDS.map(([key, label]) => noteMap[key] ? (
+                                  <div key={key} className="text-[13px]">
+                                    <span className="text-[#1A1A2E] text-[11px] block">{label}</span>
+                                    <span className="text-[#0C447C]">{noteMap[key]}</span>
+                                  </div>
+                                ) : null)}
                               </div>
                             )}
                             {(name || familyName || dob || sex || phone || email || address) && (
