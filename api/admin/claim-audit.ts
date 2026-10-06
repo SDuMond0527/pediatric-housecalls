@@ -82,7 +82,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ps.created_at      AS statement_created_at,
       ps.sent_at         AS statement_sent_at,
       ps.paid_at         AS statement_paid_at,
-      ps.written_off_at  AS statement_written_off_at,
+      ps.voided_at       AS statement_voided_at,
+      ps.void_reason     AS statement_void_reason,
       ps.total_amount_due AS statement_total,
       ps.paid_amount_cents AS statement_paid_cents,
       (
@@ -184,8 +185,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       events.push({ at: row.statement_paid_at, type: 'statement_paid', label: 'Patient statement paid', detail: paidDollars })
     }
 
-    if (row.statement_written_off_at)
-      events.push({ at: row.statement_written_off_at, type: 'statement_written_off', label: 'Patient statement written off', detail: null })
+    if (row.statement_voided_at)
+      events.push({
+        at: row.statement_voided_at,
+        type: 'statement_written_off',
+        label: 'Patient statement voided / written off',
+        detail: row.statement_void_reason ?? null,
+      })
 
     // Catch-all activity_log entries that aren't already represented.
     // Skip kinds we already surface explicitly to avoid duplication.
