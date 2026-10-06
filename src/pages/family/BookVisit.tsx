@@ -20,6 +20,7 @@ import {
   getFamilyPharmacies,
   familyUploadInsuranceCard,
   familySearchPharmacies,
+  familyGetPairedMdAvailability,
 } from '../../lib/api'
 import {
   ChildIntakeForm,
@@ -779,7 +780,24 @@ export function BookVisit() {
     }
     setVisitTypeWindow(window)
 
-    const bookedSlotsList = sched?.bookedSlots ?? []
+    let bookedSlotsList = sched?.bookedSlots ?? []
+    // For paired visits (CMA+tele, IV fluids), the server auto-pairs an
+    // on-call MD/NP at submit. If that MD/NP already has an appointment at
+    // the parent's chosen time, the submit fails with "no longer available"
+    // — but only AFTER the parent picks the slot. To prevent ghost slots,
+    // merge the paired MD/NP's booked blocks into the overlap check so the
+    // slot grid only shows times when BOTH sides are free. Twigg family
+    // 2026-10-06 had 9 cancelled attempts fighting Megan's hidden calendar.
+    // Sara 2026-10-06.
+    const isPairedVisit = isCmaTelePair(booking.visitType) || isIvFluidsPair(booking.visitType)
+    if (isPairedVisit && booking.state) {
+      try {
+        const paired = await familyGetPairedMdAvailability(date, booking.state)
+        if (paired?.bookedSlots?.length) {
+          bookedSlotsList = [...bookedSlotsList, ...paired.bookedSlots]
+        }
+      } catch { /* non-fatal — fall back to RN-only computation */ }
+    }
     setBookedSlots(bookedSlotsList)
 
     const leadTimeSlots = getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, date)

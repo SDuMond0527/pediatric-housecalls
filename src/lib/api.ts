@@ -401,6 +401,16 @@ export const getSchedulingData = (providerId: string, params: Record<string, str
     `/api/scheduling/${providerId}?${new URLSearchParams(params)}`
   )
 
+// Family-side lookup for the on-call MD/NP that would be auto-paired to a
+// CMA+tele or IV fluids booking at a given date + state, plus that NP's
+// booked time blocks. Used by the slot grid in BookVisit.tsx to intersect
+// the primary (CMA/RN) booked times with the paired NP's booked times so
+// parents don't see slots that would always fail at submit. Sara 2026-10-06.
+export const familyGetPairedMdAvailability = (date: string, state: string) =>
+  familyApiFetch<{ provider_name: string | null; bookedSlots: { time: string; duration: number }[] }>(
+    `/api/family/paired-md-availability?date=${encodeURIComponent(date)}&state=${encodeURIComponent(state)}`
+  )
+
 export const getProviderByName = (name: string) =>
   publicFetch<any | null>(`/api/providers?name=${encodeURIComponent(name)}`)
 

@@ -171,9 +171,20 @@ async function createAppointmentCore(
         const exStart = eh * 60 + em
         const exEnd = exStart + (row.duration_minutes ?? 60)
         if (newStart2 < exEnd && newEnd2 > exStart) {
-          await sql`UPDATE appointments SET status = 'cancelled' WHERE id = ${(primaryRow as any).id}::uuid`
+          // Primary row was INSERTed before we discovered the pair couldn't
+          // complete. DELETE instead of cancel — the parent never saw this
+          // as a real appointment and we don't want cancelled-visit noise
+          // piling up on provider schedules / admin views. Each failed
+          // retry used to leave a cancelled row behind (Mackenzie Twigg
+          // got 9 cancelled rows on 2026-10-06 before finding a time that
+          // worked). Sara 2026-10-06.
+          await sql`DELETE FROM appointments WHERE id = ${(primaryRow as any).id}::uuid`.catch(() => {})
           await sql`DELETE FROM schedule_blocks WHERE reason = ${'appt:' + (primaryRow as any).id} AND practice_id = ${practiceId}::uuid`.catch(() => {})
-          return { primary: null, secondary: null, error: `${mdName || 'The paired provider'} is no longer available at that time — please choose a different slot.` }
+          return {
+            primary: null,
+            secondary: null,
+            error: `${mdName || 'The provider on call'} already has another appointment at ${scheduled_time}. Please pick a different time.`,
+          }
         }
       }
       const partnerRoleLabel = isCmaTelePair(visit_type) ? 'MD/NP — telemedicine' : 'MD/NP — telemedicine screening'
