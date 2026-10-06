@@ -185,8 +185,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Pam's "Convenience Fee Review" tab checkbox — she ticks it after
       // running the Square charge manually, which clears the claim from
       // her queue. Doesn't affect Andrea's Ready for Biller view.
-      // Sara 2026-10-06.
+      // DEPRECATED 2026-10-06 — replaced by the dedicated
+      // convenience_fee_charges table + /admin/convenience-fees page.
+      // Column kept for now so historical data isn't lost; the tab is
+      // deleted from AdminClaims in this same commit. Sara 2026-10-06.
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS convenience_fee_handled boolean NOT NULL DEFAULT false` } catch {}
+
+      // Dedicated audit + action table for every convenience fee event.
+      // One row per claim with a CV charge. Pam's /admin/convenience-fees
+      // page is the single surface where she sees pending / charged /
+      // link-sent / failed / reversed CV charges and takes action.
+      // Rows get inserted at claim-gen time for appointments with
+      // scheduled_date >= 2026-10-07 (automation cutover date). Pre-
+      // cutover visits are handled by Pam's existing manual Square
+      // workflow and don't produce rows here. Sara 2026-10-06.
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS convenience_fee_charges (
+            id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            practice_id     uuid NOT NULL,
+            appointment_id  uuid,
+            claim_id        uuid,
+            patient_name    text,
+            provider_name   text,
+            service_date    date NOT NULL,
+            cv_code         text NOT NULL,
+            amount_cents    integer NOT NULL,
+            status          text NOT NULL DEFAULT 'pending',
+            square_payment_id       text,
+            square_payment_link_id  text,
+            square_payment_link_url text,
+            -- Square creates an order when a payment link is generated.
+            -- The paid-via-link webhook matches on this order_id. Also
+            -- bootstrapped idempotently so existing deployments pick it up.
+            square_order_id         text,
+            created_at    timestamptz NOT NULL DEFAULT NOW(),
+            charged_at    timestamptz,
+            link_sent_at  timestamptz,
+            paid_at       timestamptz,
+            failed_at     timestamptz,
+            reversed_at   timestamptz,
+            failure_reason   text,
+            reversed_by      text,
+            reversal_reason  text,
+            pam_notes            text,
+            pam_notes_updated_at timestamptz,
+            pam_notes_updated_by text,
+            updated_at    timestamptz NOT NULL DEFAULT NOW()
+          )`
+        await sql`CREATE INDEX IF NOT EXISTS cv_charges_service_date_idx ON convenience_fee_charges(service_date DESC)`
+        await sql`CREATE INDEX IF NOT EXISTS cv_charges_status_idx       ON convenience_fee_charges(status)`
+        await sql`CREATE INDEX IF NOT EXISTS cv_charges_claim_idx        ON convenience_fee_charges(claim_id)`
+        // Added 2026-10-06 as part of Phase 2 (Square auto-charge). Existing
+        // tables created in Phase 1a bootstrap won't have this column yet.
+        await sql`ALTER TABLE convenience_fee_charges ADD COLUMN IF NOT EXISTS square_order_id text`
+        await sql`CREATE INDEX IF NOT EXISTS cv_charges_square_order_idx  ON convenience_fee_charges(square_order_id)`
+      } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
       // Biller work queue: Pending Review + Rework + Submitted (waiting on

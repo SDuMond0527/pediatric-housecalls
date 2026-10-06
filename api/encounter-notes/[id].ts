@@ -1,6 +1,165 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+// ── Convenience-fee calculation (inlined from api/convenience-fee.ts) ────
+// Keep in sync with the authoritative version there. Vercel's api/lib
+// exclusion means we can't share the function via import; duplicating
+// here is the established pattern. Sara 2026-10-06.
+const CV_CUTOVER_DATE = '2026-10-07' // Automation starts for appts with scheduled_date >= this
+const CV_CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+const CV_IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
+const cvIsCmaTelePair  = (v?: string | null) => !!v && CV_CMA_TELE_ALIASES.includes(v)
+const cvIsIvFluidsPair = (v?: string | null) => !!v && CV_IV_FLUIDS_ALIASES.includes(v)
+function cvEasterSunday(year: number): string {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4), k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+function cvNthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): string {
+  if (n > 0) {
+    const d = new Date(year, month - 1, 1); let count = 0
+    while (d.getMonth() === month - 1) {
+      if (d.getDay() === weekday) { count++; if (count === n) break }
+      d.setDate(d.getDate() + 1)
+    }
+    return `${year}-${String(month).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  } else {
+    const d = new Date(year, month, 0)
+    while (d.getDay() !== weekday) d.setDate(d.getDate() - 1)
+    return `${year}-${String(month).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+}
+function cvIsMajorHoliday(dateStr: string): boolean {
+  const year = parseInt(dateStr.slice(0, 4))
+  const holidays = [
+    `${year}-01-01`, cvEasterSunday(year),
+    cvNthWeekdayOfMonth(year, 5, 1, -1), `${year}-07-04`,
+    cvNthWeekdayOfMonth(year, 9, 1, 1), cvNthWeekdayOfMonth(year, 11, 4, 4),
+    `${year}-12-25`,
+  ]
+  return holidays.includes(dateStr)
+}
+function cvCalculateFee(miles: number, dateStr: string, time24: string, visitType: string, state?: string | null): { fee: number; code: string } {
+  if (cvIsIvFluidsPair(visitType)) return { fee: 150, code: 'IV-flat' }
+  if (cvIsCmaTelePair(visitType))  return { fee: 50,  code: 'CMA-flat' }
+  if (cvIsMajorHoliday(dateStr))   return state === 'VA' ? { fee: 200, code: 'VACV10' } : { fee: 200, code: 'CV13' }
+  const date = new Date(dateStr + 'T12:00:00')
+  const dow = date.getDay()
+  const isWeekend = dow === 0 || dow === 6
+  const [h] = time24.split(':').map(Number)
+  const isPeakHours = h >= 8 && h < 15
+  if (state === 'VA') {
+    if (isWeekend) {
+      if (miles < 5)   return { fee: 125, code: 'VACV7' }
+      if (miles <= 15) return { fee: 150, code: 'VACV8' }
+      return { fee: 175, code: 'VACV9' }
+    }
+    if (isPeakHours) {
+      if (miles < 2)   return { fee: 50,  code: 'VACV11' }
+      if (miles < 5)   return { fee: 75,  code: 'VACV1' }
+      if (miles <= 15) return { fee: 100, code: 'VACV2' }
+      return { fee: 150, code: 'VACV3' }
+    }
+    if (miles < 5)   return { fee: 100, code: 'VACV4' }
+    if (miles <= 15) return { fee: 125, code: 'VACV5' }
+    return { fee: 150, code: 'VACV6' }
+  }
+  if (isWeekend) {
+    if (miles < 2)   return { fee: 100, code: 'CV9' }
+    if (miles < 5)   return { fee: 125, code: 'CV10' }
+    if (miles <= 15) return { fee: 150, code: 'CV11' }
+    return { fee: 175, code: 'CV12' }
+  }
+  if (isPeakHours) {
+    if (miles < 2)   return { fee: 50,  code: 'CV1' }
+    if (miles < 5)   return { fee: 75,  code: 'CV2' }
+    if (miles <= 15) return { fee: 100, code: 'CV3' }
+    return { fee: 150, code: 'CV4' }
+  }
+  if (miles < 2)   return { fee: 75,  code: 'CV5' }
+  if (miles < 5)   return { fee: 100, code: 'CV6' }
+  if (miles <= 15) return { fee: 125, code: 'CV7' }
+  return { fee: 150, code: 'CV8' }
+}
+async function cvGetDrivingMiles(origin: string, destination: string): Promise<number | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY || ''
+  if (!key) return null
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&mode=driving&units=imperial&key=${key}`
+  try {
+    const res = await fetch(url)
+    const data = await res.json() as any
+    const element = data?.rows?.[0]?.elements?.[0]
+    if (element?.status !== 'OK') return null
+    return element.distance.value / 1609.344
+  } catch { return null }
+}
+
+// ── Square + notifications (Phase 2 auto-charge, 2026-10-06) ────────────
+// Kill switch for the whole auto-charge pipeline. If set to anything
+// other than 'true' (default), rows still get inserted as 'pending' but
+// no Square calls fire — Pam handles everything manually. Sara 2026-10-06.
+const CV_AUTO_CHARGE_ENABLED = String(process.env.AUTO_CHARGE_CONVENIENCE_FEES ?? 'true').toLowerCase() !== 'false'
+// Safety cap: anything above this dollar amount doesn't auto-charge. The
+// row stays pending with a warning note for Pam to review manually.
+// Normal CV fees are $50–$200; a computed fee > $300 means something is
+// wrong with the inputs (bad miles, wrong visit type).
+const CV_MAX_AUTO_CHARGE_CENTS = 30000
+const CV_SQUARE_ACCESS_TOKEN = process.env.SQUARE_ACCESS_TOKEN || ''
+const CV_SQUARE_ENV          = process.env.SQUARE_ENVIRONMENT || 'production'
+const CV_SQUARE_LOCATION_ID  = process.env.SQUARE_LOCATION_ID || ''
+const CV_SQUARE_BASE_URL     = CV_SQUARE_ENV === 'sandbox' ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com'
+async function cvSquarePost(path: string, body: unknown): Promise<any> {
+  const res = await fetch(`${CV_SQUARE_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${CV_SQUARE_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+      'Square-Version': '2024-01-17',
+    },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json() as any
+  if (!res.ok) {
+    const detail = json?.errors?.[0]?.detail || json?.errors?.[0]?.category || `Square API error (${res.status})`
+    const err = new Error(detail) as any
+    err.squareErrors = json?.errors
+    throw err
+  }
+  return json
+}
+// Resend + Twilio senders (duplicated from api/notifications.ts for the
+// same reason other helpers are inlined).
+const CV_RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const CV_FROM_EMAIL     = process.env.FROM_EMAIL     || 'noreply@phcbooking.com'
+const CV_TWILIO_SID     = process.env.TWILIO_ACCOUNT_SID || ''
+const CV_TWILIO_TOKEN   = process.env.TWILIO_AUTH_TOKEN  || ''
+const CV_TWILIO_FROM    = process.env.TWILIO_FROM_NUMBER || ''
+async function cvSendEmail(to: string, subject: string, html: string): Promise<void> {
+  if (!CV_RESEND_API_KEY || CV_RESEND_API_KEY === 'PLACEHOLDER') return
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${CV_RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: CV_FROM_EMAIL, to, subject, html }),
+  }).catch(e => { console.error('[CV email] send failed:', e?.message) })
+}
+async function cvSendSms(to: string, body: string): Promise<void> {
+  if (!CV_TWILIO_SID || !CV_TWILIO_TOKEN || !CV_TWILIO_FROM) return
+  const auth = Buffer.from(`${CV_TWILIO_SID}:${CV_TWILIO_TOKEN}`).toString('base64')
+  const form = new URLSearchParams({ To: to, From: CV_TWILIO_FROM, Body: body })
+  await fetch(`https://api.twilio.com/2010-04-01/Accounts/${CV_TWILIO_SID}/Messages.json`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  }).catch(e => { console.error('[CV sms] send failed:', e?.message) })
+}
+
 // Inlined from api/lib/applyClears.ts + api/lib/payerIds.ts — see
 // comment in api/appointments/[id].ts explaining why.
 const ENCOUNTER_NOTES_CLEARABLE = new Set<string>([
@@ -426,6 +585,211 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
       } catch (e: any) {
         console.error('auto-ready failed (non-fatal):', e?.message)
       }
+    }
+  }
+
+  // ─── Convenience fee audit row (automation cutover 2026-10-07) ──────
+  // For appointments with scheduled_date >= 2026-10-07, log a row into
+  // convenience_fee_charges with status='pending' so Pam can see it on
+  // /admin/convenience-fees. Pre-cutover visits continue through her
+  // existing manual Square workflow and don't produce rows here. Fully
+  // wrapped in try/catch — never blocks note sign. Idempotent: skips if
+  // a row already exists for this claim. Sara 2026-10-06.
+  if (claim?.id && appt?.scheduled_date) {
+    try {
+      const dosStr = String(appt.scheduled_date).slice(0, 10)
+      const inAutomationWindow = dosStr >= CV_CUTOVER_DATE
+      // Skip pure-virtual visits (no in-home component → no CV).
+      const vt = String(appt.visit_type ?? '')
+      const isVirtualOnly = /^(video telemedicine|text visit)$/i.test(vt)
+        || vt === 'Video telemedicine screening for IV fluids' // NP side of IV pair — CV lives on RN side
+      // Only one row per claim.
+      const [existing] = await sql`SELECT id FROM convenience_fee_charges WHERE claim_id = ${claim.id}::uuid LIMIT 1`
+      if (inAutomationWindow && !isVirtualOnly && !existing) {
+        // Flat-fee paths skip the Google Maps call entirely.
+        const flatIv  = cvIsIvFluidsPair(vt)
+        const flatCma = cvIsCmaTelePair(vt)
+        const isHoliday = cvIsMajorHoliday(dosStr)
+        let miles = 0
+        if (!flatIv && !flatCma && !isHoliday) {
+          // Compute driving miles from provider's prior-visit address (same-day)
+          // falling back to provider.home_address, falling back to 0.
+          let originAddress: string | null = null
+          try {
+            const [priorAppt] = await sql`
+              SELECT notes FROM appointments
+              WHERE provider_id = ${appt.provider_id}::uuid
+                AND practice_id = ${practiceId}::uuid
+                AND scheduled_date = ${dosStr}::date
+                AND scheduled_time < ${appt.scheduled_time}
+                AND status != 'cancelled'
+              ORDER BY scheduled_time DESC
+              LIMIT 1`
+            const priorNotes = String((priorAppt as any)?.notes ?? '')
+            const priorAddr = priorNotes.split('|').find(p => p.trim().startsWith('ADDR:'))?.replace(/^.*?ADDR:/, '').trim()
+            if (priorAddr) originAddress = priorAddr
+            if (!originAddress) {
+              const [prow] = await sql`SELECT home_address FROM providers WHERE id = ${appt.provider_id}::uuid LIMIT 1`
+              originAddress = (prow as any)?.home_address || null
+            }
+          } catch { /* non-fatal */ }
+          const destAddress = [resolvedAddr.line1, resolvedAddr.city, resolvedAddr.state, resolvedAddr.zip].filter(Boolean).join(', ')
+          if (originAddress && destAddress) {
+            const m = await cvGetDrivingMiles(originAddress, destAddress)
+            if (m !== null) miles = m
+          }
+        }
+        const time24 = String(appt.scheduled_time ?? '12:00').slice(0, 5)
+        const stateCode = (resolvedAddr.state as string) ?? null
+        const { fee, code } = cvCalculateFee(miles, dosStr, time24, vt, stateCode)
+        const patientNameSnap  = [claim.patient_first_name, claim.patient_last_name].filter(Boolean).join(' ') || null
+        const providerNameSnap = (provider as any)?.name ?? null
+        const amountCents = Math.round(fee * 100)
+        const [cvRow] = await sql`
+          INSERT INTO convenience_fee_charges (
+            practice_id, appointment_id, claim_id,
+            patient_name, provider_name, service_date,
+            cv_code, amount_cents, status
+          ) VALUES (
+            ${practiceId}::uuid, ${appt.id}::uuid, ${claim.id}::uuid,
+            ${patientNameSnap}, ${providerNameSnap}, ${dosStr}::date,
+            ${code}, ${amountCents}, 'pending'
+          )
+          RETURNING id
+        `
+        const cvRowId = (cvRow as any)?.id as string | undefined
+
+        // ─── Phase 2: auto-charge pipeline ──────────────────────────────
+        // Try direct Square charge against the family's card on file.
+        // If no card / charge fails → create a Square Payment Link and
+        // send it via email + SMS. Any failure keeps the row 'pending'
+        // (plus a note) so Pam picks it up manually. Fully wrapped —
+        // never blocks the sign flow. Sara 2026-10-06.
+        if (CV_AUTO_CHARGE_ENABLED && cvRowId && amountCents > 0) {
+          const safetyCapExceeded = amountCents > CV_MAX_AUTO_CHARGE_CENTS
+          const firstName = String(claim.patient_first_name ?? '').trim() || 'your child'
+          const dosDisplay = (() => { try { const d = new Date(dosStr); return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}` } catch { return dosStr } })()
+          const practiceName = process.env.PRACTICE_NAME || 'Pediatric House Calls'
+          const chargeNote = `${practiceName} — in-home visit convenience fee for ${firstName} on ${dosDisplay}. Thank you so much for allowing us to care for your child!`
+
+          if (safetyCapExceeded) {
+            await sql`
+              UPDATE convenience_fee_charges
+              SET failure_reason = ${`Auto-charge blocked: amount $${(amountCents/100).toFixed(2)} exceeds safety cap of $${(CV_MAX_AUTO_CHARGE_CENTS/100).toFixed(0)}. Review and charge manually.`},
+                  updated_at = NOW()
+              WHERE id = ${cvRowId}::uuid`
+          } else {
+            // Lookup family contact + Square card
+            let family: any = null
+            try {
+              if (child?.family_id) {
+                const [fam] = await sql`
+                  SELECT square_customer_id, square_card_id, email, phone, display_name
+                  FROM family_profiles WHERE id = ${child.family_id}::uuid LIMIT 1`
+                family = fam ?? null
+              }
+            } catch { /* non-fatal */ }
+
+            let chargedOk = false
+            // Attempt direct charge if card is on file
+            if (family?.square_card_id && family?.square_customer_id && CV_SQUARE_ACCESS_TOKEN) {
+              try {
+                const payResp = await cvSquarePost('/v2/payments', {
+                  idempotency_key: `cv_charge_${cvRowId}`,
+                  amount_money: { amount: amountCents, currency: 'USD' },
+                  source_id: family.square_card_id,
+                  customer_id: family.square_customer_id,
+                  buyer_email_address: family.email ?? undefined,
+                  note: chargeNote,
+                })
+                const paymentId = payResp?.payment?.id
+                if (paymentId) {
+                  await sql`
+                    UPDATE convenience_fee_charges
+                    SET status = 'auto_charged',
+                        charged_at = NOW(),
+                        square_payment_id = ${paymentId},
+                        updated_at = NOW()
+                    WHERE id = ${cvRowId}::uuid`
+                  chargedOk = true
+                }
+              } catch (chargeErr: any) {
+                console.error('[CV auto-charge] direct charge failed:', chargeErr?.message)
+                await sql`
+                  UPDATE convenience_fee_charges
+                  SET failure_reason = ${String(chargeErr?.message ?? 'direct charge failed').slice(0, 500)},
+                      failed_at = NOW(),
+                      updated_at = NOW()
+                  WHERE id = ${cvRowId}::uuid`
+                // fall through to payment link
+              }
+            }
+
+            // Fallback: payment link
+            if (!chargedOk && CV_SQUARE_ACCESS_TOKEN && CV_SQUARE_LOCATION_ID) {
+              try {
+                const linkResp = await cvSquarePost('/v2/online-checkout/payment-links', {
+                  idempotency_key: `cv_link_${cvRowId}`,
+                  quick_pay: {
+                    name: `${practiceName} — convenience fee for ${firstName} on ${dosDisplay}`,
+                    price_money: { amount: amountCents, currency: 'USD' },
+                    location_id: CV_SQUARE_LOCATION_ID,
+                  },
+                  pre_populated_data: {
+                    buyer_email: family?.email ?? undefined,
+                    buyer_phone_number: family?.phone ?? undefined,
+                  },
+                  checkout_options: {
+                    allow_tipping: false,
+                  },
+                  description: 'Thank you so much for allowing us to care for your child!',
+                })
+                const link = linkResp?.payment_link
+                if (link?.url) {
+                  await sql`
+                    UPDATE convenience_fee_charges
+                    SET status = 'link_sent',
+                        link_sent_at = NOW(),
+                        square_payment_link_id  = ${link.id},
+                        square_payment_link_url = ${link.url},
+                        square_order_id         = ${link.order_id ?? null},
+                        failed_at = NULL,
+                        updated_at = NOW()
+                    WHERE id = ${cvRowId}::uuid`
+                  // Send the link to the parent
+                  const amountDisplay = `$${(amountCents/100).toFixed(2)}`
+                  // Parent first name: prefer display_name's first token
+                  // ("The Rodgers" → "Rodgers family" fallback), else generic.
+                  const dn = String(family?.display_name ?? '').trim()
+                  const parentFirst = dn && !/^the\b/i.test(dn) ? dn.split(/\s+/)[0] : ''
+                  const greeting = parentFirst ? `Hi ${parentFirst},` : 'Hi there,'
+                  const smsBody = `${greeting} this is ${practiceName}. Your in-home visit convenience fee for ${firstName}'s visit on ${dosDisplay} is ${amountDisplay}. Pay securely here: ${link.url} Reply with any questions. Thank you so much for allowing us to care for your child!`
+                  const emailHtml = `<p style="font-family:system-ui,sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6">${greeting}<br><br>This is ${practiceName}. Your in-home visit convenience fee for ${firstName}'s visit on ${dosDisplay} is <strong>${amountDisplay}</strong>.</p><p style="margin:20px 0"><a href="${link.url}" style="display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600">Pay securely</a></p><p style="font-family:system-ui,sans-serif;font-size:13px;color:#555">Or paste this link into your browser: ${link.url}</p><p style="font-family:system-ui,sans-serif;font-size:14px;color:#1A1A2E;margin-top:28px">Reply with any questions.<br>Thank you so much for allowing us to care for your child!</p>`
+                  if (family?.email) await cvSendEmail(family.email, `${practiceName} — Convenience fee for ${firstName}'s visit on ${dosDisplay}`, emailHtml)
+                  if (family?.phone) await cvSendSms(family.phone, smsBody)
+                } else {
+                  await sql`
+                    UPDATE convenience_fee_charges
+                    SET failure_reason = ${'Payment link response missing URL'},
+                        failed_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = ${cvRowId}::uuid`
+                }
+              } catch (linkErr: any) {
+                console.error('[CV auto-charge] payment link failed:', linkErr?.message)
+                await sql`
+                  UPDATE convenience_fee_charges
+                  SET failure_reason = ${String(linkErr?.message ?? 'payment link creation failed').slice(0, 500)},
+                      failed_at = NOW(),
+                      updated_at = NOW()
+                  WHERE id = ${cvRowId}::uuid`
+              }
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('CV charge row insert failed (non-fatal):', e?.message)
     }
   }
 

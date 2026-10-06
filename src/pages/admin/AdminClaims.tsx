@@ -106,7 +106,12 @@ function fmtMoney(n: any) {
 }
 
 export function AdminClaims() {
-  const [tab, setTab] = useState<Tab>('review')
+  // Default tab moved from 'review' to 'rework' 2026-10-06 after the
+  // Convenience Fee Review tab was removed (CV handling moved to the
+  // dedicated /admin/convenience-fees page). Rework is where Andrea's
+  // actionable exceptions live. The 'review' tab still exists in the
+  // type/render path as dormant code but has no entry button.
+  const [tab, setTab] = useState<Tab>('rework')
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpandedRaw] = useState<string | null>(null)
@@ -1293,9 +1298,6 @@ export function AdminClaims() {
       {/* Tabs + Ready-for-biller filter */}
       <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">
         <div className="flex">
-          <button className={tabCls('review')} onClick={() => setTab('review')}>
-            Convenience Fee Review ({reviewClaims.length})
-          </button>
           <button className={tabCls('rework')} onClick={() => setTab('rework')}>
             Rework {reworkClaims.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#7F1D1D]">{reworkClaims.length}</span>}
           </button>

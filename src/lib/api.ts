@@ -395,6 +395,48 @@ export const getReports = (params: Record<string, string>) =>
 export const getAvailabilityOverview = () =>
   apiFetch<any>('/api/admin/availability-overview')
 
+// ── Convenience fee charges (Pam's /admin/convenience-fees page) ───
+export type ConvenienceFeeCharge = {
+  id: string
+  practice_id: string
+  appointment_id: string | null
+  claim_id: string | null
+  patient_name: string | null
+  provider_name: string | null
+  service_date: string
+  cv_code: string
+  amount_cents: number
+  status: 'pending' | 'auto_charged' | 'link_sent' | 'paid_via_link' | 'failed' | 'manually_charged' | 'reversed'
+  square_payment_id: string | null
+  square_payment_link_id: string | null
+  square_payment_link_url: string | null
+  created_at: string
+  charged_at: string | null
+  link_sent_at: string | null
+  paid_at: string | null
+  failed_at: string | null
+  reversed_at: string | null
+  failure_reason: string | null
+  reversed_by: string | null
+  reversal_reason: string | null
+  pam_notes: string | null
+  pam_notes_updated_at: string | null
+  pam_notes_updated_by: string | null
+  updated_at: string
+}
+export const getConvenienceFeeCharges = (filters?: { status?: string; from?: string; to?: string }) => {
+  const qs = new URLSearchParams()
+  if (filters?.status) qs.set('status', filters.status)
+  if (filters?.from) qs.set('from', filters.from)
+  if (filters?.to) qs.set('to', filters.to)
+  const q = qs.toString()
+  return apiFetch<ConvenienceFeeCharge[]>(`/api/admin/convenience-fees${q ? `?${q}` : ''}`)
+}
+export const updateConvenienceFeeCharge = (id: string, body: Partial<Pick<ConvenienceFeeCharge, 'status' | 'pam_notes' | 'reversal_reason'>>) =>
+  apiFetch<ConvenienceFeeCharge>(`/api/admin/convenience-fees?id=${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify(body),
+  })
+
 // ── Scheduling (slot calculation) ────────────────────────────
 export const getSchedulingData = (providerId: string, params: Record<string, string>) =>
   publicFetch<{ availability: any; override: any; visitTypeAvail: any; bookedSlots: { time: string; duration: number }[] }>(

@@ -26,6 +26,7 @@ import { ClaimQuestion } from './pages/ClaimQuestion'
 import { AdminSpecialists } from './pages/admin/AdminSpecialists'
 import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
+import { AdminConvenienceFees } from './pages/admin/AdminConvenienceFees'
 import { AdminProvision } from './pages/admin/AdminProvision'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
 import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
@@ -134,6 +135,7 @@ export default function App() {
                 <Route path="waitlist"   element={<AdminWaitlist />} />
                 <Route path="broadcasts" element={<AdminBroadcasts />} />
                 <Route path="claims"     element={<AdminClaims />} />
+                <Route path="convenience-fees" element={<AdminConvenienceFees />} />
                 <Route path="patients"        element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="providers"      element={<AdminProviders />} />

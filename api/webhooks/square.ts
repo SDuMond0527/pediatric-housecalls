@@ -54,7 +54,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const sql = neon(process.env.DATABASE_URL!)
 
-    // Match by square_order_id (set when we created the payment link)
+    // First check: is this order a convenience fee payment link?
+    // We created it via cvSquarePost('/v2/online-checkout/payment-links')
+    // and stored its order_id on convenience_fee_charges. Sara 2026-10-06.
+    const [cvRow] = await sql`
+      SELECT id, status
+      FROM convenience_fee_charges
+      WHERE square_order_id = ${orderId}
+      LIMIT 1
+    `
+    if (cvRow) {
+      if (cvRow.status === 'paid_via_link') {
+        return res.status(200).json({ received: true, note: 'cv already paid' })
+      }
+      await sql`
+        UPDATE convenience_fee_charges SET
+          status = 'paid_via_link',
+          paid_at = ${paidAt},
+          square_payment_id = COALESCE(${payment.id}, square_payment_id),
+          updated_at = NOW()
+        WHERE id = ${cvRow.id}::uuid
+      `
+      console.log(`[webhooks/square] CV charge ${cvRow.id} marked paid-via-link — order ${orderId}`)
+      return res.status(200).json({ received: true, cv_charge_id: cvRow.id })
+    }
+
+    // Otherwise fall through to patient-statements matching (existing flow).
     const [stmt] = await sql`
       SELECT id, status, total_amount_due_text
       FROM patient_statements
@@ -63,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `
 
     if (!stmt) {
-      console.log(`[webhooks/square] No statement found for order_id ${orderId}`)
+      console.log(`[webhooks/square] No statement or CV charge found for order_id ${orderId}`)
       return res.status(200).json({ received: true })
     }
 
