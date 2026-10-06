@@ -285,6 +285,84 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     }
   }
 
+  // ─── Self-pay fast-path ────────────────────────────────────────────────
+  // Self-pay claims never go to Stedi (per project_self_pay_not_billed_via_stedi).
+  // No biller review step, no auto-ready. Instead: generate a draft
+  // patient statement directly from the claim at sign time. Patient
+  // owes the full total_charge; Pam only has to review + send.
+  //
+  // Idempotent: skips if a statement already exists for this claim.
+  // Non-fatal: a failed statement insert is logged but doesn't block
+  // the sign flow. Sara 2026-10-05.
+  const isSelfPayClaim = !!(claim?.id && (claim.payer_id === 'PP' || /self[\s-]*pay/i.test(String(claim.payer_name ?? ''))))
+  if (isSelfPayClaim) {
+    try {
+      const [existingStmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id}::uuid LIMIT 1`
+      if (!existingStmt) {
+        const [stmtClaim] = await sql`
+          SELECT
+            cl.id, cl.practice_id, cl.service_date, cl.cpt_codes, cl.total_charge,
+            cl.patient_first_name, cl.patient_last_name, cl.patient_dob,
+            ch.parent_email, ch.parent_phone,
+            fp.email AS family_email, fp.phone AS family_phone
+          FROM claims cl
+          LEFT JOIN children ch ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))
+          LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+          WHERE cl.id = ${claim.id}::uuid
+          LIMIT 1
+        `
+        if (stmtClaim) {
+          const totalCharge = +(parseFloat(String(stmtClaim.total_charge ?? 0)) || 0).toFixed(2)
+          const email = stmtClaim.parent_email ?? stmtClaim.family_email ?? null
+          const phone = stmtClaim.parent_phone ?? stmtClaim.family_phone ?? null
+          await sql`
+            INSERT INTO patient_statements (
+              practice_id, claim_id,
+              patient_first_name, patient_last_name, patient_dob,
+              date_of_service, cpt_codes,
+              patient_email, patient_phone,
+              amount_billed, insurance_payment, contractual_adjustment,
+              patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+              remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+              status, created_at, updated_at
+            ) VALUES (
+              ${stmtClaim.practice_id}::uuid, ${stmtClaim.id},
+              ${stmtClaim.patient_first_name}, ${stmtClaim.patient_last_name}, ${stmtClaim.patient_dob},
+              ${stmtClaim.service_date}, ${JSON.stringify(stmtClaim.cpt_codes ?? [])}::jsonb,
+              ${email}, ${phone},
+              ${totalCharge}, 0, 0,
+              0, 0, 0, ${totalCharge},
+              ${totalCharge}, 0, ${totalCharge}, ${String(totalCharge)},
+              'draft', NOW(), NOW()
+            )
+          `
+          try {
+            await sql`
+              CREATE TABLE IF NOT EXISTS claim_activity_log (
+                id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                claim_id        uuid NOT NULL,
+                created_at      timestamptz NOT NULL DEFAULT NOW(),
+                created_by      uuid,
+                created_by_name text,
+                kind            text NOT NULL DEFAULT 'note',
+                body            text NOT NULL
+              )`
+            await sql`
+              INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+              VALUES (
+                ${claim.id}::uuid, NULL, 'System (auto)', 'self_pay_statement',
+                'Auto-generated draft patient statement at claim-gen time (self-pay — no insurance to bill).'
+              )
+            `
+          } catch { /* log is non-fatal */ }
+        }
+      }
+    } catch (e: any) {
+      console.error('self-pay statement auto-gen failed (non-fatal):', e?.message)
+    }
+    return { claim }
+  }
+
   // ─── Auto-ready for biller ─────────────────────────────────────────────
   // If the just-generated claim passes the full scrubber with zero
   // errors AND zero warnings, mark it ready-for-biller automatically.

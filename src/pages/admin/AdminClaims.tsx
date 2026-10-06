@@ -764,7 +764,13 @@ export function AdminClaims() {
   // was appearing in both Review AND Completed because he had status
   // pending_review (from a manual reopen SQL) AND rework_resolved_at
   // (from a Mark-as-worked click) — both filters matched.
-  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft'))
+  // Self-pay claims never go through the biller review flow — they
+  // generate a draft patient_statement at claim-gen time (see
+  // encounter-notes/[id].ts self-pay fast-path) and Pam picks up from
+  // the statements view. Hiding them from the biller tabs keeps
+  // Andrea's queue focused on actual insurance work. Sara 2026-10-05.
+  const isSelfPayClaim = (c: any) => c.payer_id === 'PP' || /self[\s-]*pay/i.test(String(c.payer_name ?? ''))
+  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && !isSelfPayClaim(c) && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft'))
   const reworkClaims    = visibleClaims.filter(isInRework)
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
