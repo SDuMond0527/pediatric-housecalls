@@ -116,6 +116,45 @@ function localDateStr(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
+// Clinical safety gate for IV fluids self-booking. When a parent types the
+// symptoms their child is having, we want to catch anything that suggests
+// an MD/NP evaluation would be more appropriate than straight to IV
+// hydration — sore throat (strep risk), cough (respiratory), rash
+// (infectious), headache, abdominal pain, ear pain, etc. Returns true if
+// ANY of these red-flag phrases appear. Vomiting / diarrhea / dehydration
+// mentions alone do NOT trigger (that IS what IV fluids are for).
+// Sara 2026-10-06. Keyword list is intentionally broad — false positives
+// just show a prompt the parent can decline; false negatives miss a case
+// where the child actually needs an in-person evaluation.
+function symptomsIndicateMoreThanDehydration(text: string): boolean {
+  const t = text.toLowerCase()
+  if (!t.trim()) return false
+  const RED_FLAG_PHRASES = [
+    // ENT / throat
+    'sore throat', 'throat hurt', 'throat pain', 'scratchy throat', 'throat is sore',
+    // Respiratory
+    'cough', 'wheez', 'trouble breathing', 'hard to breathe', 'short of breath', 'shortness of breath', 'difficulty breathing',
+    // Dermatologic
+    'rash', 'hives', 'red spots', 'bumps on',
+    // Head
+    'headache', 'head ache', 'head hurt', 'head pain', 'migraine',
+    // Abdominal (NB: 'stomach pain' doesn't mean "stomach bug" — that'd be caught by diarrhea/vomiting separately)
+    'belly pain', 'belly hurt', 'bellyache', 'belly ache',
+    'stomach pain', 'stomach hurt', 'stomach ache', 'stomachache',
+    'tummy pain', 'tummy hurt', 'tummy ache', 'tummyache',
+    'abdomin', // abdominal, abdomen
+    // Ear
+    'ear pain', 'ear hurt', 'earache', 'ear ache', 'ears hurt',
+    // Nasal
+    'congest', 'stuffy', 'runny nose', 'snotty',
+    // Musculoskeletal
+    'back pain', 'back hurt', 'leg pain', 'leg hurt', 'arm pain', 'arm hurt', 'joint pain', 'body ache', 'body aches',
+    // Neuro / behavioral red flags
+    'stiff neck', 'confused', 'lethargic',
+  ]
+  return RED_FLAG_PHRASES.some(phrase => t.includes(phrase))
+}
+
 function getAvailableSlots(leadMin: number, date: string): string[] {
   const today = localDateStr()
   if (date !== today) return TIME_SLOTS
@@ -348,6 +387,14 @@ export function BookVisit() {
   const [convFeeLoading, setConvFeeLoading] = useState(false)
   const [waitlistOpen, setWaitlistOpen] = useState(false)
   const [waitlistDone, setWaitlistDone] = useState(false)
+  // Clinical safety gate: if the parent's IV intake symptoms list anything
+  // beyond vomiting/diarrhea/dehydration (sore throat, cough, rash, belly
+  // pain, headache, etc.), interrupt the IV booking and offer an in-person
+  // sick visit first. If they switch, remember so the appointment gets a
+  // note explaining why. Sara 2026-10-06.
+  const [showIvSwitchModal, setShowIvSwitchModal] = useState(false)
+  const [wasSwitchedFromIv, setWasSwitchedFromIv] = useState(false)
+  const [originalIvSymptoms, setOriginalIvSymptoms] = useState('')
   const [waitlistTime, setWaitlistTime] = useState('Any time')
   const [waitlistNotes, setWaitlistNotes] = useState('')
   const [waitlistComplaint, setWaitlistComplaint] = useState('')
@@ -1534,6 +1581,15 @@ export function BookVisit() {
 
     if (providerUid) {
       const noteParts = [`Ref: ${ref}`]
+      // Flag that this sick visit started as an IV fluids booking but was
+      // redirected because the parent reported symptoms beyond
+      // vomiting/diarrhea/dehydration. Admin + provider card parsers in
+      // Today.tsx and AdminSchedule.tsx surface this as a dedicated banner.
+      // Sara 2026-10-06.
+      if (wasSwitchedFromIv) {
+        const original = originalIvSymptoms ? ` Originally reported symptoms: ${originalIvSymptoms}` : ''
+        noteParts.push(`SWITCHED_FROM_IV:Parent was originally booking an in-home IV fluids appointment but based on other symptoms reported, an in-person sick visit house call was recommended first instead.${original}`)
+      }
       if (booking.visitAddress) noteParts.push(`ADDR:${booking.visitAddress}${booking.city ? `, ${booking.city}` : ''}${booking.state ? `, ${booking.state}` : ''}${booking.zip ? ` ${booking.zip}` : ''}`)
       noteParts.push(`PARENTEMAIL:${family!.email}`)
       const effectivePhone = booking.phone || (family as any)?.phone || ''
@@ -2328,9 +2384,73 @@ export function BookVisit() {
               !booking.ivFluidsIntake.consentUnderstood
             }
             missingItems={ivFluidsMissing()}
-            onNext={() => setStep(STEP_LOCATION)}
+            onNext={() => {
+              if (symptomsIndicateMoreThanDehydration(booking.ivFluidsIntake.symptoms)) {
+                setShowIvSwitchModal(true)
+                return
+              }
+              setStep(STEP_LOCATION)
+            }}
           />
         </Step>
+      )}
+
+      {/* IV → in-person sick visit switch modal. Fires when the parent
+          enters symptoms beyond vomiting/diarrhea/dehydration while booking
+          IV fluids. Yes switches to 'In-home sick visit' (solo, not paired).
+          No continues with the IV booking as planned. Sara 2026-10-06. */}
+      {showIvSwitchModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowIvSwitchModal(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E] mb-3">A quick check first</div>
+            <p className="text-[14px] text-[#1A1A2E] leading-relaxed mb-5">
+              It sounds like your child may benefit from an evaluation in-person first by an NP/MD to address some of their other symptoms aside from dehydration. Would you like me to check the availability schedule for an in-person sick visit house call before automatically booking the IV fluids?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  // Capture the original IV symptoms so we can note them on
+                  // the resulting sick-visit appointment, then switch the
+                  // booking shape to a solo in-person sick visit.
+                  setOriginalIvSymptoms(booking.ivFluidsIntake.symptoms || '')
+                  setWasSwitchedFromIv(true)
+                  setBooking(b => {
+                    // Merge IV symptoms into chief complaint for the first
+                    // selected child if the CC is empty — gives the MD/NP
+                    // the context the parent already typed.
+                    const firstChildId = b.selectedChildIds[0]
+                    const nextIntakes = { ...b.childIntakes }
+                    if (firstChildId) {
+                      const existing = nextIntakes[firstChildId] ?? {} as any
+                      if (!existing.chiefComplaint && b.ivFluidsIntake.symptoms) {
+                        nextIntakes[firstChildId] = { ...existing, chiefComplaint: b.ivFluidsIntake.symptoms }
+                      }
+                    }
+                    return {
+                      ...b,
+                      visitType: 'In-home sick visit',
+                      childIntakes: nextIntakes,
+                      // Clear slot picks — the sick-visit provider list +
+                      // availability grid is different from the IV one.
+                      date: '',
+                      time: '',
+                      provider: '',
+                    }
+                  })
+                  setShowIvSwitchModal(false)
+                  setStep(STEP_LOCATION)
+                }}
+                className="flex-1 py-2.5 bg-[#7F77DD] text-white rounded-xl text-[14px] font-semibold hover:bg-[#534AB7] transition-colors">
+                Yes, check sick visit
+              </button>
+              <button
+                onClick={() => { setShowIvSwitchModal(false); setStep(STEP_LOCATION) }}
+                className="flex-1 py-2.5 border border-[#AFA9EC] text-[#1A1A2E] rounded-xl text-[14px] font-semibold hover:bg-[#EEEDFE] transition-colors">
+                No, continue with IV
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── When + where ── */}

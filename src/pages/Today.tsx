@@ -1154,6 +1154,7 @@ export function Today() {
                         }
 
                         const partner = (appt.notes || '').split('|').find((p: string) => p.startsWith('PARTNER:'))?.replace('PARTNER:', '').trim() ?? ''
+                        const switchedFromIv = (appt.notes || '').split('|').find((p: string) => p.trim().startsWith('SWITCHED_FROM_IV:'))?.replace(/^.*?SWITCHED_FROM_IV:/, '').trim() ?? ''
 
                         // Parent-submitted IV fluids intake fields. BookVisit.tsx
                         // pushes these into notes when the visit is IV fluids
@@ -1190,6 +1191,12 @@ export function Today() {
 
                         return (
                           <div className="mb-3 space-y-2">
+                            {switchedFromIv && (
+                              <div className="bg-[#FEE4E2] border border-[#D97373] rounded-lg px-3 py-2.5">
+                                <div className="text-[11px] font-semibold text-[#791F1F] uppercase tracking-wider mb-1">Originally booked as IV fluids</div>
+                                <div className="text-[13px] text-[#791F1F] leading-relaxed">{switchedFromIv}</div>
+                              </div>
+                            )}
                             {partner && (
                               <div className="bg-[#FEF3E8] border border-[#F9C784] rounded-lg px-3 py-2.5 flex items-center gap-2">
                                 <span className="text-[11px] font-semibold text-[#633806] uppercase tracking-wider flex-shrink-0">Partner provider</span>
