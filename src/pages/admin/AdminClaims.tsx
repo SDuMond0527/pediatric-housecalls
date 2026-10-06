@@ -1316,9 +1316,6 @@ export function AdminClaims() {
           <button className={tabCls('submitted')} onClick={() => setTab('submitted')}>
             Submitted ({submittedClaims.length})
           </button>
-          <button className={tabCls('completed')} onClick={() => setTab('completed')}>
-            Completed ({completedClaims.length})
-          </button>
         </div>
         <label className="flex items-center gap-1.5 text-[12px] text-[#555] pr-2 pb-2 cursor-pointer">
           <input type="checkbox" checked={readyOnly} onChange={e => setReadyOnly(e.target.checked)} />
