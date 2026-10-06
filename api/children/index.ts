@@ -362,6 +362,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (search?.trim()) {
       const q = `%${search.trim()}%`
+      // Phone search — strip the query to digits; if we have 3+ digits,
+      // also match against the children.parent_phone and family_profiles.phone
+      // columns with their non-digit chars stripped out. That way
+      // "(704) 658-8415", "704-658-8415", "7046588415", and "6588415"
+      // all match the same stored number. Sara 2026-10-06.
+      const digits = search.trim().replace(/\D/g, '')
+      const phoneSearch = digits.length >= 3 ? `%${digits}%` : null
       const rows = showArchived
         ? await sql`
             SELECT c.*,
@@ -381,6 +388,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 OR c.last_name  ILIKE ${q}
                 OR (c.first_name || ' ' || c.last_name) ILIKE ${q}
                 OR c.display_label ILIKE ${q}
+                OR (${phoneSearch}::text IS NOT NULL AND REGEXP_REPLACE(COALESCE(c.parent_phone, ''), '[^0-9]', '', 'g') LIKE ${phoneSearch})
+                OR (${phoneSearch}::text IS NOT NULL AND REGEXP_REPLACE(COALESCE(fp.phone, ''),       '[^0-9]', '', 'g') LIKE ${phoneSearch})
               )
             ORDER BY c.first_name, c.last_name
             LIMIT 20`
@@ -402,6 +411,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 OR c.last_name  ILIKE ${q}
                 OR (c.first_name || ' ' || c.last_name) ILIKE ${q}
                 OR c.display_label ILIKE ${q}
+                OR (${phoneSearch}::text IS NOT NULL AND REGEXP_REPLACE(COALESCE(c.parent_phone, ''), '[^0-9]', '', 'g') LIKE ${phoneSearch})
+                OR (${phoneSearch}::text IS NOT NULL AND REGEXP_REPLACE(COALESCE(fp.phone, ''),       '[^0-9]', '', 'g') LIKE ${phoneSearch})
               )
             ORDER BY c.first_name, c.last_name
             LIMIT 20`
