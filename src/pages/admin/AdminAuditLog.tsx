@@ -1,164 +1,225 @@
-import { useEffect, useState } from 'react'
-import { apiFetch } from '../../lib/api'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ShieldCheck, Search, RefreshCw } from 'lucide-react'
+import {
+  Search, RefreshCw, FileText, Send, Receipt, DollarSign, CheckCircle2,
+  AlertCircle, Zap, Ban, ChevronDown, ChevronUp,
+} from 'lucide-react'
+import { getClaimAudit, type ClaimAuditRow, type ClaimAuditEventType } from '../../lib/api'
+import { ChartNumberPill } from '../../components/ChartNumberPill'
 
-interface AuditRow {
-  id: string
-  action: string
-  resource_type: string
-  resource_id: string | null
-  created_at: string
-  provider_name: string
-  provider_role: string
+/**
+ * Claim audit log — one card per claim, each with a chronological
+ * event timeline covering every lifecycle step the system tracks
+ * (created, submitted, rejection, ERA, resubmit, patient statement
+ * generated/sent/paid/written-off).
+ *
+ * Replaces the previous PHI-access audit log at /admin/audit-log per
+ * Sara 2026-10-06. The underlying phi_audit_log table is still
+ * populated for compliance; just not surfaced in the admin UI anymore.
+ */
+
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return '—'
+  try {
+    const [y, m, d] = String(v).split('T')[0].split('-').map(Number)
+    return format(new Date(y, m - 1, d), 'MMM d, yyyy')
+  } catch { return String(v) }
+}
+function fmtDateTime(v: string | null | undefined): string {
+  if (!v) return '—'
+  try { return format(new Date(v), 'MMM d, yyyy h:mm a') } catch { return String(v) }
+}
+function fmtMoney(v: number | string | null | undefined): string {
+  if (v == null || v === '') return '—'
+  const n = typeof v === 'number' ? v : parseFloat(v)
+  if (!isFinite(n)) return '—'
+  return '$' + n.toFixed(2)
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  view_patient: 'Viewed patient chart',
-  view_encounter_note: 'Opened encounter note',
+const EVENT_META: Record<ClaimAuditEventType, { icon: typeof FileText; color: string; bg: string }> = {
+  created:               { icon: FileText,    color: '#4C1D95', bg: '#EEEDFE' },
+  submitted:             { icon: Send,        color: '#2D7BA6', bg: '#EEF6FB' },
+  rejection:             { icon: AlertCircle, color: '#991B1B', bg: '#FEE2E2' },
+  era_received:          { icon: Zap,         color: '#085041', bg: '#E1F5EE' },
+  resubmit:              { icon: RefreshCw,   color: '#B45309', bg: '#FEF3C7' },
+  reopened:              { icon: RefreshCw,   color: '#4C1D95', bg: '#EEEDFE' },
+  rework_resolved:       { icon: CheckCircle2,color: '#085041', bg: '#E1F5EE' },
+  written_off:           { icon: Ban,         color: '#555',    bg: '#F1EFE8' },
+  statement_created:     { icon: Receipt,     color: '#7F77DD', bg: '#F5F4FE' },
+  statement_sent:        { icon: Send,        color: '#2D7BA6', bg: '#EEF6FB' },
+  statement_paid:        { icon: DollarSign,  color: '#085041', bg: '#E1F5EE' },
+  statement_written_off: { icon: Ban,         color: '#555',    bg: '#F1EFE8' },
+  activity:              { icon: FileText,    color: '#555',    bg: '#FAFAF8' },
 }
-
-const DAYS_OPTIONS = [
-  { label: 'Last 7 days',  value: '7' },
-  { label: 'Last 30 days', value: '30' },
-  { label: 'Last 90 days', value: '90' },
-]
 
 export function AdminAuditLog() {
-  const [rows, setRows] = useState<AuditRow[]>([])
+  const [rows, setRows] = useState<ClaimAuditRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [days, setDays] = useState('30')
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   async function load() {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
-      const data = await apiFetch<AuditRow[]>(`/api/audit-log?days=${days}&limit=500`)
-      setRows(data)
+      const data = await getClaimAudit({ search: search.trim() || undefined, limit: 200 })
+      setRows(data ?? [])
     } catch (e: any) {
-      setError(e.message || 'Failed to load audit log')
+      setError(e?.message ?? 'Failed to load claim audit')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [days])
+  useEffect(() => { load() /* eslint-disable-next-line */ }, [])
 
-  const filtered = rows.filter(r => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      r.provider_name.toLowerCase().includes(q) ||
-      r.action.toLowerCase().includes(q) ||
-      r.resource_type.toLowerCase().includes(q) ||
-      (r.resource_id ?? '').toLowerCase().includes(q)
-    )
-  })
+  // Debounce search so typing doesn't fire a fetch on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => { load() }, 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  const stats = useMemo(() => {
+    const total = rows.length
+    const paid = rows.filter(r => r.events.some(e => e.type === 'statement_paid')).length
+    const rejected = rows.filter(r => r.events.some(e => e.type === 'rejection')).length
+    const inFlight = rows.filter(r => r.events.some(e => e.type === 'submitted') && !r.events.some(e => e.type === 'era_received' || e.type === 'rejection')).length
+    return { total, paid, rejected, inFlight }
+  }, [rows])
+
+  function toggleCard(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-9 h-9 rounded-xl bg-[#7F77DD]/10 flex items-center justify-center">
-          <ShieldCheck size={18} className="text-[#7F77DD]" />
-        </div>
-        <div>
-          <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">PHI Audit Log</h1>
-          <p className="text-[12px] text-[#1A1A2E] mt-0.5">HIPAA access log — all patient data views recorded here</p>
+    <div>
+      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Claim audit log</div>
+            <div className="text-[12px] text-[#1A1A2E] mt-0.5">
+              Every lifecycle event for every claim — created, submitted, rejected, ERA'd, resubmitted, statement sent/paid. Click a card to see the full timeline.
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-[12px]">
+            <span className="text-[#555]">{stats.total} claim{stats.total === 1 ? '' : 's'}</span>
+            <span className="text-[#2D7BA6]">{stats.inFlight} in flight</span>
+            <span className="text-[#085041]">{stats.paid} paid</span>
+            {stats.rejected > 0 && <span className="text-[#991B1B]">{stats.rejected} rejected</span>}
+            <button onClick={load} className="flex items-center gap-1 text-[#1A1A2E] hover:text-[#7F77DD]">
+              <RefreshCw size={12} /> Refresh
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex rounded-lg border border-[#E8E8E4] overflow-hidden bg-white">
-          {DAYS_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setDays(opt.value)}
-              className={`px-3 py-2 text-[12px] font-medium transition-all ${
-                days === opt.value
-                  ? 'bg-[#7F77DD] text-white'
-                  : 'text-[#666] hover:bg-[#F1EFE8]'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1A1A2E]" />
+      <div className="p-6 max-w-6xl space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Filter by provider or action…"
-            className="w-full pl-8 pr-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+            placeholder="Search by patient name, chart number, or PCN…"
+            className="w-full pl-9 pr-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
           />
         </div>
 
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium text-[#666] border border-[#E8E8E4] rounded-lg bg-white hover:bg-[#F1EFE8] transition-all disabled:opacity-50"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+        {error && (
+          <div className="text-[13px] text-red-500 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{error}</div>
+        )}
 
-      {/* Summary bar */}
-      {!loading && !error && (
-        <div className="text-[12px] text-[#1A1A2E] mb-3">
-          {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
-          {search ? ` matching "${search}"` : ''} — {DAYS_OPTIONS.find(o => o.value === days)?.label.toLowerCase()}
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">Loading…</div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-red-500">{error}</div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-[13px] text-[#1A1A2E]">No audit entries found</div>
+        {loading && rows.length === 0 ? (
+          <div className="text-center py-12 text-[13px] text-[#1A1A2E]">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center text-[13px] text-[#1A1A2E]">
+            {search ? 'No claims match your search.' : 'No claims yet.'}
+          </div>
         ) : (
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8]">
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Timestamp</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Provider</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Action</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">Resource</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">ID</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F1EFE8]">
-              {filtered.map(row => (
-                <tr key={row.id} className="hover:bg-[#FAFAF8] transition-colors">
-                  <td className="px-4 py-3 text-[#1A1A2E] tabular-nums whitespace-nowrap">
-                    {format(new Date(row.created_at), 'MMM d, yyyy h:mm a')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-[#1A1A2E]">{row.provider_name}</span>
-                    <span className="ml-1.5 text-[11px] text-[#1A1A2E]">{row.provider_role}</span>
-                  </td>
-                  <td className="px-4 py-3 text-[#444]">
-                    {ACTION_LABELS[row.action] ?? row.action}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F1EFE8] text-[#666]">
-                      {row.resource_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[#1A1A2E] font-mono text-[11px] truncate max-w-[160px]">
-                    {row.resource_id ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="space-y-2">
+            {rows.map(r => {
+              const isOpen = expanded.has(r.claim_id)
+              const latestEvent = r.events[r.events.length - 1]
+              return (
+                <div key={r.claim_id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+                  <button
+                    className="w-full p-4 text-left hover:bg-[#FAFAF8] transition-colors"
+                    onClick={() => toggleCard(r.claim_id)}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link
+                            to={`/admin/claims#claim-card-${r.claim_id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="text-[14px] font-medium text-[#1A1A2E] hover:underline"
+                          >
+                            {r.patient_name}
+                          </Link>
+                          <ChartNumberPill value={r.chart_number} />
+                          <span className="text-[12px] text-[#555]">PCN {r.pcn ?? '—'}</span>
+                          <span className="text-[12px] text-[#555]">· DOS {fmtDate(r.service_date)}</span>
+                        </div>
+                        <div className="text-[12px] text-[#555] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                          <span>{r.payer_name ?? '—'}</span>
+                          <span>· {fmtMoney(r.total_charge)}</span>
+                          {latestEvent && (
+                            <span>· Last activity: {latestEvent.label} ({fmtDateTime(latestEvent.at)})</span>
+                          )}
+                          <span>· {r.events.length} event{r.events.length === 1 ? '' : 's'}</span>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-[#555]">
+                        {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-[#E8E8E4] bg-[#FAFAF8] p-4">
+                      {r.events.length === 0 ? (
+                        <div className="text-[12px] text-[#555]">No tracked events on this claim.</div>
+                      ) : (
+                        <ol className="space-y-2">
+                          {r.events.map((e, i) => {
+                            const meta = EVENT_META[e.type] ?? EVENT_META.activity
+                            const Icon = meta.icon
+                            return (
+                              <li key={i} className="flex items-start gap-3">
+                                <span
+                                  className="flex-shrink-0 inline-flex items-center justify-center rounded-full"
+                                  style={{ width: 24, height: 24, backgroundColor: meta.bg, color: meta.color }}
+                                >
+                                  <Icon size={12} />
+                                </span>
+                                <div className="min-w-0 flex-1 pt-0.5">
+                                  <div className="text-[13px] font-medium text-[#1A1A2E]">
+                                    {e.label}
+                                    <span className="ml-2 text-[11px] font-normal text-[#555]">{fmtDateTime(e.at)}</span>
+                                    {e.by && <span className="ml-2 text-[11px] font-normal text-[#777]">· {e.by}</span>}
+                                  </div>
+                                  {e.detail && (
+                                    <div className="text-[12px] text-[#555] mt-0.5 whitespace-pre-wrap break-words">
+                                      {e.detail}
+                                    </div>
+                                  )}
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>

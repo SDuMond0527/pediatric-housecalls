@@ -1559,6 +1559,38 @@ export interface SchoolNoteRow {
 export const getAdminSchoolNotes = () =>
   apiFetch<SchoolNoteRow[]>('/api/admin/school-notes')
 
+export type ClaimAuditEventType =
+  | 'created' | 'submitted' | 'rejection' | 'era_received'
+  | 'resubmit' | 'reopened' | 'rework_resolved' | 'written_off'
+  | 'statement_created' | 'statement_sent' | 'statement_paid' | 'statement_written_off'
+  | 'activity'
+
+export interface ClaimAuditRow {
+  claim_id: string
+  patient_name: string
+  chart_number: string | null
+  pcn: string | null
+  service_date: string | null
+  payer_name: string | null
+  payer_id: string | null
+  total_charge: number | string | null
+  status: string
+  events: Array<{
+    at: string
+    type: ClaimAuditEventType
+    label: string
+    detail: string | null
+    by?: string | null
+  }>
+}
+
+export const getClaimAudit = (opts: { search?: string; limit?: number } = {}) => {
+  const q = new URLSearchParams()
+  if (opts.search) q.set('search', opts.search)
+  if (opts.limit)  q.set('limit', String(opts.limit))
+  return apiFetch<ClaimAuditRow[]>(`/api/admin/claim-audit${q.toString() ? '?' + q.toString() : ''}`)
+}
+
 // ── Patient Reports (lab + radiology report file uploads) ────
 export interface PatientReport {
   id: string
