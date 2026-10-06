@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download } from 'lucide-react'
+import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
@@ -696,15 +696,22 @@ export function AdminClaims() {
 
   // A claim is "done" — no more biller action needed on the Claims
   // page — when EITHER (a) the patient statement has been sent or
-  // paid (the patient's been billed, ball's in their court), OR (b)
-  // the claim was written off. Both terminal states exit the Claims
-  // page entirely; historical lookup happens on the Statements page
-  // and the patient chart. Sara 2026-09-24.
-  const hasReachedTerminalState = (c: any) =>
-    c.statement_status === 'sent' ||
-    c.statement_status === 'paid' ||
-    !!c.statement_sent_at ||
-    c.status === 'written_off'
+  // paid AND (if an ERA came back) Andrea has clicked "Mark ERA
+  // reviewed", OR (b) the claim was written off. The ERA-review gate
+  // was added 2026-10-06 so auto-sent clean-ERA claims don't vanish
+  // instantly from Andrea's view — they stop on Submitted with a
+  // pulsing purple badge until she acknowledges the ERA, then drop
+  // off. Sara 2026-10-06.
+  const hasReachedTerminalState = (c: any) => {
+    if (c.status === 'written_off') return true
+    const stmtDone = c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at
+    if (!stmtDone) return false
+    // If the claim never had an ERA (e.g., self-pay statement sent
+    // manually, or legacy pre-ERA claim), terminal immediately.
+    if (!c.era_received_at) return true
+    // ERA came back — require Andrea's ack via era_seen_at.
+    return !!c.era_seen_at
+  }
   const isReady = (c: any) => !!c.ready_for_biller_at
   // Self-pay claims never belong on AdminClaims at all. Per
   // project_self_pay_bypasses_claim_review: sign → auto-draft statement →
@@ -2248,7 +2255,39 @@ export function AdminClaims() {
                                 </span>
                               )
                             })()}
-                            {c.era_received_at && !c.era_seen_at && (
+                            {/* ERA received + statement auto-sent/paid + Andrea
+                                hasn't acknowledged yet. Pulsing purple to grab
+                                her attention; inline "Mark reviewed" button
+                                clears era_seen_at and drops the claim off
+                                Submitted (hasReachedTerminalState becomes true).
+                                Sara 2026-10-06. */}
+                            {c.era_received_at && !c.era_seen_at &&
+                              (c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at) && (
+                              <>
+                                <span className="ml-2 inline-flex items-center gap-1 bg-[#7F77DD] text-white px-2 py-0.5 rounded-full text-[10px] font-semibold animate-pulse whitespace-nowrap">
+                                  <Zap size={9} /> ERA back clean · statement auto-sent
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={async e => {
+                                    e.stopPropagation()
+                                    const nowIso = new Date().toISOString()
+                                    setClaims(prev => prev.map(x => x.id === c.id ? { ...x, era_seen_at: nowIso } : x))
+                                    try { await updateClaim(c.id, { era_seen_at: nowIso }) }
+                                    catch (err: any) {
+                                      console.error('[AdminClaims] mark ERA reviewed failed:', err)
+                                      setClaims(prev => prev.map(x => x.id === c.id ? { ...x, era_seen_at: null } : x))
+                                    }
+                                  }}
+                                  className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-[#7F77DD] text-[#7F77DD] hover:bg-[#EEEDFE] transition-colors whitespace-nowrap"
+                                  title="Confirm you've reviewed the ERA. The claim will drop off the Submitted tab."
+                                >
+                                  <Check size={10} /> Mark ERA reviewed
+                                </button>
+                              </>
+                            )}
+                            {c.era_received_at && !c.era_seen_at &&
+                              !(c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at) && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA
                               </span>
