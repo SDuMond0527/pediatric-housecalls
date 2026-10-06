@@ -811,9 +811,15 @@ export function AdminClaims() {
   )
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
+  // Submitted = any claim status='submitted' and not in rework. Previously
+  // excluded ERA-received claims (those went to the now-deleted Completed
+  // tab). After 2026-10-06 Completed-tab removal, Submitted holds every
+  // post-submission claim — ERA-received ones render with their inline
+  // "NEW ERA" / "ERA received" pill so Andrea sees payer responses on
+  // the same claim card. Sara 2026-10-06.
   const submittedClaims = visibleClaims.filter(c =>
     !isInRework(c) && !c.rework_resolved_at &&
-    c.status === 'submitted' && !c.era_received_at)
+    c.status === 'submitted')
   // Completed = actionable end-stage queue. Insurance claim with ERA
   // back but statement not yet sent (biller still owes an action —
   // review the draft statement + send it, or write off). Once she
