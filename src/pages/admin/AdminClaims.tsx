@@ -2184,6 +2184,19 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
+                            {/* Ready-for-biller pill — surfaces on every tab now
+                                (not just the removed Convenience Fee Review tab).
+                                Sara 2026-10-06. */}
+                            {c.ready_for_biller_at && (
+                              <span
+                                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"
+                                title={`Marked by ${c.ready_for_biller_by ?? 'Unknown'} on ${fmtDate(c.ready_for_biller_at)}`}
+                              >
+                                {String(c.ready_for_biller_by ?? '').startsWith('System') && <Zap size={9} />}
+                                Ready for biller
+                                {String(c.ready_for_biller_by ?? '').startsWith('System') && <span className="opacity-70">· auto</span>}
+                              </span>
+                            )}
                             {/* Denial + 277 REJECTED badges were removed 2026-09-23.
                                 A claim in Rework lives on the Rework tab — the
                                 badge became redundant once the tab expressed
