@@ -49,7 +49,11 @@ const STEDI_277_REPORT_URL = (transactionId: string) =>
 // 277 status categories that count as REJECTIONS (as opposed to A1/A2
 // acknowledgements). Must match the constant in
 // api/admin/attach-277-x12.ts.
-const REJECTION_CATEGORIES_277 = new Set(['A3', 'A4', 'A6', 'A7', 'A8'])
+// Rejection categories per Stedi's 277CA docs example 2026-10-06.
+// A3/A4/A6/A7/A8 were already here; added R4 after seeing it in the
+// documented service-line rejection example. A1/A2/A5 are acceptance /
+// ack-only (don't count).
+const REJECTION_CATEGORIES_277 = new Set(['A3', 'A4', 'A6', 'A7', 'A8', 'R4'])
 
 interface CasBreakdown {
   patient_deductible:     number
@@ -570,11 +574,117 @@ function parseX12_277_full(text: string): Parsed277Full {
   return out
 }
 
+// Parse Stedi's 277CA Report JSON response (NOT raw X12 — Stedi
+// returns the parsed shape directly at /reports/v2/{id}/277). Shape
+// documented at stedi.com/docs/healthcare/api-reference/get-healthcare-reports-277.
+// Walks every level (provider, service-provider, information, service-line)
+// collecting status entries. Any status with category in
+// REJECTION_CATEGORIES_277 flips isRejection = true.
+function parse277CaJson(reportJson: any): Parsed277Full {
+  const out: Parsed277Full = {
+    patientControlNumber: null, payerClaimControlNumber: null,
+    patientFirstName: null, patientLastName: null,
+    serviceDateFrom: null, serviceDateTo: null,
+    payerName: null, transactionSetIdentifier: '277',
+    statuses: [], isRejection: false,
+  }
+  if (!reportJson || typeof reportJson !== 'object') return out
+  const pushStatus = (s: any, entity: string, message: string, action: string = '') => {
+    const category = String(s?.healthCareClaimStatusCategoryCode ?? '').trim()
+    const code     = String(s?.statusCode ?? '').trim()
+    const codeText = String(s?.statusCodeValue ?? '').trim()
+    out.statuses.push({
+      category, code, entity,
+      action,
+      date: '',
+      amount: 0,
+      message: [codeText, message].filter(Boolean).join(' — '),
+    })
+    if (REJECTION_CATEGORIES_277.has(category)) out.isRejection = true
+  }
+  const transactions = Array.isArray(reportJson?.transactions) ? reportJson.transactions : []
+  for (const t of transactions) {
+    const payers = Array.isArray(t?.payers) ? t.payers : []
+    for (const p of payers) {
+      if (!out.payerName && typeof p?.organizationName === 'string') {
+        out.payerName = p.organizationName
+      }
+      const cst = Array.isArray(p?.claimStatusTransactions) ? p.claimStatusTransactions : []
+      for (const batch of cst) {
+        // Provider-level statuses (whole-batch rejections).
+        const pcs = Array.isArray(batch?.providerClaimStatuses) ? batch.providerClaimStatuses : []
+        for (const pc of pcs) {
+          const ps = Array.isArray(pc?.providerStatuses) ? pc.providerStatuses : []
+          for (const s of ps) pushStatus(s, 'provider', '')
+        }
+        // Per-claim details.
+        const details = Array.isArray(batch?.claimStatusDetails) ? batch.claimStatusDetails : []
+        for (const d of details) {
+          // Service-provider-level statuses.
+          const spcs = Array.isArray(d?.serviceProviderClaimStatuses) ? d.serviceProviderClaimStatuses : []
+          for (const spc of spcs) {
+            const sps = Array.isArray(spc?.serviceProviderStatuses) ? spc.serviceProviderStatuses : []
+            for (const s of sps) pushStatus(s, 'serviceProvider', '')
+          }
+          // Patient-level details — this is where PCN + per-claim info live.
+          const patients = Array.isArray(d?.patientClaimStatusDetails) ? d.patientClaimStatusDetails : []
+          for (const pat of patients) {
+            if (pat?.subscriber) {
+              out.patientFirstName = out.patientFirstName ?? (pat.subscriber.firstName ?? null)
+              out.patientLastName  = out.patientLastName  ?? (pat.subscriber.lastName  ?? null)
+            }
+            const claims = Array.isArray(pat?.claims) ? pat.claims : []
+            for (const c of claims) {
+              const cs = c?.claimStatus
+              if (cs) {
+                // Patient Control Number lives here. Both names used
+                // interchangeably in Stedi's shape — try both.
+                if (!out.patientControlNumber) {
+                  const pcn = cs.referencedTransactionTraceNumber ?? cs.patientAccountNumber ?? cs.clearinghouseTraceNumber ?? null
+                  if (typeof pcn === 'string' && pcn.trim()) out.patientControlNumber = pcn.trim()
+                }
+                if (!out.payerClaimControlNumber && typeof cs.tradingPartnerClaimNumber === 'string') {
+                  out.payerClaimControlNumber = cs.tradingPartnerClaimNumber.trim() || null
+                }
+                if (!out.serviceDateFrom && typeof cs.claimServiceBeginDate === 'string' && /^\d{8}$/.test(cs.claimServiceBeginDate)) {
+                  out.serviceDateFrom = `${cs.claimServiceBeginDate.slice(0,4)}-${cs.claimServiceBeginDate.slice(4,6)}-${cs.claimServiceBeginDate.slice(6,8)}`
+                }
+                if (!out.serviceDateTo && typeof cs.claimServiceEndDate === 'string' && /^\d{8}$/.test(cs.claimServiceEndDate)) {
+                  out.serviceDateTo = `${cs.claimServiceEndDate.slice(0,4)}-${cs.claimServiceEndDate.slice(4,6)}-${cs.claimServiceEndDate.slice(6,8)}`
+                }
+                // Claim-level status rows.
+                const infos = Array.isArray(cs?.informationClaimStatuses) ? cs.informationClaimStatuses : []
+                for (const info of infos) {
+                  const msg = String(info?.statusMessage ?? '').trim()
+                  const action = String(info?.statusInformationActionCodeValue ?? info?.statusInformationActionCode ?? '').trim()
+                  const istats = Array.isArray(info?.informationStatuses) ? info.informationStatuses : []
+                  for (const s of istats) pushStatus(s, 'claim', msg, action)
+                }
+              }
+              // Service-line-level statuses.
+              const serviceLines = Array.isArray(c?.serviceLines) ? c.serviceLines : []
+              for (const sl of serviceLines) {
+                const scs = Array.isArray(sl?.serviceClaimStatuses) ? sl.serviceClaimStatuses : []
+                for (const sc of scs) {
+                  const msg = String(sc?.statusMessage ?? '').trim()
+                  const sss = Array.isArray(sc?.serviceStatuses) ? sc.serviceStatuses : []
+                  for (const s of sss) pushStatus(s, 'serviceLine', msg)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return out
+}
+
 // Attach a parsed 277 to whichever local claim the PCN matches. Same
 // findClaim + column bootstraps as the manual attach endpoint. Idempotent
 // (COALESCE on claim_rejection_at so the first-seen timestamp is
 // preserved across repeated processing).
-async function attach277ToClaim(sql: any, parsed: Parsed277Full, rawX12: string | null): Promise<{ matched: boolean; claimId?: string }> {
+async function attach277ToClaim(sql: any, parsed: Parsed277Full, rawPayload: string | object | null): Promise<{ matched: boolean; claimId?: string }> {
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_at timestamptz` } catch {}
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_response jsonb` } catch {}
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS claim_rejection_reasons jsonb` } catch {}
@@ -590,11 +700,14 @@ async function attach277ToClaim(sql: any, parsed: Parsed277Full, rawX12: string 
     .filter(s => REJECTION_CATEGORIES_277.has(s.category))
     .map(s => ({ category: s.category, code: s.code, entity: s.entity, action: s.action, amount: s.amount, message: s.message }))
 
-  // Stash the raw X12 alongside the parsed shape so parser bugs are
-  // debuggable without re-fetching from Stedi.
-  const responsePayload = rawX12
-    ? { parsed, rawX12 }
-    : { parsed }
+  // Stash the raw payload (JSON for webhook-sourced 277s, X12 string
+  // for manually-attached ones) alongside the parsed shape so parser
+  // bugs are debuggable without re-fetching from Stedi.
+  const responsePayload = typeof rawPayload === 'string'
+    ? { parsed, rawX12: rawPayload }
+    : rawPayload
+      ? { parsed, rawJson: rawPayload }
+      : { parsed }
 
   await sql`
     UPDATE claims SET
@@ -747,157 +860,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [prior] = await sql`SELECT transaction_id FROM stedi_transactions_processed WHERE transaction_id = ${transactionId} LIMIT 1`
     if (prior) return res.status(200).json({ ok: true, transactionId, x12Type, skipped: 'already_processed_277' })
 
-    // Try multiple X12 extraction paths so a wrong-URL guess doesn't
-    // block ingestion. First one that yields a valid ISA-headed X12
-    // string wins. Records which source worked in Vercel logs.
-    let rawX12: string | null = null
-    let x12Source = ''
-
-    // Attempt 1 — X12 embedded directly in the webhook payload. Stedi
-    // often includes the artifact body inline on transaction.processed
-    // events. Check several common paths.
-    const inlineCandidates: any[] = [
-      payload?.v1Event?.resource?.body,
-      payload?.v1Event?.resource?.x12,
-      payload?.v1Event?.data?.x12,
-      payload?.v1Event?.artifact?.body,
-      payload?.v1Event?.artifact?.content,
-      payload?.data?.x12,
-      payload?.body,
-      payload?.x12,
-    ]
-    for (const cand of inlineCandidates) {
-      if (typeof cand === 'string' && cand.trim().startsWith('ISA')) {
-        rawX12 = cand; x12Source = 'webhook-payload-inline'; break
-      }
-    }
-
-    // Attempt 2 — related resources with a URL to the artifact.
-    if (!rawX12) {
-      const related: any[] = Array.isArray(payload?.v1Event?.relatedResources) ? payload.v1Event.relatedResources : []
-      for (const rr of related) {
-        if (!rr) continue
-        const typeStr = String(rr.type ?? '').toLowerCase()
-        const isCandidate = typeStr.includes('277') || typeStr.includes('artifact')
-        const url: string | null = typeof rr.url === 'string' ? rr.url : typeof rr.href === 'string' ? rr.href : null
-        if (!isCandidate || !url) continue
-        try {
-          const rrRes = await fetch(url, { headers: { Authorization: `Key ${STEDI_API_KEY}` } })
-          if (!rrRes.ok) {
-            console.error('[stedi-transaction] related-resource fetch failed', rrRes.status, 'url:', url)
-            continue
-          }
-          const rrText = (await rrRes.text()).trim()
-          if (rrText.startsWith('ISA')) { rawX12 = rrText; x12Source = `related-resource:${url}`; break }
-          // Might be JSON wrapping the X12
-          try {
-            const rrJson = JSON.parse(rrText)
-            const embedded = rrJson?.x12 ?? rrJson?.body ?? rrJson?.content
-            if (typeof embedded === 'string' && embedded.trim().startsWith('ISA')) {
-              rawX12 = embedded; x12Source = `related-resource-json:${url}`; break
-            }
-          } catch {}
-        } catch (rrErr: any) {
-          console.error('[stedi-transaction] related-resource fetch threw', rrErr?.message, 'url:', url)
-        }
-      }
-    }
-
-    // Attempt 3 — probe every plausible Stedi URL in parallel for the
-    // first one that returns ISA-headed X12 (or JSON wrapping X12).
-    // Original /reports/v2/{id}/277 was guessed by parallel-to-835 and
-    // has returned 0/97 in prod over 2 weeks (Sara 2026-10-06). This
-    // list covers every URL shape visible in Stedi's current docs so
-    // we self-heal the moment the right one is confirmed; the winning
-    // URL is logged and surfaced in stedi_transactions_processed so
-    // we can trim this list once the right one is proven in prod.
-    if (!rawX12) {
-      const probeCandidates = [
-        // Original guess — kept so historical path still works if docs
-        // regress.
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/277`,
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}/x12`,
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/reports/v2/${transactionId}`,
-        // Transaction endpoints under /transactions/{id}.
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/transactions/${transactionId}/x12`,
-        `https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/transactions/${transactionId}`,
-        // claims-manager parallel URLs (works for ERAs at /eras/{id}/x12,
-        // so by analogy these shapes exist for 277s).
-        `https://claims-manager.us.stedi.com/2025-09-01/claim-statuses/${transactionId}/x12`,
-        `https://claims-manager.us.stedi.com/2025-09-01/claim-statuses/${transactionId}`,
-        `https://claims-manager.us.stedi.com/2025-09-01/responses/${transactionId}/x12`,
-        `https://claims-manager.us.stedi.com/2025-09-01/responses/${transactionId}`,
-        `https://claims-manager.us.stedi.com/2025-09-01/277s/${transactionId}/x12`,
-        `https://claims-manager.us.stedi.com/2025-09-01/277s/${transactionId}`,
-      ]
-      const probeOne = async (url: string): Promise<{ url: string; x12: string | null; status: number }> => {
-        try {
-          const r = await fetch(url, {
-            headers: {
-              Authorization: `Key ${STEDI_API_KEY}`,
-              Accept: 'application/edi-x12, text/plain, application/json',
-            },
-          })
-          if (!r.ok) return { url, x12: null, status: r.status }
-          const text = (await r.text()).trim()
-          if (text.startsWith('ISA')) return { url, x12: text, status: r.status }
-          try {
-            const j = JSON.parse(text)
-            const inner = j?.x12 ?? j?.body ?? j?.content ?? j?.rawX12
-            if (typeof inner === 'string' && inner.trim().startsWith('ISA')) {
-              return { url, x12: inner.trim(), status: r.status }
-            }
-          } catch {}
-          return { url, x12: null, status: r.status }
-        } catch (e: any) {
-          console.error('[stedi-transaction] probe threw', url, e?.message)
-          return { url, x12: null, status: 0 }
-        }
-      }
-      // Fire all in parallel so a slow endpoint doesn't block Stedi's
-      // webhook timeout. First successful response wins.
-      const results = await Promise.all(probeCandidates.map(probeOne))
-      const winner = results.find(r => r.x12)
-      if (winner) {
-        rawX12 = winner.x12 as string
-        x12Source = `probe:${winner.url}`
-        console.log('[stedi-transaction] 277 X12 obtained via probe. transactionId:', transactionId, 'url:', winner.url, 'len:', rawX12.length)
-      } else {
-        console.error('[stedi-transaction] 277 probe swept all variants. results:',
-          JSON.stringify(results.map(r => ({ url: r.url, status: r.status }))))
-      }
-    }
-
-    if (!rawX12) {
-      // Stash the full webhook payload to a diagnostic table so we can
-      // inspect what Stedi is actually sending without hunting Vercel
-      // logs. Pruned manually once the right endpoint is proven and
-      // extraction is stable.
-      try {
+    // Fetch the 277CA report from Stedi. Stedi returns it as JSON
+    // (not raw X12), despite the URL shape being parallel to the 835
+    // report URL — docs confirmed 2026-10-06 at
+    // stedi.com/docs/healthcare/api-reference/get-healthcare-reports-277.
+    // Earlier code tried to parse this as X12, failed, and dropped
+    // every single 277 for 2 weeks (97 silent drops). Fixed now by
+    // calling the same URL but parsing JSON per Stedi's documented
+    // schema.
+    let reportJson: any = null
+    try {
+      const reportRes = await fetch(STEDI_277_REPORT_URL(transactionId), {
+        headers: { Authorization: `Key ${STEDI_API_KEY}`, Accept: 'application/json' },
+      })
+      if (!reportRes.ok) {
+        const errText = (await reportRes.text().catch(() => '')).slice(0, 500)
+        console.error('[stedi-transaction] 277 report fetch failed', reportRes.status, errText)
         await sql`
-          CREATE TABLE IF NOT EXISTS stedi_277_unresolved (
-            transaction_id text PRIMARY KEY,
-            received_at timestamptz NOT NULL DEFAULT NOW(),
-            payload jsonb NOT NULL
-          )`
-        await sql`
-          INSERT INTO stedi_277_unresolved (transaction_id, payload)
-          VALUES (${transactionId}, ${JSON.stringify(payload)}::jsonb)
+          INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
+          VALUES (${transactionId}, 0, '277-webhook-fetch-failed')
           ON CONFLICT (transaction_id) DO NOTHING`
-      } catch (dbErr: any) {
-        console.error('[stedi-transaction] stash payload failed:', dbErr?.message)
+        return res.status(200).json({ ok: false, transactionId, x12Type, error: `277 report fetch returned ${reportRes.status}` })
       }
-      console.error('[stedi-transaction] 277 X12 extraction FAILED after all attempts. transactionId:', transactionId,
-        'payload (first 3000 chars):', JSON.stringify(payload).slice(0, 3000))
+      reportJson = await reportRes.json()
+    } catch (e: any) {
+      console.error('[stedi-transaction] 277 report fetch threw:', e?.message)
       await sql`
         INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
-        VALUES (${transactionId}, 0, '277-webhook-no-x12')
+        VALUES (${transactionId}, 0, '277-webhook-fetch-threw')
         ON CONFLICT (transaction_id) DO NOTHING`
-      return res.status(200).json({ ok: false, transactionId, x12Type, error: 'could not extract X12 after probing all endpoints. Full payload stashed in stedi_277_unresolved.' })
+      return res.status(200).json({ ok: false, transactionId, x12Type, error: e?.message })
     }
-    console.log('[stedi-transaction] 277 X12 obtained via:', x12Source, 'transactionId:', transactionId, 'len:', rawX12.length)
 
-    const parsed = parseX12_277_full(rawX12)
+    const parsed = parse277CaJson(reportJson)
     if (!parsed.isRejection) {
       // A1/A2 or similar — ack, not rejection. Skip attaching.
       await sql`
@@ -907,7 +902,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ok: true, transactionId, x12Type, skipped: 'ack_not_rejection', statuses: parsed.statuses.map(s => `${s.category}/${s.code}`) })
     }
 
-    const { matched, claimId } = await attach277ToClaim(sql, parsed, rawX12)
+    const { matched, claimId } = await attach277ToClaim(sql, parsed, reportJson)
     await sql`
       INSERT INTO stedi_transactions_processed (transaction_id, matched_claim_count, source)
       VALUES (${transactionId}, ${matched ? 1 : 0}, '277-webhook')
