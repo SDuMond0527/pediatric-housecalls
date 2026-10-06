@@ -1297,7 +1297,7 @@ export function AdminClaims() {
         <div className="mb-4 flex items-center gap-2 bg-[#E1F5EE] border border-[#5DCAA5] text-[#085041] px-4 py-2.5 rounded-xl">
           <Zap size={14} />
           <div className="text-[13px] font-medium">
-            {unseenEraCount} new ERA payment{unseenEraCount === 1 ? '' : 's'} posted — look for the pulsing <span className="mx-1 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold">NEW</span> badge on claims below.
+            {unseenEraCount} new ERA payment{unseenEraCount === 1 ? '' : 's'} posted — look for the pulsing <span className="mx-1 inline-flex items-center gap-0.5 bg-[#7F77DD] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold">NEW</span> badge on claims below.
           </div>
           <button
             onClick={async () => {
@@ -2288,7 +2288,7 @@ export function AdminClaims() {
                             )}
                             {c.era_received_at && !c.era_seen_at &&
                               !(c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at) && (
-                              <span className="ml-2 inline-flex items-center gap-0.5 bg-[#5DCAA5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
+                              <span className="ml-2 inline-flex items-center gap-0.5 bg-[#7F77DD] text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold animate-pulse">
                                 <Zap size={9} /> NEW ERA
                               </span>
                             )}
