@@ -487,7 +487,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
           const totalCharge = +(parseFloat(String(stmtClaim.total_charge ?? 0)) || 0).toFixed(2)
           const email = stmtClaim.parent_email ?? stmtClaim.family_email ?? null
           const phone = stmtClaim.parent_phone ?? stmtClaim.family_phone ?? null
-          await sql`
+          const [spRow] = await sql`
             INSERT INTO patient_statements (
               practice_id, claim_id,
               patient_first_name, patient_last_name, patient_dob,
@@ -507,6 +507,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
               ${totalCharge}, 0, ${totalCharge}, ${String(totalCharge)},
               'draft', NOW(), NOW()
             )
+            RETURNING id
           `
           try {
             await sql`
@@ -527,6 +528,29 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
               )
             `
           } catch { /* log is non-fatal */ }
+
+          // Auto-send the self-pay statement — same auto-send gate as
+          // insurance ERAs, just a simpler one (no insurance_payment /
+          // denial_codes to check — self-pay never gets an ERA). Full
+          // charge is the patient's responsibility, Pam doesn't need to
+          // review. Policy change 2026-10-06 after Sara talked to Pam.
+          const spStmtId = (spRow as any)?.id as string | undefined
+          if (spStmtId && totalCharge > 0) {
+            const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
+            if (autoSendEnabled) {
+              const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''
+              const base = process.env.PORTAL_URL || 'https://phc-team.com'
+              if (svcToken) {
+                await fetch(`${base}/api/patient-statements/${spStmtId}/send`, {
+                  method: 'POST',
+                  headers: {
+                    'X-Internal-Service-Token': svcToken,
+                    'X-Practice-Id': String(stmtClaim.practice_id),
+                  },
+                }).catch(e => { console.error('[self-pay auto-send] fetch failed:', e?.message) })
+              }
+            }
+          }
         }
       }
     } catch (e: any) {
