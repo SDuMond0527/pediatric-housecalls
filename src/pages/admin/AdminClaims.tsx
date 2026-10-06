@@ -1335,12 +1335,17 @@ export function AdminClaims() {
       ) : (
         <>
           {/* PENDING REVIEW TAB */}
-          {tab === 'review' && (
+          {(tab === 'review' || tab === 'ready') && (() => {
+            const activeList = tab === 'ready' ? readyClaimsTab : reviewClaims
+            const emptyMsg = tab === 'ready'
+              ? 'No claims ready for biller. Claims auto-ready as providers sign encounter notes.'
+              : 'No claims pending review.'
+            return (
             <div className="space-y-3">
-              {reviewClaims.length === 0 && (
-                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">No claims pending review.</div>
+              {activeList.length === 0 && (
+                <div className="text-center py-12 text-[#1A1A2E] text-[13px]">{emptyMsg}</div>
               )}
-              {reviewClaims.map(c => {
+              {activeList.map(c => {
                 const isOpen = expanded === c.id
                 const ep = editPayer[c.id]
                 const isSelfPay = c.payer_id === 'PP'
@@ -2115,26 +2120,25 @@ export function AdminClaims() {
                 )
               })}
             </div>
-          )}
+            )
+          })()}
 
           {/* SUBMITTED + COMPLETED TABS — same card layout. Submitted =
               still waiting on payer (no ERA yet). Completed = ERA back
-              (paid / partial / denied / no-pt-resp) OR written off. */}
-          {(tab === 'ready' || tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
+              (paid / partial / denied / no-pt-resp) OR written off.
+              Ready for biller renders via the reviewClaims block above
+              (not here) so Andrea gets the full edit UI. */}
+          {(tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
             const list = tab === 'completed'
               ? completedClaims
               : tab === 'rework'
                 ? reworkClaims
-                : tab === 'ready'
-                  ? readyClaimsTab
-                  : submittedClaims
+                : submittedClaims
             const emptyMsg = tab === 'completed'
               ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
               : tab === 'rework'
                 ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
-                : tab === 'ready'
-                  ? 'No claims ready for biller. Claims auto-ready as providers sign encounter notes.'
-                  : 'No submitted claims yet.'
+                : 'No submitted claims yet.'
             return (
             <div className="space-y-2">
               {list.length === 0 && (
