@@ -62,7 +62,7 @@ function extractStediErrorSummary(details: any): string | null {
   return details?.message ?? null
 }
 
-type Tab = 'review' | 'rework' | 'submitted' | 'completed'
+type Tab = 'review' | 'ready' | 'rework' | 'submitted' | 'completed'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
   draft:                     { label: 'Draft',                cls: 'bg-[#F1EFE8] text-[#555]',    icon: FileText },
@@ -106,12 +106,11 @@ function fmtMoney(n: any) {
 }
 
 export function AdminClaims() {
-  // Default tab moved from 'review' to 'rework' 2026-10-06 after the
-  // Convenience Fee Review tab was removed (CV handling moved to the
-  // dedicated /admin/convenience-fees page). Rework is where Andrea's
-  // actionable exceptions live. The 'review' tab still exists in the
-  // type/render path as dormant code but has no entry button.
-  const [tab, setTab] = useState<Tab>('rework')
+  // Default tab is 'ready' (Ready for biller) — that's Andrea's main
+  // queue, claims auto-marked ready that she still needs to submit.
+  // 'review' remains in the Tab type for the dormant Convenience Fee
+  // Review render path but has no entry button. Sara 2026-10-06.
+  const [tab, setTab] = useState<Tab>('ready')
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpandedRaw] = useState<string | null>(null)
@@ -800,6 +799,16 @@ export function AdminClaims() {
     && !c.convenience_fee_handled
   )
   const reworkClaims    = visibleClaims.filter(isInRework)
+  // Ready-for-biller tab = Andrea's "to submit" queue. Every claim
+  // auto-marked ready that she hasn't submitted yet. Excludes rework
+  // (which has its own tab) and anything self-pay (already filtered
+  // from baseVisibleClaims). Sara 2026-10-06.
+  const readyClaimsTab  = visibleClaims.filter(c =>
+    !isInRework(c)
+    && !c.submitted_at
+    && !!c.ready_for_biller_at
+    && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft')
+  )
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
   const submittedClaims = visibleClaims.filter(c =>
@@ -1298,6 +1307,9 @@ export function AdminClaims() {
       {/* Tabs + Ready-for-biller filter */}
       <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">
         <div className="flex">
+          <button className={tabCls('ready')} onClick={() => setTab('ready')}>
+            Ready for biller {readyClaimsTab.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#E1F5EE] text-[#085041]">{readyClaimsTab.length}</span>}
+          </button>
           <button className={tabCls('rework')} onClick={() => setTab('rework')}>
             Rework {reworkClaims.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#7F1D1D]">{reworkClaims.length}</span>}
           </button>
@@ -2105,17 +2117,21 @@ export function AdminClaims() {
           {/* SUBMITTED + COMPLETED TABS — same card layout. Submitted =
               still waiting on payer (no ERA yet). Completed = ERA back
               (paid / partial / denied / no-pt-resp) OR written off. */}
-          {(tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
+          {(tab === 'ready' || tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
             const list = tab === 'completed'
               ? completedClaims
               : tab === 'rework'
                 ? reworkClaims
-                : submittedClaims
+                : tab === 'ready'
+                  ? readyClaimsTab
+                  : submittedClaims
             const emptyMsg = tab === 'completed'
               ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
               : tab === 'rework'
                 ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
-                : 'No submitted claims yet.'
+                : tab === 'ready'
+                  ? 'No claims ready for biller. Claims auto-ready as providers sign encounter notes.'
+                  : 'No submitted claims yet.'
             return (
             <div className="space-y-2">
               {list.length === 0 && (
