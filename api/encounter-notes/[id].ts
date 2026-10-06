@@ -376,93 +376,26 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     return { claim }
   }
 
-  // ─── Auto-ready for biller ─────────────────────────────────────────────
-  // If the just-generated claim passes the full scrubber with zero
-  // errors AND zero warnings, mark it ready-for-biller automatically.
-  // Pam's queue becomes exceptions-only. Mirrors src/lib/claimScrubber.ts;
-  // keep the two in sync.
+  // ─── Auto-ready for biller (unconditional for insurance claims) ───────
+  // Previously gated by a full clean-check (dx + CPT + NPI + DOB + no $0
+  // + filing window + fresh eligibility + no duplicate). After Sara's
+  // 2026-10-06 redesign:
+  //   - Pre-sign gate in EncounterNoteModal catches provider-fixable
+  //     issues (dx/CPT/DOB/zero-line) at the moment of signing, so most
+  //     "dirty" cases never reach claim-gen.
+  //   - Everything that DOES reach claim-gen goes to Ready for Biller;
+  //     Andrea reviews before clicking Submit, catches anything the
+  //     pre-sign gate missed (bad NPI, stale eligibility, duplicate).
+  //   - Self-pay is already handled above by the fast-path (statement
+  //     draft, early return) — won't reach this block.
   //
   // Kill switch: AUTO_READY_CLEAN_CLAIMS=false in Vercel env disables.
-  // Guard: only runs on claims not already marked ready (idempotent on
-  // re-sign of an existing editable claim).
+  // Idempotent on re-sign: UPDATE is gated on ready_for_biller_at IS NULL.
   //
-  // Sara 2026-10-05.
+  // Sara 2026-10-06.
   const AUTO_READY_ENABLED = String(process.env.AUTO_READY_CLEAN_CLAIMS ?? 'true').toLowerCase() !== 'false'
   if (AUTO_READY_ENABLED && claim?.id && !claim.ready_for_biller_at) {
-    const dxList  = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
-    const cptList = Array.isArray(claim.cpt_codes) ? claim.cpt_codes : []
-    const npiDigits = String(claim.rendering_provider_npi ?? '').replace(/\D/g, '')
-    const hasZeroLine = cptList.some((c: any) => {
-      const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
-      const units  = parseInt(String(c.units ?? 1), 10) || 1
-      return charge * units <= 0
-    })
-    const isSelfPay = claim.payer_id === 'PP' || /self[\s-]*pay/i.test(claim.payer_name ?? '')
-
-    // Timely filing — only auto-ready if we're > 14 days from the window.
-    let withinFilingWindow = true
-    if (claim.service_date) {
-      const dos = new Date(claim.service_date)
-      if (!isNaN(dos.getTime())) {
-        const daysSince = Math.floor((Date.now() - dos.getTime()) / 86400000)
-        const payerLc = String(claim.payer_name ?? '').toLowerCase()
-        let window = 90
-        if (/aetna/.test(payerLc))                              window = 120
-        else if (/medicare|medicaid/.test(payerLc))             window = 365
-        if (window - daysSince <= 14) withinFilingWindow = false
-      }
-    }
-
-    // Eligibility freshness — skip for self-pay (no insurance to verify).
-    let eligFresh = true
-    if (!isSelfPay) {
-      const lastEligCheck = child?.last_eligibility_check_at
-      if (!lastEligCheck) {
-        eligFresh = false
-      } else {
-        const age = Math.floor((Date.now() - new Date(lastEligCheck).getTime()) / 86400000)
-        if (age > 30) eligFresh = false
-      }
-    }
-
-    // Duplicate submission check — don't auto-ready if a sibling claim
-    // for the same patient on the same DOS has already been submitted
-    // with any overlapping CPT.
-    let noDuplicate = true
-    if (claim.child_id && claim.service_date) {
-      try {
-        const sibs = await sql`
-          SELECT cpt_codes FROM claims
-          WHERE practice_id = ${practiceId}::uuid
-            AND child_id = ${claim.child_id}::uuid
-            AND service_date = ${claim.service_date}::date
-            AND id != ${claim.id}::uuid
-            AND status = 'submitted'
-        `
-        if (sibs.length > 0) {
-          const thisCpts = new Set(cptList.map((c: any) => String(c.code).toUpperCase()))
-          for (const s of sibs) {
-            const otherCpts = Array.isArray(s.cpt_codes) ? s.cpt_codes : []
-            if (otherCpts.some((c: any) => thisCpts.has(String(c.code).toUpperCase()))) {
-              noDuplicate = false
-              break
-            }
-          }
-        }
-      } catch { /* non-fatal; err on side of not auto-readying */ noDuplicate = false }
-    }
-
-    const isClean =
-      dxList.length > 0 &&
-      cptList.length > 0 &&
-      npiDigits.length === 10 &&
-      !!claim.patient_dob &&
-      !hasZeroLine &&
-      withinFilingWindow &&
-      eligFresh &&
-      noDuplicate
-
-    if (isClean) {
+    {
       try {
         await sql`
           UPDATE claims SET

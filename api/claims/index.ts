@@ -182,6 +182,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 837 claim. PEDS + 5-digit sequential (e.g., PEDS00042). Assigned
       // at submit time from a Postgres sequence.
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text` } catch {}
+      // Pam's "Convenience Fee Review" tab checkbox — she ticks it after
+      // running the Square charge manually, which clears the claim from
+      // her queue. Doesn't affect Andrea's Ready for Biller view.
+      // Sara 2026-10-06.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS convenience_fee_handled boolean NOT NULL DEFAULT false` } catch {}
       const { status, era_count } = req.query as Record<string, string>
 
       // Biller work queue: Pending Review + Rework + Submitted (waiting on

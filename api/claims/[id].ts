@@ -711,7 +711,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                      'patient_address', 'patient_city', 'patient_state', 'patient_zip',
                      'rendering_provider_npi', 'rendering_provider_taxonomy',
                      'place_of_service', 'service_date', 'status', 'cpt_codes', 'diagnoses',
-                     'era_seen_at', 'insurance_dependent_code']
+                     'era_seen_at', 'insurance_dependent_code',
+                     // Pam's "Convenience Fee Review" tab checkbox toggle.
+                     // Sara 2026-10-06.
+                     'convenience_fee_handled']
     const updates: Record<string, any> = {}
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key]

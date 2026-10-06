@@ -778,7 +778,19 @@ export function AdminClaims() {
   // the statements view. Hiding them from the biller tabs keeps
   // Andrea's queue focused on actual insurance work. Sara 2026-10-05.
   const isSelfPayClaim = (c: any) => c.payer_id === 'PP' || /self[\s-]*pay/i.test(String(c.payer_name ?? ''))
-  const reviewClaims    = visibleClaims.filter(c => !isInRework(c) && !c.submitted_at && !isSelfPayClaim(c) && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft'))
+  // Convenience Fee Review (formerly "Pending Review") = Pam's queue of
+  // claims auto-marked ready for biller by the system (not by a human),
+  // that she hasn't yet charged the CV in Square for. One-click checkbox
+  // on each row sets convenience_fee_handled=true and drops the claim
+  // off this tab (doesn't touch Andrea's Ready for Biller view).
+  // Sara 2026-10-06.
+  const reviewClaims    = visibleClaims.filter(c =>
+    !isInRework(c)
+    && !c.submitted_at
+    && !isSelfPayClaim(c)
+    && String(c.ready_for_biller_by ?? '').startsWith('System')
+    && !c.convenience_fee_handled
+  )
   const reworkClaims    = visibleClaims.filter(isInRework)
   // Submitted = still waiting on payer (no ERA), not in Rework, not
   // explicitly resolved by the biller (resolved claims land in Completed).
@@ -1279,7 +1291,7 @@ export function AdminClaims() {
       <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">
         <div className="flex">
           <button className={tabCls('review')} onClick={() => setTab('review')}>
-            Pending Review ({reviewClaims.length})
+            Convenience Fee Review ({reviewClaims.length})
           </button>
           <button className={tabCls('rework')} onClick={() => setTab('rework')}>
             Rework {reworkClaims.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#7F1D1D]">{reworkClaims.length}</span>}
@@ -1414,6 +1426,26 @@ export function AdminClaims() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {tab === 'review' && (
+                          <button
+                            type="button"
+                            onClick={async e => {
+                              e.stopPropagation()
+                              // Optimistically drop from the local list; roll back on failure.
+                              setClaims(prev => prev.map(x => x.id === c.id ? { ...x, convenience_fee_handled: true } : x))
+                              try { await updateClaim(c.id, { convenience_fee_handled: true } as any) }
+                              catch (err: any) {
+                                console.error('[AdminClaims] mark CV handled failed:', err)
+                                setClaims(prev => prev.map(x => x.id === c.id ? { ...x, convenience_fee_handled: false } : x))
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-[#EEEDFE] text-[#3C3489] border border-[#AFA9EC] hover:bg-[#C7C3F4] transition-colors"
+                            title="Mark this claim as having had its convenience fee charged in Square"
+                          >
+                            <span className="inline-block w-3 h-3 rounded border border-[#3C3489]"></span>
+                            Charged in Square
+                          </button>
+                        )}
                         {readyForBiller && (
                           <span
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E1F5EE] text-[#085041] whitespace-nowrap"

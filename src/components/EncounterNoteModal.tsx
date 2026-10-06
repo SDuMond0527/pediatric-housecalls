@@ -1178,9 +1178,49 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     }
   }
 
+  // Pre-sign gate: catch coding mistakes while the provider can still fix
+  // them. Previously, dirty claims (missing dx, missing CPT, $0 line,
+  // missing patient DOB) silently got generated and had to be caught
+  // downstream by Andrea / the auto-ready scrubber. Sara 2026-10-06:
+  // "the whole idea is to flag the provider if something isn't right with
+  // their codes before they close and sign the note." Blocks sign on
+  // errors; the provider either fixes inline or (for chart-data issues)
+  // escalates to admin.
+  function preSignGate(): string[] {
+    const errors: string[] = []
+    if (diagnoses.length === 0) {
+      errors.push('No diagnoses on the note — add at least one ICD-10 code before signing.')
+    }
+    if (cptCodes.length === 0) {
+      errors.push('No CPT codes on the note — add at least one procedure code before signing.')
+    }
+    const zeroLines = cptCodes.filter((c: any) => {
+      const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
+      const units  = parseInt(String(c.units ?? 1), 10) || 1
+      return charge * units <= 0
+    })
+    if (zeroLines.length > 0) {
+      const codes = zeroLines.map((c: any) => c.code).join(', ')
+      errors.push(`${zeroLines.length === 1 ? 'Line' : 'Lines'} ${codes} ${zeroLines.length === 1 ? 'has' : 'have'} a $0 charge — set a valid charge amount before signing.`)
+    }
+    if (!linkedChildDob) {
+      errors.push('Patient date of birth is missing on the chart — ask admin to add it before signing.')
+    }
+    return errors
+  }
+
   async function signNote() {
     setSigning(true)
     setSignError(null)
+    // Run the pre-sign gate BEFORE touching the DB. If anything fails,
+    // show every error at once (not one-at-a-time) so the provider can
+    // fix all of them in one pass.
+    const preErrors = preSignGate()
+    if (preErrors.length > 0) {
+      setSignError('Can\'t sign yet — fix these first:\n• ' + preErrors.join('\n• '))
+      setSigning(false)
+      return
+    }
     try {
       // Save vitals FIRST and let any failure surface. Previously this was
       // wrapped in .catch(() => {}) which meant a bad vitals payload would
@@ -2680,7 +2720,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                   </div>
                 )
               })()}
-              {signError && <div className="text-[12px] text-[#DC2626]">{signError}</div>}
+              {signError && <div className="text-[12px] text-[#DC2626] whitespace-pre-line leading-relaxed">{signError}</div>}
               {saveError && <div className="text-[12px] text-[#DC2626]">{saveError}</div>}
               {saveSuccess && <div className="text-[12px] text-[#1D9E75]">{saveSuccess}</div>}
               {!canSignVaccineNote && (
