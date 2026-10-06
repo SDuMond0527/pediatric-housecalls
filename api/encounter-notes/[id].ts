@@ -180,10 +180,13 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     return s + charge * units
   }, 0)
   const insuranceCodes = allCptCodes.filter((c: any) => c.category !== 'Non-Covered Services')
-  // If every CPT is Non-Covered Services (Text e-visit, CPR class,
-  // etc.), force self-pay — insurance would only reject it. See
-  // matching rule in api/claims/index.ts.
-  const forceSelfPay = allCptCodes.length > 0 && insuranceCodes.length === 0
+  // Force self-pay when:
+  //   - visit_type is "Text visit" (always cash-pay regardless of what
+  //     insurance is on file for the patient — Sara 2026-10-05), OR
+  //   - every CPT is Non-Covered Services (CPR class, etc.) — insurance
+  //     would only reject it. See matching rule in api/claims/index.ts.
+  const isTextVisit = appt?.visit_type === 'Text visit'
+  const forceSelfPay = isTextVisit || (allCptCodes.length > 0 && insuranceCodes.length === 0)
   const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
   const payerName = forceSelfPay ? 'Self Pay' : (child?.insurance_provider ?? null)
   const payerId   = forceSelfPay ? 'PP'       : resolvePayer(child?.insurance_provider ?? null)
