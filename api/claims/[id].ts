@@ -638,6 +638,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               status = 'error',
               stedi_response = ${JSON.stringify(stediData)}::jsonb,
               submission_error = ${JSON.stringify(stediData)},
+              -- Entering rework: clear the stale ready-for-biller flag so
+              -- Andrea has to explicitly re-ready after fixing. Sara 2026-10-06.
+              ready_for_biller_at = NULL,
+              ready_for_biller_by = NULL,
               updated_at = now()
             WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
           return res.status(422).json({
@@ -655,7 +659,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.json({ test: true, accepted: false, acknowledgment: { error: err.message } })
         }
         const [updated] = await sql`
-          UPDATE claims SET status = 'error', submission_error = ${err.message}, updated_at = now()
+          UPDATE claims SET
+            status = 'error',
+            submission_error = ${err.message},
+            -- Entering rework: clear ready-for-biller flag. Sara 2026-10-06.
+            ready_for_biller_at = NULL,
+            ready_for_biller_by = NULL,
+            updated_at = now()
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
         return res.status(500).json({ error: 'Failed to reach Stedi', claim: updated })
       }

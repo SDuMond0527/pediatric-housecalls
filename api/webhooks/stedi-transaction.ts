@@ -601,6 +601,9 @@ async function attach277ToClaim(sql: any, parsed: Parsed277Full, rawX12: string 
       claim_rejection_at       = COALESCE(claim_rejection_at, NOW()),
       claim_rejection_response = ${JSON.stringify(responsePayload)}::jsonb,
       claim_rejection_reasons  = ${JSON.stringify(reasons)}::jsonb,
+      -- Entering rework: clear stale ready-for-biller flag. Sara 2026-10-06.
+      ready_for_biller_at      = NULL,
+      ready_for_biller_by      = NULL,
       updated_at               = NOW()
     WHERE id = ${claim.id}::uuid`
   return { matched: true, claimId: claim.id }

@@ -832,10 +832,11 @@ export function AdminClaims() {
     !!c.rework_resolved_at
   ))
 
-  // "Ready for biller" counter spans truly-new Review + Rework (both
-  // are Andrea's active work). Excludes submitted/completed rows where
-  // the biller has already handed the claim off.
-  const readyCount      = baseVisibleClaims.filter(c => isReady(c) && (isInRework(c) || (!isInRework(c) && (c.status === 'pending_review' || c.status === 'pending_provider_response' || c.status === 'error' || c.status === 'draft')))).length
+  // Top-right "Ready for biller only" counter — mirror the Ready for
+  // biller tab's filter exactly so the two numbers always match. Was
+  // previously including rework claims too, which caused a tab=3 vs
+  // counter=4 mismatch. Sara 2026-10-06.
+  const readyCount      = readyClaimsTab.length
   // Unseen ERA payments — bill can see how many new payments landed since
   // last review. Cleared per-claim by clicking "Mark seen" on the ERA card.
   const unseenEraCount  = baseVisibleClaims.filter((c: any) => c.era_received_at && !c.era_seen_at).length

@@ -108,6 +108,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reopened_by    = ${provider.id}::uuid,
         reopen_reason  = ${reasonStr},
         reopen_note    = ${noteStr},
+        -- Reopen = fresh cycle starts. Clear the stale ready-for-biller
+        -- flag from the pre-reopen cycle; Andrea must re-ready after
+        -- fixing. Sara 2026-10-06.
+        ready_for_biller_at = NULL,
+        ready_for_biller_by = NULL,
         updated_at     = NOW()
       WHERE id = ${claimId}::uuid AND practice_id = ${provider.practice_id}::uuid
       RETURNING *
