@@ -55,7 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (type === 'insurance') {
       // Mirrors the AR aging insurance filters in financial-reports.ts —
-      // outstanding claims where the payer still owes us money.
+      // outstanding claims where the payer still owes us money. The
+      // canonical_payer CASE must match the aggregate query one-to-one
+      // or clicking a row returns the wrong set of claims. If you add
+      // a new canonical bucket in financial-reports.ts, add it here too.
+      // Sara 2026-10-06.
       const rows = await sql`
         WITH aged AS (
           SELECT
@@ -68,6 +72,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             COALESCE(cl.total_charge, 0)::numeric(12,2) AS total_charge,
             cl.status,
             COALESCE(NULLIF(TRIM(cl.payer_name), ''), 'Unknown payer') AS payer_name,
+            CASE
+              -- Neon strips one backslash in SQL string literals, so word
+              -- anchors need double-backslash (\\m / \\M, not \m / \M).
+              WHEN TRIM(cl.payer_name) ~* 'anthem' AND TRIM(cl.payer_name) ~* '\\mvirginia\\M|\\mva\\M' THEN 'Anthem BCBS of VA'
+              WHEN TRIM(cl.payer_name) ~* 'anthem' THEN 'BCBS of NC'
+              WHEN TRIM(cl.payer_name) ~* '\\mbcbs\\M|blue\\s*cross|blue\\s*shield' THEN 'BCBS of NC'
+              WHEN TRIM(cl.payer_name) ~* '\\mumr\\M' THEN 'UMR'
+              WHEN TRIM(cl.payer_name) ~* 'united\\s*health|\\muhc\\M' THEN 'United Healthcare'
+              WHEN TRIM(cl.payer_name) ~* 'cigna' THEN 'Cigna'
+              WHEN TRIM(cl.payer_name) ~* 'aetna' THEN 'Aetna'
+              WHEN TRIM(cl.payer_name) ~* 'humana' THEN 'Humana'
+              WHEN TRIM(cl.payer_name) ~* 'phcs|multiplan' THEN 'PHCS / Multiplan'
+              WHEN TRIM(cl.payer_name) ~* 'coventry' THEN 'Coventry'
+              WHEN TRIM(cl.payer_name) ~* 'select\\s*health' THEN 'Select Health'
+              WHEN TRIM(cl.payer_name) ~* 'medcost|healthgram' THEN 'Medcost / Healthgram'
+              WHEN TRIM(cl.payer_name) ~* 'bright\\s*health' THEN 'Bright Health'
+              ELSE COALESCE(NULLIF(TRIM(cl.payer_name), ''), 'Unknown payer')
+            END AS canonical_payer,
             cl.era_received_at,
             cl.era_seen_at,
             cl.submission_error,
@@ -90,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             )
         )
         SELECT * FROM aged
-        WHERE (${group} = '__all__' OR payer_name = ${group})
+        WHERE (${group} = '__all__' OR canonical_payer = ${group})
           AND (
             ${bucket} = 'all'
             OR (${bucket} = '0_30'      AND age_days BETWEEN 0 AND 30)

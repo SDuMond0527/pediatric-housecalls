@@ -51,9 +51,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // paid (no ERA received) and the claim isn't drafted / denied. Aging
     // measured from submitted_at (or created_at if the claim never went
     // out and is sitting in error).
+    //
+    // Payer canonicalization: without this, BCBS / Blue Cross / Blue Cross
+    // Blue Shield / BCBS of NC / BCBS NC / Anthem PPO all become separate
+    // rows even though they're the same Stedi payer (UPICO) and the biller
+    // works them as one group. The CASE collapses every known typing /
+    // casing variant to a single canonical display name. Mirrors the
+    // name-based rules in api/claims/index.ts resolvePayer() + Anthem
+    // routing in project_anthem_payer_id_normalization.md.
+    //
+    // KEEP IN SYNC: ar-drill.ts has the identical CASE so clicking a row
+    // returns every underlying claim regardless of raw payer_name typing.
+    // If you add a new canonical bucket, update both files.
+    // Sara 2026-10-06.
     const arInsuranceRows = await sql`
       SELECT
-        COALESCE(NULLIF(TRIM(payer_name), ''), 'Unknown payer') AS payer_name,
+        canonical_payer AS payer_name,
         SUM(CASE WHEN age_days BETWEEN 0  AND 30  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_0_30,
         SUM(CASE WHEN age_days BETWEEN 31 AND 60  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_31_60,
         SUM(CASE WHEN age_days BETWEEN 61 AND 90  THEN outstanding ELSE 0 END)::numeric(12,2) AS b_61_90,
@@ -63,7 +76,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         COUNT(*)::int                                                                          AS claim_count
       FROM (
         SELECT
-          cl.payer_name,
+          CASE
+            -- Anthem routing: Virginia Anthem keeps its own identity;
+            -- every other Anthem (including "Anthem PPO") maps to BCBS of NC.
+            -- NB: Neon strips one backslash in SQL string literals, so word
+            -- anchors need to be written as \\m / \\M (not \m / \M).
+            WHEN TRIM(cl.payer_name) ~* 'anthem' AND TRIM(cl.payer_name) ~* '\\mvirginia\\M|\\mva\\M' THEN 'Anthem BCBS of VA'
+            WHEN TRIM(cl.payer_name) ~* 'anthem' THEN 'BCBS of NC'
+            -- Every BCBS / Blue Cross / Blue Shield variant collapses.
+            WHEN TRIM(cl.payer_name) ~* '\\mbcbs\\M|blue\\s*cross|blue\\s*shield' THEN 'BCBS of NC'
+            -- UHC family. UMR is a UHC subsidiary but has its own Stedi
+            -- payer ID (39026) so keep it separate — the biller works
+            -- UMR denials differently than UHC's.
+            WHEN TRIM(cl.payer_name) ~* '\\mumr\\M' THEN 'UMR'
+            WHEN TRIM(cl.payer_name) ~* 'united\\s*health|\\muhc\\M' THEN 'United Healthcare'
+            WHEN TRIM(cl.payer_name) ~* 'cigna' THEN 'Cigna'
+            WHEN TRIM(cl.payer_name) ~* 'aetna' THEN 'Aetna'
+            WHEN TRIM(cl.payer_name) ~* 'humana' THEN 'Humana'
+            WHEN TRIM(cl.payer_name) ~* 'phcs|multiplan' THEN 'PHCS / Multiplan'
+            WHEN TRIM(cl.payer_name) ~* 'coventry' THEN 'Coventry'
+            WHEN TRIM(cl.payer_name) ~* 'select\\s*health' THEN 'Select Health'
+            WHEN TRIM(cl.payer_name) ~* 'medcost|healthgram' THEN 'Medcost / Healthgram'
+            WHEN TRIM(cl.payer_name) ~* 'bright\\s*health' THEN 'Bright Health'
+            ELSE COALESCE(NULLIF(TRIM(cl.payer_name), ''), 'Unknown payer')
+          END AS canonical_payer,
           COALESCE(cl.total_charge, 0)::numeric AS outstanding,
           EXTRACT(DAY FROM (NOW() - COALESCE(cl.submitted_at, cl.created_at)))::int AS age_days
         FROM claims cl
@@ -87,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               AND ps.status IN ('sent', 'paid')
           )
       ) t
-      GROUP BY payer_name
+      GROUP BY canonical_payer
       ORDER BY total DESC
     `
 
