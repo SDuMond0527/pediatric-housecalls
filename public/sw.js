@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-06-cv-review-include-submitted
+// Service worker — deliberate passthrough. Version: 2026-10-06-tele-mod-95-pos-10
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

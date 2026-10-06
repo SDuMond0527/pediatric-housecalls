@@ -425,6 +425,10 @@ interface CptCode {
   charge_amount: number
   modifier?: string
   units?: number
+  // Place of service override for this line. Telemedicine visits auto-set
+  // this to '10' (patient's home via telemed) via applyAutoModifier.
+  // When unset, the server defaults based on visit type at claim-gen.
+  place_of_service?: string
   // NDC (National Drug Code) attached to this line for vaccines/drugs
   // that payers require it for. Sourced from fee_schedule.ndc_code on
   // pick; flows through to encounter_notes.cpt_codes[i].ndc_code, then
@@ -437,8 +441,32 @@ interface CptCode {
 }
 
 const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
-const applyAutoModifier = (c: CptCode): CptCode =>
-  AUTO_MODIFIERS[c.code] ? { ...c, modifier: AUTO_MODIFIERS[c.code] } : c
+// Telemedicine visits (Video telemedicine, CMA + telemedicine, Video
+// telemedicine screening for IV fluids) require modifier 95 (synchronous
+// audio/video telemed) on every billed CPT AND place_of_service 10
+// (patient's home via telemed) on the claim. Sara 2026-10-06. Previously
+// the modifier was manual — provider had to remember to add it on every
+// 99213 tele note, which was error-prone.
+function isTelemedicineVisitType(visitType?: string | null): boolean {
+  return /\btele(?:medicine|health)?\b/i.test(String(visitType ?? ''))
+}
+const applyAutoModifier = (c: CptCode, visitType?: string | null): CptCode => {
+  // Telemedicine takes precedence over the CPT-code-specific modifiers
+  // (QW/25) because those apply to in-home-only tests that wouldn't be
+  // billed from a tele visit anyway. Preserve any explicit modifier/POS
+  // the provider or biller already set.
+  if (isTelemedicineVisitType(visitType)) {
+    return {
+      ...c,
+      modifier:         c.modifier         ?? '95',
+      place_of_service: c.place_of_service ?? '10',
+    }
+  }
+  if (AUTO_MODIFIERS[c.code]) {
+    return { ...c, modifier: c.modifier ?? AUTO_MODIFIERS[c.code] }
+  }
+  return c
+}
 
 interface Props {
   appointment: Appointment
@@ -938,7 +966,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         if (durMatch) setTeleDuration(durMatch[1])
         setPlan(note.plan ?? '')
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
-        setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => applyAutoModifier({ ...c, charge_amount: parseFloat(c.charge_amount) })) : [])
+        setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => applyAutoModifier({ ...c, charge_amount: parseFloat(c.charge_amount) }, appointment.visit_type)) : [])
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
         if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
           setVaccineEntries(note.vaccine_administrations)
@@ -1005,7 +1033,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             .map((s: any) => applyAutoModifier({
               ...s,
               charge_amount: parseFloat(s.charge_amount),
-            }))
+            }, appointment.visit_type))
           if (defaultsFromSchedule.length > 0) {
             setCptCodes(defaultsFromSchedule)
           }
@@ -2614,7 +2642,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                           .filter(c => !cptCodes.find(x => x.code === c.code))
                           .map(c => (
                             <button key={c.code}
-                              onClick={() => { setCptCodes(prev => [...prev, applyAutoModifier(c)]); }}
+                              onClick={() => { setCptCodes(prev => [...prev, applyAutoModifier(c, appointment.visit_type)]); }}
                               className="w-full text-left px-3 py-2 hover:bg-[#FAFAF8] border-b border-[#F8F8F6] last:border-0 flex items-center justify-between gap-2 transition-colors">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-[11px] font-semibold text-[#7F77DD] flex-shrink-0">{c.code}</span>
