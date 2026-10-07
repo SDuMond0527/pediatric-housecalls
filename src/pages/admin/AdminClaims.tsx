@@ -792,10 +792,20 @@ export function AdminClaims() {
     if (c.status === 'written_off') return true
     const stmtDone = c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at
     if (!stmtDone) return false
-    // If the claim never had an ERA (e.g., self-pay statement sent
-    // manually, or legacy pre-ERA claim), terminal immediately.
-    if (!c.era_received_at) return true
-    // ERA came back — require Andrea's ack via era_seen_at.
+    // A sent patient statement alone is NOT terminal if the claim has
+    // insurance-billable CPTs that haven't been submitted yet. The old
+    // logic treated "stmt sent + no ERA" as done, which hid mixed
+    // insurance + convenience-fee claims from Ready for Biller the
+    // moment the CV11 statement auto-sent — Karen Hinkle's RN IV
+    // fluids visit for Mackenzie Twigg on 2026-10-06 was the first
+    // case Sara caught 2026-10-07.
+    const cpts = Array.isArray(c.cpt_codes) ? c.cpt_codes : []
+    const hasInsuranceBillable = cpts.some((cp: any) => cp?.category !== 'Non-Covered Services')
+    if (!hasInsuranceBillable) return true
+    // Insurance side still owes work until a submit went out AND an
+    // ERA came back AND Andrea acknowledged it.
+    if (c.status !== 'submitted') return false
+    if (!c.era_received_at) return false
     return !!c.era_seen_at
   }
   const isReady = (c: any) => !!c.ready_for_biller_at
