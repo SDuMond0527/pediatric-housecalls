@@ -49,6 +49,53 @@ export function looksLikeBcbs(providerValue?: string | null): boolean {
   return v.includes('bcbs') || v.includes('blue cross')
 }
 
+// Canonical insurance provider dropdown — matches the AR aging report
+// and the Stedi payer resolver (api/claims/index.ts). Entering a canonical
+// name here means every downstream (payer_id lookup, claim submit,
+// aging report grouping) matches cleanly without string drift. "Other"
+// reveals a free-text fallback for anything we don't carry in the list.
+// Keep the labels in sync with the resolver so new payers don't vanish.
+// Sara 2026-10-07.
+export const INSURANCE_PROVIDERS = [
+  'BCBS of NC',
+  'Anthem BCBS of Virginia',
+  'United Healthcare',
+  'UMR',
+  'Aetna',
+  'Cigna',
+  'Humana',
+  'PHCS / Multiplan',
+  'Coventry',
+  'Select Health',
+  'Medcost / Healthgram',
+  'Bright Health',
+] as const
+
+const OTHER_SENTINEL = '__other__'
+
+/** Map a stored (possibly messy) insurance_provider string to a canonical
+ *  dropdown value, or OTHER_SENTINEL if it doesn't match a known family.
+ *  Handles legacy records entered as free text (BCBS, Blue Cross NC,
+ *  UHC, Aetna, etc.). */
+function matchCanonicalProvider(raw: string): string {
+  const v = String(raw || '').toLowerCase().trim()
+  if (!v) return ''
+  if (/anthem/.test(v) && /\b(va|virginia)\b/.test(v)) return 'Anthem BCBS of Virginia'
+  if (/anthem/.test(v))                                return 'BCBS of NC'
+  if (/\bbcbs\b|blue\s*cross|blue\s*shield/.test(v))   return 'BCBS of NC'
+  if (/\bumr\b/.test(v))                               return 'UMR'
+  if (/united\s*health|\buhc\b/.test(v))               return 'United Healthcare'
+  if (/cigna/.test(v))                                 return 'Cigna'
+  if (/aetna/.test(v))                                 return 'Aetna'
+  if (/humana/.test(v))                                return 'Humana'
+  if (/phcs|multiplan/.test(v))                        return 'PHCS / Multiplan'
+  if (/coventry/.test(v))                              return 'Coventry'
+  if (/select\s*health/.test(v))                       return 'Select Health'
+  if (/medcost|healthgram/.test(v))                    return 'Medcost / Healthgram'
+  if (/bright\s*health/.test(v))                       return 'Bright Health'
+  return OTHER_SENTINEL
+}
+
 /** Detect self-pay from any of the common spellings for the provider value. */
 export function detectSelfPay(providerValue?: string | null): boolean {
   const v = String(providerValue || '').toLowerCase().trim()
@@ -135,9 +182,49 @@ export function InsuranceEditor({
       {!value.self_pay && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Input label="Insurance provider *" placeholder="Blue Cross"
-              value={value.insurance_provider}
-              onChange={e => onChange({ insurance_provider: e.target.value })} />
+            {/* Insurance provider dropdown. Picks the exact canonical
+                name so downstream payer resolver + aging report group
+                cleanly. Legacy free-text entries get mapped on load; if
+                we can't map, the "Other" option reveals a free-text
+                field so we never block anyone whose insurance isn't in
+                the list. Sara 2026-10-07. */}
+            {(() => {
+              const canonical = matchCanonicalProvider(value.insurance_provider)
+              const dropdownValue = canonical === OTHER_SENTINEL ? OTHER_SENTINEL
+                                  : canonical
+              return (
+                <div>
+                  <label className="text-[11px] font-medium text-[#1A1A2E] block mb-1">Insurance provider *</label>
+                  <select
+                    className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD] bg-white"
+                    value={dropdownValue}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (v === '') onChange({ insurance_provider: '' })
+                      else if (v === OTHER_SENTINEL) {
+                        // Preserve any existing free-text on switch to Other.
+                        onChange({ insurance_provider: canonical === OTHER_SENTINEL ? value.insurance_provider : '' })
+                      } else {
+                        onChange({ insurance_provider: v })
+                      }
+                    }}
+                  >
+                    <option value="">— Choose insurance —</option>
+                    {INSURANCE_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+                    <option value={OTHER_SENTINEL}>Other (type below)</option>
+                  </select>
+                  {dropdownValue === OTHER_SENTINEL && (
+                    <input
+                      type="text"
+                      className="mt-1 w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                      placeholder="Type the insurance company name"
+                      value={value.insurance_provider}
+                      onChange={e => onChange({ insurance_provider: e.target.value })}
+                    />
+                  )}
+                </div>
+              )
+            })()}
             <Input label="Member ID *" placeholder="ABC123456"
               value={value.insurance_member_id}
               onChange={e => onChange({ insurance_member_id: e.target.value })} />
