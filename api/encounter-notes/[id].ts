@@ -365,6 +365,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     // Editable claim already exists — refresh cpt_codes / diagnoses /
     // total from the note, plus keep patient snapshot fields in sync
     // if they've been improved via family updates since first sign.
+    const priorPayerId = existing.payer_id
     ;[claim] = await sql`
       UPDATE claims SET
         cpt_codes    = ${JSON.stringify(cptCodes)}::jsonb,
@@ -376,6 +377,48 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         updated_at   = now()
       WHERE id = ${existing.id}
       RETURNING *`
+
+    // Payer flipped from Self Pay → insurance on re-sign (provider added
+    // an insurance-billable CPT after a self-pay-only first sign). The
+    // self-pay fast-path auto-generated AND auto-sent a patient statement
+    // for the full self-pay amount on the first sign. That statement is
+    // now stale and the family would be double-billed if they pay it AND
+    // we bill insurance. Void it. Sara caught this 2026-10-07 on
+    // Mackenzie Twigg (Karen Hinkle RN IV fluids note).
+    if (priorPayerId === 'PP' && claim?.payer_id && claim.payer_id !== 'PP') {
+      try {
+        const voided = await sql`
+          UPDATE patient_statements SET
+            status      = 'written_off',
+            voided_at   = NOW(),
+            void_reason = 'Superseded: claim re-signed with insurance-billable CPTs; original self-pay statement no longer applicable. Family should ignore any email with this balance.'
+          WHERE claim_id = ${claim.id}::uuid
+            AND status NOT IN ('paid', 'written_off')
+          RETURNING id`
+        if (voided.length > 0) {
+          try {
+            await sql`
+              CREATE TABLE IF NOT EXISTS claim_activity_log (
+                id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                claim_id        uuid NOT NULL,
+                created_at      timestamptz NOT NULL DEFAULT NOW(),
+                created_by      uuid,
+                created_by_name text,
+                kind            text NOT NULL DEFAULT 'note',
+                body            text NOT NULL
+              )`
+            await sql`
+              INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+              VALUES (
+                ${claim.id}::uuid, NULL, 'System (auto)', 'self_pay_statement_voided',
+                ${'Voided ' + voided.length + ' stale self-pay statement(s) because claim payer flipped from PP to ' + (claim.payer_id ?? '?') + ' on re-sign.'}
+              )`
+          } catch { /* non-fatal */ }
+        }
+      } catch (voidErr: any) {
+        console.error('[encounter-notes sign] void stale self-pay statements failed (non-fatal):', voidErr?.message)
+      }
+    }
   } else {
     ;[claim] = await sql`
       INSERT INTO claims (
