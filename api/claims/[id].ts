@@ -770,6 +770,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // They'll press Submit to retry.
     const clearStaleError = updates.status == null // don't override an explicit status change
 
+    // Mark the claim as biller-edited whenever dx or cpt changes via
+    // this PATCH path. The encounter-notes sign flow checks this flag
+    // and refuses to overwrite dx/cpt once set, so a subsequent note
+    // re-sign can't revert the biller's work. Shipped 2026-10-07 after
+    // Amy Turner case. Also bootstrap the column so cold deploys don't
+    // break the SELECT in the sign flow.
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS biller_edited_at timestamptz` } catch {}
+    const billerEditedDxOrCpt = updates.diagnoses != null || updates.cpt_codes != null
+
     const [updated] = await sql`
       UPDATE claims SET
         submission_error           = CASE WHEN ${clearStaleError} AND status = 'error' THEN NULL ELSE submission_error END,
@@ -799,6 +808,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         total_charge               = COALESCE(${newTotal}, total_charge),
         era_seen_at                = COALESCE(${updates.era_seen_at ?? null}::timestamptz, era_seen_at),
         insurance_dependent_code   = COALESCE(${updates.insurance_dependent_code ?? null}, insurance_dependent_code),
+        biller_edited_at           = CASE WHEN ${billerEditedDxOrCpt}::boolean THEN now() ELSE biller_edited_at END,
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
     return res.json(updated)

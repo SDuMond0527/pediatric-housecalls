@@ -363,14 +363,21 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   let claim: any
   if (existing) {
     // Editable claim already exists — refresh cpt_codes / diagnoses /
-    // total from the note, plus keep patient snapshot fields in sync
-    // if they've been improved via family updates since first sign.
+    // total from the note, UNLESS the biller has edited them directly
+    // on the claim (biller_edited_at set). Biller edits are closer to
+    // the actual submission; a subsequent note re-sign shouldn't
+    // revert them. Fix for Amy Turner case 2026-10-07: Andrea changed
+    // Z77.21 to a different code, saved, submitted — but Stedi got
+    // the original because the note got re-touched between save and
+    // submit and this UPDATE wiped her edit.
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS biller_edited_at timestamptz` } catch {}
     const priorPayerId = existing.payer_id
+    const billerLocked = !!existing.biller_edited_at
     ;[claim] = await sql`
       UPDATE claims SET
-        cpt_codes    = ${JSON.stringify(cptCodes)}::jsonb,
-        diagnoses    = ${JSON.stringify(note.diagnoses ?? [])}::jsonb,
-        total_charge = ${total},
+        cpt_codes    = CASE WHEN ${billerLocked}::boolean THEN cpt_codes ELSE ${JSON.stringify(cptCodes)}::jsonb END,
+        diagnoses    = CASE WHEN ${billerLocked}::boolean THEN diagnoses ELSE ${JSON.stringify(note.diagnoses ?? [])}::jsonb END,
+        total_charge = CASE WHEN ${billerLocked}::boolean THEN total_charge ELSE ${total} END,
         place_of_service = COALESCE(${pos}, place_of_service),
         payer_name   = COALESCE(${payerName}, payer_name),
         payer_id     = COALESCE(${payerId}, payer_id),
