@@ -4,7 +4,7 @@ import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, type ChronicProblem } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
@@ -949,6 +949,24 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     }
   }
 
+  // Files — any file type (PDF, doc, scan, lab result export, etc.)
+  // attached to the encounter note. Companion to photos. Sara 2026-10-07.
+  const [files, setFiles] = useState<{ url: string; name: string; content_type?: string }[]>([])
+  const [fileUploading, setFileUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileAttach(file: File) {
+    setFileUploading(true)
+    try {
+      const uploaded = await uploadNoteFile(file)
+      setFiles(prev => [...prev, uploaded])
+    } catch (e: any) {
+      alert('File upload failed: ' + (e?.message ?? String(e)))
+    } finally {
+      setFileUploading(false)
+    }
+  }
+
   function onPatientQueryChange(q: string) {
     setPatientQuery(q)
     if (patientTimer.current) clearTimeout(patientTimer.current)
@@ -1010,6 +1028,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         setDiagnoses(Array.isArray(note.diagnoses) ? note.diagnoses : [])
         setCptCodes(Array.isArray(note.cpt_codes) ? note.cpt_codes.map((c: any) => applyAutoModifier({ ...c, charge_amount: parseFloat(c.charge_amount) }, appointment.visit_type)) : [])
         setPhotos(Array.isArray(note.photos) ? note.photos : [])
+        setFiles(Array.isArray((note as any).files) ? (note as any).files : [])
         if (Array.isArray(note.vaccine_administrations) && note.vaccine_administrations.length > 0)
           setVaccineEntries(note.vaccine_administrations)
         if (note.iv_administration) setIVFluidsRN(note.iv_administration)
@@ -1202,6 +1221,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       diagnoses,
       cpt_codes: cptCodes,
       photos,
+      files,
       // Include current textarea value as the snapshot. For drafts,
       // this preserves in-progress edits. On sign, the server writes
       // this back to children.medical_history so the chart stays in
@@ -2334,6 +2354,50 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       className="flex items-center gap-1.5 text-[13px] text-[#7F77DD] font-medium hover:text-[#534AB7] transition-colors disabled:opacity-50">
                       <Camera size={14} />
                       {photoUploading ? 'Uploading…' : 'Add photo'}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* File attachments — anything that isn't an image (PDFs,
+                  Word docs, lab result exports, outside EHR notes).
+                  Mirrors the photo flow but no caption field. Sara 2026-10-07. */}
+              <div className="mt-3 pt-3 border-t border-[#E8E8E4]">
+                {files.length > 0 && (
+                  <ul className="space-y-1 mb-2">
+                    {files.map((f, i) => (
+                      <li key={i} className="flex items-center justify-between gap-2 text-[13px] bg-[#FAFAF8] border border-[#E8E8E4] rounded-md px-2.5 py-1.5">
+                        <a href={f.url} target="_blank" rel="noopener noreferrer"
+                          className="text-[#7F77DD] hover:underline font-medium inline-flex items-center gap-1 min-w-0 flex-1 truncate">
+                          <FileText size={12} /> {f.name}
+                        </a>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
+                            className="text-[11px] text-[#DC2626] hover:underline flex-shrink-0">
+                            Remove
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!readOnly && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.csv,image/*"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFileAttach(f); e.target.value = '' }} />
+                    <button
+                      type="button"
+                      disabled={fileUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 text-[13px] text-[#7F77DD] font-medium hover:text-[#534AB7] transition-colors disabled:opacity-50">
+                      <FileText size={14} />
+                      {fileUploading ? 'Uploading…' : 'Attach file'}
                     </button>
                   </>
                 )}

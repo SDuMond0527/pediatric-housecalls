@@ -802,6 +802,20 @@ export async function uploadNotePhoto(file: File): Promise<string> {
   return data.url
 }
 
+export async function uploadNoteFile(file: File): Promise<{ url: string; name: string; content_type: string }> {
+  const { fetchAuthSession } = await import('aws-amplify/auth')
+  const session = await fetchAuthSession()
+  const token = session.tokens?.accessToken?.toString() ?? ''
+  const contentType = file.type || 'application/octet-stream'
+  const response = await fetch(`/api/upload-note-file?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(contentType)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
+    body: file,
+  })
+  if (!response.ok) throw new Error('File upload failed')
+  return response.json()
+}
+
 // ── Eligibility ───────────────────────────────────────────────
 export const checkEligibility = (id: string, byChild = false) =>
   apiFetch<any>('/api/eligibility', { method: 'POST', body: JSON.stringify(byChild ? { child_id: id } : { appointment_id: id }) })

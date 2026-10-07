@@ -1172,11 +1172,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!existing) return res.status(404).json({ error: 'Note not found' })
 
-      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot, labs } = req.body
+      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, files, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot, labs } = req.body
 
       // Idempotent bootstrap — every PUT after this deploy ensures the
       // labs column exists so a save can never silently drop the field.
       try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS labs jsonb` } catch {}
+      // Files attachment column added 2026-10-07. Companion to photos.
+      try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS files jsonb DEFAULT '[]'::jsonb` } catch {}
 
       const unlocking = is_signed === false
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
@@ -1222,6 +1224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             diagnoses       = COALESCE(${diagnoses != null ? JSON.stringify(diagnoses) : null}::jsonb, diagnoses),
             cpt_codes       = COALESCE(${cpt_codes != null ? JSON.stringify(cpt_codes) : null}::jsonb, cpt_codes),
             photos          = COALESCE(${photos != null ? JSON.stringify(photos) : null}::jsonb, photos),
+            files           = COALESCE(${files != null ? JSON.stringify(files) : null}::jsonb, files),
             vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
             iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
             labs              = COALESCE(${labs != null ? JSON.stringify(labs) : null}::jsonb, labs),
