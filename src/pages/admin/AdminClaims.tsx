@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
@@ -1581,6 +1581,44 @@ export function AdminClaims() {
                             <ChartNumberPill value={c.chart_number} />
                             <span className="text-[12px] font-normal text-[#1A1A2E]">{fmtDate(c.service_date)}</span>
                             {renderPcnPill(c)}
+                            {/* Manual status override — Sara 2026-10-07. For
+                                cases where biller handles something outside
+                                GoRoam (e.g., resubmits in Stedi portal) and
+                                needs the tab to reflect reality. Click
+                                detaches from the row toggle so expand/collapse
+                                doesn't fire. */}
+                            {tab === 'rework' && (
+                              <select
+                                className="text-[11px] px-2 py-0.5 border border-[#AFA9EC] rounded-full bg-[#F5F4FE] text-[#3C3489] font-medium cursor-pointer hover:bg-[#EEEDFE]"
+                                value=""
+                                onClick={e => e.stopPropagation()}
+                                onChange={async e => {
+                                  e.stopPropagation()
+                                  const target = e.target.value as 'ready_for_biller' | 'submitted' | 'rework'
+                                  if (!target) return
+                                  const warn = target === 'submitted'
+                                    ? `Force this claim to Submitted?\n\nThis clears denial / rejection flags and marks it as if you've already sent it to insurance. Use this when you've resubmitted outside GoRoam (e.g., in the Stedi portal directly).`
+                                    : target === 'ready_for_biller'
+                                      ? `Force this claim to Ready for Biller?\n\nClears denial / rejection flags and puts it in Andrea's queue to re-submit from scratch.`
+                                      : `Flag this claim as Rework?\n\nAdds a manual rework trigger so it reappears on the Rework tab.`
+                                  if (!window.confirm(warn)) { e.target.value = ''; return }
+                                  try {
+                                    const updated = await forceClaimStatus(c.id, target)
+                                    setClaims(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
+                                  } catch (err: any) {
+                                    alert('Failed to change status: ' + (err?.message ?? String(err)))
+                                  } finally {
+                                    e.target.value = ''
+                                  }
+                                }}
+                                title="Manually override which tab this claim appears on."
+                              >
+                                <option value="">↹ Move to…</option>
+                                <option value="submitted">Submitted</option>
+                                <option value="ready_for_biller">Ready for Biller</option>
+                                <option value="rework">Keep in Rework</option>
+                              </select>
+                            )}
                             {/* Reopened badge — claim was submitted, then a biller reopened
                                 for correction. Distinct from brand-new pending claims so
                                 rework doesn't drown in the queue. Hover for reason + note. */}

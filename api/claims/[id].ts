@@ -423,6 +423,99 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Manual status override — Sara 2026-10-07. For cases where she
+    // handles something outside GoRoam (e.g., resubmits in the Stedi
+    // portal directly) and needs the claim's tab to reflect reality.
+    // target_status: 'ready_for_biller' | 'submitted' | 'rework'
+    //
+    // Each target wipes the fields that would route the claim elsewhere
+    // AND sets the fields that route it to the target. No audit-trail
+    // enforcement — biller is the authoritative actor on this call.
+    if (action === 'force_status') {
+      const target = String((fields as any).target_status ?? '')
+      const allowed = new Set(['ready_for_biller', 'submitted', 'rework'])
+      if (!allowed.has(target)) {
+        return res.status(400).json({ error: 'target_status must be one of ready_for_biller, submitted, rework' })
+      }
+      const [me] = await sql`SELECT name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const whoName = me?.name ?? 'Biller'
+
+      if (target === 'submitted') {
+        // Mark as submitted in our system. Clear every rework trigger so
+        // isInRework drops it out; preserve submitted_at if we have one
+        // (actual payer submission time), otherwise stamp now.
+        const [updated] = await sql`
+          UPDATE claims SET
+            status                   = 'submitted',
+            submitted_at             = COALESCE(submitted_at, NOW()),
+            denial_codes             = NULL,
+            claim_rejection_at       = NULL,
+            claim_rejection_response = NULL,
+            claim_rejection_reasons  = NULL,
+            submission_error         = NULL,
+            rework_resolved_at       = NULL,
+            ready_for_biller_at      = NULL,
+            ready_for_biller_by      = NULL,
+            updated_at               = NOW()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+        try {
+          await sql`
+            INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+            VALUES (${id}::uuid, ${whoName}, 'force_status_submitted',
+                   'Manually set status → Submitted (biller resubmitted outside GoRoam).')`
+        } catch {}
+        return res.status(200).json(updated)
+      }
+
+      if (target === 'ready_for_biller') {
+        // Pending review + marked ready. Must clear submitted_at and
+        // every rework trigger — otherwise isInRework pulls it back.
+        const [updated] = await sql`
+          UPDATE claims SET
+            status                   = 'pending_review',
+            denial_codes             = NULL,
+            claim_rejection_at       = NULL,
+            claim_rejection_response = NULL,
+            claim_rejection_reasons  = NULL,
+            submission_error         = NULL,
+            rework_resolved_at       = NULL,
+            ready_for_biller_at      = NOW(),
+            ready_for_biller_by      = ${whoName},
+            updated_at               = NOW()
+          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+          RETURNING *`
+        try {
+          await sql`
+            INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+            VALUES (${id}::uuid, ${whoName}, 'force_status_ready_for_biller',
+                   'Manually set status → Ready for Biller.')`
+        } catch {}
+        return res.status(200).json(updated)
+      }
+
+      // target === 'rework' — flip the claim back into Rework by setting
+      // an active trigger. Uses claim_rejection_at = NOW() with a note so
+      // isInRework picks it up. This is a last-resort override.
+      const [updated] = await sql`
+        UPDATE claims SET
+          claim_rejection_at       = COALESCE(claim_rejection_at, NOW()),
+          claim_rejection_reasons  = COALESCE(claim_rejection_reasons, ${JSON.stringify([{ category: 'MANUAL', code: '0', entity: 'biller', action: '', amount: 0, message: 'Manually flagged as rework by biller.' }])}::jsonb),
+          rework_resolved_at       = NULL,
+          ready_for_biller_at      = NULL,
+          ready_for_biller_by      = NULL,
+          updated_at               = NOW()
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+      try {
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+          VALUES (${id}::uuid, ${whoName}, 'force_status_rework',
+                 'Manually flagged → Rework.')`
+      } catch {}
+      return res.status(200).json(updated)
+    }
+
     // Fix + resubmit — clears every rework trigger, marks ready for
     // biller, appends a resubmission_log entry. Previously lived at
     // POST /api/claims/[id]/fix-resubmit but Vercel's file-based

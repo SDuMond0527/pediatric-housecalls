@@ -1357,6 +1357,13 @@ export const resolveReworkWithStatement = (id: string) =>
 export const fixResubmitClaim = (id: string, body: { note?: string } = {}) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'fix_resubmit', ...body }) })
 
+// Manual status override — bypass the tab-routing filters when the
+// biller handles something outside GoRoam (e.g., resubmitted directly
+// in Stedi portal). Flips the claim into whichever tab the biller
+// says it belongs to. Sara 2026-10-07.
+export const forceClaimStatus = (id: string, target: 'ready_for_biller' | 'submitted' | 'rework') =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'force_status', target_status: target }) })
+
 // Upload a documentation PDF/image to a claim. The file is stored in
 // Vercel Blob and a claim_attachments row is written with the URL.
 // Not sent through Stedi — purely for Andrea's records / payer-portal
