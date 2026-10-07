@@ -423,6 +423,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Fix + resubmit — clears every rework trigger, marks ready for
+    // biller, appends a resubmission_log entry. Previously lived at
+    // POST /api/claims/[id]/fix-resubmit but Vercel's file-based
+    // routing collided with the [id].ts file (same 405 pattern as the
+    // convenience-fees endpoint earlier today). Moved inline here as a
+    // PUT action; client updated to match. Sara 2026-10-07.
+    if (action === 'fix_resubmit') {
+      const noteStr = String(fields.note ?? '').trim()
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopened_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopened_by uuid` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopen_reason text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reopen_note text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS ready_for_biller_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS ready_for_biller_by text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS resubmission_log jsonb DEFAULT '[]'::jsonb` } catch {}
+
+      const [provider] = await sql`SELECT id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      if (!provider) return res.status(403).json({ error: 'Provider not found' })
+
+      const [existing] = await sql`
+        SELECT id, status, submitted_at, claim_rejection_at, denial_codes, resubmission_log
+        FROM claims
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        LIMIT 1`
+      if (!existing) return res.status(404).json({ error: 'Claim not found' })
+      if (!existing.submitted_at) {
+        return res.status(400).json({ error: "This claim has never been submitted — there's nothing to resubmit. Edit it in Ready for Biller instead." })
+      }
+      if (existing.status === 'written_off') {
+        return res.status(400).json({ error: 'This claim is written off. Resubmitting would resurrect a closed AR item.' })
+      }
+
+      const prevLog: any[] = Array.isArray(existing.resubmission_log) ? existing.resubmission_log : []
+      const entry = {
+        at: new Date().toISOString(),
+        by: provider.id,
+        by_name: provider.name ?? 'Biller',
+        note: noteStr || null,
+        prior_denial_codes: existing.denial_codes ?? null,
+        prior_claim_rejection_at: existing.claim_rejection_at ?? null,
+      }
+      const nextLog = [...prevLog, entry]
+
+      const [updated] = await sql`
+        UPDATE claims SET
+          denial_codes             = NULL,
+          claim_rejection_at       = NULL,
+          claim_rejection_response = NULL,
+          claim_rejection_reasons  = NULL,
+          submission_error         = NULL,
+          status                   = 'pending_review',
+          reopened_at              = NOW(),
+          reopened_by              = ${provider.id}::uuid,
+          reopen_reason            = 'payer_denied_other',
+          reopen_note              = ${noteStr || 'Fix + resubmit from Rework tab'},
+          ready_for_biller_at      = NOW(),
+          ready_for_biller_by      = ${provider.name ?? 'Biller'},
+          resubmission_log         = ${JSON.stringify(nextLog)}::jsonb,
+          updated_at               = NOW()
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS claim_activity_log (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            claim_id uuid NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT NOW(),
+            created_by uuid,
+            created_by_name text,
+            kind text NOT NULL DEFAULT 'note',
+            body text NOT NULL
+          )`
+        const body = noteStr
+          ? `Fix + resubmit from Rework tab. Note: ${noteStr}`
+          : 'Fix + resubmit from Rework tab. No note provided.'
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by, created_by_name, kind, body)
+          VALUES (${id}::uuid, ${provider.id}::uuid, ${provider.name ?? 'Biller'}, 'fix_resubmit', ${body})`
+      } catch (logErr: any) {
+        console.error('fix-resubmit activity log insert failed (non-fatal):', logErr?.message)
+      }
+
+      return res.status(200).json(updated)
+    }
+
     // Submit to Stedi (live or test)
     if (action === 'submit' || action === 'test') {
       const testMode = action === 'test'

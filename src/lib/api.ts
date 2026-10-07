@@ -1355,7 +1355,7 @@ export const resolveReworkWithStatement = (id: string) =>
 // editing + resubmit. Appends an entry to claims.resubmission_log.
 // Returns the updated claim row.
 export const fixResubmitClaim = (id: string, body: { note?: string } = {}) =>
-  apiFetch<any>(`/api/claims/${id}/fix-resubmit`, { method: 'POST', body: JSON.stringify(body) })
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'fix_resubmit', ...body }) })
 
 // Upload a documentation PDF/image to a claim. The file is stored in
 // Vercel Blob and a claim_attachments row is written with the URL.
