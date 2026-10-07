@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { Check, Undo2, Edit3, Save, X, AlertOctagon, Link as LinkIcon, Clock } from 'lucide-react'
-import { getConvenienceFeeCharges, updateConvenienceFeeCharge, type ConvenienceFeeCharge } from '../../lib/api'
+import { getConvenienceFeeCharges, updateConvenienceFeeCharge, triggerCvAutoCharge, type ConvenienceFeeCharge } from '../../lib/api'
+import { Zap } from 'lucide-react'
 
 type StatusFilter = 'all' | ConvenienceFeeCharge['status']
 
@@ -164,6 +165,32 @@ export function AdminConvenienceFees() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {isPending && (
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Charge the family's card on file $${(r.amount_cents/100).toFixed(2)} for this convenience fee?\n\nUses Square direct charge. Card must be on file; otherwise this will fail and you can run it manually in Square.`)) return
+                        setSavingId(r.id)
+                        try {
+                          const result = await triggerCvAutoCharge(r.id)
+                          if (result.ok) {
+                            setRows(prev => prev.map(x => x.id === r.id ? { ...x, status: 'auto_charged', charged_at: new Date().toISOString(), square_payment_id: result.square_payment_id ?? null } : x))
+                          } else {
+                            alert('Charge failed: ' + (result.error ?? 'unknown'))
+                            await load()
+                          }
+                        } catch (e: any) {
+                          alert('Charge failed: ' + (e?.message ?? String(e)))
+                          await load()
+                        } finally {
+                          setSavingId(null)
+                        }
+                      }}
+                      disabled={savingId === r.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#7F77DD] text-white hover:bg-[#534AB7] transition-colors disabled:opacity-50"
+                      title="Charge the card on file for this fee via Square.">
+                      <Zap size={12} /> Charge card now
+                    </button>
+                  )}
                   {isPending && (
                     <button
                       onClick={() => markCharged(r.id)}

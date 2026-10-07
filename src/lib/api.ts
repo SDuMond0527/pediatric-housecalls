@@ -432,6 +432,12 @@ export const getConvenienceFeeCharges = (filters?: { status?: string; from?: str
   const q = qs.toString()
   return apiFetch<ConvenienceFeeCharge[]>(`/api/admin/convenience-fees${q ? `?${q}` : ''}`)
 }
+export const triggerCvAutoCharge = (id: string) =>
+  apiFetch<{ ok: boolean; square_payment_id?: string; amount_cents?: number; error?: string }>(
+    `/api/admin/convenience-fees/${id}/auto-charge`,
+    { method: 'POST', body: '{}' }
+  )
+
 export const updateConvenienceFeeCharge = (id: string, body: Partial<Pick<ConvenienceFeeCharge, 'status' | 'pam_notes' | 'reversal_reason'>>) =>
   apiFetch<ConvenienceFeeCharge>(`/api/admin/convenience-fees?id=${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify(body),
