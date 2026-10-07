@@ -1057,15 +1057,26 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         // Rendering provider gets forced to Dr. Sara DuMond server-side
         // (see api/encounter-notes/[id].ts) since RNs can't bill
         // independently. Sara 2026-10-06.
+        // Every RN IV fluids variant defaults to BOTH 96360 (hydration IV
+        // infusion, insurance-billable) AND CV11 (convenience fee for
+        // in-home RN visit, non-covered → patient responsibility, charged
+        // via Square auto-charge pipeline at claim-gen). Added CV11 to the
+        // defaults 2026-10-07 after Karen Hinkle had to add it manually
+        // and the system flipped the claim to self-pay on first sign
+        // because 96360 wasn't on the note yet. Keep all 4 visit_type
+        // aliases in sync — including the en-dash variant
+        // "In-home IV fluids – RN only" that's used by the family-booking
+        // flow (not a hyphen; U+2013).
         const DEFAULT_CPTS_FOR_VISIT_TYPE: Record<string, string[]> = {
           'In-home sick visit':              ['99349'],
           'Video telemedicine':              ['99213'],
           'CMA + telemedicine':              ['99213'],  // MD/NP paired side (CMA can't sign)
           'In-home vaccine administration':  ['90471'],
-          'RN in-home IV fluids administration':             ['96360'],
-          'In-home IV fluids':                               ['96360'],
-          'RN IV fluids':                                    ['96360'],
-          'RN IV fluid visit — paired with MD/NP screening': ['96360'],
+          'RN in-home IV fluids administration':             ['96360', 'CV11'],
+          'In-home IV fluids':                               ['96360', 'CV11'],
+          'In-home IV fluids – RN only':                     ['96360', 'CV11'],
+          'RN IV fluids':                                    ['96360', 'CV11'],
+          'RN IV fluid visit — paired with MD/NP screening': ['96360', 'CV11'],
         }
         const defaultCodes = DEFAULT_CPTS_FOR_VISIT_TYPE[appointment.visit_type] ?? []
         if (defaultCodes.length > 0) {
@@ -1086,6 +1097,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         const DEFAULT_DX_FOR_VISIT_TYPE: Record<string, Array<{ code: string; name: string }>> = {
           'RN in-home IV fluids administration':             [{ code: 'E86.0', name: 'Dehydration' }],
           'In-home IV fluids':                               [{ code: 'E86.0', name: 'Dehydration' }],
+          'In-home IV fluids – RN only':                     [{ code: 'E86.0', name: 'Dehydration' }],
           'RN IV fluids':                                    [{ code: 'E86.0', name: 'Dehydration' }],
           'RN IV fluid visit — paired with MD/NP screening': [{ code: 'E86.0', name: 'Dehydration' }],
         }
