@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const practiceId = providerRows[0].practice_id as string
 
   const { start, end } = req.query as Record<string, string>
-  const [appointments, providers, encounterNotes, onCallShifts] = await Promise.all([
+  const [appointments, providers, encounterNotes, onCallShifts, broadcasts, waitlistEntries] = await Promise.all([
     sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
     sql`SELECT id, name, role FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
     sql`
@@ -65,7 +65,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         AND date >= ${start}::date
         AND date <= ${end}::date
     `,
+    // Broadcasts + waitlist pulled fresh so the Bonus leaderboard can
+    // attribute pickups per provider by the authoritative source tables
+    // (not the fragile 'From waitlist' notes-string match that undercounted
+    // on 2026-09-21). Shipped 2026-10-07.
+    sql`
+      SELECT id, is_open, created_at, related_appointment_id
+      FROM broadcasts
+      WHERE practice_id = ${practiceId}::uuid
+        AND created_at >= ${start}::date
+        AND created_at <  (${end}::date + INTERVAL '1 day')
+    `,
+    sql`
+      SELECT id, status, converted_provider_id, created_at
+      FROM waitlist_entries
+      WHERE practice_id = ${practiceId}::uuid
+        AND created_at >= ${start}::date
+        AND created_at <  (${end}::date + INTERVAL '1 day')
+    `,
   ])
 
-  res.json({ appointments, providers, encounterNotes, onCallShifts })
+  res.json({ appointments, providers, encounterNotes, onCallShifts, broadcasts, waitlistEntries })
 }

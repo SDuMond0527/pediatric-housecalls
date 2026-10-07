@@ -233,6 +233,11 @@ export function AdminReports() {
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
   const [onCallShifts, setOnCallShifts] = useState<OnCallShiftRow[]>([])
+  // Bonus leaderboard: pulled from the authoritative broadcasts +
+  // waitlist_entries tables (not fragile 'From waitlist' / 'Broadcast:'
+  // notes-string matching that undercounted pickups). Sara 2026-10-07.
+  const [broadcasts, setBroadcasts] = useState<{ id: string; is_open: boolean; created_at: string; related_appointment_id: string | null }[]>([])
+  const [waitlistEntries, setWaitlistEntries] = useState<{ id: string; status: string; converted_provider_id: string | null; created_at: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
@@ -252,6 +257,8 @@ export function AdminReports() {
       setProviders(result?.providers ?? [])
       setEncounterNotes(result?.encounterNotes ?? [])
       setOnCallShifts(result?.onCallShifts ?? [])
+      setBroadcasts(((result as any)?.broadcasts ?? []) as any)
+      setWaitlistEntries(((result as any)?.waitlistEntries ?? []) as any)
       setLoading(false)
       setHasLoadedOnce(true)
     }
@@ -388,8 +395,29 @@ export function AdminReports() {
   const total     = appts.length
   const completed = appts.filter(a => a.status === 'done').length
   const upcoming  = appts.filter(a => a.status === 'upcoming' || a.status === 'in-progress').length
-  const broadcastTotal = appts.filter(a => a.notes?.startsWith('Broadcast:')).length
-  const waitlistTotal  = appts.filter(a => a.notes?.startsWith('From waitlist')).length
+
+  // Bonus leaderboard — count pickups from the authoritative tables, not
+  // from fragile notes-string matching. See AdminAnalytics for the same
+  // waitlist fix (shipped 2026-09-21). Mirror here for broadcasts via
+  // join through related_appointment_id → appointments.provider_id.
+  // Sara 2026-10-07.
+  const apptById: Record<string, ApptRow> = {}
+  for (const a of appts) apptById[a.id] = a
+  const broadcastPickupProviderId: Record<string, number> = {}
+  for (const b of broadcasts) {
+    if (b.is_open) continue
+    if (!b.related_appointment_id) continue
+    const a = apptById[b.related_appointment_id]
+    if (!a?.provider_id) continue
+    broadcastPickupProviderId[a.provider_id] = (broadcastPickupProviderId[a.provider_id] ?? 0) + 1
+  }
+  const waitlistPickupProviderId: Record<string, number> = {}
+  for (const w of waitlistEntries) {
+    if (w.status !== 'converted' || !w.converted_provider_id) continue
+    waitlistPickupProviderId[w.converted_provider_id] = (waitlistPickupProviderId[w.converted_provider_id] ?? 0) + 1
+  }
+  const broadcastTotal = Object.values(broadcastPickupProviderId).reduce((s, n) => s + n, 0)
+  const waitlistTotal  = Object.values(waitlistPickupProviderId).reduce((s, n) => s + n, 0)
   const totalPickups   = broadcastTotal + waitlistTotal
 
   // Per-provider stats
@@ -398,8 +426,8 @@ export function AdminReports() {
       const pa = appts.filter(a => a.provider_id === p.id)
       const byType: Record<string, number> = {}
       pa.forEach(a => { byType[a.visit_type] = (byType[a.visit_type] ?? 0) + 1 })
-      const broadcasts = pa.filter(a => a.notes?.startsWith('Broadcast:')).length
-      const waitlist   = pa.filter(a => a.notes?.startsWith('From waitlist')).length
+      const broadcasts = broadcastPickupProviderId[p.id] ?? 0
+      const waitlist   = waitlistPickupProviderId[p.id]  ?? 0
       return {
         ...p,
         total:     pa.length,
@@ -412,7 +440,7 @@ export function AdminReports() {
         pickups: broadcasts + waitlist,
       }
     })
-    .filter(p => p.total > 0)
+    .filter(p => p.total > 0 || p.pickups > 0)
     .sort((a, b) => b.total - a.total)
 
   // Visit types that appear this period, in preferred order
