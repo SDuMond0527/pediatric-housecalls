@@ -82,6 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
       WHERE ps.practice_id = ${provider.practice_id}::uuid
         AND (${status ?? null}::text IS NULL OR ps.status = ${status ?? null})
+        -- Hide voided/written-off statements from every tab (All included)
+        -- unless the caller explicitly asks for them. These are statements
+        -- the system or an admin cancelled; they would double-count totals
+        -- and clutter the view. Sara 2026-10-07 (Mackenzie Twigg case).
+        AND (${status ?? null}::text = 'written_off' OR ps.status != 'written_off')
       -- Order by most recent activity: sent_at if present, else paid_at
       -- (autopaid rows never had a sent event), else created_at (drafts).
       -- Every row gets a non-null sort key, so the All tab stays
