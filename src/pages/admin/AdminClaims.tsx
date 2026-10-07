@@ -1526,11 +1526,15 @@ export function AdminClaims() {
       ) : (
         <>
           {/* PENDING REVIEW TAB */}
-          {(tab === 'review' || tab === 'ready') && (() => {
-            const activeList = tab === 'ready' ? readyClaimsTab : reviewClaims
+          {(tab === 'review' || tab === 'ready' || tab === 'rework') && (() => {
+            const activeList = tab === 'ready' ? readyClaimsTab
+                             : tab === 'rework' ? reworkClaims
+                             : reviewClaims
             const emptyMsg = tab === 'ready'
               ? 'No claims ready for biller. Claims auto-ready as providers sign encounter notes.'
-              : 'No claims pending review.'
+              : tab === 'rework'
+                ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
+                : 'No claims pending review.'
             return (
             <div className="space-y-3">
               {activeList.length === 0 && (
@@ -2319,6 +2323,33 @@ export function AdminClaims() {
                           {renderActivitySection(c)}
                           {renderNotifySection(c)}
                           <div className="flex flex-wrap gap-2">
+                            {/* Rework-tab-only: clear denial/rejection flags
+                                so a fresh Submit can go through cleanly.
+                                Shows only when the claim has active denial
+                                state. Once clicked, denial clears and the
+                                Submit button below can fire. Sara 2026-10-07. */}
+                            {tab === 'rework' && (c.denial_codes || c.claim_rejection_at) && (
+                              <Button variant="teal"
+                                onClick={() => {
+                                  setFixResubmitTarget(c)
+                                  setFixResubmitNote('')
+                                  setFixResubmitError(null)
+                                }}
+                                title="Clears the denial/rejection flags and marks the claim ready to resubmit. Edit inline below, then click Submit.">
+                                <RefreshCw size={13} className="mr-1.5" /> Fix + resubmit
+                              </Button>
+                            )}
+                            {/* Rework-tab-only: give up on insurance,
+                                move to Completed, generate + auto-send
+                                a patient statement. */}
+                            {tab === 'rework' && (
+                              <Button variant="secondary"
+                                loading={resolvingReworkId === c.id}
+                                onClick={() => markReworkResolvedWithStatement(c)}
+                                title="Marks this claim as worked, moves it to Completed, generates and auto-sends a patient statement.">
+                                Mark as worked → statement
+                              </Button>
+                            )}
                             {showStatementButton && (
                               <Button variant="teal" onClick={() => setStatementClaim(c)}>
                                 <Receipt size={13} className="mr-1.5" /> Generate patient statement
@@ -2368,12 +2399,10 @@ export function AdminClaims() {
               (paid / partial / denied / no-pt-resp) OR written off.
               Ready for biller renders via the reviewClaims block above
               (not here) so Andrea gets the full edit UI. */}
-          {(tab === 'submitted' || tab === 'completed' || tab === 'rework') && (() => {
+          {(tab === 'submitted' || tab === 'completed') && (() => {
             const rawList = tab === 'completed'
               ? completedClaims
-              : tab === 'rework'
-                ? reworkClaims
-                : submittedClaims
+              : submittedClaims
             // Submitted-tab-only patient-name filter. Matches first OR last
             // name, chart number, and PCN (case-insensitive, substring).
             const q = tab === 'submitted' ? submittedSearch.trim().toLowerCase() : ''
@@ -2388,11 +2417,9 @@ export function AdminClaims() {
               : rawList
             const emptyMsg = tab === 'completed'
               ? 'No completed claims yet. Claims land here once the payer sends back an ERA.'
-              : tab === 'rework'
-                ? 'No claims in rework. Payer rejections, denials, submission errors, or biller-reopened corrections will land here.'
-                : q
-                  ? `No submitted claims match "${submittedSearch}".`
-                  : 'No submitted claims yet.'
+              : q
+                ? `No submitted claims match "${submittedSearch}".`
+                : 'No submitted claims yet.'
             return (
             <div className="space-y-2">
               {tab === 'submitted' && (
@@ -2900,51 +2927,12 @@ export function AdminClaims() {
                               stays here on Rework with a prominent
                               Submit button (below). Sara 2026-10-06
                               (Option B). */}
-                          {tab === 'rework' && !c.ready_for_biller_at && (
-                            <Button size="sm" variant="teal"
-                              onClick={() => {
-                                setFixResubmitTarget(c)
-                                setFixResubmitNote('')
-                                setFixResubmitError(null)
-                              }}
-                              title="Clears the denial/rejection flags and marks the claim ready to resubmit. Claim stays on Rework; a Submit button will appear.">
-                              Fix + resubmit
-                            </Button>
-                          )}
-                          {/* Prepared-to-resubmit state — Fix+Resubmit was
-                              clicked, now the biller submits a fresh 837
-                              through Stedi without leaving Rework. If the
-                              new submit succeeds, the claim exits Rework
-                              into Submitted. If it rejects or denies
-                              again, it stays here with the new denial. */}
-                          {tab === 'rework' && c.status === 'pending_review' && c.ready_for_biller_at && !c.denial_codes && !c.claim_rejection_at && (
-                            <>
-                              <Button size="sm" variant="teal"
-                                loading={submitting === c.id}
-                                onClick={() => handleSubmit(c.id)}
-                                title="Submit a fresh 837 to Stedi. Successful submit moves this claim to Submitted.">
-                                Submit to Stedi
-                              </Button>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EEEDFE] text-[#4C1D95] text-[10px] rounded-full font-semibold">
-                                ↻ READY TO RESUBMIT
-                              </span>
-                            </>
-                          )}
-                          {/* Rework-only: biller signals "I'm done fighting
-                              this claim with insurance" — the system
-                              generates a patient statement AND auto-sends
-                              it to the family in one click. Previously two
-                              buttons (Completed only + Draft statement);
-                              consolidated 2026-10-06 since Pam signed off
-                              on auto-send across all statement surfaces. */}
-                          {tab === 'rework' && (
-                            <Button size="sm" variant="secondary"
-                              loading={resolvingReworkId === c.id}
-                              onClick={() => markReworkResolvedWithStatement(c)}
-                              title="Marks this claim as worked, moves it to Completed, generates a patient statement AND auto-sends it to the family (email + SMS). No draft step — the family gets the bill immediately.">
-                              Mark as worked → Generate and auto-send patient statement
-                            </Button>
-                          )}
+                          {/* Fix+Resubmit, Submit-to-Stedi, Mark-as-worked,
+                              and the READY TO RESUBMIT badge used to live
+                              here for the Rework tab. Rework now renders
+                              via the review/ready block (which has the
+                              full editor); those buttons migrated to that
+                              block's actions row. Sara 2026-10-07. */}
                           <Button size="sm" variant="secondary"
                             onClick={() => {
                               setReopenTarget(c)
