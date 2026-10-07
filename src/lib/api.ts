@@ -434,7 +434,7 @@ export const getConvenienceFeeCharges = (filters?: { status?: string; from?: str
 }
 export const triggerCvAutoCharge = (id: string) =>
   apiFetch<{ ok: boolean; square_payment_id?: string; amount_cents?: number; error?: string }>(
-    `/api/admin/convenience-fees/${id}/auto-charge`,
+    `/api/admin/convenience-fees?id=${encodeURIComponent(id)}&action=auto-charge`,
     { method: 'POST', body: '{}' }
   )
 
