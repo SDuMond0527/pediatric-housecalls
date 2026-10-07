@@ -111,11 +111,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       UPDATE claims SET
         -- Clear every rework trigger so isInRework drops this claim out
         -- of the Rework tab. A subsequent payer response (277/835) will
-        -- repopulate these if it comes back dirty again.
-        denial_codes            = NULL,
-        claim_rejection_at      = NULL,
-        claim_rejection_277_x12 = NULL,
-        submission_error        = NULL,
+        -- repopulate these if it comes back dirty again. Previously tried
+        -- to NULL claim_rejection_277_x12 which doesn't exist in prod —
+        -- the 277 raw X12 is stored inside claim_rejection_response.rawX12
+        -- (jsonb), and the whole response gets cleared below. Sara
+        -- 2026-10-07 (fix after HTTP error on Prepare for resubmit).
+        denial_codes             = NULL,
+        claim_rejection_at       = NULL,
+        claim_rejection_response = NULL,
+        claim_rejection_reasons  = NULL,
+        submission_error         = NULL,
         -- Reset status to pending_review so Andrea can edit + resubmit
         -- via the Ready-for-biller editor. submitted_at stays intact
         -- (history of what went out previously).
