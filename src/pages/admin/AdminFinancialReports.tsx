@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
-import { getFinancialReports, type ArBucket } from '../../lib/api'
+import { getFinancialReports, getArDrill, type ArBucket } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
 import { PatientStatementModal } from './PatientStatementModal'
@@ -306,7 +306,55 @@ function ArAgingSection({
   const linkCls = 'text-[#7F77DD]'
 
   return (
-    <ReportShell title={title} icon={Icon} plainEnglish={plainEnglish} onExport={() => {
+    <ReportShell title={title} icon={Icon} plainEnglish={plainEnglish} onExport={async () => {
+      // Insurance CSV: Andrea needs one row per claim, not aggregates.
+      // Pulls the full drill (type=insurance, group=__all__, bucket=all)
+      // which returns every outstanding insurance claim with patient,
+      // DOS, submitted date, age, charge, payer, chart. Sara 2026-10-07.
+      if (drillType === 'insurance') {
+        try {
+          const { rows: drillRows } = await getArDrill({ type: 'insurance', group: '__all__', bucket: 'all' })
+          const bucketOf = (age: number) => {
+            if (age <= 30)  return '0-30'
+            if (age <= 60)  return '31-60'
+            if (age <= 90)  return '61-90'
+            if (age <= 120) return '91-120'
+            return '120+'
+          }
+          const detail = drillRows.map((r: any) => ({
+            payer:        r.canonical_payer ?? r.payer_name ?? '',
+            payer_raw:    r.payer_name ?? '',
+            patient:      [r.patient_first_name, r.patient_last_name].filter(Boolean).join(' '),
+            chart_number: r.chart_number ?? '',
+            service_date: r.service_date ? String(r.service_date).slice(0, 10) : '',
+            submitted_at: r.submitted_at ? String(r.submitted_at).slice(0, 10) : '',
+            age_days:     r.age_days ?? '',
+            bucket:       r.age_days != null ? bucketOf(Number(r.age_days)) : '',
+            charge:       r.total_charge != null ? Number(r.total_charge).toFixed(2) : '',
+            status:       r.status ?? '',
+            claim_id:     r.id ?? '',
+          }))
+          const csv = toCsv(detail, [
+            { key: 'payer',        label: 'Payer' },
+            { key: 'payer_raw',    label: 'Payer (as entered)' },
+            { key: 'patient',      label: 'Patient' },
+            { key: 'chart_number', label: 'Chart #' },
+            { key: 'service_date', label: 'DOS' },
+            { key: 'submitted_at', label: 'Submitted' },
+            { key: 'age_days',     label: 'Age (days)' },
+            { key: 'bucket',       label: 'Bucket' },
+            { key: 'charge',       label: 'Outstanding $' },
+            { key: 'status',       label: 'Status' },
+            { key: 'claim_id',     label: 'Claim ID' },
+          ], { title: title + ' — detail', periodStart: start, periodEnd: end })
+          downloadCsv(`${filenameStem}-detail.csv`, csv)
+          return
+        } catch (e: any) {
+          alert('Could not load detail rows for CSV: ' + (e?.message ?? String(e)))
+          return
+        }
+      }
+      // Patient AR CSV (unchanged — summary rows per patient).
       const csv = toCsv(rows, [
         { key: groupKey,   label: groupLabel },
         { key: 'b_0_30',   label: '0-30' },
