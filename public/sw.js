@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-07-leaderboard-fix
+// Service worker — deliberate passthrough. Version: 2026-10-07-leaderboard-accepted-by
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

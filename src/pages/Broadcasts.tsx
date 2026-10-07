@@ -223,7 +223,7 @@ export function Broadcasts() {
         return
       }
 
-      await updateBroadcast(bc.id, { is_open: false })
+      await updateBroadcast(bc.id, { is_open: false, accepted_by_id: provider.id, accepted_by_name: provider.name })
 
       // If the broadcast was spawned by a waitlist entry, mark it converted now
       // that the visit is actually booked.

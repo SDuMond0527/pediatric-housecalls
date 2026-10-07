@@ -30,7 +30,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as { id: string }
 
   if (req.method === 'PATCH') {
-    const { is_open } = req.body
+    const { is_open, accepted_by_id, accepted_by_name } = req.body ?? {}
+    // Persist WHO accepted the broadcast so the Bonus leaderboard can
+    // attribute pickups to the right provider. Previously inferred from
+    // broadcasts.related_appointment_id, which points to the pair's
+    // INITIATOR (NP for IV fluids, MD/NP for CMA) — not the picker-upper
+    // (RN/CMA). Sara 2026-10-07 (Karen Hinkle's IV fluids pickup for
+    // Mackenzie Twigg was being credited to Megan Heilemann).
+    try { await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS accepted_by_provider_id uuid` } catch {}
+    try { await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS accepted_by_name text` } catch {}
+    try { await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS accepted_at timestamptz` } catch {}
+
+    if (is_open === false && accepted_by_id) {
+      const [row] = await sql`
+        UPDATE broadcasts SET
+          is_open = false,
+          accepted_by_provider_id = COALESCE(accepted_by_provider_id, ${accepted_by_id}::uuid),
+          accepted_by_name        = COALESCE(accepted_by_name, ${accepted_by_name ?? null}),
+          accepted_at             = COALESCE(accepted_at, NOW())
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+      return res.json(row)
+    }
+    if (is_open === true) {
+      // Reopen — clear acceptance (someone un-accepted via admin).
+      const [row] = await sql`
+        UPDATE broadcasts SET
+          is_open = true,
+          accepted_by_provider_id = NULL,
+          accepted_by_name        = NULL,
+          accepted_at             = NULL
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+      return res.json(row)
+    }
     const [row] = await sql`UPDATE broadcasts SET is_open=${is_open} WHERE id=${id}::uuid AND practice_id=${practiceId}::uuid RETURNING *`
     return res.json(row)
   }

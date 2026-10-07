@@ -236,7 +236,7 @@ export function AdminReports() {
   // Bonus leaderboard: pulled from the authoritative broadcasts +
   // waitlist_entries tables (not fragile 'From waitlist' / 'Broadcast:'
   // notes-string matching that undercounted pickups). Sara 2026-10-07.
-  const [broadcasts, setBroadcasts] = useState<{ id: string; is_open: boolean; created_at: string; related_appointment_id: string | null }[]>([])
+  const [broadcasts, setBroadcasts] = useState<{ id: string; is_open: boolean; created_at: string; related_appointment_id: string | null; accepted_by_provider_id: string | null; accepted_by_name: string | null }[]>([])
   const [waitlistEntries, setWaitlistEntries] = useState<{ id: string; status: string; converted_provider_id: string | null; created_at: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
@@ -401,15 +401,26 @@ export function AdminReports() {
   // waitlist fix (shipped 2026-09-21). Mirror here for broadcasts via
   // join through related_appointment_id → appointments.provider_id.
   // Sara 2026-10-07.
+  // Attribute broadcast pickups to the provider who actually accepted
+  // (stored on broadcasts.accepted_by_provider_id). Falls back to the
+  // related_appointment_id → provider_id join for historical rows where
+  // accepted_by_provider_id wasn't captured yet — but that fallback
+  // credits the pair's INITIATOR (NP for IV fluids) instead of the
+  // picker-upper (RN), so going forward we only trust the stored field.
+  // Sara 2026-10-07.
   const apptById: Record<string, ApptRow> = {}
   for (const a of appts) apptById[a.id] = a
   const broadcastPickupProviderId: Record<string, number> = {}
   for (const b of broadcasts) {
     if (b.is_open) continue
-    if (!b.related_appointment_id) continue
-    const a = apptById[b.related_appointment_id]
-    if (!a?.provider_id) continue
-    broadcastPickupProviderId[a.provider_id] = (broadcastPickupProviderId[a.provider_id] ?? 0) + 1
+    let providerId: string | null = null
+    if (b.accepted_by_provider_id) {
+      providerId = b.accepted_by_provider_id
+    } else if (b.related_appointment_id) {
+      providerId = apptById[b.related_appointment_id]?.provider_id ?? null
+    }
+    if (!providerId) continue
+    broadcastPickupProviderId[providerId] = (broadcastPickupProviderId[providerId] ?? 0) + 1
   }
   const waitlistPickupProviderId: Record<string, number> = {}
   for (const w of waitlistEntries) {

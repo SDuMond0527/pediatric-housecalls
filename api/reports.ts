@@ -70,7 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // (not the fragile 'From waitlist' notes-string match that undercounted
     // on 2026-09-21). Shipped 2026-10-07.
     sql`
-      SELECT id, is_open, created_at, related_appointment_id
+      SELECT id, is_open, created_at, related_appointment_id,
+             accepted_by_provider_id, accepted_by_name
       FROM broadcasts
       WHERE practice_id = ${practiceId}::uuid
         AND created_at >= ${start}::date
