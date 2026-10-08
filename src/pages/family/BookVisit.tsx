@@ -450,6 +450,57 @@ export function BookVisit() {
 
   const isTelemedicine = (vt: string) => vt === 'Video telemedicine' || vt === 'Text visit'
 
+  // Refresh family + children on mount so booking always starts from a
+  // DB-fresh snapshot. The family context otherwise persists across page
+  // navigations within the SPA, so a parent who uploaded insurance cards
+  // (via FamilyProfile, provider portal update, or an earlier booking
+  // attempt) and then came to Book Visit was seeing a stale children
+  // list where card URLs were empty — the booking step then prompted
+  // them to re-upload cards that were already on file. Sara 2026-10-08
+  // after Nash Martirano's parent texted about this exact scenario.
+  useEffect(() => {
+    refreshFamily().catch(() => { /* non-fatal — stale data falls back to existing behavior */ })
+    // Mount-only intentionally; refresh helper is stable from context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // If `children` updates AFTER an intake was initialized (refresh landed
+  // mid-flow), patch the already-selected intakes with the freshest card
+  // URLs / cardOnFile flag so the UI stops prompting for uploads that
+  // are actually on file. Guards: never overwrite URLs the parent has
+  // just entered in this session.
+  useEffect(() => {
+    setBooking(b => {
+      let changed = false
+      const nextIntakes = { ...b.childIntakes }
+      for (const cid of Object.keys(nextIntakes)) {
+        const intake = nextIntakes[cid]
+        if (!intake) continue
+        const child = children.find(c => c.id === cid)
+        if (!child) continue
+        const fresh = {
+          front: child.insurance_card_front_url || '',
+          back:  child.insurance_card_back_url  || '',
+        }
+        const freshBoth = !!(fresh.front && fresh.back)
+        // Only patch if the intake currently thinks there's no card and
+        // the parent hasn't entered one in this session. Avoids
+        // clobbering an in-progress upload.
+        if (!intake.cardOnFile && freshBoth && !intake.insuranceCardFrontUrl && !intake.insuranceCardBackUrl) {
+          nextIntakes[cid] = {
+            ...intake,
+            cardOnFile: true,
+            insuranceCardFrontUrl: fresh.front,
+            insuranceCardBackUrl:  fresh.back,
+          }
+          changed = true
+        }
+      }
+      return changed ? { ...b, childIntakes: nextIntakes } : b
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [children])
+
   // Pre-fill waitlist phone from family profile once it loads
   useEffect(() => {
     if ((family as any)?.phone && !waitlistPhone) setWaitlistPhone((family as any).phone)
