@@ -705,6 +705,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // ─── BCBS NC: always re-pull member_id + dep_code from the child
+      // record at submit time. The chart is the source of truth —
+      // claim snapshots can drift (sibling pre-fill overrides on
+      // intake, old claims predating dep_code column, merged
+      // duplicate children records, etc.). Found 5 open BCBS NC
+      // claims with chart/claim drift during Sara's audit 2026-10-08
+      // (Madelynn Rodgers, Graham Gerloff x2, Kate Martin). This block
+      // ensures Stedi always receives the chart's current values and
+      // writes them back to the claim row so the historical record
+      // matches what was transmitted.
+      if (claim.payer_id === 'UPICO' && claim.child_id) {
+        try {
+          const [chartRow] = await sql`
+            SELECT insurance_member_id, insurance_dependent_code
+            FROM children
+            WHERE id = ${claim.child_id}::uuid AND practice_id = ${practiceId}::uuid
+            LIMIT 1`
+          if (chartRow) {
+            const chartMember = String(chartRow.insurance_member_id ?? '').trim()
+            const chartDep    = String(chartRow.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+            const claimMember = String(claim.member_id ?? '').trim()
+            const claimDep    = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+            const memberIdMismatch = chartMember && chartMember !== claimMember
+            const depMismatch      = (chartDep || claimDep) && chartDep !== claimDep
+            if (chartMember && (memberIdMismatch || depMismatch)) {
+              await sql`
+                UPDATE claims SET
+                  member_id                = ${chartMember},
+                  insurance_dependent_code = ${chartDep || null},
+                  updated_at               = now()
+                WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+              claim.member_id = chartMember
+              claim.insurance_dependent_code = chartDep || null
+              try {
+                await sql`
+                  CREATE TABLE IF NOT EXISTS claim_activity_log (
+                    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    claim_id uuid NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT NOW(),
+                    created_by uuid,
+                    created_by_name text,
+                    kind text NOT NULL DEFAULT 'note',
+                    body text NOT NULL
+                  )`
+                await sql`
+                  INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+                  VALUES (${id}::uuid, 'System (auto)', 'bcbs_member_id_refresh',
+                         ${`BCBS NC submit: refreshed member_id "${claimMember || '(empty)'}" → "${chartMember}" and dep "${claimDep || '(empty)'}" → "${chartDep || '(empty)'}" from chart before transmit.`})`
+              } catch { /* audit log non-fatal */ }
+            }
+          }
+        } catch (e: any) {
+          console.error('[claim submit] BCBS member_id refresh failed (non-fatal):', e?.message)
+        }
+      }
+
       // Refresh NDC codes from the fee schedule onto any CPT entry
       // that doesn't already carry one. Existing claims whose entries
       // were snapshotted before fee_schedule.ndc_code was seeded (or
