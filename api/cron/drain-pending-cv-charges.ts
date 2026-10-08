@@ -46,6 +46,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  // ─── Step 0: find orphan claims and create missing CV rows ──────────
+  // Scans for claims that have a CV CPT code on them but no corresponding
+  // convenience_fee_charges row. This recovers the case where the inline
+  // sign-time path threw BEFORE the INSERT (the Ramsay Schrum failure
+  // mode 2026-10-08). Caps at 50 orphans per minute to bound work.
+  const orphans = await sql`
+    SELECT c.id              AS claim_id,
+           c.practice_id,
+           c.appointment_id,
+           c.service_date,
+           c.patient_first_name,
+           c.patient_last_name,
+           c.cpt_codes,
+           p.name            AS provider_name
+    FROM claims c
+    LEFT JOIN providers p ON p.id = c.provider_id
+    WHERE c.service_date >= '2026-10-07'
+      AND c.cpt_codes IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(c.cpt_codes) AS line
+        WHERE line->>'category' = 'Non-Covered Services'
+          AND (line->>'code' LIKE 'CV%' OR line->>'code' LIKE 'VACV%')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM convenience_fee_charges cv WHERE cv.claim_id = c.id
+      )
+    ORDER BY c.service_date DESC, c.created_at DESC
+    LIMIT 50
+  `
+  const orphanCreated: Array<{ claim_id: string; cv_id: string; cv_code: string; amount_cents: number }> = []
+  for (const row of orphans) {
+    const claimId   = (row as any).claim_id as string
+    const practiceId = (row as any).practice_id as string
+    const apptId   = (row as any).appointment_id as string | null
+    const serviceDate = String((row as any).service_date).slice(0, 10)
+    const patientName = [(row as any).patient_first_name, (row as any).patient_last_name].filter(Boolean).join(' ') || null
+    const providerName = (row as any).provider_name as string | null
+    const cpts: any[] = Array.isArray((row as any).cpt_codes) ? (row as any).cpt_codes : []
+    const cvLine = cpts.find((l: any) => l?.category === 'Non-Covered Services' && (String(l?.code ?? '').startsWith('CV') || String(l?.code ?? '').startsWith('VACV')))
+    if (!cvLine) continue
+    const code = String(cvLine.code)
+    const chargeDollars = parseFloat(String(cvLine.charge_amount ?? '0')) || 0
+    const amountCents = Math.round(chargeDollars * 100) || 5000 // $50 CV1 fallback
+    try {
+      const [ins] = await sql`
+        INSERT INTO convenience_fee_charges (
+          practice_id, appointment_id, claim_id,
+          patient_name, provider_name, service_date,
+          cv_code, amount_cents, status
+        ) VALUES (
+          ${practiceId}::uuid, ${apptId ? apptId : null}::uuid, ${claimId}::uuid,
+          ${patientName}, ${providerName}, ${serviceDate}::date,
+          ${code}, ${amountCents}, 'pending'
+        )
+        RETURNING id`
+      orphanCreated.push({ claim_id: claimId, cv_id: (ins as any).id, cv_code: code, amount_cents: amountCents })
+    } catch (e: any) {
+      console.error('[cv-cron] orphan backfill INSERT failed for claim', claimId, e?.message)
+    }
+  }
+
   // Pull the oldest N pending rows that have a card on file. Rows that
   // don't have a card are left pending for Pam to send a payment link
   // (handled by a separate link-send pipeline, not this cron).
@@ -141,6 +202,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     ok: true,
+    orphans_backfilled: orphanCreated.length,
+    orphan_detail: orphanCreated,
     scanned: rows.length,
     results,
     charged: results.filter(r => r.outcome === 'auto_charged').length,

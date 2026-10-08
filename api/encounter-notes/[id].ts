@@ -684,10 +684,36 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         const flatIv  = cvIsIvFluidsPair(vt)
         const flatCma = cvIsCmaTelePair(vt)
         const isHoliday = cvIsMajorHoliday(dosStr)
+
+        // Insert the row FIRST with placeholder amount so nothing between
+        // here and the final charge can leave the claim without a row.
+        // Google Maps / Square / serverless-timeout can all swallow the
+        // whole block mid-execution; writing the row first means at worst
+        // the row lingers 'pending' with miles=0 and the cron
+        // (drain-pending-cv-charges) + the "orphan CV scan" catch it.
+        // Fallback amount = CV1 ($50) because that's the minimum CV fee —
+        // better to under-charge and let the biller correct than to never
+        // charge at all. Sara 2026-10-08 (Ramsay Schrum case).
+        const patientNameSnap  = [claim.patient_first_name, claim.patient_last_name].filter(Boolean).join(' ') || null
+        const providerNameSnap = (provider as any)?.name ?? null
+        const [cvRowInit] = await sql`
+          INSERT INTO convenience_fee_charges (
+            practice_id, appointment_id, claim_id,
+            patient_name, provider_name, service_date,
+            cv_code, amount_cents, status
+          ) VALUES (
+            ${practiceId}::uuid, ${appt.id}::uuid, ${claim.id}::uuid,
+            ${patientNameSnap}, ${providerNameSnap}, ${dosStr}::date,
+            'CV1', 5000, 'pending'
+          )
+          RETURNING id
+        `
+        const cvRowId = (cvRowInit as any)?.id as string | undefined
+
+        // Now compute the real miles + fee. If any of this throws, the
+        // pending row still exists at $50/CV1 and the cron handles it.
         let miles = 0
         if (!flatIv && !flatCma && !isHoliday) {
-          // Compute driving miles from provider's prior-visit address (same-day)
-          // falling back to provider.home_address, falling back to 0.
           let originAddress: string | null = null
           try {
             const [priorAppt] = await sql`
@@ -716,22 +742,19 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         const time24 = String(appt.scheduled_time ?? '12:00').slice(0, 5)
         const stateCode = (resolvedAddr.state as string) ?? null
         const { fee, code } = cvCalculateFee(miles, dosStr, time24, vt, stateCode)
-        const patientNameSnap  = [claim.patient_first_name, claim.patient_last_name].filter(Boolean).join(' ') || null
-        const providerNameSnap = (provider as any)?.name ?? null
         const amountCents = Math.round(fee * 100)
-        const [cvRow] = await sql`
-          INSERT INTO convenience_fee_charges (
-            practice_id, appointment_id, claim_id,
-            patient_name, provider_name, service_date,
-            cv_code, amount_cents, status
-          ) VALUES (
-            ${practiceId}::uuid, ${appt.id}::uuid, ${claim.id}::uuid,
-            ${patientNameSnap}, ${providerNameSnap}, ${dosStr}::date,
-            ${code}, ${amountCents}, 'pending'
-          )
-          RETURNING id
-        `
-        const cvRowId = (cvRow as any)?.id as string | undefined
+
+        // Upgrade the row with the real amount + code if they differ
+        // from the placeholder. Idempotent: skips if the row is already
+        // charged (shouldn't be at this point, but belt-and-suspenders).
+        if (cvRowId && (amountCents !== 5000 || code !== 'CV1')) {
+          await sql`
+            UPDATE convenience_fee_charges
+            SET cv_code = ${code},
+                amount_cents = ${amountCents},
+                updated_at = NOW()
+            WHERE id = ${cvRowId}::uuid AND status = 'pending'`
+        }
 
         // ─── Phase 2: auto-charge pipeline ──────────────────────────────
         // Try direct Square charge against the family's card on file.
