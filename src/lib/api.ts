@@ -803,17 +803,22 @@ export async function uploadNotePhoto(file: File): Promise<string> {
 }
 
 export async function uploadNoteFile(file: File): Promise<{ url: string; name: string; content_type: string }> {
+  // Direct-to-blob upload so audio/video recordings (50-200 MB) don't
+  // hit Vercel's serverless function body-size limit. Browser gets a
+  // signed URL from /api/upload-note-file-token and streams the file
+  // straight to Blob storage. Sara 2026-10-07.
   const { fetchAuthSession } = await import('aws-amplify/auth')
+  const { upload } = await import('@vercel/blob/client')
   const session = await fetchAuthSession()
-  const token = session.tokens?.accessToken?.toString() ?? ''
+  const accessToken = session.tokens?.accessToken?.toString() ?? ''
   const contentType = file.type || 'application/octet-stream'
-  const response = await fetch(`/api/upload-note-file?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(contentType)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
-    body: file,
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_')
+  const blob = await upload(`note-files/${Date.now()}-${safeName}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/upload-note-file-token',
+    clientPayload: JSON.stringify({ accessToken }),
   })
-  if (!response.ok) throw new Error('File upload failed')
-  return response.json()
+  return { url: blob.url, name: file.name, content_type: contentType }
 }
 
 // ── Eligibility ───────────────────────────────────────────────

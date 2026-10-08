@@ -2388,7 +2388,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.csv,image/*"
+                      accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.csv,.mp3,.m4a,.wav,.aac,.ogg,.mp4,.mov,.m4v,.3gp,.webm,.avi,image/*,audio/*,video/*"
                       className="hidden"
                       onChange={e => { const f = e.target.files?.[0]; if (f) handleFileAttach(f); e.target.value = '' }} />
                     <button
