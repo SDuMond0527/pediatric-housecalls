@@ -796,7 +796,10 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
             if (family?.square_card_id && family?.square_customer_id && CV_SQUARE_ACCESS_TOKEN) {
               try {
                 const payResp = await cvSquarePost('/v2/payments', {
-                  idempotency_key: `cv_charge_${cvRowId}`,
+                  // Square's idempotency_key maxes at 45 chars. `cv_charge_` +
+                  // UUID = 46 → rejected. Strip hyphens to fit in 34.
+                  // Sara 2026-10-08 (actual bug behind Mackenzie/Ramsay).
+                  idempotency_key: `cv${(cvRowId ?? '').replace(/-/g, '')}`,
                   amount_money: { amount: amountCents, currency: 'USD' },
                   source_id: family.square_card_id,
                   customer_id: family.square_customer_id,

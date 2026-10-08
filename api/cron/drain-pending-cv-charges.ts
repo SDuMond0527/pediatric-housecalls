@@ -168,7 +168,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'Square-Version': '2024-10-17',
         },
         body: JSON.stringify({
-          idempotency_key: `cv_charge_${cvId}`,
+          // Square's idempotency_key maxes at 45 chars; strip UUID
+          // hyphens to fit. Sara 2026-10-08.
+          idempotency_key: `cv${cvId.replace(/-/g, '')}`,
           amount_money: { amount: amt, currency: 'USD' },
           source_id: (row as any).square_card_id,
           customer_id: (row as any).square_customer_id,
