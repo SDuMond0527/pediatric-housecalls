@@ -142,7 +142,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       catch { return dosStr }
     })()
     const practiceName = process.env.PRACTICE_NAME || 'Pediatric House Calls'
-    const chargeNote = `${practiceName} — in-home visit convenience fee for ${first} on ${dosDisplay}. Thank you so much for allowing us to care for your child!`
+    // Square's /v2/payments.note has a 45-char cap — bypassed yesterday
+    // on Mackenzie, caught today on Ramsay. See encounter-notes/[id].ts.
+    const chargeNote = `In-home CV fee ${first} ${dosDisplay}`.slice(0, 45)
 
     try {
       const payRes = await fetch(`${SQUARE_API_BASE}/v2/payments`, {
