@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-09-payroll-cma-rn
+// Service worker — deliberate passthrough. Version: 2026-10-09-family-school-notes-tab
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

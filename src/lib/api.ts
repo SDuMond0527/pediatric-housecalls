@@ -527,6 +527,22 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+export const familyGetSchoolNotes = () =>
+  familyApiFetch<Array<{
+    id: string
+    child_id: string
+    child_name: string
+    excuse_dates_text: string
+    provider_name: string | null
+    blob_url: string
+    filename: string
+    sent_at: string | null
+    status: string
+    created_at: string
+    visit_date: string | null
+    visit_type: string | null
+  }>>('/api/family/school-notes')
+
 // Fetches the appointment + child + provider for a single appointment id
 // owned by this family. Primary data source for FamilySchoolExcuseRequest
 // so the UI can render even if the provider hasn't signed the encounter
