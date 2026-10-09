@@ -56,7 +56,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE a.scheduled_date >= ${start}::date
         AND a.scheduled_date <= ${end}::date
         AND en.practice_id = ${practiceId}::uuid
-        AND en.cpt_codes IS NOT NULL
+        AND en.signed_at IS NOT NULL
+        -- Note: used to require cpt_codes IS NOT NULL, which excluded
+        -- CMA notes (CMAs don't bill — their paired MD/NP side has the
+        -- CPTs). Loosened 2026-10-09 so CMA + RN paired-visit sign-ins
+        -- surface in payroll via PAIRED_ROLE_PAY lookup. The client-side
+        -- payroll builder synthesizes a per-visit row for empty-CPT
+        -- paired notes.
     `,
     sql`
       SELECT provider_id, date::text AS date, state, start_time, end_time

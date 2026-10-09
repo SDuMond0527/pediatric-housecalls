@@ -90,7 +90,10 @@ export const VACV_SPLIT: Record<string, number> = {
 // Every alias name for each pair maps to the same value.
 import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from './dualVisitTypes'
 
-const CMA_TELE_PAY = { md: 31, pnp: 31, cma: 35, rn: 0 }
+// CMA: $35 flat visit + $10 trip = $45 total per paired visit.
+// RN:  $80 flat visit + $10 trip = $90 total per paired visit.
+// Sara 2026-10-09.
+const CMA_TELE_PAY = { md: 31, pnp: 31, cma: 45, rn: 0 }
 const IV_FLUIDS_PAY = { md: 31, pnp: 31, cma: 0, rn: 90 }
 
 export const PAIRED_ROLE_PAY: Record<string, { md: number; pnp: number; cma: number; rn: number }> = {

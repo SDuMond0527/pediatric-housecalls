@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports } from '../../lib/api'
-import { computeProviderPay } from '../../lib/payrollRules'
+import { computeProviderPay, PAIRED_ROLE_PAY } from '../../lib/payrollRules'
 
 interface ApptRow {
   id: string
@@ -275,10 +275,53 @@ export function AdminReports() {
     // Step 1: build a flat row per CPT line.
     const raw: PayrollRow[] = []
     encounterNotes.forEach(en => {
-      if (!Array.isArray(en.cpt_codes)) return
       const provider = providers.find(p => p.id === en.provider_id)
       if (!provider) return
-      en.cpt_codes.forEach((c, idx) => {
+      const cpts: any[] = Array.isArray(en.cpt_codes) ? en.cpt_codes : []
+      const vt = en.visit_type ?? ''
+      // Paired visits (CMA + telemedicine, IV fluids) create two notes:
+      // the MD/NP note carries the billable CPTs; the CMA/RN support note
+      // has none. Without CPT lines the forEach below produces no rows,
+      // so synthesize ONE row per empty-CPT paired note from the paired
+      // pay rule — this is how CMAs and RNs end up on payroll. Sara
+      // 2026-10-09.
+      const paired = PAIRED_ROLE_PAY[vt]
+      const role = String(provider.role ?? '').toUpperCase()
+      if (cpts.length === 0 && paired) {
+        const pairPay = role === 'MD'  ? paired.md
+                      : (role === 'PNP' || role === 'NP') ? paired.pnp
+                      : role === 'CMA' ? paired.cma
+                      : role === 'RN'  ? paired.rn
+                      : 0
+        if (pairPay > 0) {
+          raw.push({
+            key: `${en.encounter_note_id}-paired`,
+            encounterNoteId: en.encounter_note_id,
+            providerId: provider.id,
+            providerName: provider.name,
+            chartNumber: en.chart_number ?? '',
+            patientName: fmtPatientName(en.patient_first_name, en.patient_last_name),
+            claimNumber: en.claim_number ?? '',
+            payer: fmtPayer(en.payer_name, en.payer_id),
+            code: role === 'CMA' ? 'CMA-pair' : role === 'RN' ? 'RN-pair' : 'MDNP-pair',
+            description: `${role} share of ${vt}`,
+            category: 'Procedure',
+            encounterDate: en.scheduled_date,
+            visitType: vt,
+            claimDate: en.claim_created_at,
+            charge: 0,
+            quantity: 1,
+            rvu: 0,
+            rvuRate: 0,
+            rvuCount: 0,
+            providerPay: pairPay,
+            cvSplit: 0,
+            appointmentStatus: en.appointment_status ?? '',
+          })
+        }
+        return
+      }
+      cpts.forEach((c, idx) => {
         const charge = Number(c.charge_amount) || 0
         const quantity = Number(c.units) || 1
         const pay = computeProviderPay({

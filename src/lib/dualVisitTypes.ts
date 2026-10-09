@@ -14,6 +14,7 @@ export const CMA_TELE_ALIASES = [
 
 export const IV_FLUIDS_ALIASES = [
   'In-home IV fluids',                            // legacy short name (some practices)
+  'In-home IV fluids – RN only',                  // family-booking en-dash variant used by PHC
   'RN IV fluids',                                 // legacy short name (some practices)
   'RN IV fluid visit — paired with MD/NP screening',
   'RN in-home IV fluids administration',          // PHC — RN side of the IV pair
