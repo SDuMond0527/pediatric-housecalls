@@ -165,6 +165,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `
       : []
 
+    // School notes (same filter as /api/family/school-notes — scoped to
+    // the family's own children). Bootstraps table in case this is the
+    // first endpoint to touch it on a cold deploy.
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS school_notes (
+          id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          practice_id            uuid NOT NULL REFERENCES practices(id),
+          child_id               uuid NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+          appointment_id         uuid REFERENCES appointments(id),
+          requested_by_family_id uuid REFERENCES family_profiles(id),
+          requested_by_name      text,
+          excuse_dates_text      text NOT NULL,
+          parent_additional_notes text,
+          rendering_provider_id  uuid REFERENCES providers(id),
+          rendering_provider_name text,
+          rendering_provider_npi text,
+          blob_url               text NOT NULL,
+          filename               text NOT NULL,
+          sent_to_email          text,
+          sent_at                timestamptz,
+          status                 text NOT NULL DEFAULT 'generated',
+          created_at             timestamptz NOT NULL DEFAULT NOW()
+        )`
+      await sql`ALTER TABLE school_notes ADD COLUMN IF NOT EXISTS requested_by_provider_id uuid REFERENCES providers(id)`
+      await sql`ALTER TABLE school_notes ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'family'`
+    } catch (e: any) { console.error('school_notes bootstrap failed:', e?.message) }
+
+    const schoolNoteRows = childIds.length
+      ? await sql`
+          SELECT
+            sn.id,
+            sn.child_id,
+            sn.excuse_dates_text,
+            sn.rendering_provider_name,
+            sn.blob_url,
+            sn.filename,
+            sn.sent_at,
+            sn.status,
+            sn.created_at,
+            a.scheduled_date AS visit_date,
+            a.visit_type
+          FROM school_notes sn
+          LEFT JOIN appointments a ON a.id = sn.appointment_id
+          WHERE sn.practice_id = ${provider.practice_id}::uuid
+            AND sn.child_id = ANY(${childIds}::uuid[])
+          ORDER BY sn.created_at DESC
+          LIMIT 200
+        `
+      : []
+
+    const schoolNotes = schoolNoteRows.map((r: any) => ({
+      id: r.id,
+      child_id: r.child_id,
+      child_name: childMap[r.child_id] ?? 'Unknown',
+      excuse_dates_text: r.excuse_dates_text,
+      provider_name: r.rendering_provider_name,
+      blob_url: r.blob_url,
+      filename: r.filename,
+      sent_at: r.sent_at,
+      status: r.status,
+      created_at: r.created_at,
+      visit_date: r.visit_date,
+      visit_type: r.visit_type,
+    }))
+
     const notes = encounterNotes.map((n: any) => ({
       id: n.id,
       child_id: n.child_id,
@@ -191,6 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       waitlist,
       offers,
       encounter_notes: notes,
+      school_notes: schoolNotes,
       statements,
     })
   } catch (e: any) {

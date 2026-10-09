@@ -1,13 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ArrowLeft, Eye, Clock, User, Stethoscope, Syringe, Home, Download } from 'lucide-react'
+import { ArrowLeft, Eye, Clock, User, Stethoscope, FileText, FlaskConical, Activity, CalendarPlus, Home, Download } from 'lucide-react'
 import { getFamilyPortalView, downloadEncounterNoteHtml } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { PatientBillingList, type BillingStatement } from '../../components/PatientBillingList'
+import { PatientReportsSection } from '../../components/PatientReportsSection'
 import { VISIT_TYPE_INFO } from '../../lib/zipData'
 
-type Tab = 'home' | 'visits' | 'vaccines' | 'profile'
+type Tab = 'home' | 'visits' | 'school-notes' | 'labs' | 'radiology' | 'book' | 'profile'
+
+interface SchoolNote {
+  id: string
+  child_id: string
+  child_name: string
+  excuse_dates_text: string
+  provider_name: string | null
+  blob_url: string
+  filename: string
+  sent_at: string | null
+  status: string
+  created_at: string
+  visit_date: string | null
+  visit_type: string | null
+}
 
 function safeFormat(value: string | null | undefined, fmt: string, suffix = ''): string {
   if (!value) return '—'
@@ -63,13 +79,13 @@ export function AdminViewAsParent() {
     )
   }
 
-  const { family, children, bookings, waitlist, offers, encounter_notes, statements } = data
+  const { family, children, bookings, waitlist, offers, encounter_notes, statements } = data as any
+  const schoolNotes: SchoolNote[] = (data as any).school_notes ?? []
   const displayName = family.display_name || family.email || 'this family'
 
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
-      {/* View-as-parent banner — makes it obvious this is an impersonation
-          view, not the admin's own account. Sticky at top. */}
+      {/* View-as-parent banner — makes it obvious this is an impersonation view. */}
       <div className="bg-[#EEEDFE] border-b border-[#AFA9EC] px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-30">
         <div className="flex items-center gap-3 min-w-0">
           <Eye size={16} className="text-[#7F77DD] flex-shrink-0" />
@@ -87,13 +103,16 @@ export function AdminViewAsParent() {
         </button>
       </div>
 
-      {/* Family-portal-style tab bar (mirrors AppLayout / family sidebar) */}
+      {/* Tab bar — matches the parent portal nav in FamilyLayout exactly. */}
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-3 flex items-center gap-1 overflow-x-auto">
         {[
-          { key: 'home' as const,     label: 'Home',     icon: Home },
-          { key: 'visits' as const,   label: 'Visits',   icon: Stethoscope },
-          { key: 'vaccines' as const, label: 'Vaccines', icon: Syringe },
-          { key: 'profile' as const,  label: 'Profile',  icon: User },
+          { key: 'home'         as const, label: 'Home',          icon: Home },
+          { key: 'visits'       as const, label: 'Visits',        icon: Stethoscope },
+          { key: 'school-notes' as const, label: 'School notes',  icon: FileText },
+          { key: 'labs'         as const, label: 'Labs',          icon: FlaskConical },
+          { key: 'radiology'    as const, label: 'Radiology',     icon: Activity },
+          { key: 'book'         as const, label: 'Book a visit',  icon: CalendarPlus },
+          { key: 'profile'      as const, label: 'Profile',       icon: User },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -120,9 +139,12 @@ export function AdminViewAsParent() {
             statements={statements}
           />
         )}
-        {tab === 'visits' && <VisitsTab notes={encounter_notes} />}
-        {tab === 'vaccines' && <VaccinesTab notes={encounter_notes} />}
-        {tab === 'profile' && <ProfileTab family={family} children={children} />}
+        {tab === 'visits'       && <VisitsTab notes={encounter_notes} />}
+        {tab === 'school-notes' && <SchoolNotesTab schoolNotes={schoolNotes} notes={encounter_notes} multiChild={children.length > 1} />}
+        {tab === 'labs'         && <ReportsTab children={children} kind="lab" />}
+        {tab === 'radiology'    && <ReportsTab children={children} kind="radiology" />}
+        {tab === 'book'         && <BookTab />}
+        {tab === 'profile'      && <ProfileTab family={family} children={children} />}
       </div>
     </div>
   )
@@ -141,7 +163,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
 
   return (
     <div className="space-y-6">
-      {/* Family header — mirror FamilyDashboard's header */}
       <div className="bg-white border border-[#E8E8E4] rounded-xl p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -167,7 +188,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         )}
       </div>
 
-      {/* Slot offers */}
       {offers.length > 0 && (
         <div>
           <h2 className="text-[13px] font-semibold text-[#1D9E75] uppercase tracking-wider mb-3">A spot opened up</h2>
@@ -193,7 +213,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         </div>
       )}
 
-      {/* Waitlist */}
       {waitlist.length > 0 && (
         <div>
           <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">On the waitlist</h2>
@@ -212,7 +231,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         </div>
       )}
 
-      {/* Upcoming */}
       {upcoming.length > 0 && (
         <div>
           <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Upcoming appointments</h2>
@@ -222,7 +240,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         </div>
       )}
 
-      {/* Past */}
       {past.length > 0 && (
         <div>
           <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Past visits</h2>
@@ -232,7 +249,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         </div>
       )}
 
-      {/* Empty state */}
       {upcoming.length === 0 && past.length === 0 && waitlist.length === 0 && offers.length === 0 && (
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center shadow-sm">
           <Clock size={28} className="text-[#aeaeb2] mx-auto mb-3" />
@@ -240,7 +256,6 @@ function HomeTab({ family, children, bookings, waitlist, offers, statements }: {
         </div>
       )}
 
-      {/* Billing */}
       <div>
         <h2 className="text-[13px] font-semibold text-[#555] uppercase tracking-wider mb-3">Billing</h2>
         <PatientBillingList
@@ -349,35 +364,141 @@ function VisitsTab({ notes }: { notes: any[] }) {
 
 // ─────────────────────────────────────────────────────────────
 
-function VaccinesTab({ notes }: { notes: any[] }) {
-  const vaccineNotes = notes.filter(n => n.note_type === 'In-home vaccine administration' && n.vaccine_administrations?.length)
-  if (vaccineNotes.length === 0) {
-    return (
-      <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center shadow-sm">
-        <Syringe size={28} className="text-[#aeaeb2] mx-auto mb-3" />
-        <div className="text-[13px] text-[#1A1A2E]">No vaccines administered yet through Pediatric Housecalls.</div>
-      </div>
-    )
-  }
+function SchoolNotesTab({ schoolNotes, notes, multiChild }: { schoolNotes: SchoolNote[]; notes: any[]; multiChild: boolean }) {
+  const signedNotes = notes.filter(n => n.signed_at)
   return (
-    <div className="space-y-3">
-      {vaccineNotes.map(n => (
-        <div key={n.id} className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="font-display text-[15px] font-medium text-[#1A1A2E]">{n.child_name}</span>
-            <span className="text-[12px] text-[#555]">· {safeFormat(n.scheduled_date, 'MMM d, yyyy')}</span>
-            {n.provider_name && <span className="text-[12px] text-[#555]">· {n.provider_name}</span>}
-          </div>
-          <ul className="space-y-1 text-[12px] text-[#1A1A2E]">
-            {(n.vaccine_administrations ?? []).map((v: any, i: number) => (
-              <li key={i} className="flex justify-between gap-3">
-                <span>{v.vaccine_name || v.cvx || 'Vaccine'} {v.dose_number ? `· Dose ${v.dose_number}` : ''}</span>
-                {v.lot_number && <span className="text-[#555]">Lot {v.lot_number}</span>}
-              </li>
-            ))}
-          </ul>
+    <div>
+      <section className="mb-10">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText size={16} className="text-[#7F77DD]" />
+          <h2 className="font-display text-[15px] font-semibold text-[#1A1A2E]">School excuse notes</h2>
         </div>
-      ))}
+        {schoolNotes.length === 0 ? (
+          <div className="text-center py-10 bg-white border border-[#E8E8E4] rounded-xl">
+            <FileText size={28} className="text-[#E8E8E4] mx-auto mb-2" />
+            <div className="text-[13px] text-[#1A1A2E]">No school excuse notes yet.</div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {schoolNotes.map(sn => (
+              <div key={sn.id} className="bg-white border border-[#E8E8E4] rounded-xl px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-display text-[14px] font-semibold text-[#1A1A2E]">{sn.excuse_dates_text}</span>
+                    {multiChild && (
+                      <span className="text-[11px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full">{sn.child_name}</span>
+                    )}
+                  </div>
+                  <div className="text-[12px] text-[#1A1A2E] flex flex-wrap gap-x-3 gap-y-0.5">
+                    {sn.provider_name && <span>{sn.provider_name}</span>}
+                    <span className="text-[#555]">Generated {safeFormat(sn.created_at, 'MMM d, yyyy')}</span>
+                  </div>
+                </div>
+                <a href={sn.blob_url} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:underline flex-shrink-0">
+                  <Download size={12} /> Download PDF
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <Stethoscope size={16} className="text-[#7F77DD]" />
+          <h2 className="font-display text-[15px] font-semibold text-[#1A1A2E]">Visit notes</h2>
+        </div>
+        {signedNotes.length === 0 ? (
+          <div className="text-center py-10 bg-white border border-[#E8E8E4] rounded-xl">
+            <Stethoscope size={28} className="text-[#E8E8E4] mx-auto mb-2" />
+            <div className="text-[13px] text-[#1A1A2E]">No completed visit notes yet.</div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {signedNotes.map(n => (
+              <div key={n.id} className="bg-white border border-[#E8E8E4] rounded-xl px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-display text-[14px] font-semibold text-[#1A1A2E]">
+                      {safeFormat(n.scheduled_date, 'MMMM d, yyyy')}
+                    </span>
+                    {n.visit_type && (
+                      <span className="text-[11px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full">{n.visit_type}</span>
+                    )}
+                    {multiChild && (
+                      <span className="text-[11px] font-medium bg-[#F1EFE8] text-[#1A1A2E] px-2 py-0.5 rounded-full">{n.child_name}</span>
+                    )}
+                  </div>
+                  <div className="text-[12px] text-[#1A1A2E]">{n.provider_name || '—'}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => downloadEncounterNoteHtml(n.id).catch(e => alert(e?.message ?? 'Download failed'))}
+                  className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:underline flex-shrink-0">
+                  <Download size={12} /> Download
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+
+function ReportsTab({ children, kind }: { children: any[]; kind: 'lab' | 'radiology' }) {
+  const label = kind === 'lab' ? 'Lab reports' : 'Radiology reports'
+  const emptyIcon = kind === 'lab'
+    ? <FlaskConical size={32} className="text-[#E8E8E4] mx-auto mb-3" />
+    : <Activity size={32} className="text-[#E8E8E4] mx-auto mb-3" />
+  const multiChild = (children?.length ?? 0) > 1
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="font-display text-[22px] font-semibold text-[#1A1A2E]">{label}</h1>
+        <p className="text-[13px] text-[#1A1A2E] mt-1">
+          Reports uploaded by the family or added by our team.
+        </p>
+      </div>
+
+      {(!children || children.length === 0) ? (
+        <div className="text-center py-16">
+          {emptyIcon}
+          <div className="text-[14px] text-[#1A1A2E]">No children on file.</div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {children.map(child => (
+            <div key={child.id}>
+              {multiChild && (
+                <div className="text-[13px] font-semibold text-[#7F77DD] mb-2">
+                  {[child.first_name, child.last_name].filter(Boolean).join(' ') || child.display_label}
+                </div>
+              )}
+              <PatientReportsSection childId={child.id} kind={kind} role="provider" />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+
+function BookTab() {
+  return (
+    <div className="bg-white border border-[#E8E8E4] rounded-xl p-10 text-center shadow-sm">
+      <CalendarPlus size={28} className="text-[#aeaeb2] mx-auto mb-3" />
+      <div className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Book a visit</div>
+      <div className="text-[13px] text-[#1A1A2E]/70 max-w-md mx-auto">
+        Booking is disabled from the admin impersonation view. To schedule a visit for this family,
+        use the chart's booking tools or the main schedule.
+      </div>
     </div>
   )
 }
