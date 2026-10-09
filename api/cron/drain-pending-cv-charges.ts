@@ -27,6 +27,15 @@ const SQUARE_API_BASE     = SQUARE_ENV === 'sandbox'
 const MAX_AUTO_CHARGE_CENTS = 30000
 const BATCH_PER_RUN = 25
 
+// Neon returns date/timestamptz as JS Date; `String(d).slice(0,10)` yields
+// "Fri Oct 09", which Postgres rejects as `::date`. Caused the orphan
+// backfill INSERT to throw every minute for Colin Simpson's claim 2026-10-09.
+const toYmd = (d: any): string => {
+  if (!d) return ''
+  if (d instanceof Date) return d.toISOString().slice(0, 10)
+  return String(d).slice(0, 10)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Vercel cron requests include a specific authorization header. If
   // CRON_SECRET is configured, enforce it so the endpoint isn't publicly
@@ -80,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const claimId   = (row as any).claim_id as string
     const practiceId = (row as any).practice_id as string
     const apptId   = (row as any).appointment_id as string | null
-    const serviceDate = String((row as any).service_date).slice(0, 10)
+    const serviceDate = toYmd((row as any).service_date)
     const patientName = [(row as any).patient_first_name, (row as any).patient_last_name].filter(Boolean).join(' ') || null
     const providerName = (row as any).provider_name as string | null
     const cpts: any[] = Array.isArray((row as any).cpt_codes) ? (row as any).cpt_codes : []
@@ -149,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cvId = (row as any).id as string
     const amt  = Number((row as any).amount_cents)
     const first = String((row as any).patient_first_name ?? '').trim() || 'your child'
-    const dosStr = String((row as any).service_date).slice(0, 10)
+    const dosStr = toYmd((row as any).service_date)
     const dosDisplay = (() => {
       try { const d = new Date(dosStr); return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}` }
       catch { return dosStr }

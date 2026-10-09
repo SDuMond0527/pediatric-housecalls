@@ -7,6 +7,18 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 // exclusion means we can't share the function via import; duplicating
 // here is the established pattern. Sara 2026-10-06.
 const CV_CUTOVER_DATE = '2026-10-07' // Automation starts for appts with scheduled_date >= this
+
+// Neon's JS driver returns `date` and `timestamptz` columns as JS Date objects.
+// `String(dateObj).slice(0, 10)` returns "Fri Oct 09" (via Date.prototype.toString),
+// which Postgres can't parse when passed back as `::date` — the INSERT throws
+// and the whole CV auto-charge block gets swallowed by its try/catch, so Colin
+// Simpson's claim shipped with no CV row 2026-10-09 (and the orphan cron hit
+// the same bug on backfill). Always route date columns through toISOString.
+const toYmd = (d: any): string => {
+  if (!d) return ''
+  if (d instanceof Date) return d.toISOString().slice(0, 10)
+  return String(d).slice(0, 10)
+}
 const CV_CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
 const CV_IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const cvIsCmaTelePair  = (v?: string | null) => !!v && CV_CMA_TELE_ALIASES.includes(v)
@@ -671,7 +683,7 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   // a row already exists for this claim. Sara 2026-10-06.
   if (claim?.id && appt?.scheduled_date) {
     try {
-      const dosStr = String(appt.scheduled_date).slice(0, 10)
+      const dosStr = toYmd(appt.scheduled_date)
       const inAutomationWindow = dosStr >= CV_CUTOVER_DATE
       // Skip pure-virtual visits (no in-home component → no CV).
       const vt = String(appt.visit_type ?? '')
@@ -1131,8 +1143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
 
       const dateStr = appt?.scheduled_date
-        ? String(appt.scheduled_date).slice(0, 10)
-        : String(note.signed_at ?? note.created_at ?? '').slice(0, 10)
+        ? toYmd(appt.scheduled_date)
+        : toYmd(note.signed_at ?? note.created_at)
       const patientSlug = [child?.first_name, child?.last_name]
         .filter(Boolean).join('_').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'patient'
       const filename = `encounter_${patientSlug}_${dateStr}.html`
