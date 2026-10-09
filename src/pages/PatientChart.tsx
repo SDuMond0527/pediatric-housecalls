@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -219,7 +219,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '' })
+  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '', insurance_card_front_url: '', insurance_card_back_url: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -584,6 +584,8 @@ export function PatientChart() {
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
         insurance_subscriber_relationship: child?.insurance_subscriber_relationship || '',
+        insurance_card_front_url: child?.insurance_card_front_url || '',
+        insurance_card_back_url: child?.insurance_card_back_url || '',
       })
     }
     setEditingSection(section)
@@ -611,6 +613,8 @@ export function PatientChart() {
           insurance_subscriber_dob:          isSelf ? null : (insEdit.insurance_subscriber_dob || null),
           insurance_subscriber_gender:       isSelf ? null : (insEdit.insurance_subscriber_gender || null),
           insurance_subscriber_relationship: isSelf ? null : (insEdit.insurance_subscriber_relationship || null),
+          insurance_card_front_url:          isSelf ? null : (insEdit.insurance_card_front_url || null),
+          insurance_card_back_url:           isSelf ? null : (insEdit.insurance_card_back_url || null),
         }
       }
       // Compute _clear: any field that went from non-empty on the current
@@ -620,7 +624,7 @@ export function PatientChart() {
       const CLEARABLE_BY_SECTION: Record<string, string[]> = {
         contact:   ['parent_phone', 'parent_email', 'parent_address', 'parent_city', 'parent_state', 'parent_zip'],
         medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'dosespot_pharmacy_id', 'pcp', 'pcp_id', 'vaccination_status'],
-        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship'],
+        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship', 'insurance_card_front_url', 'insurance_card_back_url'],
       }
       const clears = computeClears(child ?? {}, body, CLEARABLE_BY_SECTION[section] || [])
       const payload = clears.length ? { ...body, _clear: clears } : body
@@ -1287,13 +1291,11 @@ export function PatientChart() {
                           insurance_subscriber_dob: insEdit.insurance_subscriber_dob,
                           insurance_subscriber_gender: insEdit.insurance_subscriber_gender,
                           insurance_subscriber_relationship: insEdit.insurance_subscriber_relationship,
-                          // Card URLs live on the child record but aren't edited from
-                          // this form (upload happens elsewhere). Pass empty strings.
-                          insurance_card_front_url: '',
-                          insurance_card_back_url: '',
+                          insurance_card_front_url: insEdit.insurance_card_front_url,
+                          insurance_card_back_url: insEdit.insurance_card_back_url,
                         }}
                         onChange={patch => setInsEdit(p => ({ ...p, ...patch }))}
-                        showCards={false}
+                        uploadCard={childId ? (file, side) => providerUploadInsuranceCard(childId, file, side) : undefined}
                       />
                       {editError &&<div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
