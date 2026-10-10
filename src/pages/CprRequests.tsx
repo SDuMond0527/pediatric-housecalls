@@ -313,9 +313,6 @@ export function CprRequests() {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] mb-4">
                     <div><span className="text-[#1A1A2E]">Contact email: </span><span className="font-medium">{noteFields.PARENTEMAIL || b.family?.email || '—'}</span></div>
                     <div><span className="text-[#1A1A2E]">Contact phone: </span><span className="font-medium">{noteFields.PARENTPHONE || b.family?.phone || '—'}</span></div>
-                    {noteFields.DOB && (
-                      <div><span className="text-[#1A1A2E]">Date of birth: </span><span className="font-medium">{noteFields.DOB}</span></div>
-                    )}
                     {noteFields.ADDR && (
                       <div className="col-span-2"><span className="text-[#1A1A2E]">Address: </span><span className="font-medium">{noteFields.ADDR}</span></div>
                     )}
@@ -375,7 +372,6 @@ const CPR_DURATION_FOR_MODAL = 180
 function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCreated: (newBookingId?: string) => void | Promise<void> }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [dob, setDob] = useState('')
   const [address, setAddress] = useState('')
   const [city, setCity] = useState('')
   const [state, setState] = useState('NC')
@@ -397,7 +393,6 @@ function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCre
     const err =
       req(firstName, 'First name')
       || req(lastName, 'Last name')
-      || req(dob, 'Date of birth')
       || req(address, 'Street address')
       || req(city, 'City')
       || req(state, 'State')
@@ -422,7 +417,6 @@ function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCre
       const notes = [
         `Ref: ${ref}`,
         `CONTACT_NAME:${firstName.trim()} ${lastName.trim()}`,
-        `DOB:${dob}`,
         `ADDR:${fullAddress}`,
         `PARENTEMAIL:${email.trim()}`,
         `PARENTPHONE:${phone.trim()}`,
@@ -490,11 +484,8 @@ function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCre
           <div className="grid grid-cols-2 gap-3">
             <Input label="First name *" value={firstName} onChange={e => setFirstName(e.target.value)} />
             <Input label="Last name *" value={lastName} onChange={e => setLastName(e.target.value)} />
-            <Input label="Date of birth *" type="date" value={dob} onChange={e => setDob(e.target.value)} />
             <Input label="Phone *" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
-            <div className="col-span-2">
-              <Input label="Email *" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
+            <Input label="Email *" type="email" value={email} onChange={e => setEmail(e.target.value)} />
             <div className="col-span-2">
               <Input label="Street address *" value={address} onChange={e => setAddress(e.target.value)} />
             </div>
