@@ -1,11 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { XCircle, Clock, ChevronDown, Check, AlertCircle } from 'lucide-react'
+import { XCircle, Clock, ChevronDown, Check, AlertCircle, Plus, X } from 'lucide-react'
 import { format } from 'date-fns'
-import { getBookingRequests, updateBookingRequest, getFamiliesByIds, invokeNotifications, createAppointmentWithOverlapRetry } from '../lib/api'
+import { getBookingRequests, updateBookingRequest, getFamiliesByIds, invokeNotifications, createAppointmentWithOverlapRetry, createBookingRequest, getProviderByName } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 import type { BookingRequest, FamilyProfile } from '../types/family'
+
+// Full visit_type strings as stored on booking_requests and appointments.
+// Keep these byte-identical to zipData.ts so AdminSchedule / Today / email
+// subject lines all resolve the same metadata entry.
+const CPR_CLASS_TYPES = [
+  {
+    label: 'Heartsaver (pediatric)',
+    value: 'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)',
+  },
+  {
+    label: 'BLS (adult)',
+    value: 'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)',
+  },
+] as const
 
 // Provider-facing CPR requests page (Sara 2026-09-21). Melissa lands
 // here from the "Review & respond" button in her request email. Shows
@@ -72,6 +87,7 @@ export function CprRequests() {
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
   const [actioning, setActioning] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
 
   async function fetchBookings() {
     setLoading(true)
@@ -82,8 +98,8 @@ export function CprRequests() {
     const merged = (results.flat() as BookingRequest[])
       .filter(b => b.visit_type.toLowerCase().includes('cpr class'))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    const familyIds = [...new Set(merged.map(b => b.family_id))]
-    const families = familyIds.length ? await getFamiliesByIds(familyIds).catch(() => []) : []
+    const familyIds = [...new Set(merged.map(b => b.family_id).filter(Boolean))]
+    const families = familyIds.length ? await getFamiliesByIds(familyIds as string[]).catch(() => []) : []
     setBookings(merged.map(b => ({
       ...b,
       family: (families as FamilyProfile[]).find(f => f.id === b.family_id),
@@ -220,15 +236,27 @@ export function CprRequests() {
           <div className="font-display text-[18px] font-medium text-[#1A1A2E]">CPR class requests</div>
           <div className="text-[12px] text-[#1A1A2E] mt-0.5">Approve or decline family requests for in-home CPR classes.</div>
         </div>
-        <div className="flex gap-1 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-0.5">
-          {(['pending', 'all'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-md text-[12px] font-medium capitalize transition-colors ${filter === f ? 'bg-white shadow-sm text-[#1A1A2E]' : 'text-[#1A1A2E] hover:text-[#555]'}`}>
-              {f === 'pending' ? 'Pending' : 'All history'}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <Button variant="teal" size="xs" onClick={() => setScheduleOpen(true)}>
+            <Plus size={12} /> Schedule a class
+          </Button>
+          <div className="flex gap-1 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-0.5">
+            {(['pending', 'all'] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-3 py-1.5 rounded-md text-[12px] font-medium capitalize transition-colors ${filter === f ? 'bg-white shadow-sm text-[#1A1A2E]' : 'text-[#1A1A2E] hover:text-[#555]'}`}>
+                {f === 'pending' ? 'Pending' : 'All history'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {scheduleOpen && (
+        <ScheduleClassModal
+          onClose={() => setScheduleOpen(false)}
+          onCreated={async () => { setScheduleOpen(false); await fetchBookings() }}
+        />
+      )}
 
       {actionError && (
         <div className="mx-6 mt-3 flex items-start gap-2 text-[13px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg">
@@ -245,7 +273,7 @@ export function CprRequests() {
         )}
         {bookings.map(b => {
           const noteFields = parseBookingNotes(b.notes)
-          const patientName = b.family?.display_name || b.family?.email || 'Unknown family'
+          const patientName = b.family?.display_name || b.family?.email || noteFields.CONTACT_NAME || 'Unknown contact'
           return (
             <div key={b.id} id={`cpr-card-${b.id}`} className={`border rounded-xl overflow-hidden bg-white shadow-sm ${b.status === 'pending' ? 'border-[#FAC775]' : 'border-[#E8E8E4]'}`}>
               <div className="flex items-center gap-3 px-5 py-4 cursor-pointer" onClick={() => setExpanded(expanded === b.id ? null : b.id)}>
@@ -271,6 +299,9 @@ export function CprRequests() {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] mb-4">
                     <div><span className="text-[#1A1A2E]">Contact email: </span><span className="font-medium">{noteFields.PARENTEMAIL || b.family?.email || '—'}</span></div>
                     <div><span className="text-[#1A1A2E]">Contact phone: </span><span className="font-medium">{noteFields.PARENTPHONE || b.family?.phone || '—'}</span></div>
+                    {noteFields.DOB && (
+                      <div><span className="text-[#1A1A2E]">Date of birth: </span><span className="font-medium">{noteFields.DOB}</span></div>
+                    )}
                     {noteFields.ADDR && (
                       <div className="col-span-2"><span className="text-[#1A1A2E]">Address: </span><span className="font-medium">{noteFields.ADDR}</span></div>
                     )}
@@ -312,6 +343,195 @@ export function CprRequests() {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Melissa's own "Schedule a class" modal — bypasses the pending-approval
+// flow because she IS the approver. Captures just enough contact info
+// (Sara 2026-10-10: name, DOB, address, phone, email) + class metadata to
+// seed the appointment and send a confirmation email. Writes a confirmed
+// booking_request with family_id=null so the row shows up in the "All
+// history" tab identically to family-initiated bookings.
+
+const CPR_DURATION_FOR_MODAL = 180
+
+function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [dob, setDob] = useState('')
+  const [address, setAddress] = useState('')
+  const [city, setCity] = useState('')
+  const [state, setState] = useState('NC')
+  const [zip, setZip] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [classType, setClassType] = useState<string>(CPR_CLASS_TYPES[0].value)
+  const [participantCount, setParticipantCount] = useState('1')
+  const [attendeeNames, setAttendeeNames] = useState('')
+  const [instructorNotes, setInstructorNotes] = useState('')
+  const [date, setDate] = useState('')
+  const [time12, setTime12] = useState('9:00 AM')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    const req = (val: string, name: string) => (!val.trim() ? `${name} is required` : '')
+    const err =
+      req(firstName, 'First name')
+      || req(lastName, 'Last name')
+      || req(dob, 'Date of birth')
+      || req(address, 'Street address')
+      || req(city, 'City')
+      || req(state, 'State')
+      || req(zip, 'Zip')
+      || req(phone, 'Phone')
+      || req(email, 'Email')
+      || req(date, 'Class date')
+      || req(time12, 'Class time')
+    if (err) { setError(err); return }
+    const time24 = parseTimeInput(time12)
+    if (!time24) { setError(`"${time12}" isn't a valid time — enter something like "9:00 AM" or "2:30 PM".`); return }
+    const count = parseInt(participantCount, 10)
+    if (isNaN(count) || count < 1 || count > 20) { setError('Participant count must be between 1 and 20.'); return }
+
+    setSubmitting(true)
+    try {
+      const melissa = await getProviderByName('Melissa Jesse').catch(() => null)
+      if (!melissa?.id) { setError('Could not find Melissa Jesse in the provider list.'); setSubmitting(false); return }
+
+      const ref = 'MEL-' + Math.floor(10000 + Math.random() * 90000)
+      const fullAddress = `${address.trim()}, ${city.trim()}, ${state.trim()} ${zip.trim()}`
+      const notes = [
+        `Ref: ${ref}`,
+        `CONTACT_NAME:${firstName.trim()} ${lastName.trim()}`,
+        `DOB:${dob}`,
+        `ADDR:${fullAddress}`,
+        `PARENTEMAIL:${email.trim()}`,
+        `PARENTPHONE:${phone.trim()}`,
+        `PARTICIPANTS:${count}`,
+        attendeeNames.trim() ? `ATTENDEES:${attendeeNames.trim()}` : '',
+        instructorNotes.trim() ? `INSTRUCTOR_NOTES:${instructorNotes.trim()}` : '',
+        `SOURCE:instructor_scheduled`,
+      ].filter(Boolean).join('|')
+
+      await createAppointmentWithOverlapRetry({
+        provider_id: melissa.id,
+        visit_type: classType,
+        zone: 'CPR Class',
+        scheduled_time: time24,
+        scheduled_date: date,
+        status: 'upcoming',
+        notes,
+        duration_minutes: CPR_DURATION_FOR_MODAL,
+      }, msg => window.confirm(msg + '\n\nSchedule anyway?'))
+
+      const bookingRow = await createBookingRequest({
+        family_id: null,
+        child_ids: [],
+        visit_type: classType,
+        preferred_provider: 'Melissa Jesse',
+        zone: 'CPR Class',
+        state: state.trim(),
+        preferred_date: date,
+        preferred_time: time12,
+        status: 'confirmed',
+        confirmed_provider_id: melissa.id,
+        reference_code: ref,
+        notes,
+      })
+
+      if (bookingRow?.id) {
+        invokeNotifications({
+          type: 'cpr_booking_approved',
+          bookingRequestId: bookingRow.id,
+          familyName: `${firstName.trim()} ${lastName.trim()}`,
+          parentEmail: email.trim(),
+          parentPhone: phone.trim(),
+          visitType: classType,
+          date,
+          time: time12,
+        }).catch(() => {})
+      }
+
+      await onCreated()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to schedule class')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto p-6">
+      <div className="bg-white rounded-xl shadow-xl max-w-xl w-full my-8">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E4]">
+          <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Schedule a CPR class</div>
+          <button onClick={onClose} className="text-[#555] hover:text-[#1A1A2E]"><X size={16} /></button>
+        </div>
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="First name *" value={firstName} onChange={e => setFirstName(e.target.value)} />
+            <Input label="Last name *" value={lastName} onChange={e => setLastName(e.target.value)} />
+            <Input label="Date of birth *" type="date" value={dob} onChange={e => setDob(e.target.value)} />
+            <Input label="Phone *" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+            <div className="col-span-2">
+              <Input label="Email *" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Input label="Street address *" value={address} onChange={e => setAddress(e.target.value)} />
+            </div>
+            <Input label="City *" value={city} onChange={e => setCity(e.target.value)} />
+            <Input label="State *" value={state} onChange={e => setState(e.target.value.toUpperCase().slice(0, 2))} />
+            <Input label="Zip *" value={zip} onChange={e => setZip(e.target.value)} />
+          </div>
+
+          <div className="border-t border-[#E8E8E4] pt-4 space-y-3">
+            <div>
+              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Class type *</label>
+              <select value={classType} onChange={e => setClassType(e.target.value)}
+                className="w-full border border-[#E8E8E4] rounded-lg px-3 py-2 text-[13px] bg-white">
+                {CPR_CLASS_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Class date *" type="date" value={date} onChange={e => setDate(e.target.value)} />
+              <Input label="Class time (e.g. 9:00 AM) *" value={time12} onChange={e => setTime12(e.target.value)} />
+              <div className="col-span-2">
+                <Input label="Number of participants *" type="number" min={1} max={20} value={participantCount}
+                  onChange={e => setParticipantCount(e.target.value)} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Attendee names (optional)</label>
+                <textarea value={attendeeNames} onChange={e => setAttendeeNames(e.target.value)} rows={2}
+                  placeholder="One per line, e.g. Jane Doe · 32"
+                  className="w-full border border-[#E8E8E4] rounded-lg px-3 py-2 text-[13px]" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Notes for yourself (optional)</label>
+                <textarea value={instructorNotes} onChange={e => setInstructorNotes(e.target.value)} rows={2}
+                  className="w-full border border-[#E8E8E4] rounded-lg px-3 py-2 text-[13px]" />
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 text-[13px] text-[#991B1B] bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg">
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> <span>{error}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#E8E8E4]">
+          <Button variant="secondary" size="xs" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="teal" size="xs" onClick={submit} loading={submitting}>
+            <Check size={12} /> Schedule &amp; send confirmation
+          </Button>
+        </div>
       </div>
     </div>
   )

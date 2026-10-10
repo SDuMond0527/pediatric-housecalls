@@ -2150,7 +2150,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [booking] = await sql`SELECT * FROM booking_requests WHERE id = ${bookingRequestId}::uuid`
       if (!booking) throw new Error('Booking not found')
 
-      const [family] = await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+      const [family] = booking.family_id
+        ? await sql`SELECT email, display_name FROM family_profiles WHERE id = ${booking.family_id}::uuid`
+        : [null]
 
       const dateFormatted = formatDate(booking.preferred_date)
       const notesStr: string = booking.notes || ''
@@ -2163,13 +2165,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Prefer the contact email the family chose on STEP_LOCATION.
       const emailMatch = notesStr.match(/PARENTEMAIL:([^|]+)/)
       const contactEmail = emailMatch ? emailMatch[1].trim() : (family?.email ?? null)
+      // Melissa-scheduled bookings have no family_profile — fall back to
+      // the CONTACT_NAME she entered on the form for a personalized greeting.
+      const contactNameMatch = notesStr.match(/CONTACT_NAME:([^|]+)/)
+      const displayName = family?.display_name ?? (contactNameMatch ? contactNameMatch[1].trim() : null)
 
       if (contactEmail) {
         await sendEmail(
           contactEmail,
           `CPR class confirmed — ${dateFormatted} at ${booking.preferred_time}`,
           cprApprovedEmail({
-            displayName: family?.display_name ?? null,
+            displayName,
             visitType: booking.visit_type,
             date: dateFormatted,
             time: booking.preferred_time,

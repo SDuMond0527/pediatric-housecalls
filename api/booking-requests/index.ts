@@ -88,9 +88,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const b = req.body
     const childIds = b.child_ids ?? []
+    // Allow family_id to be null for provider-initiated CPR class bookings
+    // (Melissa schedules a walk-in participant with no patient record of
+    // their own). Reason: CPR classes don't require a pediatric chart —
+    // all contact info lives in the notes column. Sara 2026-10-10.
+    try { await sql`ALTER TABLE booking_requests ALTER COLUMN family_id DROP NOT NULL` } catch {}
+    const familyId = b.family_id ?? null
     const [row] = await sql`
       INSERT INTO booking_requests (practice_id, family_id, child_ids, visit_type, preferred_provider, zone, state, preferred_date, preferred_time, status, confirmed_provider_id, reference_code, convenience_fee, notes)
-      VALUES (${practiceId}::uuid, ${b.family_id}::uuid, ${childIds}::uuid[], ${b.visit_type}, ${b.preferred_provider ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.preferred_date}::date, ${b.preferred_time}, ${b.status ?? 'pending'}, ${b.confirmed_provider_id ?? null}, ${b.reference_code}, ${b.convenience_fee ?? null}, ${b.notes ?? null})
+      VALUES (${practiceId}::uuid, ${familyId}::uuid, ${childIds}::uuid[], ${b.visit_type}, ${b.preferred_provider ?? null}, ${b.zone ?? null}, ${b.state ?? null}, ${b.preferred_date}::date, ${b.preferred_time}, ${b.status ?? 'pending'}, ${b.confirmed_provider_id ?? null}, ${b.reference_code}, ${b.convenience_fee ?? null}, ${b.notes ?? null})
       RETURNING *`
     return res.json(row)
   }
