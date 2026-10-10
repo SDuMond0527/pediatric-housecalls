@@ -753,8 +753,32 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
         }
         const time24 = String(appt.scheduled_time ?? '12:00').slice(0, 5)
         const stateCode = (resolvedAddr.state as string) ?? null
-        const { fee, code } = cvCalculateFee(miles, dosStr, time24, vt, stateCode)
-        const amountCents = Math.round(fee * 100)
+        const distanceBased = cvCalculateFee(miles, dosStr, time24, vt, stateCode)
+
+        // Provider's choice wins. If the provider put a CV / VACV line
+        // on the claim (manually or via the built-in picker), that is the
+        // authoritative fee — do NOT recompute from miles. The miles
+        // calc is only a fallback for the pre-populate case where the
+        // provider hasn't yet added a CV line.
+        //
+        // Sara 2026-10-10: an earlier version of this block always used
+        // the distance-based result, which overcharged Roy, Connor,
+        // Gibson, and Nash when their providers coded a lower-level CV
+        // than my distance calc suggested. Never again.
+        const claimCpts: any[] = Array.isArray((claim as any)?.cpt_codes) ? (claim as any).cpt_codes : []
+        const providerCvLine = claimCpts.find((c: any) =>
+          c?.category === 'Non-Covered Services'
+          && (String(c?.code ?? '').startsWith('CV') || String(c?.code ?? '').startsWith('VACV'))
+        )
+        let code: string
+        let amountCents: number
+        if (providerCvLine) {
+          code = String(providerCvLine.code)
+          amountCents = Math.round((parseFloat(String(providerCvLine.charge_amount ?? '0')) || 0) * 100)
+        } else {
+          code = distanceBased.code
+          amountCents = Math.round(distanceBased.fee * 100)
+        }
 
         // Upgrade the row with the real amount + code if they differ
         // from the placeholder. Idempotent: skips if the row is already
