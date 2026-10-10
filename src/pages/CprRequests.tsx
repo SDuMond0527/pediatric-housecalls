@@ -254,7 +254,21 @@ export function CprRequests() {
       {scheduleOpen && (
         <ScheduleClassModal
           onClose={() => setScheduleOpen(false)}
-          onCreated={async () => { setScheduleOpen(false); await fetchBookings() }}
+          onCreated={async (newBookingId) => {
+            setScheduleOpen(false)
+            // Melissa just scheduled a confirmed booking — the default
+            // Pending filter hides those, so flip to All history and
+            // auto-expand the row she just created. Without this she'd
+            // think the submit silently dropped the row.
+            setFilter('all')
+            if (newBookingId) {
+              setExpanded(newBookingId)
+              setTimeout(() => {
+                document.getElementById(`cpr-card-${newBookingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 200)
+            }
+            await fetchBookings()
+          }}
         />
       )}
 
@@ -358,7 +372,7 @@ export function CprRequests() {
 
 const CPR_DURATION_FOR_MODAL = 180
 
-function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void | Promise<void> }) {
+function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCreated: (newBookingId?: string) => void | Promise<void> }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
@@ -457,7 +471,7 @@ function ScheduleClassModal({ onClose, onCreated }: { onClose: () => void; onCre
         }).catch(() => {})
       }
 
-      await onCreated()
+      await onCreated(bookingRow?.id)
     } catch (e: any) {
       setError(e?.message ?? 'Failed to schedule class')
     } finally {
