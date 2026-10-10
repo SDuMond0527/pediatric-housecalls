@@ -2194,6 +2194,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // admin email per CPR class notifications rule (email-only, no SMS).
       const isInstructorScheduled = /\bSOURCE:instructor_scheduled\b/.test(notesStr)
       if (isInstructorScheduled && booking.practice_id) {
+        // Admins opted out of CPR class notifications (Sara 2026-10-10).
+        // Andrea handles billing and doesn't need visibility into CPR class
+        // scheduling. Keep her an admin for everything else.
+        const CPR_ADMIN_NOTIFY_OPT_OUT_EMAILS = new Set(['andrea@superiorrcms.com'])
         const admins = await sql`SELECT email FROM providers WHERE is_admin = true AND practice_id = ${booking.practice_id}::uuid`
         const contactName = displayName ?? 'a new attendee'
         const adminSubject = `[${PRACTICE_NAME} Admin] CPR class scheduled — ${dateFormatted} at ${booking.preferred_time}`
@@ -2208,7 +2212,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <a href="${PORTAL_URL}/admin/schedule">View on schedule</a>
         </p>`
         for (const admin of admins as Array<{ email: string | null }>) {
-          if (admin.email) await sendEmail(admin.email, adminSubject, adminHtml).catch(e => console.error('CPR instructor-scheduled admin email failed:', e))
+          if (!admin.email) continue
+          if (CPR_ADMIN_NOTIFY_OPT_OUT_EMAILS.has(admin.email.toLowerCase())) continue
+          await sendEmail(admin.email, adminSubject, adminHtml).catch(e => console.error('CPR instructor-scheduled admin email failed:', e))
         }
       }
 
