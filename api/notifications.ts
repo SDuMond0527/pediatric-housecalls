@@ -2187,6 +2187,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ).catch(e => console.error('CPR family approval email failed:', e))
       }
 
+      // Instructor-self-scheduled flow (Sara 2026-10-10): the family flow
+      // already notified admins at request-received time. For self-scheduled
+      // classes there's no request step, so admins would otherwise learn
+      // about new classes only by checking the schedule. Fire a one-time
+      // admin email per CPR class notifications rule (email-only, no SMS).
+      const isInstructorScheduled = /\bSOURCE:instructor_scheduled\b/.test(notesStr)
+      if (isInstructorScheduled && booking.practice_id) {
+        const admins = await sql`SELECT email FROM providers WHERE is_admin = true AND practice_id = ${booking.practice_id}::uuid`
+        const contactName = displayName ?? 'a new attendee'
+        const adminSubject = `[${PRACTICE_NAME} Admin] CPR class scheduled — ${dateFormatted} at ${booking.preferred_time}`
+        const adminHtml = `<p style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6">
+          Melissa scheduled a new CPR class.<br><br>
+          <strong>Class:</strong> ${booking.visit_type}<br>
+          <strong>Date / time:</strong> ${dateFormatted} at ${booking.preferred_time}<br>
+          <strong>Attendee:</strong> ${contactName}${contactEmail ? ` (${contactEmail})` : ''}<br>
+          ${address ? `<strong>Address:</strong> ${address}<br>` : ''}
+          <strong>Participants:</strong> ${participantCount}<br>
+          <strong>Ref:</strong> ${booking.reference_code}<br><br>
+          <a href="${PORTAL_URL}/admin/schedule">View on schedule</a>
+        </p>`
+        for (const admin of admins as Array<{ email: string | null }>) {
+          if (admin.email) await sendEmail(admin.email, adminSubject, adminHtml).catch(e => console.error('CPR instructor-scheduled admin email failed:', e))
+        }
+      }
+
       return res.json({ ok: true })
     }
 
