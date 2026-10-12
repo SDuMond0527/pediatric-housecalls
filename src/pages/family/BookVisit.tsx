@@ -367,6 +367,10 @@ export function BookVisit() {
   // path (Melissa hardcode, participants intake, etc.) was skipped.
   const isCpr = (byType[booking.visitType]?.is_cpr ?? false)
     || booking.visitType.toLowerCase().includes('cpr class')
+  // BLS runs $90/person; Heartsaver stays $80/person. Keep in sync with
+  // the price string in zipData.ts and the price lookup in
+  // api/notifications.ts cprApprovedEmail. Sara 2026-10-12.
+  const cprPricePerPerson = booking.visitType.includes('(BLS') ? 90 : 80
   const STEPS = isIvFluids ? STEPS_IV : isCpr ? STEPS_CPR : STEPS_DEFAULT
 
   // Logical step indices adjust when IV fluids step is inserted
@@ -1925,7 +1929,7 @@ export function BookVisit() {
             <div><strong>Your request has been sent to Melissa Jesse.</strong> She'll review your date, time, and address and confirm within 24 hours. You'll get an email when she does.</div>
             <div className="pt-1"><strong>Once confirmed:</strong></div>
             <div>1. Check your email for the e-learning link — all attendees must complete it before class.</div>
-            <div>2. Send payment via Venmo <strong>@{VENMO_HANDLE}</strong> (${booking.participantCount * 80}).</div>
+            <div>2. Send payment via Venmo <strong>@{VENMO_HANDLE}</strong> (${booking.participantCount * cprPricePerPerson}).</div>
             <div>3. Email attendee names to <strong>deeringmel@me.com</strong>.</div>
           </div>
         ) : (
@@ -2122,7 +2126,7 @@ export function BookVisit() {
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-[#aeaeb2] mt-2">$80 per person · {booking.participantCount} × $80 = <strong>${booking.participantCount * 80}</strong></p>
+              <p className="text-[11px] text-[#aeaeb2] mt-2">${cprPricePerPerson} per person · {booking.participantCount} × ${cprPricePerPerson} = <strong>${booking.participantCount * cprPricePerPerson}</strong></p>
             </div>
 
             <div>
@@ -3198,7 +3202,7 @@ export function BookVisit() {
                 <strong>After Melissa confirms:</strong> You'll receive an e-learning link by email. All participants must complete it before class day.
               </div>
               <div className="p-3.5 bg-[#E8F8F5] border border-[#A9DFBF] rounded-xl text-[13px] text-[#1E8449]">
-                <strong>Payment (after confirmation):</strong> Venmo <strong>@{VENMO_HANDLE}</strong> — ${booking.participantCount * 80} total (${booking.participantCount} × $80). Don't send payment until Melissa confirms.
+                <strong>Payment (after confirmation):</strong> Venmo <strong>@{VENMO_HANDLE}</strong> — ${booking.participantCount * cprPricePerPerson} total (${booking.participantCount} × ${cprPricePerPerson}). Don't send payment until Melissa confirms.
               </div>
               <div className="p-3.5 bg-[#EBF5FB] border border-[#AED6F1] rounded-xl text-[13px] text-[#1A5276]">
                 <strong>Attendee names:</strong> Please email the full names of all attendees to <strong>deeringmel@me.com</strong> so Melissa can prepare completion cards.

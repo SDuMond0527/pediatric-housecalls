@@ -504,7 +504,10 @@ function cprApprovedEmail(data: {
   ref: string
 }) {
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
-  const totalCost = data.participantCount * 80
+  // BLS runs $90/person; Heartsaver stays $80/person. Keep in sync with
+  // zipData.ts price string and BookVisit's cprPricePerPerson derivation.
+  const pricePerPerson = String(data.visitType).includes('(BLS') ? 90 : 80
+  const totalCost = data.participantCount * pricePerPerson
 
   return `<!DOCTYPE html>
 <html>
@@ -587,7 +590,7 @@ function cprApprovedEmail(data: {
     <div style="background:#E8F8F5;border-radius:12px;border:1px solid #A9DFBF;padding:18px 20px;margin-bottom:28px;">
       <div style="font-size:14px;font-weight:600;color:#1E8449;margin-bottom:8px;">💳 Payment</div>
       <p style="font-size:13px;color:#1E8449;margin:0;line-height:1.55;">
-        Please send <strong>$${totalCost}</strong> ($80 × ${data.participantCount} person${data.participantCount > 1 ? 's' : ''}) via Venmo to <strong>${VENMO_HANDLE}</strong> before your class.
+        Please send <strong>$${totalCost}</strong> ($${pricePerPerson} × ${data.participantCount} person${data.participantCount > 1 ? 's' : ''}) via Venmo to <strong>${VENMO_HANDLE}</strong> before your class.
       </p>
     </div>
 
@@ -624,7 +627,11 @@ function cprMelissaEmail(data: {
   ref: string
   bookingId: string  // for the deep-link CTA
 }) {
-  const totalCost = data.participantCount * 80
+  // BLS runs $90/person; Heartsaver stays $80/person. Match the family
+  // email + BookVisit variant check so the dollar amount Melissa sees
+  // in her approval request matches what the family just quoted.
+  const pricePerPerson = String(data.visitType).includes('(BLS') ? 90 : 80
+  const totalCost = data.participantCount * pricePerPerson
   // Provider-facing page, NOT /admin/bookings. Melissa is a PNP; her
   // approval workflow lives in her own AppLayout, not the admin
   // dashboard. Admins can still find requests at /admin/bookings.

@@ -105,7 +105,7 @@ export const VISIT_TYPE_INFO = {
   },
   'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '🫀',
-    duration: '3 hours · up to 6 people · $80/person',
+    duration: '3 hours · up to 6 people · $90/person',
     shortName: 'In-home CPR class (BLS)',
     details: [
       'Adult CPR and AED use',
@@ -118,7 +118,7 @@ export const VISIT_TYPE_INFO = {
       'Recognizing the signs of mental health crisis in the workplace',
       'Optional modules in Child CPR AED and Infant CPR AED',
     ],
-    note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a BLS e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $80 per person.`,
+    note: `Melissa Jesse will arrive 30 minutes early to set up. After booking, you will receive a BLS e-learning link to complete before class. Payment via Venmo @${VENMO_HANDLE} at $90 per person.`,
   },
 }
 
