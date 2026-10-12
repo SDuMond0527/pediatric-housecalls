@@ -80,6 +80,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // Out-of-service-state gate (Sara 2026-10-12 — Florida parent hit a
+      // raw 500 instead of a human-readable "we don't serve FL" response).
+      // Only block when state is provided AND the resolved practice has
+      // zones defined. If zones aren't configured, let the write proceed
+      // (demo/new-practice case). The client-side FamilySetup catches this
+      // before we even get here; this is defense in depth for direct API
+      // calls and old client bundles.
+      const stateCode = String(state ?? '').trim().toUpperCase()
+      if (stateCode) {
+        const resolvedPracticeId = String(practice_id ?? process.env.VITE_PRACTICE_ID ?? '').trim()
+        if (resolvedPracticeId) {
+          const zoneStates = await sql`
+            SELECT DISTINCT state FROM practice_zones
+            WHERE practice_id = ${resolvedPracticeId}::uuid AND state IS NOT NULL`
+          const served = new Set((zoneStates as Array<{ state: string }>).map(z => String(z.state).toUpperCase()))
+          if (served.size > 0 && !served.has(stateCode)) {
+            const servedList = [...served].sort().join(', ')
+            return res.status(400).json({
+              code: 'OUT_OF_SERVICE_STATE',
+              state: stateCode,
+              servedStates: [...served].sort(),
+              error: `We don't yet provide services in ${stateCode}. ${process.env.PRACTICE_NAME || 'The practice'} currently serves ${servedList}. We'll let you know as soon as we expand.`,
+            })
+          }
+        }
+      }
+
       const [row] = await sql`
         INSERT INTO family_profiles (id, cognito_sub, email, display_name, phone, address_line1, city, state, zip, referral_source, agreements_accepted_at, payment_policy_accepted_at, practice_id)
         VALUES (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard, familySearchPharmacies } from '../../lib/api'
+import { updateMyFamily, createChild, lookupChild, familyUploadInsuranceCard, familySearchPharmacies, getPracticeZones } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -60,6 +60,37 @@ export function FamilySetup() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Served states (set of two-letter codes) fetched from the public
+  // /api/practice-zones endpoint. Used to short-circuit a save when the
+  // parent picks a state we don't currently serve, so instead of a raw
+  // 500 they get a friendly modal. Sara 2026-10-12. If fetch fails we
+  // leave the set empty — the server-side gate catches that case.
+  const [servedStates, setServedStates] = useState<Set<string>>(new Set())
+  const [outOfServiceModal, setOutOfServiceModal] = useState<{ state: string; servedList: string } | null>(null)
+
+  useEffect(() => {
+    const practiceId = import.meta.env.VITE_PRACTICE_ID || undefined
+    getPracticeZones(practiceId)
+      .then((zones: any[]) => {
+        const codes = new Set(
+          (zones ?? [])
+            .map(z => String((z as any)?.state ?? '').toUpperCase())
+            .filter(Boolean)
+        )
+        setServedStates(codes)
+      })
+      .catch(() => { /* fail-safe: server-side gate catches it */ })
+  }, [])
+
+  function stateFullName(code: string): string {
+    return US_STATES.find(([c]) => c === code)?.[1] ?? code
+  }
+  function servedStatesPretty(): string {
+    const names = [...servedStates].sort().map(stateFullName)
+    if (names.length <= 2) return names.join(' and ')
+    return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1]
+  }
+
   const lookupTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
 
   function updateChildField(i: number, field: keyof ChildEntry, value: string | boolean | number | null) {
@@ -94,6 +125,15 @@ export function FamilySetup() {
       return
     }
     if (zip.length < 5) { setError('Please enter a 5-digit zip code.'); return }
+
+    // Out-of-service-state check — open the friendly modal instead of
+    // letting the parent hit a 500 downstream. Only applies when we
+    // successfully loaded the served-state list; empty set means
+    // fail-open so a flaky /api/practice-zones can't block signups.
+    if (servedStates.size > 0 && !servedStates.has(state.toUpperCase())) {
+      setOutOfServiceModal({ state: stateFullName(state), servedList: servedStatesPretty() })
+      return
+    }
 
     if (children.length === 0) { setError('Please add at least one child.'); return }
     for (let i = 0; i < children.length; i++) {
@@ -261,6 +301,29 @@ export function FamilySetup() {
         </div>
         <AuthHelpFooter />
       </div>
+
+      {outOfServiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setOutOfServiceModal(null)}>
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}>
+            <h3 className="font-display text-lg font-medium text-[#1A1A2E] mb-2">
+              We're not in {outOfServiceModal.state} yet
+            </h3>
+            <p className="text-[13px] text-[#1A1A2E] leading-relaxed">
+              Thanks so much for your interest! We currently provide in-home visits in {outOfServiceModal.servedList} only.
+              We'll let you know as soon as we expand to {outOfServiceModal.state}.
+            </p>
+            <p className="text-[12px] text-[#aeaeb2] mt-3 leading-relaxed">
+              If you entered the wrong state, close this and update it.
+            </p>
+            <button onClick={() => setOutOfServiceModal(null)}
+              className="w-full mt-5 py-2.5 bg-[#7F77DD] text-white rounded-xl text-[13px] font-semibold hover:bg-[#6C64C8] transition-colors">
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
