@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
+import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, type ChronicProblem } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, downloadEncounterNoteHtml, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Appointment } from '../types'
 
@@ -1421,6 +1421,20 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#E1F5EE] text-[#085041]">
                   Signed
                 </span>
+                {/* Download the signed note as HTML in a new tab so Sara
+                    and Andrea can save-as-PDF for payer-portal uploads
+                    straight from the modal — previously they had to
+                    close it and route through the chart or claim card.
+                    Sara 2026-10-14. */}
+                {noteId && (
+                  <button
+                    onClick={() => downloadEncounterNoteHtml(noteId).catch(e => alert(e?.message ?? 'Download failed'))}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] transition-colors"
+                    title="Opens the signed note in a new tab. Use browser Print → Save as PDF for payer-portal upload."
+                  >
+                    <Download size={13} /> Download
+                  </button>
+                )}
                 <Button variant="secondary" size="sm" onClick={unlockNote} loading={saving}>
                   Unlock note
                 </Button>
