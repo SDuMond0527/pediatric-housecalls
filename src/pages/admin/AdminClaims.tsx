@@ -245,10 +245,15 @@ export function AdminClaims() {
   const [activityLoading, setActivityLoading]       = useState<Record<string, boolean>>({})
   const [activityDraftByClaim, setActivityDraftByClaim] = useState<Record<string, string>>({})
   const [activitySaving, setActivitySaving]         = useState<Record<string, boolean>>({})
-  // Explicit expand/collapse of the Activity panel — collapsed by default
-  // on cards with no prior notes to reduce clutter (Andrea 2026-09-30).
-  // When notes exist, auto-expands so nothing gets hidden.
-  const [activityExpanded, setActivityExpanded]     = useState<Record<string, boolean>>({})
+  // Explicit expand/collapse of the Activity panel. Tri-state:
+  //   true  → user clicked expand (open)
+  //   false → user clicked Hide (closed, even if there are entries)
+  //   undefined → fall back to auto (open when there are entries or
+  //              the user has typed a draft)
+  // Andrea 2026-10-14: previously the panel auto-expanded on every claim
+  // with history and couldn't be closed, which cluttered Rework cards
+  // with lots of prior notes.
+  const [activityExpanded, setActivityExpanded]     = useState<Record<string, boolean | undefined>>({})
 
   // Fetch activity the first time a card is expanded.
   useEffect(() => {
@@ -976,19 +981,34 @@ export function AdminClaims() {
     const draft = activityDraftByClaim[claim.id] ?? ''
     const saving = !!activitySaving[claim.id]
     const canSave = !saving && draft.trim().length > 0
-    // Auto-expand if there are prior entries, if the user has typed a
-    // draft, or if she explicitly clicked expand. Otherwise collapsed to
-    // a single button so the Pending Review card isn't cluttered with
-    // an empty notes panel by default. Andrea 2026-09-30.
+    // Explicit expand/collapse wins over the auto rule. If the biller
+    // hasn't touched the toggle (undefined), fall back to auto: open
+    // when there are entries or an unsaved draft, closed otherwise.
     const hasEntries = (entries ?? []).length > 0
-    const isExpanded = activityExpanded[claim.id] || hasEntries || draft.length > 0
+    const explicit = activityExpanded[claim.id]
+    const isExpanded = explicit === true
+      ? true
+      : explicit === false
+        ? false
+        : (hasEntries || draft.length > 0)
 
     if (!isExpanded) {
+      // Collapsed view — still shows a hint of the history so Andrea
+      // knows there IS activity she could pull up with one click.
       return (
-        <div>
+        <div className="flex items-center gap-2">
           <Button size="xs" variant="secondary" onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: true }))}>
             + Add note
           </Button>
+          {hasEntries && (
+            <button
+              onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: true }))}
+              className="text-[11px] text-[#7F77DD] hover:underline"
+              title="Show the full activity log for this claim"
+            >
+              Show activity ({(entries ?? []).length} entr{(entries ?? []).length === 1 ? 'y' : 'ies'})
+            </button>
+          )}
         </div>
       )
     }
@@ -1009,15 +1029,15 @@ export function AdminClaims() {
           <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Activity</div>
           <div className="flex items-center gap-2">
             <div className="text-[10px] text-[#555]">{(entries ?? []).length} entr{(entries ?? []).length === 1 ? 'y' : 'ies'}</div>
-            {!hasEntries && draft.length === 0 && (
-              <button
-                onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: false }))}
-                className="text-[11px] text-[#7F77DD] hover:underline"
-                title="Hide notes panel"
-              >
-                Hide
-              </button>
-            )}
+            <button
+              onClick={() => setActivityExpanded(s => ({ ...s, [claim.id]: false }))}
+              className="text-[11px] text-[#7F77DD] hover:underline"
+              title={draft.length > 0
+                ? "Hide the activity panel. Your draft note stays — it reappears when you expand again."
+                : "Hide the activity panel. Click Show activity to bring it back."}
+            >
+              Hide
+            </button>
           </div>
         </div>
         <div className="space-y-2">
