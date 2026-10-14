@@ -1399,6 +1399,14 @@ export const fixResubmitClaim = (id: string, body: { note?: string } = {}) =>
 export const forceClaimStatus = (id: string, target: 'ready_for_biller' | 'submitted' | 'rework') =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'force_status', target_status: target }) })
 
+// Re-pull every insurance field (payer, member_id, dep_code, group, subscriber
+// name/DOB/gender) from the patient's chart and overwrite the claim snapshot.
+// For when the family corrects their insurance after a claim was already
+// generated with stale data. Server gates to editable states — not usable on
+// already-submitted/paid claims. Sara 2026-10-14.
+export const refreshClaimInsuranceFromChart = (id: string) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'refresh_insurance_from_chart' }) })
+
 // Upload a documentation PDF/image to a claim. The file is stored in
 // Vercel Blob and a claim_attachments row is written with the URL.
 // Not sent through Stedi — purely for Andrea's records / payer-portal

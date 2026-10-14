@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, refreshClaimInsuranceFromChart, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
@@ -1713,6 +1713,29 @@ export function AdminClaims() {
                             Ready for biller
                             {c.ready_for_biller_by === 'System (auto)' && <span className="opacity-70">· auto</span>}
                           </span>
+                        )}
+                        {/* Refresh insurance from chart — Sara 2026-10-14. For when
+                            a family corrects their insurance in the chart after a
+                            claim was already generated. Only shown on editable
+                            states; server rejects on submitted/accepted/paid. */}
+                        {(tab === 'review' || tab === 'ready' || tab === 'rework') && (
+                          <button
+                            type="button"
+                            onClick={async e => {
+                              e.stopPropagation()
+                              if (!window.confirm('Re-pull payer, member ID, dep code, group, and subscriber details from this patient\'s chart and overwrite the claim with them?\n\nUse this after you\'ve corrected the insurance in the chart.')) return
+                              try {
+                                const updated = await refreshClaimInsuranceFromChart(c.id)
+                                setClaims(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
+                              } catch (err: any) {
+                                alert('Failed to refresh insurance: ' + (err?.message ?? String(err)))
+                              }
+                            }}
+                            title="Re-pull every insurance field from the patient's chart and overwrite the claim. Use this after you've corrected insurance in the chart."
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#AFA9EC] bg-[#F5F4FE] text-[#3C3489] hover:bg-[#EEEDFE] whitespace-nowrap"
+                          >
+                            <RefreshCw size={10} /> Refresh insurance
+                          </button>
                         )}
                         {isOpen ? <ChevronUp size={15} className="text-[#1A1A2E] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#1A1A2E] flex-shrink-0" />}
                       </div>

@@ -23,6 +23,34 @@ const PRACTICE_ZIP   = process.env.PRACTICE_ZIP   || '28202'
 const PRACTICE_PHONE = (process.env.PRACTICE_PHONE || '7045550000').replace(/\D/g, '')
 const PRACTICE_CLIA  = process.env.PRACTICE_CLIA_NUMBER || ''
 
+// Payer-name → payer-id lookup. Duplicated from api/encounter-notes/[id].ts
+// because Vercel's api/lib exclusion blocks shared imports (established
+// pattern). Any change to the inline map or Anthem routing MUST happen in
+// both files. Sara 2026-10-14.
+const PAYER_IDS_INLINE: Record<string, string> = {
+  'self pay': 'PP', 'self-pay': 'PP', 'selfpay': 'PP', 'self': 'PP',
+  'bcbs': 'UPICO', 'bcbs of nc': 'UPICO', 'bcbs nc': 'UPICO',
+  'blue cross': 'UPICO', 'blue cross nc': 'UPICO',
+  'blue cross blue shield': 'UPICO', 'blue cross blue shield of nc': 'UPICO',
+  'blue cross blue shield nc': 'UPICO',
+  'aetna': '60054', 'cigna': '62308',
+  'united healthcare': '87726', 'united health care': '87726', 'uhc': '87726',
+  'umr': '39026', 'humana': '61101',
+  'phcs': '52133', 'multiplan': '52133',
+  'coventry': '38217', 'select health': '53589',
+  'medcost': '56162', 'healthgram': '56162',
+  'bright health': '98798', 'bright healthcare': '98798',
+}
+function resolvePayer(name: string | null): string | null {
+  if (!name) return null
+  const normalized = name.toLowerCase().trim()
+  if (/anthem/.test(normalized)) {
+    if (/\b(va|virginia)\b/.test(normalized)) return 'VABLS'
+    return 'UPICO'
+  }
+  return PAYER_IDS_INLINE[normalized] ?? null
+}
+
 function getFacilityAddress(renderingProviderName: string | null) {
   const name = (renderingProviderName ?? '').toLowerCase()
   if (name.includes('niu') || name.includes('santos')) {
@@ -513,6 +541,98 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           VALUES (${id}::uuid, ${whoName}, 'force_status_rework',
                  'Manually flagged → Rework.')`
       } catch {}
+      return res.status(200).json(updated)
+    }
+
+    // Refresh insurance from chart — re-pulls every insurance field
+    // (payer_name, payer_id, member_id, dep_code, group_number, subscriber
+    // name/DOB/gender) from the child record and overwrites the claim
+    // snapshot. For when a family corrects the insurance in the chart
+    // after a claim was already generated with stale data. Sara
+    // 2026-10-14. Gated to editable states (pending_review / rework /
+    // error / draft) — do NOT allow after submission because the payer
+    // already has the stale version.
+    if (action === 'refresh_insurance_from_chart') {
+      const [current] = await sql`
+        SELECT c.id, c.status, c.child_id, c.payer_name, c.payer_id, c.member_id,
+               c.insurance_dependent_code, c.group_number,
+               c.subscriber_name, c.subscriber_dob, c.subscriber_gender
+        FROM claims c
+        WHERE c.id = ${id}::uuid AND c.practice_id = ${practiceId}::uuid
+        LIMIT 1`
+      if (!current) return res.status(404).json({ error: 'Claim not found' })
+      const editable = new Set(['pending_review', 'error', 'draft'])
+      const isRework = !!(current as any).claim_rejection_at // mirrored by isInRework on the client
+      if (!editable.has(String(current.status)) && !isRework) {
+        return res.status(409).json({
+          error: `Can't refresh insurance on a ${current.status} claim. If this claim really needs new insurance, unlock it first (e.g. move to Rework) or create a corrected claim.`,
+        })
+      }
+      if (!current.child_id) {
+        return res.status(400).json({ error: 'Claim has no linked patient — cannot refresh insurance from a chart.' })
+      }
+      const [child] = await sql`
+        SELECT insurance_provider, insurance_member_id, insurance_group_number,
+               insurance_dependent_code, insurance_subscriber_name,
+               insurance_subscriber_dob, insurance_subscriber_gender
+        FROM children
+        WHERE id = ${current.child_id}::uuid AND practice_id = ${practiceId}::uuid
+        LIMIT 1`
+      if (!child) return res.status(404).json({ error: 'Patient chart not found' })
+
+      const providerLower = String(child.insurance_provider || '').toLowerCase().trim()
+      const isSelfPay = providerLower === 'self-pay' || providerLower === 'selfpay' || providerLower === 'self pay' || providerLower === 'self'
+      const newPayerName = isSelfPay ? 'Self Pay' : (child.insurance_provider ?? null)
+      const newPayerId   = isSelfPay ? 'PP' : resolvePayer(child.insurance_provider ?? null)
+      const newMemberId  = isSelfPay ? null : (child.insurance_member_id ?? null)
+      const newDepCode   = isSelfPay ? null : (child.insurance_dependent_code ?? null)
+      const newGroup     = isSelfPay ? null : (child.insurance_group_number ?? null)
+      const newSubName   = isSelfPay ? null : (child.insurance_subscriber_name ?? null)
+      const newSubDob    = isSelfPay ? null : (child.insurance_subscriber_dob ?? null)
+      const newSubGender = isSelfPay ? null : (child.insurance_subscriber_gender ?? null)
+
+      const [me] = await sql`SELECT name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const whoName = (me as any)?.name ?? 'Biller'
+
+      const [updated] = await sql`
+        UPDATE claims SET
+          payer_name                = ${newPayerName},
+          payer_id                  = ${newPayerId},
+          member_id                 = ${newMemberId},
+          insurance_dependent_code  = ${newDepCode},
+          group_number              = ${newGroup},
+          subscriber_name           = ${newSubName},
+          subscriber_dob            = ${newSubDob}::date,
+          subscriber_gender         = ${newSubGender},
+          updated_at                = NOW()
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+
+      // Human-readable diff so Andrea can see exactly what changed on the
+      // claim card's activity log, instead of having to compare rows.
+      const diffs: string[] = []
+      const line = (label: string, before: any, after: any) => {
+        const b = before == null || before === '' ? '(empty)' : String(before)
+        const a = after  == null || after  === '' ? '(empty)' : String(after)
+        if (b !== a) diffs.push(`${label}: ${b} → ${a}`)
+      }
+      line('Payer',       (current as any).payer_name,              newPayerName)
+      line('Payer ID',    (current as any).payer_id,                newPayerId)
+      line('Member ID',   (current as any).member_id,               newMemberId)
+      line('Dep code',    (current as any).insurance_dependent_code,newDepCode)
+      line('Group',       (current as any).group_number,            newGroup)
+      line('Subscriber',  (current as any).subscriber_name,         newSubName)
+      line('Sub DOB',     String((current as any).subscriber_dob ?? '').slice(0, 10), String(newSubDob ?? '').slice(0, 10))
+      line('Sub gender',  (current as any).subscriber_gender,       newSubGender)
+      const body = diffs.length
+        ? 'Refreshed insurance from chart. Changes: ' + diffs.join(' · ')
+        : 'Refreshed insurance from chart. No changes — claim already matched the chart.'
+      try {
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+          VALUES (${id}::uuid, ${whoName}, 'insurance_refreshed', ${body})`
+      } catch { /* non-fatal */ }
+
       return res.status(200).json(updated)
     }
 
