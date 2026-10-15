@@ -99,16 +99,20 @@ async function buildOrderPdf(opts: {
   const introW = bold.widthOfTextAtSize(introLabel, 11)
   page.drawText(introLabel, { x: (width - introW) / 2, y: height - 101, font: bold, size: 11, color: white })
 
-  y = height - 120
+  // Fax-back-to-practice banner (Sara 2026-10-15). The imaging center
+  // handles the patient; this tells them where to send the completed
+  // report so PHC can act on it. Full-width amber bar for high contrast.
+  const amberBg   = rgb(1.00, 0.95, 0.78)
+  const amberLine = rgb(0.72, 0.52, 0.00)
+  const amberText = rgb(0.47, 0.33, 0.00)
+  page.drawRectangle({ x: 0, y: height - 140, width, height: 30, color: amberBg })
+  page.drawLine({ start: { x: 0, y: height - 110 }, end: { x: width, y: height - 110 }, thickness: 1.5, color: amberLine })
+  page.drawLine({ start: { x: 0, y: height - 140 }, end: { x: width, y: height - 140 }, thickness: 1.5, color: amberLine })
+  const faxLabel = 'PLEASE FAX REPORT TO 704-519-2652'
+  const faxW = bold.widthOfTextAtSize(faxLabel, 13)
+  page.drawText(faxLabel, { x: (width - faxW) / 2, y: height - 130, font: bold, size: 13, color: amberText })
 
-  if (priority === 'stat') {
-    page.drawRectangle({ x: margin, y: y - 20, width: contentW, height: 24, color: rgb(0.99, 0.93, 0.93) })
-    page.drawRectangle({ x: margin, y: y - 20, width: contentW, height: 24, borderColor: rgb(0.85, 0.20, 0.20), borderWidth: 1 })
-    page.drawText('STAT ORDER — Patient should obtain imaging immediately', {
-      x: margin + 10, y: y - 13, font: bold, size: 9, color: red,
-    })
-    y -= 34
-  }
+  y = height - 150
 
   function sectionHeader(label: string) {
     page.drawRectangle({ x: margin, y: y - 18, width: contentW, height: 20, color: light })
