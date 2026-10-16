@@ -386,8 +386,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // fax notes for a different child even if a bad id is sent.
   let attachedNotes: any[] = []
   if (noteIds.length > 0) {
+    // scheduled_date and visit_type live on `appointments`, not
+    // `encounter_notes` — pull them from the joined appointment row.
+    // Previous version SELECTed en.scheduled_date / en.visit_type which
+    // 500'd (column doesn't exist). Sara 2026-10-16 — Caroline DuMond
+    // referral with an attached encounter note.
     attachedNotes = await sql`
-      SELECT en.id, en.scheduled_date, en.visit_type, en.is_signed,
+      SELECT en.id,
+             a.scheduled_date,
+             a.visit_type,
+             en.is_signed,
              en.chief_complaint, en.subjective, en.objective, en.assessment, en.plan,
              en.diagnoses, en.cpt_codes,
              p.name AS provider_name
@@ -397,22 +405,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE en.id = ANY(${noteIds}::uuid[])
         AND en.practice_id = ${practiceId}::uuid
         AND en.child_id = ${child_id}::uuid
-      ORDER BY COALESCE(en.scheduled_date, a.scheduled_date, en.created_at::date) DESC
+      ORDER BY COALESCE(a.scheduled_date, en.created_at::date) DESC
     ` as any[]
-    // Fill in scheduled_date from the joined appointment if the note
-    // row doesn't have one directly.
-    for (const n of attachedNotes) {
-      if (!n.scheduled_date) {
-        const [appt] = await sql`
-          SELECT scheduled_date, visit_type FROM appointments
-          WHERE id = (SELECT appointment_id FROM encounter_notes WHERE id = ${n.id}::uuid)
-        `
-        if (appt) {
-          n.scheduled_date = appt.scheduled_date
-          if (!n.visit_type) n.visit_type = appt.visit_type
-        }
-      }
-    }
   }
 
   const html = buildReferralHtml({
