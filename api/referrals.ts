@@ -328,6 +328,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_name text` } catch {}
   try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_phone text` } catch {}
   try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS referral_contact_email text` } catch {}
+  // Fax goes on the cover sheet so specialists can fax consult notes
+  // back. Column was referenced in the SELECT below without ever being
+  // bootstrapped — hit prod as a 500 on 2026-10-16 when Caroline DuMond's
+  // referral was being sent. Sara.
+  try { await sql`ALTER TABLE practices ADD COLUMN IF NOT EXISTS fax text` } catch {}
 
   const [practice] = await sql`
     SELECT name, phone, fax,
