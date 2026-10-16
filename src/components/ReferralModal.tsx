@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Send, AlertCircle, CheckCircle2, Clock, Plus, Paperclip } from 'lucide-react'
 import { Button } from './ui/Button'
 import {
@@ -42,6 +42,11 @@ export function ReferralModal({
   const [urgency, setUrgency]                   = useState<'routine' | 'urgent' | 'stat'>('routine')
   const [sending, setSending]                   = useState(false)
   const [justSent, setJustSent]                 = useState<Referral | null>(null)
+  // Ref on the scrollable body so handleSend can scroll the just-sent
+  // banner into view. Without this the banner renders at the top of a
+  // long form and gets missed when the biller is scrolled down to click
+  // Send referral. Sara 2026-10-16.
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // Attachment selections. Demographics + insurance default ON since
   // most referrals want them; individual note checkboxes default OFF.
@@ -127,7 +132,12 @@ export function ReferralModal({
       })
       setJustSent(created)
       setHistory(prev => [created, ...prev])
-    } catch (e: any) { setError(e?.message ?? 'Failed to send') }
+      // Scroll the banner into view — see scrollRef comment above.
+      setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 0)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to send')
+      setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 0)
+    }
     finally { setSending(false) }
   }
 
@@ -145,7 +155,7 @@ export function ReferralModal({
           <button onClick={onClose} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E] p-1 -mr-1"><X size={18} /></button>
         </div>
 
-        <div className="overflow-auto flex-1 p-5 space-y-4">
+        <div ref={scrollRef} className="overflow-auto flex-1 p-5 space-y-4">
           {loading && <div className="py-8 text-center text-[13px] text-[#1A1A2E]/60">Loading…</div>}
 
           {error && (
@@ -158,12 +168,21 @@ export function ReferralModal({
             <div className={`flex items-start gap-2 text-[13px] px-3 py-2.5 rounded-lg border ${
               justSent.fax_status === 'sent'
                 ? 'text-[#085041] bg-[#E1F5EE] border-[#8FD8BE]'
-                : 'text-[#991B1B] bg-[#FCEBEB] border-[#F5C6C6]'
+                : justSent.fax_status === 'pending'
+                  ? 'text-[#1E3A8A] bg-[#DBEAFE] border-[#93C5FD]'
+                  : 'text-[#991B1B] bg-[#FCEBEB] border-[#F5C6C6]'
             }`}>
-              {justSent.fax_status === 'sent'
-                ? <><CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" /> <span>Referral faxed to <strong>{justSent.specialist_name_snapshot}</strong>. You can close this dialog or send another.</span></>
-                : <><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> <span>Referral saved but fax failed: <strong>{justSent.fax_error}</strong>. The record is in this patient's history so you can retry manually.</span></>
-              }
+              {justSent.fax_status === 'sent' ? (
+                <><CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" /> <span>Referral faxed to <strong>{justSent.specialist_name_snapshot}</strong>. You can close this dialog or send another.</span></>
+              ) : justSent.fax_status === 'pending' ? (
+                // Sinch takes a few seconds to confirm delivery, so most sends
+                // return 'pending' first and flip to 'sent' or 'failed' via
+                // webhook. Call it out explicitly so Sara doesn't think
+                // nothing happened (2026-10-16).
+                <><CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" /> <span>Referral queued and being faxed to <strong>{justSent.specialist_name_snapshot}</strong> at {justSent.specialist_fax_snapshot}. Delivery usually confirms within a minute — you can close this dialog; the status updates in the patient's referral history.</span></>
+              ) : (
+                <><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> <span>Referral saved but fax failed{justSent.fax_error ? <>: <strong>{justSent.fax_error}</strong></> : ''}. The record is in this patient's history so you can retry manually.</span></>
+              )}
             </div>
           )}
 
