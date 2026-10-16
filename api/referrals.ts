@@ -288,9 +288,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `
     await sql`CREATE INDEX IF NOT EXISTS referrals_child_idx ON referrals(child_id)`
     await sql`CREATE INDEX IF NOT EXISTS referrals_practice_idx ON referrals(practice_id)`
+    // Delivery visibility + "view what was faxed" support. Sara 2026-10-16.
+    // fax_html: snapshot of the HTML cover sheet rendered + sent to Sinch,
+    //           so the biller can see exactly what the specialist received.
+    // delivery_status / delivered_at / delivery_checked_at: polled from
+    //           Sinch v3 GET /faxes/{id} on demand via the Check-delivery
+    //           button so the biller can tell whether the fax actually
+    //           reached the specialist's machine (vs just being accepted).
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS fax_html text`
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS delivery_status text`
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS delivered_at timestamptz`
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS delivery_checked_at timestamptz`
   } catch (e: any) { console.error('referrals bootstrap failed:', e?.message) }
 
   if (req.method === 'GET') {
+    // View the stored HTML of a sent referral in a new tab. Returns
+    // text/html so the browser renders directly. Sara 2026-10-16.
+    if (req.query.format === 'html' && req.query.id) {
+      const refId = String(req.query.id)
+      const [row] = await sql`
+        SELECT fax_html, specialist_name_snapshot, child_id, practice_id
+        FROM referrals WHERE id = ${refId}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1
+      `
+      if (!row) return res.status(404).send('Referral not found')
+      if (!row.fax_html) {
+        // Pre-2026-10-16 referrals weren't snapshotted. Surface clearly
+        // so the biller doesn't think the page is broken.
+        return res.status(404).type('text/html').send(
+          `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;max-width:600px;margin:0 auto;">
+          <h2>Fax snapshot not available</h2>
+          <p>This referral was sent before we started storing the rendered HTML (2026-10-16).
+          The record still exists in the patient's chart with reason, specialist, and delivery status;
+          only the printable cover sheet image was not retained.</p>
+          </body></html>`
+        )
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      return res.status(200).send(row.fax_html)
+    }
+
     const childId = req.query.child_id as string
     if (!childId) return res.status(400).json({ error: 'child_id required' })
     const rows = await sql`
@@ -304,6 +340,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  // ─── POST ?action=check_delivery&id=X ────────────────────────────────
+  // Poll Sinch for the current delivery state of a sent fax. Updates the
+  // referral row's delivery_status / delivered_at and returns the updated
+  // row. Sara 2026-10-16 — "sent" in GoRoam currently just means Sinch
+  // accepted the fax; this surfaces whether it actually got to the
+  // specialist's machine.
+  const action = String(req.query.action ?? '')
+  if (action === 'check_delivery') {
+    const refId = String(req.query.id ?? '')
+    if (!refId) return res.status(400).json({ error: 'id required' })
+    const [row] = await sql`
+      SELECT id, fax_id, fax_status FROM referrals
+      WHERE id = ${refId}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1
+    `
+    if (!row) return res.status(404).json({ error: 'Referral not found' })
+    if (!row.fax_id) {
+      return res.status(400).json({ error: 'This referral never got a Sinch fax ID — nothing to check. Status in GoRoam: ' + row.fax_status })
+    }
+    const projectId = process.env.SINCH_PROJECT_ID
+    const keyId     = process.env.SINCH_KEY_ID
+    const keySecret = process.env.SINCH_KEY_SECRET
+    if (!projectId || !keyId || !keySecret) return res.status(500).json({ error: 'Sinch credentials not configured' })
+    try {
+      const sinchRes = await fetch(
+        `https://fax.api.sinch.com/v3/projects/${projectId}/faxes/${encodeURIComponent(row.fax_id)}`,
+        { headers: { Authorization: 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64') } },
+      )
+      const rawText = await sinchRes.text().catch(() => '')
+      let result: any = {}
+      try { result = JSON.parse(rawText) } catch {}
+      if (!sinchRes.ok) {
+        return res.status(502).json({ error: `Sinch ${sinchRes.status}: ${rawText.slice(0, 300)}` })
+      }
+      // Sinch v3 statuses we care about: QUEUED, DIALING, IN_PROGRESS,
+      // DELIVERED, FAILED, EXPIRED, NO_ANSWER, BUSY.
+      const status = String(result?.status ?? '').toUpperCase() || null
+      const terminalSuccess = status === 'DELIVERED'
+      const terminalFailure = ['FAILED', 'EXPIRED', 'NO_ANSWER', 'BUSY', 'CANCELLED'].includes(status || '')
+      const faxStatusUpdate = terminalSuccess ? 'sent' : terminalFailure ? 'failed' : null
+      const [updated] = await sql`
+        UPDATE referrals SET
+          delivery_status     = ${status},
+          delivered_at        = ${terminalSuccess ? new Date().toISOString() : null}::timestamptz,
+          delivery_checked_at = NOW(),
+          fax_status          = COALESCE(${faxStatusUpdate}, fax_status),
+          fax_error           = ${terminalFailure ? ('Sinch delivery: ' + status + (result?.errorType ? ' (' + result.errorType + ')' : '')) : null},
+          updated_at          = NOW()
+        WHERE id = ${refId}::uuid RETURNING *
+      `
+      return res.status(200).json(updated)
+    } catch (e: any) {
+      return res.status(502).json({ error: 'Sinch poll threw: ' + (e?.message ?? String(e)) })
+    }
+  }
 
   const { child_id, specialist_id, reason, clinical_summary, urgency, attachments } = req.body ?? {}
   if (!child_id)       return res.status(400).json({ error: 'child_id required' })
@@ -340,6 +431,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     FROM practices WHERE id = ${practiceId}::uuid LIMIT 1
   `
   if (!practice) return res.status(500).json({ error: 'Practice not found' })
+
+  // ─── POST ?action=preview ─────────────────────────────────────────────
+  // Render the referral HTML with current form values + current patient
+  // data and return as text/html — no DB write, no Sinch call. Lets the
+  // biller eyeball exactly what will be faxed before committing.
+  // Sara 2026-10-16.
+  if (action === 'preview') {
+    const previewNotes = await (async () => {
+      if (noteIds.length === 0) return []
+      return await sql`
+        SELECT en.id, a.scheduled_date, a.visit_type, en.is_signed,
+               en.chief_complaint, en.subjective, en.objective, en.assessment, en.plan,
+               en.diagnoses, en.cpt_codes,
+               p.name AS provider_name
+        FROM encounter_notes en
+        LEFT JOIN providers p ON p.id = en.provider_id
+        LEFT JOIN appointments a ON a.id = en.appointment_id
+        WHERE en.id = ANY(${noteIds}::uuid[])
+          AND en.practice_id = ${practiceId}::uuid
+          AND en.child_id = ${child_id}::uuid
+        ORDER BY COALESCE(a.scheduled_date, en.created_at::date) DESC
+      ` as any[]
+    })()
+    const previewHtml = buildReferralHtml({
+      child,
+      specialist: { name: specialist.name, specialty: specialist.specialty, fax_number: specialist.fax_number, address: specialist.address },
+      provider: { name: prov.name, role: prov.role },
+      practice: {
+        name: practice.name,
+        phone: practice.phone,
+        fax: practice.fax,
+        referral_contact_name:  practice.referral_contact_name,
+        referral_contact_phone: practice.referral_contact_phone,
+        referral_contact_email: practice.referral_contact_email,
+      },
+      reason: reason.trim(),
+      clinical_summary: clinical_summary ?? '',
+      urgency: urg,
+      createdAt: new Date(),
+      attachments: {
+        demographics: includeDemographics,
+        insurance: includeInsurance,
+        notes: previewNotes.map(n => ({
+          id: n.id,
+          scheduled_date: n.scheduled_date ? String(n.scheduled_date).split('T')[0] : null,
+          visit_type: n.visit_type,
+          is_signed: !!n.is_signed,
+          chief_complaint: n.chief_complaint,
+          subjective: n.subjective,
+          objective: n.objective,
+          assessment: n.assessment,
+          plan: n.plan,
+          diagnoses: n.diagnoses,
+          cpt_codes: n.cpt_codes,
+          provider_name: n.provider_name,
+        })),
+      },
+    })
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(previewHtml)
+  }
 
   // Persist the referral first with fax_status='pending' so we don't
   // lose the record if the Sinch call fails.
@@ -460,8 +612,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { result = JSON.parse(rawText) } catch {}
 
     if (sinchRes.ok) {
+      // Store the rendered HTML so the biller can View sent fax later
+      // and see exactly what the specialist received. Sara 2026-10-16.
       const [updated] = await sql`
-        UPDATE referrals SET fax_status = 'sent', fax_id = ${result.id ?? null}, faxed_at = NOW(), updated_at = NOW()
+        UPDATE referrals SET
+          fax_status = 'sent',
+          fax_id     = ${result.id ?? null},
+          fax_html   = ${html},
+          faxed_at   = NOW(),
+          updated_at = NOW()
         WHERE id = ${ref.id}::uuid RETURNING *
       `
       return res.status(200).json(updated)

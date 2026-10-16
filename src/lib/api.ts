@@ -705,6 +705,17 @@ export interface Referral {
   sent_by_provider_name: string | null;
   reason: string; clinical_summary: string | null; urgency: 'routine' | 'urgent' | 'stat';
   faxed_at: string | null; fax_id: string | null; fax_status: 'pending' | 'sent' | 'failed'; fax_error: string | null;
+  // Delivery visibility (Sara 2026-10-16). Sinch v3's actual delivery
+  // state — DELIVERED means the fax reached the specialist's machine;
+  // anything else means it's still in flight or failed. Populated by
+  // the on-demand "Check delivery status" button via Sinch's GET
+  // /faxes/{id} endpoint.
+  delivery_status?: string | null
+  delivered_at?: string | null
+  delivery_checked_at?: string | null
+  // Snapshot of the HTML cover sheet that was faxed. Null for referrals
+  // sent before 2026-10-16 — those weren't captured.
+  fax_html?: string | null
   created_at: string
 }
 
@@ -736,6 +747,48 @@ export const sendReferral = (body: {
   }
 }) =>
   apiFetch<Referral>('/api/referrals', { method: 'POST', body: JSON.stringify(body) })
+
+// Render the referral cover sheet with the current form values and open
+// it in a new tab — no DB write, no fax. Lets the biller eyeball what
+// will be faxed before clicking Send. Sara 2026-10-16.
+export async function previewReferral(body: Parameters<typeof sendReferral>[0]) {
+  const headers = await authHeaders()
+  const res = await fetch('/api/referrals?action=preview', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener,noreferrer')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+// Fetch the stored HTML of a previously-sent referral and open it in a
+// new tab. Returns the error message when the referral has no snapshot
+// (sent before 2026-10-16 when we started capturing).
+export async function viewSentReferralHtml(id: string) {
+  const headers = await authHeaders()
+  const res = await fetch(`/api/referrals?id=${encodeURIComponent(id)}&format=html`, { headers })
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener,noreferrer')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+// Ask Sinch for the current delivery status of a sent referral.
+// Updates the row's delivery_status + delivered_at + flips fax_status
+// to 'sent'/'failed' when Sinch reports a terminal state. Returns the
+// updated row. Sara 2026-10-16 — distinguishes "Sinch accepted the fax"
+// (what we currently call 'sent') from "specialist's machine received it".
+export const checkReferralDelivery = (id: string) =>
+  apiFetch<Referral>(`/api/referrals?action=check_delivery&id=${encodeURIComponent(id)}`, { method: 'POST' })
 
 // ── Edge function proxy ───────────────────────────────────────
 export const invokeNotifications = (body: Record<string, unknown>) =>

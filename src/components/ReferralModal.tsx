@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Send, AlertCircle, CheckCircle2, Clock, Plus, Paperclip } from 'lucide-react'
+import { X, Send, AlertCircle, CheckCircle2, Clock, Plus, Paperclip, Eye, RefreshCw } from 'lucide-react'
 import { Button } from './ui/Button'
 import {
   getSpecialists, createSpecialist, sendReferral, getReferralsForChild, getEncounterNotes,
+  previewReferral, viewSentReferralHtml, checkReferralDelivery,
   type Specialist, type Referral,
 } from '../lib/api'
 
@@ -191,16 +192,52 @@ export function ReferralModal({
               {history.length > 0 && (
                 <div className="p-3 bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg">
                   <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">Past referrals for this patient</div>
-                  <div className="space-y-1.5 text-[12px]">
-                    {history.slice(0, 4).map(r => (
-                      <div key={r.id} className="flex items-center gap-2">
-                        {r.fax_status === 'sent'   && <CheckCircle2 size={12} className="text-[#1D9E75] flex-shrink-0" />}
-                        {r.fax_status === 'failed' && <AlertCircle  size={12} className="text-[#991B1B] flex-shrink-0" />}
-                        {r.fax_status === 'pending' && <Clock       size={12} className="text-[#8A4B00] flex-shrink-0" />}
-                        <span className="text-[#1A1A2E]"><strong>{r.specialist_name_snapshot}</strong>{r.specialist_specialty ? ` (${r.specialist_specialty})` : ''} — {r.reason}</span>
-                        <span className="text-[#1A1A2E]/60 ml-auto">{new Date(r.created_at).toLocaleDateString()}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 text-[12px]">
+                    {history.slice(0, 4).map(r => {
+                      // Delivery pill: distinguishes "Sinch accepted"
+                      // (fax_status === 'sent' but no delivered_at) from
+                      // "actually delivered to the specialist's machine"
+                      // (delivery_status === 'DELIVERED' / delivered_at
+                      // populated). Sara 2026-10-16.
+                      const deliveryPill = r.delivered_at
+                        ? { label: 'Delivered', cls: 'bg-[#E1F5EE] text-[#085041]' }
+                        : r.delivery_status
+                          ? { label: r.delivery_status, cls: 'bg-[#FEF3C7] text-[#8A4B00]' }
+                          : null
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 flex-wrap">
+                          {r.fax_status === 'sent'   && <CheckCircle2 size={12} className="text-[#1D9E75] flex-shrink-0" />}
+                          {r.fax_status === 'failed' && <AlertCircle  size={12} className="text-[#991B1B] flex-shrink-0" />}
+                          {r.fax_status === 'pending' && <Clock       size={12} className="text-[#8A4B00] flex-shrink-0" />}
+                          <span className="text-[#1A1A2E] flex-1 min-w-0 truncate"><strong>{r.specialist_name_snapshot}</strong>{r.specialist_specialty ? ` (${r.specialist_specialty})` : ''} — {r.reason}</span>
+                          {deliveryPill && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${deliveryPill.cls}`}>{deliveryPill.label}</span>
+                          )}
+                          <span className="text-[#1A1A2E]/60">{new Date(r.created_at).toLocaleDateString()}</span>
+                          <button
+                            onClick={() => viewSentReferralHtml(r.id)}
+                            className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline"
+                            title="Open the HTML cover sheet that was faxed to this specialist."
+                          >
+                            <Eye size={11} /> View
+                          </button>
+                          {r.fax_id && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const updated = await checkReferralDelivery(r.id)
+                                  setHistory(prev => prev.map(x => x.id === r.id ? updated : x))
+                                } catch (e: any) { alert('Delivery check failed: ' + (e?.message ?? String(e))) }
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#7F77DD] hover:underline"
+                              title="Ask Sinch what happened to this fax after we handed it off — DELIVERED means the specialist's machine actually received it."
+                            >
+                              <RefreshCw size={11} /> Check delivery
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -333,12 +370,35 @@ export function ReferralModal({
         </div>
 
         {!justSent && !loading && (
-          <div className="px-5 py-3 border-t border-[#E8E8E4] bg-[#FAFAF8] flex items-center justify-between">
-            <span className="text-[11px] text-[#1A1A2E]/60">Fax sent from your practice number. Patient identity + allergies + meds + PMH always on the cover page.</span>
-            <Button variant="teal" size="sm" loading={sending}
-              disabled={!specialistId || !reason.trim()} onClick={handleSend}>
-              <Send size={12} /> Send referral
-            </Button>
+          <div className="px-5 py-3 border-t border-[#E8E8E4] bg-[#FAFAF8] flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-[11px] text-[#1A1A2E]/60 flex-1 min-w-[200px]">Fax sent from your practice number. Patient identity + allergies + meds + PMH always on the cover page.</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button variant="secondary" size="sm"
+                disabled={!specialistId || !reason.trim() || sending}
+                title="Open the referral cover sheet in a new tab exactly as it will be faxed. No fax is sent."
+                onClick={async () => {
+                  try {
+                    await previewReferral({
+                      child_id: childId,
+                      specialist_id: specialistId,
+                      reason: reason.trim(),
+                      clinical_summary: clinicalSummary.trim(),
+                      urgency,
+                      attachments: {
+                        include_demographics: includeDemographics,
+                        include_insurance: includeInsurance,
+                        encounter_note_ids: Array.from(selectedNoteIds),
+                      },
+                    })
+                  } catch (e: any) { setError(e?.message ?? 'Preview failed') }
+                }}>
+                <Eye size={12} /> Preview
+              </Button>
+              <Button variant="teal" size="sm" loading={sending}
+                disabled={!specialistId || !reason.trim()} onClick={handleSend}>
+                <Send size={12} /> Send referral
+              </Button>
+            </div>
           </div>
         )}
 
