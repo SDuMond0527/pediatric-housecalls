@@ -64,6 +64,7 @@ export const INSURANCE_PROVIDERS = [
   'Aetna',
   'Cigna',
   'Humana',
+  'Meritain',
   'PHCS / Multiplan',
   'Coventry',
   'Select Health',
@@ -88,6 +89,7 @@ function matchCanonicalProvider(raw: string): string {
   if (/cigna/.test(v))                                 return 'Cigna'
   if (/aetna/.test(v))                                 return 'Aetna'
   if (/humana/.test(v))                                return 'Humana'
+  if (/meritain/.test(v))                              return 'Meritain'
   if (/phcs|multiplan/.test(v))                        return 'PHCS / Multiplan'
   if (/coventry/.test(v))                              return 'Coventry'
   if (/select\s*health/.test(v))                       return 'Select Health'
