@@ -93,6 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             WHEN TRIM(cl.payer_name) ~* 'cigna' THEN 'Cigna'
             WHEN TRIM(cl.payer_name) ~* 'aetna' THEN 'Aetna'
             WHEN TRIM(cl.payer_name) ~* 'humana' THEN 'Humana'
+            WHEN TRIM(cl.payer_name) ~* 'meritain' THEN 'Meritain'
             WHEN TRIM(cl.payer_name) ~* 'phcs|multiplan' THEN 'PHCS / Multiplan'
             WHEN TRIM(cl.payer_name) ~* 'coventry' THEN 'Coventry'
             WHEN TRIM(cl.payer_name) ~* 'select\\s*health' THEN 'Select Health'
