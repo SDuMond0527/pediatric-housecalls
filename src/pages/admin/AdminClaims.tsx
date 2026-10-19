@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip } from 'lucide-react'
+import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip, DollarSign } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, refreshClaimInsuranceFromChart, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { PostPaymentModal } from '../../components/PostPaymentModal'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
@@ -114,6 +115,8 @@ export function AdminClaims() {
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpandedRaw] = useState<string | null>(null)
+  // Claim id of the "Post payment" modal when open. Sara 2026-10-19.
+  const [postPaymentClaimId, setPostPaymentClaimId] = useState<string | null>(null)
   // Tracks which claim's status dropdown is currently PATCHing so the
   // select disables during the in-flight write. Sara 2026-09-30.
   const [statusChanging, setStatusChanging] = useState<string | null>(null)
@@ -2618,6 +2621,20 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
+                            {/* Manual "Post payment" — for payments that arrived
+                                outside the Stedi ERA pipeline (paper EOB, EFT
+                                without ERA). Only visible on Submitted claims
+                                that haven't received an ERA yet. Sara 2026-10-19. */}
+                            {tab === 'submitted' && !c.era_received_at && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPostPaymentClaimId(c.id) }}
+                                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE] whitespace-nowrap"
+                                title="Post an insurance payment that arrived outside the Stedi ERA pipeline (paper EOB, EFT without ERA, manually keyed check)."
+                              >
+                                <DollarSign size={10} /> Post payment
+                              </button>
+                            )}
                             {/* Place-of-service pill — visible on every tab so
                                 Andrea can see what POS was submitted. Edit via
                                 the full edit panel on the Ready for biller tab.
@@ -3525,6 +3542,24 @@ export function AdminClaims() {
           </div>
         </div>
       )}
+
+      {/* Post payment modal — rendered at the top level so it overlays
+          cleanly regardless of which card the biller clicked from.
+          Sara 2026-10-19. */}
+      {postPaymentClaimId && (() => {
+        const c = claims.find(x => x.id === postPaymentClaimId)
+        if (!c) return null
+        return (
+          <PostPaymentModal
+            claim={c}
+            onClose={() => setPostPaymentClaimId(null)}
+            onPosted={(updated) => {
+              setClaims(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
+              setPostPaymentClaimId(null)
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -723,6 +723,138 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(updated)
     }
 
+    // ── Manual insurance payment posting ─────────────────────────────────
+    // Andrea needs to post payments that arrived outside the Stedi ERA
+    // pipeline — paper EOB, EFT without ERA, manually keyed check. Writes
+    // the same claim columns the ERA pipeline writes (so downstream
+    // "payment received" logic — Completed-tab routing, patient-statement
+    // generation — behaves identically), plus a payment_source + audit
+    // trail so we can tell this came from Andrea, not Stedi. Sara 2026-10-19.
+    if (action === 'post_insurance_payment') {
+      // Bootstrap source + audit columns idempotently.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payment_source text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payment_posted_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payment_posted_by text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payment_reference text` } catch {}
+
+      const num = (v: any): number => {
+        const n = parseFloat(String(v ?? '').trim().replace(/[^0-9.-]/g, ''))
+        return Number.isFinite(n) ? n : 0
+      }
+      const amountBilled    = num((fields as any).amount_billed)
+      const insurancePayment = num((fields as any).insurance_payment)
+      const contractualAdj   = num((fields as any).contractual_adjustment)
+      const copay            = num((fields as any).patient_copay)
+      const deductible       = num((fields as any).patient_deductible)
+      const coinsurance      = num((fields as any).patient_coinsurance)
+      const nonCovered       = num((fields as any).patient_non_covered)
+      const paymentReference = String((fields as any).payment_reference ?? '').trim() || null
+      const paymentDateIn    = String((fields as any).payment_date ?? '').trim()
+      const paymentDate      = paymentDateIn ? new Date(paymentDateIn + 'T12:00:00Z') : new Date()
+      if (isNaN(paymentDate.getTime())) return res.status(400).json({ error: 'Invalid payment_date — use YYYY-MM-DD' })
+
+      const [claim] = await sql`
+        SELECT id, status, practice_id, child_id, appointment_id, service_date,
+               cpt_codes, patient_first_name, patient_last_name, patient_dob,
+               total_charge, era_received_at
+        FROM claims
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!claim) return res.status(404).json({ error: 'Claim not found' })
+      if (claim.status === 'written_off') {
+        return res.status(400).json({ error: 'This claim is written off. Posting a payment would resurrect a closed AR item — reopen it first.' })
+      }
+      if (claim.era_received_at) {
+        // Not a 400 — just surface it so Andrea doesn't accidentally
+        // double-post on top of a Stedi ERA that already landed.
+        return res.status(409).json({ error: 'A payment has already been posted to this claim (Stedi ERA received ' + new Date(claim.era_received_at).toLocaleDateString() + '). If this is a correction, reach out and we will handle it separately.' })
+      }
+
+      // Use the claim's total_charge as the billed amount if Andrea
+      // didn't type one — avoids blank-amount statements.
+      const billedForStatement = amountBilled > 0 ? amountBilled : (parseFloat(String(claim.total_charge ?? 0)) || 0)
+      const patientResp = +(copay + deductible + coinsurance + nonCovered).toFixed(2)
+      const remaining   = +(billedForStatement - insurancePayment - contractualAdj).toFixed(2)
+
+      const [me] = await sql`SELECT name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const whoName = (me as any)?.name ?? 'Biller'
+
+      // Update the claim row. era_received_at being set is what moves it
+      // to Completed on the Submitted tab; payment_source distinguishes
+      // manually-posted from Stedi-ERA for reporting.
+      const [updated] = await sql`
+        UPDATE claims SET
+          amount_billed_era          = ${billedForStatement},
+          insurance_payment_era      = ${insurancePayment},
+          contractual_adjustment_era = ${contractualAdj},
+          patient_copay_era          = ${copay},
+          patient_deductible_era     = ${deductible},
+          patient_coinsurance_era    = ${coinsurance},
+          patient_non_covered_era    = ${nonCovered},
+          era_received_at            = ${paymentDate}::timestamptz,
+          payment_source             = 'manual',
+          payment_posted_at          = NOW(),
+          payment_posted_by          = ${whoName},
+          payment_reference          = ${paymentReference},
+          updated_at                 = NOW()
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+
+      // Create a patient_statement if none exists, same shape as the ERA
+      // path. Autopaid shortcut: insurance paid >$0 AND patient owes $0 →
+      // mark statement as already paid (mirrors ensureStatementForClaim
+      // in api/cron/stedi-era-poll.ts).
+      try {
+        const [existingStmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${id}::uuid LIMIT 1`
+        if (!existingStmt) {
+          const [contactRow] = await sql`
+            SELECT ch.parent_email, ch.parent_phone, fp.email AS family_email, fp.phone AS family_phone
+            FROM claims cl
+            LEFT JOIN children ch ON ch.id = COALESCE(cl.child_id, (SELECT child_id FROM appointments WHERE id = cl.appointment_id LIMIT 1))
+            LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+            WHERE cl.id = ${id}::uuid LIMIT 1`
+          const email = (contactRow as any)?.parent_email ?? (contactRow as any)?.family_email ?? null
+          const phone = (contactRow as any)?.parent_phone ?? (contactRow as any)?.family_phone ?? null
+          const autoPaid = patientResp === 0 && insurancePayment > 0
+          await sql`
+            INSERT INTO patient_statements (
+              practice_id, claim_id,
+              patient_first_name, patient_last_name, patient_dob,
+              date_of_service, cpt_codes,
+              patient_email, patient_phone,
+              amount_billed, insurance_payment, contractual_adjustment,
+              patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+              remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+              status, paid_at, created_at, updated_at
+            ) VALUES (
+              ${claim.practice_id}::uuid, ${claim.id},
+              ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+              ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+              ${email}, ${phone},
+              ${billedForStatement}, ${insurancePayment}, ${contractualAdj},
+              ${copay}, ${deductible}, ${coinsurance}, ${nonCovered},
+              ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+              ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
+            )`
+        }
+      } catch (stmtErr: any) {
+        console.error('[post_insurance_payment] statement creation failed (non-fatal):', stmtErr?.message)
+      }
+
+      const summary =
+        `Manual insurance payment posted: billed $${billedForStatement.toFixed(2)}, ` +
+        `insurance paid $${insurancePayment.toFixed(2)}, ` +
+        `contractual adj $${contractualAdj.toFixed(2)}, ` +
+        `patient resp $${patientResp.toFixed(2)} (copay $${copay.toFixed(2)}, ded $${deductible.toFixed(2)}, coins $${coinsurance.toFixed(2)}, non-covered $${nonCovered.toFixed(2)})` +
+        (paymentReference ? `. Ref: ${paymentReference}` : '')
+      try {
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+          VALUES (${id}::uuid, ${whoName}, 'manual_payment_posted', ${summary})`
+      } catch { /* non-fatal */ }
+
+      return res.status(200).json(updated)
+    }
+
     // Submit to Stedi (live or test)
     if (action === 'submit' || action === 'test') {
       const testMode = action === 'test'

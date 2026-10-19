@@ -1460,6 +1460,24 @@ export const forceClaimStatus = (id: string, target: 'ready_for_biller' | 'submi
 export const refreshClaimInsuranceFromChart = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'refresh_insurance_from_chart' }) })
 
+// Andrea posts an insurance payment that arrived outside the Stedi ERA
+// pipeline (paper EOB, EFT without ERA, manually keyed check). Writes
+// the same payment columns the ERA path writes, so downstream — Completed
+// routing, patient-statement generation — behaves identically. Server
+// 409s if a payment is already posted. Sara 2026-10-19.
+export const postInsurancePayment = (id: string, body: {
+  amount_billed?: number | string
+  insurance_payment: number | string
+  contractual_adjustment?: number | string
+  patient_copay?: number | string
+  patient_deductible?: number | string
+  patient_coinsurance?: number | string
+  patient_non_covered?: number | string
+  payment_reference?: string
+  payment_date?: string
+}) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'post_insurance_payment', ...body }) })
+
 // Upload a documentation PDF/image to a claim. The file is stored in
 // Vercel Blob and a claim_attachments row is written with the URL.
 // Not sent through Stedi — purely for Andrea's records / payer-portal
