@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports } from '../../lib/api'
-import { computeProviderPay, PAIRED_ROLE_PAY } from '../../lib/payrollRules'
+import { computeProviderPay, PAIRED_ROLE_PAY, CPR_INSTRUCTOR_PAY, isCprClassVisitType } from '../../lib/payrollRules'
 
 interface ApptRow {
   id: string
@@ -370,23 +370,55 @@ export function AdminReports() {
       })
     })
 
-    // CMAs don't sign encounter notes — their payroll keys off their
-    // scheduled appointments on paired visit types (CMA + telemedicine
-    // aliases). Count every scheduled appointment except cancelled; do
-    // NOT filter by status='done' because providers don't reliably mark
-    // visits done after seeing the patient. Sara 2026-10-20 — the whole
-    // "Keaira only had 1 visit on payroll" was partly my gating on
-    // encounter_notes and partly the broader "never trust the Done
-    // button" rule that applies to everyone's payroll.
+    // Appointment-based payroll synthesis. Covers two populations that
+    // don't produce encounter notes: CMAs (hybrid visits) and CPR class
+    // instructors. In both cases every non-cancelled scheduled
+    // appointment counts — do NOT filter by status='done' because
+    // providers don't reliably mark visits done after seeing the
+    // patient. Sara 2026-10-20.
     appts.forEach(a => {
       const provider = providers.find(p => p.id === a.provider_id)
       if (!provider) return
+      if (a.status === 'cancelled') return
       const role = String(provider.role ?? '').toUpperCase()
-      if (role !== 'CMA') return
       const vt = a.visit_type ?? ''
+
+      // CPR class — $384 flat to the instructor regardless of role.
+      // Classes aren't SOAP visits; they're scheduled appointments with
+      // no encounter note. Any provider on a CPR class appointment
+      // gets paid the instructor rate. Sara 2026-10-20.
+      if (isCprClassVisitType(vt)) {
+        raw.push({
+          key: `appt-${a.id}`,
+          encounterNoteId: '',
+          providerId: provider.id,
+          providerName: provider.name,
+          chartNumber: a.chart_number ?? '',
+          patientName: fmtPatientName(a.patient_first_name ?? '', a.patient_last_name ?? ''),
+          claimNumber: '',
+          payer: '',
+          code: 'CPR-class',
+          description: 'In-home CPR class instructor',
+          category: 'Procedure',
+          encounterDate: a.scheduled_date,
+          visitType: vt,
+          claimDate: null,
+          charge: 0,
+          quantity: 1,
+          rvu: 0,
+          rvuRate: 0,
+          rvuCount: 0,
+          providerPay: CPR_INSTRUCTOR_PAY,
+          cvSplit: 0,
+          appointmentStatus: a.status,
+        })
+        return
+      }
+
+      // CMA hybrid-visit — $45 per paired-visit appointment.
+      if (role !== 'CMA') return
       const paired = PAIRED_ROLE_PAY[vt]
       if (!paired) return
-      if (a.status === 'cancelled') return
       const pay = paired.cma
       if (pay <= 0) return
       raw.push({

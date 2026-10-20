@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-20-cma-payroll-from-appointments
+// Service worker — deliberate passthrough. Version: 2026-10-20-cpr-class-payroll
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

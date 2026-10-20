@@ -101,6 +101,16 @@ export const PAIRED_ROLE_PAY: Record<string, { md: number; pnp: number; cma: num
   ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, IV_FLUIDS_PAY])),
 }
 
+// In-home CPR class instructor pay — flat per class regardless of role.
+// Melissa Jesse is the sole instructor today but the pay rule is tied to
+// the visit type, not the person. CPR classes don't get encounter notes;
+// they're scheduled appointments. Sara 2026-10-20.
+export const CPR_INSTRUCTOR_PAY = 384
+export function isCprClassVisitType(vt: string | null | undefined): boolean {
+  const v = String(vt ?? '').toLowerCase()
+  return v.startsWith('in-home cpr class') || v.includes('cpr class ')
+}
+
 export interface PayComputation {
   pay: number
   rvu: number
