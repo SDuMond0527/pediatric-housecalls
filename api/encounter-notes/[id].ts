@@ -84,6 +84,16 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   if (!note) return { error: 'Note not found' }
   if (!note.is_signed) return { error: 'Note must be signed' }
 
+  // "NC" (No Charge) short-circuits every downstream billing path. The
+  // note is still signed, visible on the chart and in the parent
+  // portal, but no claim or patient_statement is ever generated. Sara
+  // 2026-10-20. Covers courtesy visits, follow-up checks, admin-only
+  // documentation visits — anything that needs a record but no bill.
+  const noteCpts = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+  if (noteCpts.some((c: any) => String(c?.code ?? '').toUpperCase() === 'NC')) {
+    return { skipped: 'No charge visit (NC code on note)' }
+  }
+
   const [appt] = note.appointment_id
     ? await sql`SELECT * FROM appointments WHERE id = ${note.appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
     : [null]
