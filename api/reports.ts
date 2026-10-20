@@ -31,7 +31,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { start, end } = req.query as Record<string, string>
   const [appointments, providers, encounterNotes, onCallShifts, broadcasts, waitlistEntries] = await Promise.all([
-    sql`SELECT id, provider_id, visit_type, scheduled_date, status, notes FROM appointments WHERE scheduled_date >= ${start}::date AND scheduled_date <= ${end}::date AND practice_id = ${practiceId}::uuid`,
+    // Enrich with child info so payroll rows for CMAs — who don't sign
+    // encounter notes but are paid off completed appointments — can show
+    // patient name + chart on the Payroll report. Sara 2026-10-20.
+    sql`SELECT a.id, a.provider_id, a.visit_type, a.scheduled_date, a.status, a.notes,
+               a.child_id, ch.first_name AS patient_first_name, ch.last_name AS patient_last_name,
+               ch.chart_number
+          FROM appointments a
+          LEFT JOIN children ch ON ch.id = a.child_id
+          WHERE a.scheduled_date >= ${start}::date
+            AND a.scheduled_date <= ${end}::date
+            AND a.practice_id = ${practiceId}::uuid`,
     sql`SELECT id, name, role FROM providers WHERE role != 'admin' AND practice_id = ${practiceId}::uuid`,
     sql`
       SELECT

@@ -12,6 +12,13 @@ interface ApptRow {
   scheduled_date: string
   status: string
   notes: string | null
+  // Child info joined on the server so CMAs — who don't sign encounter
+  // notes but need to appear on payroll — can show patient / chart on
+  // the Payroll report. Sara 2026-10-20.
+  child_id?: string | null
+  patient_first_name?: string | null
+  patient_last_name?: string | null
+  chart_number?: string | null
 }
 interface ProviderRow { id: string; name: string; role: string }
 interface OnCallShiftRow { provider_id: string; date: string; state: string; start_time: string | null; end_time: string | null }
@@ -280,13 +287,17 @@ export function AdminReports() {
       const cpts: any[] = Array.isArray(en.cpt_codes) ? en.cpt_codes : []
       const vt = en.visit_type ?? ''
       // Paired visits (CMA + telemedicine, IV fluids) create two notes:
-      // the MD/NP note carries the billable CPTs; the CMA/RN support note
+      // the MD/NP note carries the billable CPTs; the RN support note
       // has none. Without CPT lines the forEach below produces no rows,
       // so synthesize ONE row per empty-CPT paired note from the paired
-      // pay rule — this is how CMAs and RNs end up on payroll. Sara
-      // 2026-10-09.
+      // pay rule — this is how RNs end up on payroll. Sara 2026-10-09.
       const paired = PAIRED_ROLE_PAY[vt]
       const role = String(provider.role ?? '').toUpperCase()
+      // CMAs don't sign encounter notes (Sara 2026-10-20: only NP/MD/RN
+      // do). If a CMA note accidentally gets signed under their name,
+      // skip it so we don't double-pay — the appointment-based loop
+      // below is the sole source of truth for CMA payroll.
+      if (role === 'CMA') return
       if (cpts.length === 0 && paired) {
         const pairPay = role === 'MD'  ? paired.md
                       : (role === 'PNP' || role === 'NP') ? paired.pnp
@@ -356,6 +367,51 @@ export function AdminReports() {
           cvSplit: pay.cvSplit,
           appointmentStatus: en.appointment_status ?? '',
         })
+      })
+    })
+
+    // CMAs don't sign encounter notes — their payroll keys off their
+    // scheduled appointments on paired visit types (CMA + telemedicine
+    // aliases). Count every scheduled appointment except cancelled; do
+    // NOT filter by status='done' because providers don't reliably mark
+    // visits done after seeing the patient. Sara 2026-10-20 — the whole
+    // "Keaira only had 1 visit on payroll" was partly my gating on
+    // encounter_notes and partly the broader "never trust the Done
+    // button" rule that applies to everyone's payroll.
+    appts.forEach(a => {
+      const provider = providers.find(p => p.id === a.provider_id)
+      if (!provider) return
+      const role = String(provider.role ?? '').toUpperCase()
+      if (role !== 'CMA') return
+      const vt = a.visit_type ?? ''
+      const paired = PAIRED_ROLE_PAY[vt]
+      if (!paired) return
+      if (a.status === 'cancelled') return
+      const pay = paired.cma
+      if (pay <= 0) return
+      raw.push({
+        key: `appt-${a.id}`,
+        encounterNoteId: '',
+        providerId: provider.id,
+        providerName: provider.name,
+        chartNumber: a.chart_number ?? '',
+        patientName: fmtPatientName(a.patient_first_name ?? '', a.patient_last_name ?? ''),
+        claimNumber: '',
+        payer: '',
+        code: 'CMA-pair',
+        description: `CMA share of ${vt}`,
+        category: 'Procedure',
+        encounterDate: a.scheduled_date,
+        visitType: vt,
+        claimDate: null,
+        charge: 0,
+        quantity: 1,
+        rvu: 0,
+        rvuRate: 0,
+        rvuCount: 0,
+        providerPay: pay,
+        cvSplit: 0,
+        appointmentStatus: a.status,
       })
     })
 
