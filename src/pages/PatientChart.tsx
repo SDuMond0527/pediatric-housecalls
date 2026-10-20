@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -1904,6 +1904,30 @@ export function PatientChart() {
                                   <FlaskConical size={12} />
                                   {dsLoading ? 'Launching…' : 'Prescribe'}
                                 </button>
+                                {/* Admin-only Delete. Server also enforces the
+                                    is_admin gate and refuses if the note has
+                                    a submitted / paid / written-off claim.
+                                    Sara 2026-10-20 — cleaning up CMA-signed
+                                    notes. */}
+                                {currentProvider?.is_admin && (
+                                  <button
+                                    onClick={async () => {
+                                      const noteLabel = `${note.note_type || note.visit_type || 'note'} on ${formatApiDate(note.scheduled_date ?? '', 'MMMM d, yyyy') || 'unknown date'}`
+                                      if (!window.confirm(`Permanently delete this ${noteLabel}?\n\nThis also deletes any derived claim + patient statement. Cannot be undone.`)) return
+                                      try {
+                                        await deleteEncounterNote(note.id)
+                                        setNotes(prev => prev.filter(n => n.id !== note.id))
+                                      } catch (e: any) {
+                                        alert(e?.message ?? 'Delete failed')
+                                      }
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FEE2E2] text-[#991B1B] text-[12px] font-medium rounded-lg hover:bg-[#FECACA] transition-colors"
+                                    title="Admin-only. Permanently removes the note (and any derived claim). Server blocks deletion once a claim has been submitted to the payer."
+                                  >
+                                    <Trash2 size={12} />
+                                    Delete
+                                  </button>
+                                )}
                               </div>
                             </div>
                           )}

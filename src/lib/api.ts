@@ -821,6 +821,13 @@ export const coSignEncounterNote = (id: string) =>
 export const undoCoSignEncounterNote = (id: string) =>
   apiFetch<any>(`/api/encounter-notes/${id}/co-sign`, { method: 'DELETE' })
 
+// Admin-only. Permanently delete an encounter note + cascade its
+// derived claim + patient statements. Server refuses with a 409 if the
+// claim has already been submitted/accepted/paid — void the claim path
+// first in that case. Sara 2026-10-20 (clearing CMA-signed notes).
+export const deleteEncounterNote = (id: string) =>
+  apiFetch<void>(`/api/encounter-notes/${id}`, { method: 'DELETE' })
+
 // Download an encounter note as HTML in a new browser tab. The biller
 // then hits Cmd+P → Save as PDF for payer-portal uploads. Requires a
 // Bearer token so we can't use a plain <a href> — we fetch the HTML

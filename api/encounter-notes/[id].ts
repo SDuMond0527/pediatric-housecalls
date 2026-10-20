@@ -814,6 +814,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json(row)
   }
 
+  // Admin-only DELETE: permanently remove an encounter note. Cascades
+  // to its derived claim + any patient statements derived from that
+  // claim. Blocks if the claim has already been submitted/accepted/paid
+  // — too late to clean up safely, so the biller must void the claim
+  // path first. Sara 2026-10-20 — Keaira Bryson documented a few CMA
+  // notes before we made the "CMAs don't do notes" rule explicit; this
+  // lets Sara clear them manually.
+  if (req.method === 'DELETE') {
+    const [provRow] = await sql`SELECT is_admin, name FROM providers WHERE cognito_sub = ${sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    if (!provRow?.is_admin) return res.status(403).json({ error: 'Admin only' })
+
+    const [note] = await sql`
+      SELECT id, is_signed, provider_id, child_id
+      FROM encounter_notes
+      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+    if (!note) return res.status(404).json({ error: 'Note not found' })
+
+    const [claim] = await sql`
+      SELECT id, status, submitted_at, era_received_at
+      FROM claims
+      WHERE encounter_note_id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+    if (claim) {
+      const lockedStatuses = new Set(['submitted', 'accepted', 'paid', 'written_off'])
+      if (lockedStatuses.has(String(claim.status)) || claim.submitted_at || claim.era_received_at) {
+        return res.status(409).json({
+          error: `This note has a claim that's already ${claim.status}${claim.era_received_at ? ' with an ERA on file' : claim.submitted_at ? ' and been submitted to the payer' : ''}. Deleting it now would orphan payer-side records. Void or write off the claim first, then retry.`,
+        })
+      }
+    }
+
+    // Order matters — statements → claims → note.
+    try {
+      if (claim?.id) {
+        await sql`DELETE FROM patient_statements WHERE claim_id = ${claim.id}::uuid AND practice_id = ${practiceId}::uuid`
+        await sql`DELETE FROM claim_activity_log WHERE claim_id = ${claim.id}::uuid`
+        await sql`DELETE FROM claims WHERE id = ${claim.id}::uuid AND practice_id = ${practiceId}::uuid`
+      }
+      await sql`DELETE FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Delete failed: ' + (e?.message ?? String(e)) })
+    }
+
+    // Audit so Sara can always see who deleted what and when.
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS phi_audit_log (
+          id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          provider_id   uuid,
+          action        text NOT NULL,
+          resource_type text NOT NULL,
+          resource_id   text,
+          created_at    timestamptz NOT NULL DEFAULT NOW()
+        )`
+      await sql`
+        INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
+        VALUES ((SELECT id FROM providers WHERE cognito_sub = ${sub} LIMIT 1), 'delete_encounter_note', 'encounter_note', ${id})`
+    } catch { /* non-fatal */ }
+
+    return res.status(204).end()
+  }
+
   if (req.method === 'PUT') {
     try {
       const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
