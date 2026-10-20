@@ -1296,15 +1296,9 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
     if (cptCodes.length === 0) {
       errors.push('No CPT codes on the note — add at least one procedure code before signing.')
     }
-    const zeroLines = cptCodes.filter((c: any) => {
-      const charge = parseFloat(String(c.charge_amount ?? 0)) || 0
-      const units  = parseInt(String(c.units ?? 1), 10) || 1
-      return charge * units <= 0
-    })
-    if (zeroLines.length > 0) {
-      const codes = zeroLines.map((c: any) => c.code).join(', ')
-      errors.push(`${zeroLines.length === 1 ? 'Line' : 'Lines'} ${codes} ${zeroLines.length === 1 ? 'has' : 'have'} a $0 charge — set a valid charge amount before signing.`)
-    }
+    // The $0 charge check was removed 2026-10-20. Rule now: a CPT and
+    // an ICD-10 are required to sign; dollar amount is not enforced.
+    // NC (No Charge) and other legitimately-zero codes now sign cleanly.
     if (!linkedChildDob) {
       errors.push('Patient date of birth is missing on the chart — ask admin to add it before signing.')
     }
