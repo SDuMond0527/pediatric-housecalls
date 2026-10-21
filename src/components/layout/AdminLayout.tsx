@@ -7,6 +7,7 @@ import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 import { getEraCount, getPendingWriteOffCount } from '../../lib/api'
 import { dailyAffirmation } from '../../lib/affirmations'
 import { GlobalPatientSearch } from '../GlobalPatientSearch'
+import { ProviderReplyBell } from '../ProviderReplyBell'
 
 const NAV = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
@@ -198,8 +199,11 @@ export function AdminLayout() {
                 {dailyAffirmation()}
               </div>
             </div>
-            <div className="hidden sm:block flex-shrink-0 w-full max-w-xs">
-              <GlobalPatientSearch />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <ProviderReplyBell />
+              <div className="hidden sm:block w-full max-w-xs">
+                <GlobalPatientSearch />
+              </div>
             </div>
           </div>
         )}

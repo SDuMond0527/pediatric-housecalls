@@ -914,6 +914,20 @@ export const getEraCount = () =>
 export const submitProviderReply = (claimId: string, body: string) =>
   apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
 
+export type ProviderReplyBadgeItem = {
+  id: string
+  claim_id: string
+  created_at: string
+  provider_name: string
+  body: string
+  patient_first_name: string | null
+  patient_last_name: string | null
+}
+export const getProviderReplyBadge = () =>
+  apiFetch<{ count: number; items: ProviderReplyBadgeItem[] }>('/api/provider-reply-badge')
+export const markProviderRepliesSeen = () =>
+  apiFetch<{ ok: true }>('/api/provider-reply-badge', { method: 'POST' })
+
 // ── Claims pipeline (financials tab) ────────────────────────────
 export type ClaimsPipelineRange = 'this_month' | 'last_90' | 'last_6mo'
 export interface ClaimsPipelineRow {
