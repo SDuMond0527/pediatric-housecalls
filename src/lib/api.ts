@@ -914,6 +914,36 @@ export const getEraCount = () =>
 export const submitProviderReply = (claimId: string, body: string) =>
   apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
 
+export type MarketingFilters = {
+  states?: Array<'NC' | 'SC' | 'VA'>
+  age_min?: number | null
+  age_max?: number | null
+  last_visit_within_days?: number | null
+  last_visit_older_than_days?: number | null
+  never_visited?: boolean
+}
+export type MarketingAudience = {
+  count: number
+  sample: Array<{ email: string; display_name: string | null; state: string | null; last_visit: string | null }>
+}
+export type MarketingCampaign = {
+  id: string
+  subject: string
+  filters: MarketingFilters
+  audience_count: number
+  sent_count: number
+  failed_count: number
+  sent_by_name: string
+  created_at: string
+  completed_at: string | null
+}
+export const previewMarketingAudience = (filters: MarketingFilters) =>
+  apiFetch<MarketingAudience>('/api/marketing/audience', { method: 'POST', body: JSON.stringify(filters) })
+export const sendMarketingCampaign = (payload: { subject: string; html: string; filters: MarketingFilters; expected_count: number }) =>
+  apiFetch<{ campaign_id: string; sent: number; failed: number; audience: number }>('/api/marketing/send', { method: 'POST', body: JSON.stringify(payload) })
+export const getMarketingCampaigns = () =>
+  apiFetch<MarketingCampaign[]>('/api/marketing/campaigns')
+
 export type ProviderReplyBadgeItem = {
   id: string
   claim_id: string

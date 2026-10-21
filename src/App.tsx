@@ -31,6 +31,7 @@ import { AdminProvision } from './pages/admin/AdminProvision'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
 import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
 import { AdminStatements } from './pages/admin/AdminStatements'
+import { AdminMarketing } from './pages/admin/AdminMarketing'
 import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
@@ -145,6 +146,7 @@ export default function App() {
                 <Route path="audit-log"    element={<AdminAuditLog />} />
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
                 <Route path="statements" element={<AdminStatements />} />
+                <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
