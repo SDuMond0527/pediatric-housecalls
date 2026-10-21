@@ -66,8 +66,16 @@ function resolvePayer(name: string | null): string | null {
 }
 
 async function generateClaimForNote(sql: any, encounterNoteId: string, practiceId: string) {
+  // Must include biller_edited_at (gates whether we overwrite dx/cpt on
+  // re-sign) and payer_id (used below to detect self-pay → insurance
+  // flips and void stale patient statements). Previously selected only
+  // id + status, so both branches silently read `undefined` — meaning
+  // every note re-sign restored the note's original diagnoses even
+  // after Andrea/Pam had edited the claim via PATCH. Sara DuMond
+  // 2026-10-21.
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS biller_edited_at timestamptz` } catch {}
   const [existing] = await sql`
-    SELECT id, status FROM claims WHERE encounter_note_id = ${encounterNoteId}::uuid AND practice_id = ${practiceId}::uuid
+    SELECT id, status, payer_id, biller_edited_at FROM claims WHERE encounter_note_id = ${encounterNoteId}::uuid AND practice_id = ${practiceId}::uuid
   `
   // If a submitted / accepted claim already exists, leave it alone
   // (billers do NOT want auto-sync overwriting frozen claims). But
