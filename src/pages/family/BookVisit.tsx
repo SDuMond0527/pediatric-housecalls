@@ -756,8 +756,13 @@ export function BookVisit() {
       } catch { /* silent */ }
       setConvFeeLoading(false)
     })()
+  // Re-fire when ANY input the fetch depends on changes — not just step.
+  // Previously `[step]` only, which meant a parent who went back to the
+  // Location step, corrected address / city / state / zip, then returned
+  // to Confirm would see a stale estimate from the first entry. Sara
+  // 2026-10-21.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
+  }, [step, booking.visitAddress, booking.city, booking.state, booking.zip, booking.date, booking.time, booking.visitType, booking.provider, firstAvailResult?.provider])
   const [newChild, setNewChild] = useState<ChildEntry>(emptyChild())
   const [addingChildError, setAddingChildError] = useState('')
   const [addingChildSaving, setAddingChildSaving] = useState(false)
