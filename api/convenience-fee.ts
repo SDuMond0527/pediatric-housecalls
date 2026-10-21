@@ -70,7 +70,7 @@ const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(
 function calculateFee(miles: number, dateStr: string, time24: string, visitType: string, state?: string): { fee: number; code: string } {
   if (isIvFluidsPair(visitType)) return { fee: 150, code: 'IV-flat' }
   if (isCmaTelePair(visitType)) return { fee: 50, code: 'CMA-flat' }
-  if (isMajorHoliday(dateStr)) return state === 'VA' ? { fee: 200, code: 'VACV10' } : { fee: 200, code: 'CV13' }
+  if (isMajorHoliday(dateStr)) return state === 'VA' ? { fee: 200, code: 'VACV10' } : { fee: 200, code: 'CV10' }
 
   const date = new Date(dateStr + 'T12:00:00')
   const dow = date.getDay()
@@ -96,25 +96,27 @@ function calculateFee(miles: number, dateStr: string, time24: string, visitType:
     return { fee: 150, code: 'VACV6' }
   }
 
-  // NC / SC (default)
+  // NC / SC — authoritative schedule lives in the fee_schedule table.
+  // The previous code introduced a non-existent <2mi tier for peak /
+  // off-peak and misassigned every code slot (used CV4/CV8/CV11/CV12/
+  // CV13 which either shift tiers or don't exist on the fee schedule).
+  // Sara 2026-10-21 — all 3+mi Charlotte patients were seeing $150.
   if (isWeekend) {
-    if (miles < 2)   return { fee: 100, code: 'CV9' }
-    if (miles < 5)   return { fee: 125, code: 'CV10' }
-    if (miles <= 15) return { fee: 150, code: 'CV11' }
-    return { fee: 175, code: 'CV12' }
+    if (miles < 5)   return { fee: 100, code: 'CV7' }
+    if (miles <= 15) return { fee: 125, code: 'CV8' }
+    return { fee: 150, code: 'CV9' }
   }
 
   if (isPeakHours) {
-    if (miles < 2)   return { fee: 50,  code: 'CV1' }
-    if (miles < 5)   return { fee: 75,  code: 'CV2' }
-    if (miles <= 15) return { fee: 100, code: 'CV3' }
-    return { fee: 150, code: 'CV4' }
+    if (miles < 5)   return { fee: 50,  code: 'CV1' }
+    if (miles <= 15) return { fee: 75,  code: 'CV2' }
+    return { fee: 100, code: 'CV3' }
   }
 
-  if (miles < 2)   return { fee: 75,  code: 'CV5' }
-  if (miles < 5)   return { fee: 100, code: 'CV6' }
-  if (miles <= 15) return { fee: 125, code: 'CV7' }
-  return { fee: 150, code: 'CV8' }
+  // Weekday off-hours (before 8am or after 3pm)
+  if (miles < 5)   return { fee: 75,  code: 'CV4' }
+  if (miles <= 15) return { fee: 100, code: 'CV5' }
+  return { fee: 125, code: 'CV6' }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────

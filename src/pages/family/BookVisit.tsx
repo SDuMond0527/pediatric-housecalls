@@ -738,7 +738,18 @@ export function BookVisit() {
         const res = await fetch('/api/convenience-fee', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: prov.id, appointmentAddress: booking.visitAddress, date: booking.date, time: to24hr(booking.time), visitType: booking.visitType, state: booking.state }),
+          // Full address with city/state/zip so Google Maps doesn't
+          // geocode a bare street to a random town hundreds of miles
+          // away. Sara 2026-10-21 — "123 Main St." was resolving to
+          // 2957 miles out, blowing the fee into the $150 top tier.
+          body: JSON.stringify({
+            providerId: prov.id,
+            appointmentAddress: [booking.visitAddress, booking.city, booking.state, booking.zip].filter(Boolean).join(', '),
+            date: booking.date,
+            time: to24hr(booking.time),
+            visitType: booking.visitType,
+            state: booking.state,
+          }),
         })
         const data = res.ok ? await res.json() : null
         if (data?.ok) setConvFee({ fee: data.fee, code: data.code, basis: data.basis })
