@@ -70,6 +70,21 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
   const [priorBalance, setPriorBalance] = useState('')
   const [totalAmountDue, setTotalAmountDue] = useState('')
 
+  // Editable copy of the statement's CPT lines. Starts from the stored
+  // statement's cpt_codes (what the family actually saw) if a statement
+  // exists, otherwise the claim's current codes. Lets Andrea / Pam /
+  // Sara fix the code shown on the statement after the fact — the sent
+  // email reads from statement.cpt_codes, so updating this corrects any
+  // resend.
+  type EditCpt = { code: string; description: string; charge_amount: string }
+  const [editCpts, setEditCpts] = useState<EditCpt[]>([])
+  const toEdit = (arr: any[] | null | undefined): EditCpt[] =>
+    (arr ?? []).map((c: any) => ({
+      code: String(c?.code ?? ''),
+      description: String(c?.description ?? ''),
+      charge_amount: c?.charge_amount == null ? '' : String(c.charge_amount),
+    }))
+
   // "Record a payment" (manual mark-paid) — used by the biller when they
   // run the card in Square outside the portal per the practice's
   // "auto-charge card on file after 2 weeks" policy. Not shown until
@@ -184,6 +199,7 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
           // No statement yet — pre-fill contact from family profile
           if (claim.family_email) setPatientEmail(claim.family_email)
           if (claim.family_phone) setPatientPhone(claim.family_phone)
+          setEditCpts(toEdit(claim.cpt_codes ?? []))
           // Auto-compute total from CPT code charge amounts
           const computed = cptTotal(claim.cpt_codes ?? [])
           if (computed > 0) { setAmountBilled(String(computed)); setTotalAmountDue(String(computed)) }
@@ -224,6 +240,12 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     setFamilyPhone(fp)
     setPatientEmail(stmt.patient_email ?? fe)
     setPatientPhone(stmt.patient_phone ?? fp)
+    // Seed the editable CPT list from the stored statement — that's
+    // what the family saw and what any resend would use. Fall back to
+    // the claim's live codes only if the statement row has none.
+    const stmtCpts = Array.isArray(stmt.cpt_codes) && stmt.cpt_codes.length
+      ? stmt.cpt_codes : (claim.cpt_codes ?? [])
+    setEditCpts(toEdit(stmtCpts))
     setInsurancePayment(stmt.insurance_payment ?? '')
     setContractualAdjustment(stmt.contractual_adjustment ?? '')
     setPatientCopay(stmt.patient_copay ?? '')
@@ -259,7 +281,13 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
       patient_last_name: claim.patient_last_name ?? claim.child_last_name ?? '',
       patient_dob: claim.patient_dob ?? '',
       date_of_service: claim.service_date ?? '',
-      cpt_codes: claim.cpt_codes ?? [],
+      cpt_codes: editCpts
+        .filter(c => c.code.trim())
+        .map(c => ({
+          code: c.code.trim(),
+          description: c.description.trim(),
+          charge_amount: c.charge_amount === '' ? null : Number(c.charge_amount),
+        })),
       patient_email: patientEmail,
       patient_phone: patientPhone,
       amount_billed: amountBilled,
@@ -710,22 +738,77 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
                       <span className="text-[#1A1A2E]">{fmtDate(claim.service_date)}</span>
                     </div>
                   </div>
-                  {(claim.cpt_codes ?? []).length > 0 && (
+                  {editing ? (
                     <div className="pt-2 border-t border-[#E8E8E4]">
-                      <span className="text-[#1A1A2E] text-[11px] block mb-1.5">CPT Codes</span>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[#1A1A2E] text-[11px]">CPT Codes</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditCpts(prev => [...prev, { code: '', description: '', charge_amount: '' }])}
+                          className="text-[11px] text-[#7F77DD] hover:underline"
+                        >+ Add line</button>
+                      </div>
                       <div className="space-y-1">
-                        {(claim.cpt_codes ?? []).map((c: any) => (
-                          <div key={c.code} className="flex items-center gap-2 text-[12px]">
-                            <span className="font-semibold text-[#7F77DD] w-14 flex-shrink-0">{c.code}</span>
-                            <span className="text-[#555] flex-1">{c.description}</span>
-                            {c.charge_amount != null && (
-                              <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount).toFixed(2)}</span>
-                            )}
+                        {editCpts.length === 0 && (
+                          <div className="text-[11px] text-[#1A1A2E]/50 italic">No CPT lines on this statement.</div>
+                        )}
+                        {editCpts.map((c, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[12px]">
+                            <input
+                              value={c.code}
+                              onChange={e => setEditCpts(prev => prev.map((p, j) => j === i ? { ...p, code: e.target.value } : p))}
+                              placeholder="Code"
+                              className="w-20 flex-shrink-0 px-1.5 py-1 border border-[#E8E8E4] rounded text-[11px] font-semibold text-[#7F77DD]"
+                            />
+                            <input
+                              value={c.description}
+                              onChange={e => setEditCpts(prev => prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p))}
+                              placeholder="Description"
+                              className="flex-1 min-w-0 px-1.5 py-1 border border-[#E8E8E4] rounded text-[11px] text-[#555]"
+                            />
+                            <div className="flex items-center flex-shrink-0">
+                              <span className="text-[#1A1A2E] text-[11px]">$</span>
+                              <input
+                                value={c.charge_amount}
+                                onChange={e => setEditCpts(prev => prev.map((p, j) => j === i ? { ...p, charge_amount: e.target.value } : p))}
+                                placeholder="0.00"
+                                inputMode="decimal"
+                                className="w-16 px-1.5 py-1 border border-[#E8E8E4] rounded text-[11px] text-right"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditCpts(prev => prev.filter((_, j) => j !== i))}
+                              className="text-[#EF4444] hover:text-[#B91C1C] px-1 flex-shrink-0"
+                              aria-label="Remove line"
+                            >×</button>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : (() => {
+                    // Prefer the statement's stored CPT lines (what the family
+                    // actually saw) when a statement exists — the underlying
+                    // claim's codes may have drifted after a note re-sign.
+                    const displayCpts = (statement?.cpt_codes?.length ? statement.cpt_codes : (claim.cpt_codes ?? []))
+                    if (displayCpts.length === 0) return null
+                    return (
+                      <div className="pt-2 border-t border-[#E8E8E4]">
+                        <span className="text-[#1A1A2E] text-[11px] block mb-1.5">CPT Codes</span>
+                        <div className="space-y-1">
+                          {displayCpts.map((c: any, i: number) => (
+                            <div key={`${c.code}-${i}`} className="flex items-center gap-2 text-[12px]">
+                              <span className="font-semibold text-[#7F77DD] w-14 flex-shrink-0">{c.code}</span>
+                              <span className="text-[#555] flex-1">{c.description}</span>
+                              {c.charge_amount != null && (
+                                <span className="text-[#1A1A2E] font-medium flex-shrink-0">${parseFloat(c.charge_amount).toFixed(2)}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 

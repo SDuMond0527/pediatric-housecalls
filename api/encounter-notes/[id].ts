@@ -388,7 +388,40 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   const isSelfPayClaim = !!(claim?.id && (claim.payer_id === 'PP' || /self[\s-]*pay/i.test(String(claim.payer_name ?? ''))))
   if (isSelfPayClaim) {
     try {
-      const [existingStmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id}::uuid LIMIT 1`
+      const [existingStmt] = await sql`SELECT id, status, sent_at FROM patient_statements WHERE claim_id = ${claim.id}::uuid LIMIT 1`
+      // Re-sign with the claim already linked to a statement: refresh
+      // the DRAFT statement to match the current claim's codes +
+      // totals, instead of silently skipping. Sara DuMond 2026-10-21 —
+      // Matthew Porcelli went out with the pre-edit insurance codes
+      // ($250) after she re-signed with [SLFPAYVV, CVTech] ($109)
+      // because this block used to bail out on any existing statement.
+      //
+      // SENT statements are intentionally not touched: the family has
+      // already seen the stored codes, so a silent DB update would
+      // widen the gap between what they received and what the biller
+      // sees. Biller must edit + Resend via the UI.
+      if (existingStmt && existingStmt.status === 'draft' && !existingStmt.sent_at) {
+        const [fresh] = await sql`
+          SELECT cpt_codes, total_charge, service_date, patient_first_name, patient_last_name, patient_dob
+          FROM claims WHERE id = ${claim.id}::uuid LIMIT 1`
+        if (fresh) {
+          const freshTotal = +(parseFloat(String(fresh.total_charge ?? 0)) || 0).toFixed(2)
+          await sql`
+            UPDATE patient_statements SET
+              cpt_codes            = ${JSON.stringify(fresh.cpt_codes ?? [])}::jsonb,
+              date_of_service      = ${fresh.service_date},
+              patient_first_name   = ${fresh.patient_first_name},
+              patient_last_name    = ${fresh.patient_last_name},
+              patient_dob          = ${fresh.patient_dob},
+              amount_billed        = ${freshTotal},
+              remaining_balance    = ${freshTotal},
+              total_amount_due     = ${freshTotal},
+              total_amount_due_text = ${String(freshTotal)},
+              updated_at           = NOW()
+            WHERE id = ${existingStmt.id}
+              AND status = 'draft' AND sent_at IS NULL`
+        }
+      }
       if (!existingStmt) {
         const [stmtClaim] = await sql`
           SELECT
