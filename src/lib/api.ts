@@ -941,6 +941,8 @@ export const previewMarketingAudience = (filters: MarketingFilters) =>
   apiFetch<MarketingAudience>('/api/marketing/audience', { method: 'POST', body: JSON.stringify(filters) })
 export const sendMarketingCampaign = (payload: { subject: string; html: string; filters: MarketingFilters; expected_count: number }) =>
   apiFetch<{ campaign_id: string; sent: number; failed: number; audience: number }>('/api/marketing/send', { method: 'POST', body: JSON.stringify(payload) })
+export const sendMarketingTest = (payload: { subject: string; html: string }) =>
+  apiFetch<{ ok: true; to: string; skipped?: boolean }>('/api/marketing/send-test', { method: 'POST', body: JSON.stringify(payload) })
 export const getMarketingCampaigns = () =>
   apiFetch<MarketingCampaign[]>('/api/marketing/campaigns')
 

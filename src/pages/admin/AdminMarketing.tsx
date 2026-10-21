@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Megaphone, Eye, Send, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Megaphone, Eye, Send, AlertCircle, CheckCircle2, Mail } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import {
   previewMarketingAudience,
   sendMarketingCampaign,
+  sendMarketingTest,
   getMarketingCampaigns,
   type MarketingAudience,
   type MarketingCampaign,
@@ -43,6 +44,7 @@ export function AdminMarketing() {
   const [audience, setAudience] = useState<MarketingAudience | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [sending, setSending] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   const previewRef = useRef<HTMLIFrameElement>(null)
@@ -88,6 +90,21 @@ export function AdminMarketing() {
       setResult({ ok: false, msg: e?.message ?? 'Preview failed' })
     } finally {
       setPreviewing(false)
+    }
+  }
+
+  async function handleSendTest() {
+    if (!subject.trim()) { setResult({ ok: false, msg: 'Subject is empty' }); return }
+    if (!html.trim())    { setResult({ ok: false, msg: 'Body is empty' }); return }
+    setSendingTest(true)
+    setResult(null)
+    try {
+      const r = await sendMarketingTest({ subject, html })
+      setResult({ ok: true, msg: r.skipped ? `Test skipped — Resend not configured. (Would have gone to ${r.to}.)` : `Test sent to ${r.to}. Check your inbox.` })
+    } catch (e: any) {
+      setResult({ ok: false, msg: e?.message ?? 'Test send failed' })
+    } finally {
+      setSendingTest(false)
     }
   }
 
@@ -226,6 +243,16 @@ export function AdminMarketing() {
 
               <Button variant="secondary" size="sm" onClick={handlePreview} loading={previewing} className="w-full">
                 <Eye size={14} className="mr-1" /> Preview recipients
+              </Button>
+            </div>
+
+            <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 space-y-2">
+              <div className="text-[13px] font-semibold text-[#1A1A2E]">Test it on yourself first</div>
+              <p className="text-[11px] text-[#1A1A2E]/60">
+                Sends only to your admin email with a <strong>[TEST]</strong> subject prefix and a yellow banner. Audience filters are ignored.
+              </p>
+              <Button variant="secondary" size="sm" onClick={handleSendTest} loading={sendingTest} className="w-full">
+                <Mail size={14} className="mr-1" /> Send test to me
               </Button>
             </div>
 
