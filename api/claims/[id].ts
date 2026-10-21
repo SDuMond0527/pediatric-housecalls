@@ -62,7 +62,7 @@ function getFacilityAddress(renderingProviderName: string | null) {
 
 function buildStediPayload(claim: any, testMode = false): object {
   const diagnoses = Array.isArray(claim.diagnoses) ? claim.diagnoses : []
-  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
+  const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25', 'A7003': 'NU' }
   // Codes that are universally bundled by payers and never pay out when
   // billed alongside a procedure. Keeping them on the encounter note
   // for internal tracking / self-pay collection is fine; sending them

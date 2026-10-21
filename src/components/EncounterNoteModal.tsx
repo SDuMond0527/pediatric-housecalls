@@ -440,7 +440,7 @@ interface CptCode {
   ndc_unit_count?: number | null
 }
 
-const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25' }
+const AUTO_MODIFIERS: Record<string, string> = { '87880': 'QW', '87812': 'QW', '94640': '25', 'A7003': 'NU' }
 // Telemedicine visits (Video telemedicine, CMA + telemedicine, Video
 // telemedicine screening for IV fluids) require modifier 95 (synchronous
 // audio/video telemed) on every billed CPT AND place_of_service 10
