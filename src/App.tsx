@@ -32,6 +32,8 @@ import { AdminAuditLog } from './pages/admin/AdminAuditLog'
 import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
 import { AdminStatements } from './pages/admin/AdminStatements'
 import { AdminMarketing } from './pages/admin/AdminMarketing'
+import { AdminReferrals } from './pages/admin/AdminReferrals'
+import { ReferralIvFluids } from './pages/public/ReferralIvFluids'
 import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
@@ -76,6 +78,9 @@ export default function App() {
         {/* Password reset pages — no auth context needed */}
         <Route path="/family/forgot-password" element={<FamilyForgotPassword />} />
         <Route path="/family/reset-password"  element={<FamilyResetPassword />} />
+
+        {/* Public referral form — targeted by QR codes distributed to urgent cares. */}
+        <Route path="/referral/iv-fluids" element={<ReferralIvFluids />} />
 
         {/* Family portal — own auth context */}
         <Route path="/family/*" element={
@@ -147,6 +152,7 @@ export default function App() {
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
                 <Route path="statements" element={<AdminStatements />} />
                 <Route path="marketing"  element={<AdminMarketing />} />
+                <Route path="referrals"  element={<AdminReferrals />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />

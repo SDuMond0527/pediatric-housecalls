@@ -878,6 +878,18 @@ export async function uploadNotePhoto(file: File): Promise<string> {
   return data.url
 }
 
+export async function uploadReferralCardImage(file: File): Promise<string> {
+  // Public, no-auth upload used by the UC-facing referral form. Lands
+  // under referrals/ prefix in Vercel Blob. See api/referrals/upload-token.ts.
+  const { upload } = await import('@vercel/blob/client')
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_')
+  const blob = await upload(`referrals/${Date.now()}-${safeName}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/referrals/upload-token',
+  })
+  return blob.url
+}
+
 export async function uploadNoteFile(file: File): Promise<{ url: string; name: string; content_type: string }> {
   // Direct-to-blob upload so audio/video recordings (50-200 MB) don't
   // hit Vercel's serverless function body-size limit. Browser gets a
@@ -945,6 +957,58 @@ export const sendMarketingTest = (payload: { subject: string; html: string }) =>
   apiFetch<{ ok: true; to: string; skipped?: boolean }>('/api/marketing/send-test', { method: 'POST', body: JSON.stringify(payload) })
 export const getMarketingCampaigns = () =>
   apiFetch<MarketingCampaign[]>('/api/marketing/campaigns')
+
+export type ReferralIn = {
+  id: string
+  created_at: string
+  updated_at: string
+  referral_type: string
+  referring_uc_name: string
+  referring_provider_name: string
+  patient_first_name: string
+  patient_last_name: string
+  patient_dob: string
+  patient_gender: string | null
+  patient_weight: string | null
+  parent_name: string
+  parent_phone: string
+  parent_email: string
+  parent_address: string
+  insurance_provider: string | null
+  insurance_member_id: string | null
+  subscriber_name: string | null
+  subscriber_dob: string | null
+  subscriber_gender: string | null
+  insurance_card_front_url: string | null
+  insurance_card_back_url: string | null
+  iv_intake: Record<string, any> | null
+  status: 'new' | 'contacted' | 'scheduled' | 'declined' | 'closed'
+  status_updated_at: string | null
+  status_updated_by: string | null
+  appointment_id: string | null
+  activity_log: Array<{ at: string; by: string; status: string | null; note: string | null }>
+}
+export const submitIvFluidsReferral = (payload: Record<string, unknown>) =>
+  publicFetch<{ ok: true; id: string }>('/api/referrals/iv-fluids', { method: 'POST', body: JSON.stringify(payload) })
+export const getReferrals = () =>
+  apiFetch<ReferralIn[]>('/api/referrals')
+export const getReferral = (id: string) =>
+  apiFetch<ReferralIn>(`/api/referrals/${id}`)
+export const updateReferral = (id: string, payload: { status?: string; note?: string; appointment_id?: string | null }) =>
+  apiFetch<ReferralIn>(`/api/referrals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+export type RnAvailability = {
+  today: string
+  tomorrow: string
+  rns: Array<{
+    id: string; name: string; initials: string | null
+    avatar_color: string | null; avatar_text_color: string | null
+    zones: string[]; states: string[]
+    today: { on: boolean; start: string | null; end: string | null; note?: string | null; booked: Array<{ time: string; duration_minutes: number; visit_type: string }> }
+    tomorrow: { on: boolean; start: string | null; end: string | null; note?: string | null; booked: Array<{ time: string; duration_minutes: number; visit_type: string }> }
+  }>
+}
+export const getRnAvailability = () =>
+  apiFetch<RnAvailability>('/api/referrals/rn-availability')
 
 export type ProviderReplyBadgeItem = {
   id: string

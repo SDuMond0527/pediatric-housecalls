@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
@@ -16,6 +16,7 @@ const NAV = [
   { to: '/admin/reports-schedule',  icon: FileBarChart, label: "Bookkeeping to-do's" },
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
+  { to: '/admin/referrals',  icon: Inbox,         label: 'Referral inbox' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true },
