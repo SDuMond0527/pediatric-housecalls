@@ -303,16 +303,18 @@ export function PatientChart() {
     }
   }
 
-  // Radiology — mirrors Labs. For now the only study ordered through
-  // this flow is a PA/Lateral chest x-ray, so the form skips the test
-  // picker and submits that single CPT every time.
-  const RADIOLOGY_TEST = { code: '71046', name: 'PA/Lateral Chest X-ray' }
+  // Radiology — mirrors Labs. Provider picks either a chest x-ray (fixed
+  // PA/Lateral) or an ultrasound (body part filled in free-text, since
+  // imaging center will determine the specific CPT off the body part).
+  const CHEST_XRAY_TEST = { code: '71046', name: 'PA/Lateral Chest X-ray' }
 
   const [radiologyOrders, setRadiologyOrders] = useState<any[]>([])
   const [radiologyLoading, setRadiologyLoading] = useState(false)
   const [radiologyLoaded, setRadiologyLoaded] = useState(false)
   const [radiologyError, setRadiologyError] = useState<string | null>(null)
   const [radOrderFormOpen, setRadOrderFormOpen] = useState(false)
+  const [radOrderStudyType, setRadOrderStudyType] = useState<'chest_xray' | 'ultrasound'>('chest_xray')
+  const [radOrderBodyPart, setRadOrderBodyPart] = useState('')
   const [radOrderDiagnoses, setRadOrderDiagnoses] = useState('')
   const [radOrderPriority, setRadOrderPriority] = useState<'routine' | 'stat'>('routine')
   const [radOrderNotes, setRadOrderNotes] = useState('')
@@ -350,18 +352,31 @@ export function PatientChart() {
 
   async function submitRadiologyOrder() {
     if (!childId) return
+    if (radOrderStudyType === 'ultrasound' && !radOrderBodyPart.trim()) {
+      setRadOrderError('Enter the body part to be imaged.')
+      return
+    }
     setRadOrderSubmitting(true)
     setRadOrderError(null)
     try {
+      const test = radOrderStudyType === 'chest_xray'
+        ? CHEST_XRAY_TEST
+        // 76999 = Unlisted ultrasound procedure. The imaging center
+        // bills the specific CPT appropriate for the body part — this
+        // placeholder keeps the PDF's CPT column populated so it doesn't
+        // look blank.
+        : { code: '76999', name: `Ultrasound - ${radOrderBodyPart.trim()}` }
       const order = await createRadiologyOrder({
         child_id: childId,
-        tests: [RADIOLOGY_TEST],
+        tests: [test],
         diagnoses: radOrderDiagnoses.split(',').map(s => s.trim()).filter(Boolean),
         priority: radOrderPriority,
         notes: radOrderNotes || undefined,
       })
       setRadiologyOrders(prev => [order, ...prev])
       setRadOrderFormOpen(false)
+      setRadOrderStudyType('chest_xray')
+      setRadOrderBodyPart('')
       setRadOrderDiagnoses('')
       setRadOrderPriority('routine')
       setRadOrderNotes('')
@@ -2154,7 +2169,7 @@ export function PatientChart() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">Radiology Orders</div>
-                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">Order a PA/Lateral chest x-ray — parent takes the PDF to any outpatient imaging center</div>
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">Order a chest x-ray or ultrasound — parent takes the PDF to any outpatient imaging center</div>
                   </div>
                   <button
                     onClick={() => { setRadOrderFormOpen(true); setRadOrderError(null) }}
@@ -2172,13 +2187,38 @@ export function PatientChart() {
                       <button onClick={() => setRadOrderFormOpen(false)} className="text-[#1A1A2E] hover:text-[#555]"><X size={16} /></button>
                     </div>
 
-                    {/* Study (fixed) */}
+                    {/* Study type picker */}
                     <div className="mb-4">
                       <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Study</div>
-                      <div className="flex items-center justify-between px-3 py-2 bg-[#F1EFE8] rounded-lg">
-                        <span className="text-[13px] text-[#1A1A2E]">{RADIOLOGY_TEST.name}</span>
-                        <span className="text-[11px] text-[#1A1A2E] font-mono">CPT {RADIOLOGY_TEST.code}</span>
+                      <div className="flex gap-2 mb-2">
+                        {([
+                          { value: 'chest_xray', label: 'Chest X-ray' },
+                          { value: 'ultrasound', label: 'Ultrasound' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => { setRadOrderStudyType(opt.value); if (opt.value === 'chest_xray') setRadOrderBodyPart('') }}
+                            className={`px-4 py-1.5 rounded-lg text-[12px] font-medium border transition-all ${radOrderStudyType === opt.value ? 'bg-[#7F77DD] text-white border-[#7F77DD]' : 'border-[#E8E8E4] text-[#666] hover:bg-[#F1EFE8]'}`}
+                          >{opt.label}</button>
+                        ))}
                       </div>
+                      {radOrderStudyType === 'chest_xray' && (
+                        <div className="flex items-center justify-between px-3 py-2 bg-[#F1EFE8] rounded-lg">
+                          <span className="text-[13px] text-[#1A1A2E]">{CHEST_XRAY_TEST.name}</span>
+                          <span className="text-[11px] text-[#1A1A2E] font-mono">CPT {CHEST_XRAY_TEST.code}</span>
+                        </div>
+                      )}
+                      {radOrderStudyType === 'ultrasound' && (
+                        <div>
+                          <input
+                            value={radOrderBodyPart}
+                            onChange={e => setRadOrderBodyPart(e.target.value)}
+                            placeholder="Body part (e.g. Right kidney, Abdomen complete, Scrotal)"
+                            className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                          />
+                          <div className="text-[11px] text-[#1A1A2E] mt-1">The imaging center bills the specific CPT off the body part.</div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Diagnoses */}
