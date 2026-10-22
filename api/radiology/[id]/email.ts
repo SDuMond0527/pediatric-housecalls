@@ -28,7 +28,7 @@ function fmtDate(val: string | null | undefined): string {
   try { return new Date(val).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }) } catch { return val }
 }
 
-async function buildOrderPdf(opts: {
+export async function buildOrderPdf(opts: {
   patientFirstName: string
   patientLastName: string
   patientDob: string | null

@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -322,6 +322,7 @@ export function PatientChart() {
   const [radOrderError, setRadOrderError] = useState<string | null>(null)
   const [emailingRadOrderId, setEmailingRadOrderId] = useState<string | null>(null)
   const [emailRadResult, setEmailRadResult] = useState<Record<string, 'sent' | 'error'>>({})
+  const [downloadingRadOrderId, setDownloadingRadOrderId] = useState<string | null>(null)
 
   async function handleEmailRadiologyOrder(orderId: string) {
     setEmailingRadOrderId(orderId)
@@ -332,6 +333,17 @@ export function PatientChart() {
       setEmailRadResult(prev => ({ ...prev, [orderId]: 'error' }))
     } finally {
       setEmailingRadOrderId(null)
+    }
+  }
+
+  async function handleDownloadRadiologyOrder(orderId: string) {
+    setDownloadingRadOrderId(orderId)
+    try {
+      await downloadRadiologyOrderPdf(orderId)
+    } catch (e: any) {
+      alert(`Download failed: ${e?.message ?? 'unknown'}`)
+    } finally {
+      setDownloadingRadOrderId(null)
     }
   }
 
@@ -2314,7 +2326,7 @@ export function PatientChart() {
                         </div>
 
                         {order.status === 'pending' && (
-                          <div className="mt-3 pt-3 border-t border-[#F1EFE8] flex items-center gap-3">
+                          <div className="mt-3 pt-3 border-t border-[#F1EFE8] flex items-center gap-3 flex-wrap">
                             <button
                               onClick={() => handleEmailRadiologyOrder(order.id)}
                               disabled={emailingRadOrderId === order.id}
@@ -2322,6 +2334,14 @@ export function PatientChart() {
                             >
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                               {emailingRadOrderId === order.id ? 'Sending…' : 'Email order to patient'}
+                            </button>
+                            <button
+                              onClick={() => handleDownloadRadiologyOrder(order.id)}
+                              disabled={downloadingRadOrderId === order.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-[#1A1A2E]/20 text-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E]/5 transition-colors disabled:opacity-50"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              {downloadingRadOrderId === order.id ? 'Preparing…' : 'Download PDF'}
                             </button>
                             {emailRadResult[order.id] === 'sent' && (
                               <span className="text-[12px] text-emerald-600 font-medium">Sent ✓</span>

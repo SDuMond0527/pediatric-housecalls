@@ -1773,6 +1773,9 @@ export const createRadiologyOrder = (body: {
 export const emailRadiologyOrder = (orderId: string) =>
   apiFetch<{ sent: boolean; to: string }>(`/api/radiology/${orderId}/email`, { method: 'POST' })
 
+export const downloadRadiologyOrderPdf = (orderId: string) =>
+  openClaimPdf(`/api/radiology/${orderId}/pdf`, `radiology-order-${orderId.slice(0, 8)}.pdf`)
+
 // ── School notes (admin audit) ───────────────────────────────
 export interface SchoolNoteRow {
   id: string
