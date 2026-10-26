@@ -69,10 +69,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
-  // Hard-coded practice resolution — the form is public and we only run
-  // one practice today. If/when PHC runs multiple practices, add a
-  // ?practice= slug on the QR URL.
-  const [practice] = await sql`SELECT id FROM practices ORDER BY created_at LIMIT 1`
+  // Public form — look up the practice by name so the referral lands
+  // on the right practice_id even in a multi-practice prod DB. Fall back
+  // to the oldest practice only if the name lookup misses.
+  const [byName] = await sql`SELECT id FROM practices WHERE LOWER(name) = LOWER(${PRACTICE_NAME}) ORDER BY created_at LIMIT 1`
+  const [fallback] = byName ? [byName] : await sql`SELECT id FROM practices ORDER BY created_at LIMIT 1`
+  const practice = byName ?? fallback
   if (!practice) return res.status(500).json({ error: 'Practice not configured' })
   const practiceId = practice.id
 
