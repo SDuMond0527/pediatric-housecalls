@@ -76,6 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!practice) return res.status(500).json({ error: 'Practice not configured' })
   const practiceId = practice.id
 
+  // Column referenced by the admin alert SELECT below. Bootstrap on
+  // every submit so prod never 500s because the column was created in
+  // preview but not prod. Idempotent. Sara 2026-10-26.
+  try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS receives_referral_alerts boolean DEFAULT false` } catch {}
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS referrals_in (
