@@ -527,6 +527,18 @@ export const familyChangePassword = (currentPassword: string, newPassword: strin
 export const familyGetEncounterNotes = () =>
   familyApiFetch<any[]>('/api/family/encounter-notes')
 
+export const familyGetVisitsForSchoolNote = () =>
+  familyApiFetch<Array<{
+    appointment_id: string
+    scheduled_date: string
+    visit_type: string | null
+    child_id: string
+    status: string
+    child_first_name: string | null
+    child_last_name: string | null
+    provider_name: string | null
+  }>>('/api/family/visits-for-school-note')
+
 export const familyGetSchoolNotes = () =>
   familyApiFetch<Array<{
     id: string

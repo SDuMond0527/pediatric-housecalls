@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Stethoscope, ArrowRight } from 'lucide-react'
-import { familyGetEncounterNotes } from '../../lib/api'
+import { familyGetVisitsForSchoolNote } from '../../lib/api'
 import { useFamilyAuth } from '../../contexts/FamilyAuthContext'
 import { formatApiDate } from '../../lib/dateUtils'
 
-interface EncounterNote {
-  id: string
-  appointment_id: string | null
-  child_id: string
-  child_name: string
-  visit_type: string | null
+interface Visit {
+  appointment_id: string
   scheduled_date: string | null
+  visit_type: string | null
+  child_id: string
+  child_first_name: string | null
+  child_last_name: string | null
   provider_name: string | null
 }
 
@@ -31,27 +31,17 @@ function fmt(d: string | null): string {
  */
 export function FamilySchoolNotePicker() {
   const { children } = useFamilyAuth()
-  const [notes, setNotes] = useState<EncounterNote[]>([])
+  const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    familyGetEncounterNotes()
-      .then((data: any[]) => {
-        // Last 60 days only — school notes for older visits are rare and
-        // usually indicate the parent is confused about which visit they
-        // mean. If they genuinely need one for an older visit, they can
-        // call the office.
-        const cutoff = new Date()
-        cutoff.setDate(cutoff.getDate() - 60)
-        const recent = (data ?? []).filter(n => {
-          if (!n.scheduled_date) return false
-          try {
-            return new Date(n.scheduled_date) >= cutoff
-          } catch { return false }
-        })
-        setNotes(recent)
-      })
+    // Pulls from appointments directly (server caps at 60 days) so the
+    // parent can request a school note the moment a visit is on the
+    // calendar — provider doesn't have to open or sign the encounter
+    // note first. Sara 2026-10-26.
+    familyGetVisitsForSchoolNote()
+      .then(data => setVisits(data ?? []))
       .catch(e => setError(e?.message ?? 'Failed to load your visits'))
       .finally(() => setLoading(false))
   }, [])
@@ -77,7 +67,7 @@ export function FamilySchoolNotePicker() {
         </div>
       )}
 
-      {!loading && !error && notes.length === 0 && (
+      {!loading && !error && visits.length === 0 && (
         <div className="bg-white border border-[#E8E8E4] rounded-2xl p-8 text-center shadow-sm">
           <Stethoscope size={32} className="text-[#E8E8E4] mx-auto mb-3" />
           <div className="text-[14px] font-medium text-[#1A1A2E]">No recent visits found</div>
@@ -87,41 +77,35 @@ export function FamilySchoolNotePicker() {
         </div>
       )}
 
-      {!loading && !error && notes.length > 0 && (
+      {!loading && !error && visits.length > 0 && (
         <div className="space-y-3">
-          {notes.map(n => {
-            const canRequest = !!n.appointment_id
-            const target = n.appointment_id
-              ? `/family/school-excuse-request?appointment=${encodeURIComponent(n.appointment_id)}`
-              : '#'
-            const cardBase = 'bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm transition-colors'
-            const cardInteractive = canRequest ? 'hover:border-[#AFA9EC] cursor-pointer' : 'opacity-60 cursor-not-allowed'
+          {visits.map(v => {
+            const target = `/family/school-excuse-request?appointment=${encodeURIComponent(v.appointment_id)}`
+            const childName = [v.child_first_name, v.child_last_name].filter(Boolean).join(' ').trim()
             return (
               <Link
-                key={n.id}
+                key={v.appointment_id}
                 to={target}
-                className={`block ${cardBase} ${cardInteractive}`}
-                onClick={e => { if (!canRequest) e.preventDefault() }}
-                aria-disabled={!canRequest}
+                className="block bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm transition-colors hover:border-[#AFA9EC] cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">
-                      {fmt(n.scheduled_date)}
+                      {fmt(v.scheduled_date)}
                     </div>
                     <div className="text-[12px] text-[#1A1A2E] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                      {n.visit_type && (
+                      {v.visit_type && (
                         <span className="text-[11px] font-medium bg-[#EEEDFE] text-[#3C3489] px-2 py-0.5 rounded-full">
-                          {n.visit_type}
+                          {v.visit_type}
                         </span>
                       )}
-                      {n.provider_name && <span>{n.provider_name}</span>}
-                      {multiChild && n.child_name && (
-                        <span className="text-[#7F77DD] font-medium">{n.child_name}</span>
+                      {v.provider_name && <span>{v.provider_name}</span>}
+                      {multiChild && childName && (
+                        <span className="text-[#7F77DD] font-medium">{childName}</span>
                       )}
                     </div>
                   </div>
-                  {canRequest && <ArrowRight size={16} className="text-[#7F77DD] mt-1 flex-shrink-0" />}
+                  <ArrowRight size={16} className="text-[#7F77DD] mt-1 flex-shrink-0" />
                 </div>
               </Link>
             )
