@@ -1003,7 +1003,7 @@ export type ReferralIn = {
 export const submitIvFluidsReferral = (payload: Record<string, unknown>) =>
   publicFetch<{ ok: true; id: string }>('/api/referrals/iv-fluids', { method: 'POST', body: JSON.stringify(payload) })
 export const getReferrals = () =>
-  apiFetch<ReferralIn[]>('/api/referrals')
+  apiFetch<ReferralIn[]>('/api/referrals/inbox')
 export const getReferral = (id: string) =>
   apiFetch<ReferralIn>(`/api/referrals/${id}`)
 export const updateReferral = (id: string, payload: { status?: string; note?: string; appointment_id?: string | null }) =>
