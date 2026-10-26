@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle, HelpCircle, Upload, FileText, Download } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, Check, X, AlertCircle, HelpCircle, Upload, FileText, Download, Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAuth } from '../contexts/AuthContext'
@@ -67,6 +67,7 @@ export function Handbook() {
   const [editingEntryBody, setEditingEntryBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [showFormatHelp, setShowFormatHelp] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   async function load() {
     setLoading(true); setError(null)
@@ -94,6 +95,52 @@ export function Handbook() {
     .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title))
   const activeFiles = files.filter(f => f.section_id === activeSectionId)
     .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title))
+
+  // Keyword search across section titles, entry titles+body, and file
+  // title+filename. Short query (< 2 chars) is treated as "no query" so
+  // the normal layout still renders — avoids thrashing results while the
+  // user is still typing the first letter.
+  const q = searchQuery.trim().toLowerCase()
+  const searchActive = q.length >= 2
+  const sectionById = Object.fromEntries(sections.map(s => [s.id, s] as const))
+  const matchingSections = searchActive ? sections.filter(s => s.title.toLowerCase().includes(q)) : []
+  const matchingEntries  = searchActive ? entries.filter(e =>
+    e.title.toLowerCase().includes(q) || (e.body ?? '').toLowerCase().includes(q)
+  ) : []
+  const matchingFiles    = searchActive ? files.filter(f =>
+    f.title.toLowerCase().includes(q) || (f.filename ?? '').toLowerCase().includes(q)
+  ) : []
+  const totalMatches = matchingSections.length + matchingEntries.length + matchingFiles.length
+
+  // Grab a short snippet of body text around the first match so the
+  // reader can see context before clicking in.
+  function bodySnippet(body: string | null | undefined): string | null {
+    if (!body) return null
+    const low = body.toLowerCase()
+    const i = low.indexOf(q)
+    if (i < 0) return null
+    const start = Math.max(0, i - 40)
+    const end   = Math.min(body.length, i + q.length + 60)
+    const prefix = start > 0 ? '…' : ''
+    const suffix = end < body.length ? '…' : ''
+    return prefix + body.slice(start, end) + suffix
+  }
+
+  // Case-insensitive <mark> highlight for a short string (titles,
+  // filenames, snippets). Preserves the source casing.
+  function highlight(text: string) {
+    if (!searchActive) return text
+    const low = text.toLowerCase()
+    const i = low.indexOf(q)
+    if (i < 0) return text
+    return (
+      <>
+        {text.slice(0, i)}
+        <mark className="bg-[#FFF3BF] text-[#1A1A2E] px-0.5 rounded-sm">{text.slice(i, i + q.length)}</mark>
+        {text.slice(i + q.length)}
+      </>
+    )
+  }
 
   async function handleUploadClick() {
     if (!activeSectionId) { setError('Pick or create a section first.'); return }
@@ -221,21 +268,41 @@ export function Handbook() {
 
   return (
     <div>
-      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <BookOpen size={18} className="text-[#7F77DD]" />
-          <div>
+      <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center justify-between gap-3 sticky top-0 z-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <BookOpen size={18} className="text-[#7F77DD] flex-shrink-0" />
+          <div className="min-w-0">
             <div className="font-display text-[18px] font-medium text-[#1A1A2E]">All things PHC</div>
             <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
               {isAdmin ? 'Handbook — you can add and edit content here.' : 'Handbook — reference for the practice.'}
             </div>
           </div>
         </div>
-        {isAdmin && (
-          <Button size="sm" variant="secondary" onClick={handleAddSection} loading={busy && sections.length === 0}>
-            <Plus size={13} /> Add section
-          </Button>
-        )}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1A1A2E]/40 pointer-events-none" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search handbook…"
+              className="w-56 md:w-72 pl-7 pr-7 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[#1A1A2E]/50 hover:text-[#1A1A2E]"
+                title="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {isAdmin && (
+            <Button size="sm" variant="secondary" onClick={handleAddSection} loading={busy && sections.length === 0}>
+              <Plus size={13} /> Add section
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -246,6 +313,80 @@ export function Handbook() {
 
       {loading ? (
         <div className="p-12 text-center text-[13px] text-[#1A1A2E]/60">Loading…</div>
+      ) : searchActive ? (
+        <div className="p-6 max-w-4xl space-y-3">
+          <div className="text-[13px] text-[#1A1A2E]/70 mb-2">
+            {totalMatches === 0
+              ? <>No matches for <span className="font-semibold text-[#1A1A2E]">"{searchQuery}"</span>.</>
+              : <>{totalMatches} match{totalMatches === 1 ? '' : 'es'} for <span className="font-semibold text-[#1A1A2E]">"{searchQuery}"</span>.</>}
+          </div>
+
+          {matchingSections.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[#1A1A2E]/50">Sections</div>
+              {matchingSections.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => { setActiveSectionId(s.id); setSearchQuery('') }}
+                  className="w-full text-left p-3 border border-[#E8E8E4] rounded-lg bg-white hover:border-[#AFA9EC]"
+                >
+                  <div className="text-[14px] font-medium text-[#1A1A2E]">{highlight(s.title)}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {matchingEntries.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[#1A1A2E]/50">Entries</div>
+              {matchingEntries.map(e => {
+                const sect = sectionById[e.section_id]
+                const snippet = bodySnippet(e.body)
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => { setActiveSectionId(e.section_id); setSearchQuery('') }}
+                    className="w-full text-left p-3 border border-[#E8E8E4] rounded-lg bg-white hover:border-[#AFA9EC]"
+                  >
+                    <div className="text-[14px] font-medium text-[#1A1A2E]">{highlight(e.title)}</div>
+                    <div className="text-[11px] text-[#1A1A2E]/50 mt-0.5">in {sect?.title ?? '—'}</div>
+                    {snippet && <div className="text-[12px] text-[#1A1A2E]/80 mt-1 leading-snug">{highlight(snippet)}</div>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {matchingFiles.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[#1A1A2E]/50">Files</div>
+              {matchingFiles.map(f => {
+                const sect = sectionById[f.section_id]
+                return (
+                  <div key={f.id} className="p-3 border border-[#E8E8E4] rounded-lg bg-white flex items-start gap-3">
+                    <FileText size={16} className="text-[#7F77DD] flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-medium text-[#1A1A2E]">{highlight(f.title)}</div>
+                      <div className="text-[11px] text-[#1A1A2E]/50 mt-0.5">
+                        in {sect?.title ?? '—'} · {highlight(f.filename ?? '')}
+                        {f.size_bytes ? ` · ${fmtBytes(f.size_bytes)}` : ''}
+                      </div>
+                    </div>
+                    <a
+                      href={f.blob_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={f.filename}
+                      className="inline-flex items-center gap-1 text-[12px] text-[#7F77DD] hover:text-[#5F58B8] font-medium flex-shrink-0"
+                    >
+                      <Download size={12} /> Download
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       ) : sections.length === 0 ? (
         <div className="p-16 text-center">
           <BookOpen size={32} className="text-[#1A1A2E]/20 mx-auto mb-3" />
