@@ -1128,6 +1128,29 @@ export interface ChronicProblem {
   resolved_by_name: string | null
   resolved_reason: string | null
 }
+export type PatientCommunication = {
+  id: string
+  child_id: string
+  provider_id: string | null
+  provider_name: string | null
+  communication_type: 'phone' | 'text'
+  occurred_at: string
+  notes: string
+  created_at: string
+}
+export const getPatientCommunications = (childId: string) =>
+  apiFetch<PatientCommunication[]>(`/api/communications?child_id=${encodeURIComponent(childId)}`)
+export const addPatientCommunication = (body: {
+  child_id: string
+  communication_type: 'phone' | 'text'
+  occurred_at: string
+  notes: string
+}) => apiFetch<PatientCommunication>('/api/communications', { method: 'POST', body: JSON.stringify(body) })
+export const updatePatientCommunication = (id: string, body: { occurred_at?: string; notes?: string }) =>
+  apiFetch<PatientCommunication>(`/api/communications/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deletePatientCommunication = (id: string) =>
+  apiFetch<void>(`/api/communications/${id}`, { method: 'DELETE' })
+
 export const getChronicProblems = (childId: string, includeResolved = false) =>
   apiFetch<{ problems: ChronicProblem[] }>(
     `/api/chronic-problems?child_id=${encodeURIComponent(childId)}${includeResolved ? '&include_resolved=1' : ''}`,

@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -151,7 +151,7 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing' | 'communications'>('overview')
   // Billing tab: log-book of every claim + statement for this child.
   // Loaded lazily on first tab visit to avoid a round-trip on every
   // chart open — same pattern as `labsLoaded` below.
@@ -336,6 +336,65 @@ export function PatientChart() {
     }
   }
 
+  // Communications log — phone calls + text messages that are NOT text
+  // visits. No billing, no claim. Just documentation inside the chart.
+  const [comms, setComms] = useState<PatientCommunication[]>([])
+  const [commsLoaded, setCommsLoaded] = useState(false)
+  const [commsError, setCommsError] = useState<string | null>(null)
+  const [commFormOpen, setCommFormOpen] = useState(false)
+  const [commType, setCommType] = useState<'phone' | 'text'>('phone')
+  const [commOccurredAt, setCommOccurredAt] = useState<string>(() => {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+  })
+  const [commNotes, setCommNotes] = useState('')
+  const [commSubmitting, setCommSubmitting] = useState(false)
+
+  async function loadCommunications() {
+    if (!childId) return
+    setCommsError(null)
+    try {
+      const data = await getPatientCommunications(childId)
+      setComms(data ?? [])
+      setCommsLoaded(true)
+    } catch (e: any) {
+      setCommsError(e?.message ?? 'Failed to load communications')
+    }
+  }
+
+  async function submitCommunication() {
+    if (!childId) return
+    if (!commNotes.trim()) { setCommsError('Enter some notes.'); return }
+    setCommSubmitting(true)
+    setCommsError(null)
+    try {
+      const row = await addPatientCommunication({
+        child_id: childId,
+        communication_type: commType,
+        occurred_at: new Date(commOccurredAt).toISOString(),
+        notes: commNotes.trim(),
+      })
+      setComms(prev => [row, ...prev])
+      setCommFormOpen(false)
+      setCommNotes('')
+    } catch (e: any) {
+      setCommsError(e?.message ?? 'Failed to save')
+    } finally {
+      setCommSubmitting(false)
+    }
+  }
+
+  async function removeCommunication(id: string) {
+    if (!window.confirm('Delete this entry? This cannot be undone.')) return
+    try {
+      await deletePatientCommunication(id)
+      setComms(prev => prev.filter(c => c.id !== id))
+    } catch (e: any) {
+      setCommsError(e?.message ?? 'Failed to delete')
+    }
+  }
+
   async function handleDownloadRadiologyOrder(orderId: string) {
     setDownloadingRadOrderId(orderId)
     try {
@@ -503,6 +562,7 @@ export function PatientChart() {
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
     { key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null },
+    { key: 'communications' as const, label: 'Communications', count: comms.length || null },
     { key: 'billing' as const,  label: 'Billing',   count: billingEntries.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
   ]
@@ -841,6 +901,7 @@ export function PatientChart() {
                 setActiveTab(tab.key)
                 if (tab.key === 'labs' && !labsLoaded) loadLabs()
                 if (tab.key === 'radiology' && !radiologyLoaded) loadRadiology()
+                if (tab.key === 'communications' && !commsLoaded) loadCommunications()
                 if (tab.key === 'billing' && !billingLoaded) loadBilling()
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
@@ -2539,6 +2600,121 @@ export function PatientChart() {
                   error={billingError}
                   onOpenClaim={openBillingClaim}
                 />
+              </div>
+            )}
+
+            {activeTab === 'communications' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">Communications</div>
+                    <div className="text-[12px] text-[#1A1A2E] mt-0.5">
+                      Phone calls and text messages with this family. Not a text visit — no billing. Just documentation.
+                    </div>
+                  </div>
+                  {!commFormOpen && (
+                    <button
+                      onClick={() => { setCommFormOpen(true); setCommsError(null) }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors"
+                    >
+                      + Log a call / text
+                    </button>
+                  )}
+                </div>
+
+                {commFormOpen && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-[14px] text-[#1A1A2E]">New entry</div>
+                      <button onClick={() => setCommFormOpen(false)} className="text-[#1A1A2E] hover:text-[#555]"><X size={16} /></button>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Type</div>
+                      <div className="flex gap-2">
+                        {([
+                          { value: 'phone' as const, label: 'Phone call' },
+                          { value: 'text'  as const, label: 'Text message' },
+                        ]).map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setCommType(opt.value)}
+                            className={`px-4 py-1.5 rounded-lg text-[12px] font-medium border transition-all ${commType === opt.value ? 'bg-[#7F77DD] text-white border-[#7F77DD]' : 'border-[#E8E8E4] text-[#666] hover:bg-[#F1EFE8]'}`}
+                          >{opt.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Date & time</label>
+                      <input
+                        type="datetime-local"
+                        value={commOccurredAt}
+                        onChange={e => setCommOccurredAt(e.target.value)}
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide block mb-1">Notes</label>
+                      <textarea
+                        value={commNotes}
+                        onChange={e => setCommNotes(e.target.value)}
+                        rows={4}
+                        placeholder="e.g. Mom called asking about Tylenol dosing. Confirmed 160mg Q4H prn fever."
+                        className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#7F77DD]/30"
+                      />
+                    </div>
+                    {commsError && (
+                      <div className="text-[12px] text-red-600 bg-red-50 px-3 py-2 rounded-lg">{commsError}</div>
+                    )}
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setCommFormOpen(false)} className="px-4 py-2 text-[13px] text-[#666] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8] transition-colors">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitCommunication}
+                        disabled={commSubmitting}
+                        className="px-4 py-2 text-[13px] bg-[#7F77DD] text-white rounded-lg hover:bg-[#6C64C8] transition-colors disabled:opacity-50 font-medium"
+                      >
+                        {commSubmitting ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {commsError && !commFormOpen && (
+                  <div className="text-[13px] text-red-500 bg-red-50 px-4 py-3 rounded-xl">{commsError}</div>
+                )}
+
+                {commsLoaded && comms.length === 0 ? (
+                  <div className="bg-white border border-[#E8E8E4] rounded-xl p-8 text-center shadow-sm">
+                    <div className="text-[13px] text-[#1A1A2E]">No calls or texts logged yet for this patient.</div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {comms.map(c => (
+                      <div key={c.id} className="group bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489]">
+                              {c.communication_type === 'phone' ? '☎ Phone call' : '✉ Text message'}
+                            </span>
+                            <span className="text-[13px] font-semibold text-[#1A1A2E]">
+                              {new Date(c.occurred_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                            {c.provider_name && <span className="text-[11px] text-[#1A1A2E]/60">· {c.provider_name}</span>}
+                          </div>
+                          <button
+                            onClick={() => removeCommunication(c.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-[#1A1A2E]/60 hover:text-[#991B1B]"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        <div className="text-[13px] text-[#1A1A2E] whitespace-pre-wrap">{c.notes}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
