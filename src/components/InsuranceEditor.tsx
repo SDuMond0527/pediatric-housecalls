@@ -224,6 +224,9 @@ export function InsuranceEditor({
                       onChange={e => onChange({ insurance_provider: e.target.value })}
                     />
                   )}
+                  <p className="mt-1.5 text-[11px] text-[#1A1A2E]/70 leading-snug">
+                    Don't see your insurance? That means we're not currently in-network with that payer. You're welcome to choose Self-Pay and we'll bill you directly after each visit.
+                  </p>
                 </div>
               )
             })()}
