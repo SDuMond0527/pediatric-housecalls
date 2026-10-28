@@ -72,7 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
-  const [practice] = await sql`SELECT id FROM practices WHERE LOWER(name) = LOWER(${PRACTICE_NAME}) ORDER BY created_at LIMIT 1`
+  const [byName] = await sql`SELECT id FROM practices WHERE LOWER(name) = LOWER(${PRACTICE_NAME}) ORDER BY created_at LIMIT 1`
+  const [fallback] = byName ? [byName] : await sql`SELECT id FROM practices ORDER BY created_at LIMIT 1`
+  const practice = byName ?? fallback
   if (!practice) return res.status(500).json({ error: 'Practice not configured' })
   const practiceId = practice.id
 
