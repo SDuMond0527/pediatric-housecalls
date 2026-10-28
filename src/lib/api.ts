@@ -970,6 +970,34 @@ export const sendMarketingTest = (payload: { subject: string; html: string }) =>
 export const getMarketingCampaigns = () =>
   apiFetch<MarketingCampaign[]>('/api/marketing/campaigns')
 
+export type Agency = {
+  id: string
+  practice_id: string
+  slug: string
+  name: string
+  contact_name: string | null
+  phone: string | null
+  email: string | null
+  fax: string | null
+  address: string | null
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+export const getAgencies = () =>
+  apiFetch<Agency[]>('/api/agencies')
+export const createAgency = (body: Partial<Agency>) =>
+  apiFetch<Agency>('/api/agencies', { method: 'POST', body: JSON.stringify(body) })
+export const updateAgency = (id: string, body: Partial<Agency>) =>
+  apiFetch<Agency>(`/api/agencies/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deactivateAgency = (id: string) =>
+  apiFetch<void>(`/api/agencies/${id}`, { method: 'DELETE' })
+export const getAgencyBySlug = (slug: string) =>
+  publicFetch<{ id: string; name: string; slug: string }>(`/api/agencies/by-slug?slug=${encodeURIComponent(slug)}`)
+export const submitAgencyReferral = (payload: Record<string, unknown>) =>
+  publicFetch<{ ok: true; id: string }>('/api/referrals/agency', { method: 'POST', body: JSON.stringify(payload) })
+
 export type ReferralIn = {
   id: string
   created_at: string
@@ -994,6 +1022,8 @@ export type ReferralIn = {
   insurance_card_front_url: string | null
   insurance_card_back_url: string | null
   iv_intake: Record<string, any> | null
+  agency_id: string | null
+  referral_source_kind: 'agency' | null
   status: 'new' | 'contacted' | 'scheduled' | 'declined' | 'closed'
   status_updated_at: string | null
   status_updated_by: string | null

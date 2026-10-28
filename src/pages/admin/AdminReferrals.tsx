@@ -161,6 +161,9 @@ export function AdminReferrals() {
                     </div>
                     <div className="text-[12px] text-[#1A1A2E]/70 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span>From <strong>{r.referring_uc_name}</strong> · {r.referring_provider_name}</span>
+                      {r.referral_source_kind === 'agency' && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#1E40AF] border border-[#BFDBFE]">Agency</span>
+                      )}
                       <span>· {fmtTime(r.created_at)}</span>
                     </div>
                   </div>

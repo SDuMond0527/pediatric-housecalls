@@ -17,6 +17,7 @@ const NAV = [
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
   { to: '/admin/referrals',  icon: Inbox,         label: 'Referral inbox' },
+  { to: '/admin/agencies',   icon: Building2,     label: 'Referral partners' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true },

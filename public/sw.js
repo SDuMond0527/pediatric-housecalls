@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-10-28-insurance-helper-text
+// Service worker — deliberate passthrough. Version: 2026-10-28-agencies
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

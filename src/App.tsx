@@ -33,7 +33,9 @@ import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
 import { AdminStatements } from './pages/admin/AdminStatements'
 import { AdminMarketing } from './pages/admin/AdminMarketing'
 import { AdminReferrals } from './pages/admin/AdminReferrals'
+import { AdminAgencies } from './pages/admin/AdminAgencies'
 import { ReferralIvFluids } from './pages/public/ReferralIvFluids'
+import { AgencyReferral } from './pages/public/AgencyReferral'
 import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
@@ -81,6 +83,7 @@ export default function App() {
 
         {/* Public referral form — targeted by QR codes distributed to urgent cares. */}
         <Route path="/referral/iv-fluids" element={<ReferralIvFluids />} />
+        <Route path="/referral/agency/:slug" element={<AgencyReferral />} />
 
         {/* Family portal — own auth context */}
         <Route path="/family/*" element={
@@ -153,6 +156,7 @@ export default function App() {
                 <Route path="statements" element={<AdminStatements />} />
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<AdminReferrals />} />
+                <Route path="agencies"   element={<AdminAgencies />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
