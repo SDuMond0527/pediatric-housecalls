@@ -29,16 +29,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       FROM children
       WHERE LOWER(last_name) LIKE ${'%' + q + '%'} OR LOWER(first_name) LIKE ${'%' + q + '%'}
       ORDER BY last_name, first_name`
-    const claims = await sql`
-      SELECT c.id, c.payer_id, c.member_id, c.insurance_dependent_code,
-             c.patient_first_name, c.patient_last_name,
-             c.status, c.submitted_at, c.service_date,
-             c.submission_error, c.created_at, c.updated_at,
-             LENGTH(c.member_id) AS mid_len
-      FROM claims c
-      WHERE (LOWER(c.patient_last_name) LIKE ${'%' + q + '%'} OR LOWER(c.patient_first_name) LIKE ${'%' + q + '%'})
-        ${serviceDate ? sql`AND c.service_date = ${serviceDate}::date` : sql``}
-      ORDER BY c.created_at DESC`
+    const claims = serviceDate
+      ? await sql`
+          SELECT c.id, c.payer_id, c.member_id, c.insurance_dependent_code,
+                 c.patient_first_name, c.patient_last_name,
+                 c.status, c.submitted_at, c.service_date,
+                 c.submission_error, c.created_at, c.updated_at,
+                 LENGTH(c.member_id) AS mid_len
+          FROM claims c
+          WHERE (LOWER(c.patient_last_name) LIKE ${'%' + q + '%'} OR LOWER(c.patient_first_name) LIKE ${'%' + q + '%'})
+            AND c.service_date = ${serviceDate}::date
+          ORDER BY c.created_at DESC`
+      : await sql`
+          SELECT c.id, c.payer_id, c.member_id, c.insurance_dependent_code,
+                 c.patient_first_name, c.patient_last_name,
+                 c.status, c.submitted_at, c.service_date,
+                 c.submission_error, c.created_at, c.updated_at,
+                 LENGTH(c.member_id) AS mid_len
+          FROM claims c
+          WHERE LOWER(c.patient_last_name) LIKE ${'%' + q + '%'} OR LOWER(c.patient_first_name) LIKE ${'%' + q + '%'}
+          ORDER BY c.created_at DESC`
     const activityLog = claims.length > 0
       ? await sql`
           SELECT claim_id, created_at, kind, created_by_name, body
