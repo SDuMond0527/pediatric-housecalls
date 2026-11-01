@@ -305,11 +305,19 @@ function buildStediPayload(claim: any, testMode = false): object {
       // and left Graham Gerloff still broken because his dad's "01"
       // suffix is different from Graham's "04". Caught by smoke test.
       memberId: (() => {
+        // BCBS NC output must always be 12-char base + 2-char dep.
+        // Previously the transform only ran on length 12 or 14, which
+        // silently skipped 13 / 15-char IDs — Sophie Slutzker 10/30
+        // submitted with a 13-char ID and dep=01, Stedi got the raw ID
+        // with no suffix. Now: any ID ≥ 12 chars gets truncated to 12
+        // and the stored dep appended. IDs < 12 chars (e.g. Medicare
+        // / short-format plans) are left alone — truncating them would
+        // destroy a valid ID. Sara 2026-11-01.
         const raw = String(claim.member_id ?? '').trim()
         if (claim.payer_id !== 'UPICO') return raw
         const dep = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
         if (!dep) return raw
-        if (raw.length === 14 || raw.length === 12) return raw.slice(0, 12) + dep
+        if (raw.length >= 12) return raw.slice(0, 12) + dep
         return raw
       })(),
       paymentResponsibilityLevelCode: 'P',

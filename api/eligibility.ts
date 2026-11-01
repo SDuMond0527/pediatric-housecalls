@@ -196,7 +196,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // code — the suffix at the end of a parent-entered 14-char ID is
     // the subscriber's own suffix (often "01"), not the dependent we're
     // checking eligibility for. Same logic as api/claims/[id].ts.
-    if (raw.length === 14 || raw.length === 12) return raw.slice(0, 12) + depCode
+    // Length ≥ 12 covers 13 / 15-char IDs too — the old 12-or-14 gate
+    // let those pass through raw, matching the Stedi submit path's old
+    // silent-skip bug. Sara 2026-11-01.
+    if (raw.length >= 12) return raw.slice(0, 12) + depCode
     return raw
   })()
 
