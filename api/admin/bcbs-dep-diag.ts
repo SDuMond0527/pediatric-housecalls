@@ -14,6 +14,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sql = neon(process.env.DATABASE_URL!)
 
+  const q = String(req.query.q ?? '').trim().toLowerCase()
+  const serviceDate = String(req.query.service_date ?? '').trim()
+
+  if (q) {
+    // Zoomed-in view for one patient / family. Returns every claim, the
+    // child chart row(s), and the full activity log so I can watch dep
+    // codes change across submit attempts.
+    const children = await sql`
+      SELECT id, first_name, last_name, date_of_birth,
+             insurance_provider, insurance_member_id, insurance_dependent_code,
+             LENGTH(insurance_member_id) AS mid_len,
+             updated_at
+      FROM children
+      WHERE LOWER(last_name) LIKE ${'%' + q + '%'} OR LOWER(first_name) LIKE ${'%' + q + '%'}
+      ORDER BY last_name, first_name`
+    const claims = await sql`
+      SELECT c.id, c.payer_id, c.member_id, c.insurance_dependent_code,
+             c.patient_first_name, c.patient_last_name,
+             c.status, c.submitted_at, c.service_date,
+             c.submission_error, c.created_at, c.updated_at,
+             LENGTH(c.member_id) AS mid_len
+      FROM claims c
+      WHERE (LOWER(c.patient_last_name) LIKE ${'%' + q + '%'} OR LOWER(c.patient_first_name) LIKE ${'%' + q + '%'})
+        ${serviceDate ? sql`AND c.service_date = ${serviceDate}::date` : sql``}
+      ORDER BY c.created_at DESC`
+    const activityLog = claims.length > 0
+      ? await sql`
+          SELECT claim_id, created_at, kind, created_by_name, body
+          FROM claim_activity_log
+          WHERE claim_id = ANY(${(claims as any[]).map(c => c.id)}::uuid[])
+          ORDER BY created_at`
+      : []
+    return res.json({ q, service_date: serviceDate || null, children, claims, activityLog })
+  }
+
   const children = await sql`
     SELECT first_name, last_name,
            insurance_provider, insurance_member_id, insurance_dependent_code,
