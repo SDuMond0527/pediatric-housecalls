@@ -22,10 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // child chart row(s), and the full activity log so I can watch dep
     // codes change across submit attempts.
     const children = await sql`
-      SELECT id, first_name, last_name, date_of_birth,
+      SELECT id, first_name, last_name,
              insurance_provider, insurance_member_id, insurance_dependent_code,
-             LENGTH(insurance_member_id) AS mid_len,
-             updated_at
+             LENGTH(insurance_member_id) AS mid_len
       FROM children
       WHERE LOWER(last_name) LIKE ${'%' + q + '%'} OR LOWER(first_name) LIKE ${'%' + q + '%'}
       ORDER BY last_name, first_name`
