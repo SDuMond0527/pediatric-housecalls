@@ -313,8 +313,15 @@ function buildStediPayload(claim: any, testMode = false): object {
         // and the stored dep appended. IDs < 12 chars (e.g. Medicare
         // / short-format plans) are left alone — truncating them would
         // destroy a valid ID. Sara 2026-11-01.
+        //
+        // ALSO: Anthem patients (except Anthem of VA, which has its own
+        // payer ID) route to UPICO but Anthem does NOT use a dependent
+        // suffix. Skip the transform when payer_name reads as Anthem so
+        // we don't glue a bogus suffix onto an Anthem member ID. Sara
+        // 2026-11-01.
         const raw = String(claim.member_id ?? '').trim()
         if (claim.payer_id !== 'UPICO') return raw
+        if (/anthem/i.test(String(claim.payer_name ?? ''))) return raw
         const dep = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
         if (!dep) return raw
         if (raw.length >= 12) return raw.slice(0, 12) + dep

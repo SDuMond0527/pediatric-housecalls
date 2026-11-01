@@ -191,6 +191,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const transmittedMemberId = (() => {
     const raw = String(child.insurance_member_id ?? '').trim()
     if (payerId !== 'UPICO') return raw
+    // Anthem (except Anthem of VA, which has its own payer ID) routes
+    // to UPICO but doesn't use dependent suffixes. Skip the transform.
+    // Sara 2026-11-01.
+    if (/anthem/i.test(String(child.insurance_provider ?? ''))) return raw
     if (!depCode) return raw
     // Always strip to the 12-char base and append THIS patient's dep
     // code — the suffix at the end of a parent-entered 14-char ID is
