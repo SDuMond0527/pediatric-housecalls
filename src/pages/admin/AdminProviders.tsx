@@ -9,7 +9,7 @@ import type { Provider } from '../../types'
 
 type ProviderWithContact = Provider & { phone?: string | null; email?: string | null; home_address?: string | null }
 
-type ProviderEdit = { phone: string; email: string; home_address: string; npi: string; taxonomy_code: string }
+type ProviderEdit = { phone: string; email: string; home_address: string; npi: string; taxonomy_code: string; secure_text_number: string }
 
 const ROLE_COLORS: Record<string, 'purple' | 'teal' | 'amber' | 'blue' | 'gray'> = {
   MD: 'purple', PNP: 'teal', CMA: 'amber', RN: 'blue', admin: 'gray',
@@ -107,7 +107,7 @@ export function AdminProviders() {
   }, [])
 
   function getEdit(p: ProviderWithContact): ProviderEdit {
-    return edits[p.id] ?? { phone: p.phone || '', email: p.email || '', home_address: (p as any).home_address || '', npi: (p as any).npi || '', taxonomy_code: (p as any).taxonomy_code || '' }
+    return edits[p.id] ?? { phone: p.phone || '', email: p.email || '', home_address: (p as any).home_address || '', npi: (p as any).npi || '', taxonomy_code: (p as any).taxonomy_code || '', secure_text_number: (p as any).secure_text_number || '' }
   }
 
   function setField(id: string, field: keyof ProviderEdit, value: string) {
@@ -124,6 +124,7 @@ export function AdminProviders() {
         home_address: edit.home_address || null,
         npi: edit.npi || null,
         taxonomy_code: edit.taxonomy_code || null,
+        secure_text_number: edit.secure_text_number || null,
       })
     } catch (e: any) {
       alert(`Couldn't save provider: ${e?.message ?? 'unknown error'}. Please try again.`)
@@ -319,8 +320,15 @@ export function AdminProviders() {
                           </div>
                         </div>
 
-                        <Input label="Phone number" placeholder="+1 (555) 000-0000"
+                        <Input label="Phone number (for GoRoam notifications — private)" placeholder="+1 (555) 000-0000"
                           value={edit.phone} onChange={e => setField(p.id, 'phone', e.target.value)} />
+                        <div>
+                          <Input label="Texting number shown on parent portal (optional)" placeholder="+1 (555) 000-0000"
+                            value={edit.secure_text_number} onChange={e => setField(p.id, 'secure_text_number', e.target.value)} />
+                          <div className="text-[11px] text-[#777] mt-1">
+                            Parents in this provider's zones see this number as a tap-to-text link. Leave blank to keep the provider's number hidden from families.
+                          </div>
+                        </div>
                         <Input label="Email address" placeholder="provider@example.com"
                           value={edit.email} onChange={e => setField(p.id, 'email', e.target.value)} />
                         <Input label="Home address (for convenience fee calculation)"
