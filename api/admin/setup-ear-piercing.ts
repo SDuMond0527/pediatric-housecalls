@@ -63,11 +63,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ['EarStudsX', 'Additional set of titanium studs', 100.00],
   ] as const) {
     const [existing] = await sql`
-      SELECT id FROM fee_schedule WHERE practice_id = ${pid}::uuid AND code = ${code} LIMIT 1`
+      SELECT code FROM fee_schedule WHERE practice_id = ${pid}::uuid AND code = ${code} LIMIT 1`
     if (existing) {
       const [u] = await sql`
         UPDATE fee_schedule SET description = ${desc}, charge_amount = ${amt}, category = 'Non-Covered Services'
-        WHERE id = ${existing.id}::uuid RETURNING code, charge_amount`
+        WHERE practice_id = ${pid}::uuid AND code = ${code} RETURNING code, charge_amount`
       feeRows.push(u)
     } else {
       const [c] = await sql`
