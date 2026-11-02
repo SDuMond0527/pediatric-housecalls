@@ -7,7 +7,9 @@ import {
   getProviders, updateBookingRequest, invokeNotifications,
   getBookingRequests, getChildrenByIds, invokeCharmDetails, searchChildren,
   chargeCard, apiFetch, getOnCallSchedule, getCmaSchedule, searchPharmacies,
+  getEncounterNotes, draftAviFromNote,
 } from '../lib/api'
+import { Sparkles, RefreshCw } from 'lucide-react'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderModal'
@@ -147,6 +149,13 @@ export function Today() {
   // Mark done
   const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
   const [doneInstructions, setDoneInstructions] = useState('')
+  // AVI auto-draft state. aviState walks through 'idle' → 'loading' →
+  // ('ready' | 'error'). On 'ready' the textarea has been populated and
+  // the provider can edit, hit Regenerate, or just send. On 'error' they
+  // see a short message and still have the empty textarea.
+  const [aviState, setAviState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [aviError, setAviError] = useState<string | null>(null)
+  const [aviNoteId, setAviNoteId] = useState<string | null>(null)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
 
   // Charge card
@@ -437,6 +446,54 @@ export function Today() {
     const data = await invokeCharmDetails({ charm_patient_id: charmPatientId, charm_appointment_id: charmAppointmentId }).catch(() => null)
     if (data?.ok) setCharmDetails(prev => ({ ...prev, [appt.id]: data }))
     else setCharmDetails(prev => ({ ...prev, [appt.id]: { notFound: true } }))
+  }
+
+  // Auto-fire the AVI draft the moment the Mark-complete modal opens. If
+  // there's no signed encounter note for the appointment, skip silently
+  // and leave the textarea empty (provider types their own).
+  useEffect(() => {
+    if (!doneTarget) {
+      setAviState('idle'); setAviError(null); setAviNoteId(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const notes = await getEncounterNotes({ appointment_id: doneTarget.id })
+        const note = (notes ?? [])[0]
+        if (!note?.id) {
+          if (!cancelled) { setAviState('idle'); setAviNoteId(null) }
+          return
+        }
+        if (cancelled) return
+        setAviNoteId(note.id)
+        setAviState('loading')
+        setAviError(null)
+        const { text } = await draftAviFromNote(note.id)
+        if (cancelled) return
+        setDoneInstructions(text)
+        setAviState('ready')
+      } catch (e: any) {
+        if (cancelled) return
+        setAviError(e?.message ?? 'Draft service is unavailable right now.')
+        setAviState('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [doneTarget?.id])
+
+  async function regenerateAvi() {
+    if (!aviNoteId) return
+    setAviState('loading')
+    setAviError(null)
+    try {
+      const { text } = await draftAviFromNote(aviNoteId)
+      setDoneInstructions(text)
+      setAviState('ready')
+    } catch (e: any) {
+      setAviError(e?.message ?? 'Draft service is unavailable right now.')
+      setAviState('error')
+    }
   }
 
   async function submitDone() {
@@ -1519,15 +1576,54 @@ export function Today() {
             </div>
 
             <div className="mb-4">
-              <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1.5">
-                After-visit instructions <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
-              </label>
-              <textarea rows={4}
-                placeholder="e.g. Rest and fluids for 48 hours. Recheck temperature in the morning. Call if fever returns above 102°F."
-                value={doneInstructions}
-                onChange={e => setDoneInstructions(e.target.value)}
-                className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none" />
-              <p className="text-[11px] text-[#1A1A2E] mt-1">If provided, the family will see this in their app under past visits.</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider">
+                  After-visit instructions <span className="text-[#1A1A2E] normal-case font-normal">(optional)</span>
+                </label>
+                {aviState === 'ready' && aviNoteId && (
+                  <button
+                    type="button"
+                    onClick={regenerateAvi}
+                    className="flex items-center gap-1 text-[11px] text-[#7F77DD] hover:text-[#5F58B8] font-medium"
+                    title="Generate a different draft"
+                  >
+                    <RefreshCw size={11} /> Regenerate
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <textarea rows={aviState === 'ready' ? 10 : 4}
+                  placeholder={aviState === 'error'
+                    ? 'Type your own instructions here.'
+                    : 'e.g. Rest and fluids for 48 hours. Recheck temperature in the morning.'}
+                  value={doneInstructions}
+                  onChange={e => setDoneInstructions(e.target.value)}
+                  disabled={aviState === 'loading'}
+                  className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none disabled:bg-[#FAFAF8]" />
+                {aviState === 'loading' && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
+                    <div className="flex items-center gap-2 text-[12px] text-[#1A1A2E]/70">
+                      <Sparkles size={14} className="text-[#7F77DD] animate-pulse" />
+                      Drafting instructions…
+                    </div>
+                  </div>
+                )}
+              </div>
+              {aviState === 'ready' && (
+                <p className="text-[11px] text-[#1A1A2E]/70 mt-1 flex items-center gap-1">
+                  <Sparkles size={10} className="text-[#7F77DD]" />
+                  Draft generated from your encounter note. Review, edit, or regenerate.
+                </p>
+              )}
+              {aviState === 'error' && (
+                <p className="text-[11px] text-[#991B1B] mt-1">
+                  {aviError ?? 'Couldn\'t generate a draft right now.'} Type your own, or
+                  {' '}<button type="button" onClick={regenerateAvi} className="underline">try again</button>.
+                </p>
+              )}
+              {aviState === 'idle' && (
+                <p className="text-[11px] text-[#1A1A2E] mt-1">If provided, the family will see this in their app under past visits.</p>
+              )}
             </div>
 
             <div className="flex gap-2">

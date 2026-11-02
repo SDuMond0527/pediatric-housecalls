@@ -52,6 +52,7 @@
     { "src": "/api/admin/reset-provider-password", "dest": "/api/admin/reset-provider-password" },
     { "src": "/api/note-templates/([^/]+)", "dest": "/api/note-templates/[id]?id=$1" },
     { "src": "/api/encounter-notes/([^/]+)/co-sign", "dest": "/api/encounter-notes/[id]/co-sign?id=$1" },
+    { "src": "/api/encounter-notes/([^/]+)/draft-avi", "dest": "/api/encounter-notes/[id]/draft-avi?id=$1" },
     { "src": "/api/encounter-notes/([^/]+)", "dest": "/api/encounter-notes/[id]?id=$1" },
     { "src": "/api/vitals/([^/]+)", "dest": "/api/vitals/[id]?id=$1" },
     { "src": "/api/availability/overrides/([^/]+)", "dest": "/api/availability/overrides/[id]?id=$1" },

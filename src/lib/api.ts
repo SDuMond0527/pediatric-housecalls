@@ -859,6 +859,9 @@ export async function downloadEncounterNoteHtml(id: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
+export const draftAviFromNote = (noteId: string) =>
+  apiFetch<{ text: string }>(`/api/encounter-notes/${noteId}/draft-avi`, { method: 'POST' })
+
 export const patchEncounterNote = (id: string, body: { diagnoses?: unknown; cpt_codes?: unknown }) =>
   apiFetch<any>(`/api/encounter-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
