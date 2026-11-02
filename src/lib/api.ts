@@ -890,6 +890,39 @@ export async function uploadNotePhoto(file: File): Promise<string> {
   return data.url
 }
 
+export type StudOption = {
+  id: string
+  name: string
+  photo_url: string
+  price: number | string
+  is_active?: boolean
+  sort_order?: number
+}
+export const getStudOptions = () =>
+  apiFetch<StudOption[]>('/api/stud-options')
+export const getStudOptionsPublic = () =>
+  publicFetch<StudOption[]>('/api/stud-options?public=1')
+export const createStudOption = (body: Partial<StudOption>) =>
+  apiFetch<StudOption>('/api/stud-options', { method: 'POST', body: JSON.stringify(body) })
+export const updateStudOption = (id: string, body: Partial<StudOption>) =>
+  apiFetch<StudOption>(`/api/stud-options/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const deactivateStudOption = (id: string) =>
+  apiFetch<void>(`/api/stud-options/${id}`, { method: 'DELETE' })
+
+export async function uploadStudOptionPhoto(file: File): Promise<string> {
+  const { fetchAuthSession } = await import('aws-amplify/auth')
+  const { upload } = await import('@vercel/blob/client')
+  const session = await fetchAuthSession()
+  const accessToken = session.tokens?.accessToken?.toString() ?? ''
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_')
+  const blob = await upload(`stud-options/${Date.now()}-${safeName}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/stud-options-upload-token',
+    clientPayload: JSON.stringify({ accessToken }),
+  })
+  return blob.url
+}
+
 export async function uploadReferralCardImage(file: File): Promise<string> {
   // Public, no-auth upload used by the UC-facing referral form. Lands
   // under referrals/ prefix in Vercel Blob. See api/referrals/upload-token.ts.

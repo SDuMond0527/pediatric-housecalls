@@ -37,7 +37,7 @@ import { Input } from '../../components/ui/Input'
 import { ProviderAvatar } from '../../components/ProviderAvatar'
 import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
-import { getProvidersByZone, getProvidersByState } from '../../lib/api'
+import { getProvidersByZone, getProvidersByState, getStudOptionsPublic } from '../../lib/api'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { isCmaTelePair, isIvFluidsPair, CMA_TELE_ALIASES } from '../../lib/dualVisitTypes'
 import { CompleteChildProfileGate } from '../../components/CompleteChildProfileGate'
@@ -358,6 +358,7 @@ export function BookVisit() {
   })
 
   const isIvFluids = isIvFluidsPair(booking.visitType)
+  const isEarPiercing = booking.visitType === 'In-home ear piercing'
   // DB is source-of-truth for is_cpr, but fall back to a name heuristic
   // for legacy setups where the practice_visit_types row is missing or
   // misnamed. Verified 2026-09-20: prod only had a single legacy
@@ -418,6 +419,8 @@ export function BookVisit() {
   const [waitlistInsuranceSubscriber, setWaitlistInsuranceSubscriber] = useState('')
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
   const [secureTextProviders, setSecureTextProviders] = useState<{name: string; role: string; secure_text_number: string}[]>([])
+  const [studOptions, setStudOptions] = useState<Array<{ id: string; name: string; photo_url: string; price: number | string }>>([])
+  const [selectedStudOptionId, setSelectedStudOptionId] = useState<string | null>(null)
   const [addingChild, setAddingChild] = useState(false)
   const [bookedSlots, setBookedSlots] = useState<{ time: string; duration: number }[]>([])
   const [allSlotsBooked, setAllSlotsBooked] = useState(false)
@@ -627,6 +630,13 @@ export function BookVisit() {
       setBooking(b => ({ ...b, zone, state: st }))
     }
   }, [zipToZone])
+
+  // Load extra-stud options whenever the parent picks the ear-piercing
+  // visit type. Clear the selection if they switch away.
+  useEffect(() => {
+    if (!isEarPiercing) { setStudOptions([]); setSelectedStudOptionId(null); return }
+    getStudOptionsPublic().then(setStudOptions).catch(() => setStudOptions([]))
+  }, [isEarPiercing])
 
   // Fetch Melissa's next 14 days of availability whenever we know her
   // provider id and we're on a CPR flow. Aligns the window to the
@@ -1662,6 +1672,10 @@ export function BookVisit() {
         noteParts.push(`SWITCHED_FROM_IV:Parent was originally booking an in-home IV fluids appointment but based on other symptoms reported, an in-person sick visit house call was recommended first instead.${original}`)
       }
       if (booking.visitAddress) noteParts.push(`ADDR:${booking.visitAddress}${booking.city ? `, ${booking.city}` : ''}${booking.state ? `, ${booking.state}` : ''}${booking.zip ? ` ${booking.zip}` : ''}`)
+      if (isEarPiercing && selectedStudOptionId) {
+        const picked = studOptions.find(s => s.id === selectedStudOptionId)
+        if (picked) noteParts.push(`STUD_OPTION:${picked.name} (+$${Number(picked.price).toFixed(0)})`)
+      }
       noteParts.push(`PARENTEMAIL:${family!.email}`)
       const effectivePhone = booking.phone || (family as any)?.phone || ''
       if (effectivePhone) noteParts.push(`PARENTPHONE:${effectivePhone}`)
@@ -3163,6 +3177,43 @@ export function BookVisit() {
                    ((byType[booking.visitType]?.is_in_home ?? true) && (!booking.visitAddress || !booking.city)))
             }
             onNext={() => setStep(STEP_CONFIRM)} />
+
+          {/* Ear-piercing: optional extra set of studs. Shown only when
+              the parent picked that visit type and the admin has at
+              least one active stud option on file. */}
+          {isEarPiercing && studOptions.length > 0 && (
+            <div className="mt-6 pt-5 border-t border-[#E8E8E4]">
+              <div className="mb-3">
+                <div className="font-display text-[16px] font-semibold text-[#1A1A2E]">Want an extra pair of studs?</div>
+                <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
+                  Your appointment already includes one set of medical-grade titanium starter studs ($100). Pick a second pair here if you'd like — $100 per pair.
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudOptionId(null)}
+                  className={`relative border-2 rounded-xl p-3 text-left transition-colors ${selectedStudOptionId === null ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] hover:border-[#AFA9EC]'}`}
+                >
+                  <div className="aspect-square bg-[#FAFAF8] rounded-lg flex items-center justify-center mb-2 text-[11px] text-[#1A1A2E]/50">No extras</div>
+                  <div className="text-[12px] font-medium text-[#1A1A2E]">No extra pair</div>
+                  <div className="text-[11px] text-[#1A1A2E]/60">—</div>
+                </button>
+                {studOptions.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedStudOptionId(s.id)}
+                    className={`relative border-2 rounded-xl p-3 text-left transition-colors ${selectedStudOptionId === s.id ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] hover:border-[#AFA9EC]'}`}
+                  >
+                    <img src={s.photo_url} alt={s.name} className="aspect-square object-cover rounded-lg mb-2 w-full" />
+                    <div className="text-[12px] font-medium text-[#1A1A2E]">{s.name}</div>
+                    <div className="text-[11px] text-[#1A1A2E]/60">+${Number(s.price).toFixed(0)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </Step>
       )}
 
