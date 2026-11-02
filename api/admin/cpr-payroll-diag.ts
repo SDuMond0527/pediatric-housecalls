@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // signed up, Melissa approved, but the appointment row never got
   // created or was assigned to the wrong provider).
   const bookings = await sql`
-    SELECT id, reference_code, visit_type, requested_dates, status,
+    SELECT id, reference_code, visit_type, status,
            created_at, charm_appointment_id
     FROM booking_requests
     WHERE created_at BETWEEN ${start}::timestamptz AND (${end}::date + INTERVAL '1 day')::timestamptz
