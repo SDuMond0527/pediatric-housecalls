@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const appts = await sql`
     SELECT a.id, a.scheduled_date::text AS date, a.scheduled_time, a.visit_type,
            a.status, a.provider_id, p.name AS provider_name, p.role AS provider_role,
-           a.patient_first_name, a.patient_last_name, a.notes
+           a.notes
     FROM appointments a
     LEFT JOIN providers p ON p.id = a.provider_id
     WHERE a.scheduled_date BETWEEN ${start}::date AND ${end}::date
@@ -39,8 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // created or was assigned to the wrong provider).
   const bookings = await sql`
     SELECT id, reference_code, visit_type, requested_dates, status,
-           created_at, charm_appointment_id,
-           patient_first_name, patient_last_name
+           created_at, charm_appointment_id
     FROM booking_requests
     WHERE created_at BETWEEN ${start}::timestamptz AND (${end}::date + INTERVAL '1 day')::timestamptz
       AND (visit_type ILIKE '%cpr%' OR visit_type ILIKE 'in-home cpr%')
