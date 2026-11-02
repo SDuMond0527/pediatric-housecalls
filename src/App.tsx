@@ -35,6 +35,7 @@ import { AdminMarketing } from './pages/admin/AdminMarketing'
 import { AdminReferrals } from './pages/admin/AdminReferrals'
 import { AdminAgencies } from './pages/admin/AdminAgencies'
 import { AdminStudOptions } from './pages/admin/AdminStudOptions'
+import { MockupVisitPrep } from './pages/admin/MockupVisitPrep'
 import { ReferralIvFluids } from './pages/public/ReferralIvFluids'
 import { AgencyReferral } from './pages/public/AgencyReferral'
 import { AdminPcps } from './pages/admin/AdminPcps'
@@ -159,6 +160,7 @@ export default function App() {
                 <Route path="referrals"  element={<AdminReferrals />} />
                 <Route path="agencies"   element={<AdminAgencies />} />
                 <Route path="stud-options" element={<AdminStudOptions />} />
+                <Route path="mockup-visit-prep" element={<MockupVisitPrep />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
