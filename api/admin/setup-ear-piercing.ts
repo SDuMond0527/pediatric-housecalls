@@ -29,36 +29,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const results: Record<string, unknown> = {}
 
-  // 1. Visit type on the practice catalog.
-  const [visitType] = await sql`
-    INSERT INTO practice_visit_types
-      (practice_id, visit_type, base_price, badge_label, badge_color, badge_text_color,
-       duration_minutes, lead_minutes, has_convenience_fee, per_child_extra_minutes,
-       is_in_home, is_cpr, is_active, sort_order)
-    VALUES
-      (${pid}::uuid, ${EAR_PIERCING}, 100, 'Piercing', '#F1EFE8', '#1A1A2E',
-       60, 60, true, 0,
-       true, false, true, 50)
-    ON CONFLICT (practice_id, visit_type) DO UPDATE SET
-      base_price = EXCLUDED.base_price,
-      duration_minutes = EXCLUDED.duration_minutes,
-      has_convenience_fee = EXCLUDED.has_convenience_fee,
-      is_in_home = EXCLUDED.is_in_home,
-      is_active = EXCLUDED.is_active
-    RETURNING id, visit_type`
-  results.visit_type = visitType
+  // 1. Visit type on the practice catalog — check-then-upsert without
+  // relying on an ON CONFLICT target constraint that may not exist.
+  const [existingVt] = await sql`
+    SELECT id FROM practice_visit_types
+    WHERE practice_id = ${pid}::uuid AND visit_type = ${EAR_PIERCING} LIMIT 1`
+  if (existingVt) {
+    const [updated] = await sql`
+      UPDATE practice_visit_types SET
+        base_price = 100, duration_minutes = 60, lead_minutes = 60,
+        has_convenience_fee = true, is_in_home = true, is_cpr = false,
+        is_active = false, badge_label = 'Piercing'
+      WHERE id = ${existingVt.id}::uuid
+      RETURNING id, visit_type`
+    results.visit_type = updated
+  } else {
+    const [created] = await sql`
+      INSERT INTO practice_visit_types
+        (practice_id, visit_type, base_price, badge_label, badge_color, badge_text_color,
+         duration_minutes, lead_minutes, has_convenience_fee, per_child_extra_minutes,
+         is_in_home, is_cpr, is_active, sort_order)
+      VALUES
+        (${pid}::uuid, ${EAR_PIERCING}, 100, 'Piercing', '#F1EFE8', '#1A1A2E',
+         60, 60, true, 0, true, false, true, 50)
+      RETURNING id, visit_type`
+    results.visit_type = created
+  }
 
-  // 2. Fee schedule rows (idempotent).
-  const feeRows = await sql`
-    INSERT INTO fee_schedule (practice_id, code, description, charge_amount, category)
-    VALUES
-      (${pid}::uuid, 'EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00, 'Non-Covered Services'),
-      (${pid}::uuid, 'EarStudsX', 'Additional set of titanium studs', 100.00, 'Non-Covered Services')
-    ON CONFLICT (practice_id, code) DO UPDATE SET
-      description = EXCLUDED.description,
-      charge_amount = EXCLUDED.charge_amount,
-      category = EXCLUDED.category
-    RETURNING code, charge_amount`
+  // 2. Fee schedule rows — same check-then-upsert pattern.
+  const feeRows: any[] = []
+  for (const [code, desc, amt] of [
+    ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+    ['EarStudsX', 'Additional set of titanium studs', 100.00],
+  ] as const) {
+    const [existing] = await sql`
+      SELECT id FROM fee_schedule WHERE practice_id = ${pid}::uuid AND code = ${code} LIMIT 1`
+    if (existing) {
+      const [u] = await sql`
+        UPDATE fee_schedule SET description = ${desc}, charge_amount = ${amt}, category = 'Non-Covered Services'
+        WHERE id = ${existing.id}::uuid RETURNING code, charge_amount`
+      feeRows.push(u)
+    } else {
+      const [c] = await sql`
+        INSERT INTO fee_schedule (practice_id, code, description, charge_amount, category)
+        VALUES (${pid}::uuid, ${code}, ${desc}, ${amt}, 'Non-Covered Services')
+        RETURNING code, charge_amount`
+      feeRows.push(c)
+    }
+  }
   results.fee_schedule = feeRows
 
   // 3. visit_type_availability for Becca + Megan only.
@@ -68,13 +86,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       AND (name = 'Becca Jones' OR name = 'Megan Heilemann')
       AND is_active = true` as any[]
   for (const p of providers) {
-    await sql`
-      INSERT INTO visit_type_availability (provider_id, visit_type, is_active, start_time, end_time)
-      VALUES (${p.id}::uuid, ${EAR_PIERCING}, true, '08:00', '17:00')
-      ON CONFLICT (provider_id, visit_type) DO UPDATE SET
-        is_active = true,
-        start_time = EXCLUDED.start_time,
-        end_time = EXCLUDED.end_time`
+    const [existingAvail] = await sql`
+      SELECT id FROM visit_type_availability
+      WHERE provider_id = ${p.id}::uuid AND visit_type = ${EAR_PIERCING} LIMIT 1`
+    if (existingAvail) {
+      await sql`
+        UPDATE visit_type_availability SET is_active = false, start_time = '08:00', end_time = '17:00'
+        WHERE id = ${existingAvail.id}::uuid`
+    } else {
+      await sql`
+        INSERT INTO visit_type_availability (provider_id, visit_type, is_active, start_time, end_time)
+        VALUES (${p.id}::uuid, ${EAR_PIERCING}, false, '08:00', '17:00')`
+    }
   }
   results.providers_enabled = providers.map((p: any) => p.name)
 
