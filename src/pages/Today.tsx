@@ -149,11 +149,10 @@ export function Today() {
   // Mark done
   const [doneTarget, setDoneTarget] = useState<Appointment | null>(null)
   const [doneInstructions, setDoneInstructions] = useState('')
-  // AVI auto-draft state. aviState walks through 'idle' → 'loading' →
-  // ('ready' | 'error'). On 'ready' the textarea has been populated and
-  // the provider can edit, hit Regenerate, or just send. On 'error' they
-  // see a short message and still have the empty textarea.
-  const [aviState, setAviState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  // AVI auto-draft state. States distinguish every path so a provider
+  // staring at the modal can always tell what's happening or what went
+  // wrong instead of silently seeing an empty textarea.
+  const [aviState, setAviState] = useState<'idle' | 'looking' | 'no_note' | 'loading' | 'ready' | 'error'>('idle')
   const [aviError, setAviError] = useState<string | null>(null)
   const [aviNoteId, setAviNoteId] = useState<string | null>(null)
   const [doneSubmitting, setDoneSubmitting] = useState(false)
@@ -448,9 +447,11 @@ export function Today() {
     else setCharmDetails(prev => ({ ...prev, [appt.id]: { notFound: true } }))
   }
 
-  // Auto-fire the AVI draft the moment the Mark-complete modal opens. If
-  // there's no signed encounter note for the appointment, skip silently
-  // and leave the textarea empty (provider types their own).
+  // Auto-fire the AVI draft the moment the Mark-complete modal opens.
+  // Every state transition is reflected in UI AND logged to the browser
+  // console so Sara can open DevTools once and tell me what step failed
+  // if it misbehaves. State transitions: idle → looking → (no_note |
+  // loading) → (ready | error).
   useEffect(() => {
     if (!doneTarget) {
       setAviState('idle'); setAviError(null); setAviNoteId(null)
@@ -459,21 +460,28 @@ export function Today() {
     let cancelled = false
     ;(async () => {
       try {
+        setAviState('looking')
+        console.log('[AVI] looking for encounter note', { appointment_id: doneTarget.id })
         const notes = await getEncounterNotes({ appointment_id: doneTarget.id })
+        console.log('[AVI] notes response', notes)
         const note = (notes ?? [])[0]
         if (!note?.id) {
-          if (!cancelled) { setAviState('idle'); setAviNoteId(null) }
+          console.log('[AVI] no note linked to this appointment — falling back to blank textarea')
+          if (!cancelled) { setAviState('no_note'); setAviNoteId(null) }
           return
         }
         if (cancelled) return
         setAviNoteId(note.id)
         setAviState('loading')
         setAviError(null)
+        console.log('[AVI] drafting via Claude', { note_id: note.id })
         const { text } = await draftAviFromNote(note.id)
         if (cancelled) return
+        console.log('[AVI] draft ready', { length: text?.length ?? 0 })
         setDoneInstructions(text)
         setAviState('ready')
       } catch (e: any) {
+        console.error('[AVI] failed', e)
         if (cancelled) return
         setAviError(e?.message ?? 'Draft service is unavailable right now.')
         setAviState('error')
@@ -1612,18 +1620,18 @@ export function Today() {
               </div>
               <div className="relative">
                 <textarea rows={aviState === 'ready' ? 10 : 4}
-                  placeholder={aviState === 'error'
+                  placeholder={aviState === 'error' || aviState === 'no_note'
                     ? 'Type your own instructions here.'
                     : 'e.g. Rest and fluids for 48 hours. Recheck temperature in the morning.'}
                   value={doneInstructions}
                   onChange={e => setDoneInstructions(e.target.value)}
-                  disabled={aviState === 'loading'}
+                  disabled={aviState === 'looking' || aviState === 'loading'}
                   className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans outline-none focus:border-[#1D9E75] resize-none disabled:bg-[#FAFAF8]" />
-                {aviState === 'loading' && (
+                {(aviState === 'looking' || aviState === 'loading') && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
                     <div className="flex items-center gap-2 text-[12px] text-[#1A1A2E]/70">
                       <Sparkles size={14} className="text-[#7F77DD] animate-pulse" />
-                      Drafting instructions…
+                      {aviState === 'looking' ? 'Looking for the encounter note…' : 'Drafting instructions…'}
                     </div>
                   </div>
                 )}
@@ -1632,6 +1640,11 @@ export function Today() {
                 <p className="text-[11px] text-[#1A1A2E]/70 mt-1 flex items-center gap-1">
                   <Sparkles size={10} className="text-[#7F77DD]" />
                   Draft generated from your encounter note. Review, edit, or regenerate.
+                </p>
+              )}
+              {aviState === 'no_note' && (
+                <p className="text-[11px] text-[#1A1A2E]/70 mt-1">
+                  No signed encounter note on this appointment — type your own.
                 </p>
               )}
               {aviState === 'error' && (

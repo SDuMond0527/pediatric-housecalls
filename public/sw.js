@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-02-sibling-prompt
+// Service worker — deliberate passthrough. Version: 2026-11-03-avi-debug-states
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
