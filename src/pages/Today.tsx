@@ -1026,10 +1026,21 @@ export function Today() {
               const vt = byType[appt.visit_type]
               const isExpanded = expanded === appt.id
 
+              // Multi-patient detector. BookVisit writes "CHILDREN:N children"
+              // to appt.notes whenever more than one child was on the booking.
+              // Fallback: compare appt.duration_minutes to the base duration
+              // for the visit type — if the booking inflated the slot, there's
+              // a sibling on it. Either signal flips the purple top-stripe on.
+              const notes = (appt as any).notes || ''
+              const siblingByNote = /\bCHILDREN:\s*(\d+)/i.exec(notes)
+              const siblingCountFromNote = siblingByNote ? parseInt(siblingByNote[1], 10) : 1
+              const baseDur = (vt as any)?.duration_minutes ?? 0
+              const siblingByDur = baseDur > 0 && ((appt as any).duration_minutes ?? 0) > baseDur
+              const isMultiPatient = siblingCountFromNote > 1 || siblingByDur
 
               return (
                 <div key={appt.id}
-                  className={`border rounded-lg overflow-hidden transition-all cursor-pointer ${isExpanded ? 'border-[#7F77DD] bg-[#EEEDFE]/30' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
+                  className={`border rounded-lg overflow-hidden transition-all cursor-pointer relative ${isExpanded ? 'border-[#7F77DD] bg-[#EEEDFE]/30' : 'border-[#E8E8E4] bg-white hover:border-[#AFA9EC]'}`}
                   onClick={() => {
                     const next = isExpanded ? null : appt.id
                     setExpanded(next)
@@ -1076,6 +1087,14 @@ export function Today() {
                     }
                   }}>
 
+                  {/* Multi-patient stripe — shows at the top of the card
+                      whenever the booking carried a sibling add-on. Can't
+                      miss from across the room. */}
+                  {isMultiPatient && (
+                    <div className="bg-[#7F77DD] text-white px-4 py-1 text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                      👯 2 patients on this visit
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 px-4 py-3">
                     <div className="text-[13px] font-medium text-[#555] w-16 flex-shrink-0">{to12h(appt.scheduled_time)}</div>
                     <div className="flex-1 min-w-0">

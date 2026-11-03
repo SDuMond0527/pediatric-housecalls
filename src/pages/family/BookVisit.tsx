@@ -37,7 +37,7 @@ import { Input } from '../../components/ui/Input'
 import { ProviderAvatar } from '../../components/ProviderAvatar'
 import { VISIT_TYPE_INFO, TIME_SLOTS } from '../../lib/zipData'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
-import { getProvidersByZone, getProvidersByState, getStudOptionsPublic } from '../../lib/api'
+import { getProvidersByZone, getProvidersByState, getStudOptionsPublic, logSiblingPrompt } from '../../lib/api'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { isCmaTelePair, isIvFluidsPair, CMA_TELE_ALIASES } from '../../lib/dualVisitTypes'
 import { CompleteChildProfileGate } from '../../components/CompleteChildProfileGate'
@@ -421,6 +421,14 @@ export function BookVisit() {
   const [secureTextProviders, setSecureTextProviders] = useState<{name: string; role: string; secure_text_number: string}[]>([])
   const [studOptions, setStudOptions] = useState<Array<{ id: string; name: string; photo_url: string; price: number | string }>>([])
   const [selectedStudOptionId, setSelectedStudOptionId] = useState<string | null>(null)
+  // Sibling add-on prompt — surfaced on STEP_CONFIRM to invite the parent
+  // to bring another child in the household onto the visit. Rules Sara
+  // locked 2026-11-02: the parent still clicks Yes (no auto-booking from
+  // the system's side), writes only run through the existing add-child
+  // flow, usage is logged separately. See project_feature_ground_rules_
+  // 2026-11-02.md.
+  const [siblingPromptAccepted, setSiblingPromptAccepted] = useState<null | boolean>(null)
+  const [siblingChildCountAtPrompt, setSiblingChildCountAtPrompt] = useState<number>(0)
   const [addingChild, setAddingChild] = useState(false)
   const [bookedSlots, setBookedSlots] = useState<{ time: string; duration: number }[]>([])
   const [allSlotsBooked, setAllSlotsBooked] = useState(false)
@@ -1755,6 +1763,24 @@ export function BookVisit() {
       }
       // CMA+tele returns { cma, md }; IV fluids returns { rn, md }; all other visit types return the appointment row directly
       appointmentDbId = (isCmaVisit ? apptRecord?.cma?.id : isIvFluids ? apptRecord?.rn?.id : apptRecord?.id) || null
+    }
+
+    // Log the sibling-prompt outcome — one row per booking that saw the
+    // prompt. Never blocks the booking. Non-prompt bookings (CPR classes
+    // or multi-child bookings that never saw the prompt because they
+    // already had >1 child selected on the intake step) don't log —
+    // siblingPromptAccepted stays null and we skip.
+    if (!isCpr && siblingPromptAccepted !== null) {
+      const after = booking.selectedChildIds.length
+      logSiblingPrompt({
+        visit_type: booking.visitType || null,
+        zone: booking.zone || null,
+        accepted: siblingPromptAccepted,
+        sibling_added: after > siblingChildCountAtPrompt,
+        child_count_before: siblingChildCountAtPrompt,
+        child_count_after: after,
+        appointment_id: appointmentDbId,
+      }).catch(() => { /* non-fatal */ })
     }
 
     // Save contact info immediately after appointment is created — before anything else
@@ -3352,6 +3378,81 @@ export function BookVisit() {
               </button>
             </div>
           )}
+
+          {/* ─── Sibling add-on prompt ──────────────────────────────────
+              Only shown when the booking has exactly one child selected AND
+              it isn't a CPR class (CPR classes use participantCount, not
+              child selection). Nothing writes to the booking from here —
+              tapping Yes bounces the parent back to the intake step with
+              the existing Add Child / Pick Sibling UI already open, and
+              from there the normal booking flow handles duration
+              extension + chart creation + household-info inheritance. */}
+          {!isCpr && booking.selectedChildIds.length === 1 && (() => {
+            const otherChildren = children.filter(c => !booking.selectedChildIds.includes(c.id))
+            return (
+              <div className="mb-4 border-2 border-[#7F77DD]/30 rounded-xl p-4 bg-[#F6F3EE]">
+                <div className="flex items-start gap-2 mb-2">
+                  <span className="text-[16px]">👯</span>
+                  <div className="flex-1">
+                    <div className="font-display text-[15px] font-semibold text-[#1A1A2E]">
+                      Is anyone else at home feeling sick?
+                    </div>
+                    <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
+                      You can add another child to this visit — same slot, same provider. Your visit length will extend to cover the second patient.
+                    </div>
+                  </div>
+                </div>
+                {siblingPromptAccepted !== false ? (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSiblingPromptAccepted(true)
+                        setSiblingChildCountAtPrompt(booking.selectedChildIds.length)
+                        // Preseed the Add Child form with household info
+                        // from the primary child (same as the intake-step
+                        // "Add another child" button does).
+                        const primary = children.find(c => c.id === booking.selectedChildIds[0]) ?? children[0]
+                        setNewChild(primary ? emptyChildInheritingFrom(primary) : emptyChild())
+                        setAddingChildError('')
+                        setAddingChild(true)
+                        setStep(STEP_INTAKE)
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-[#7F77DD] text-white text-[13px] font-medium rounded-lg hover:bg-[#6B61C7]"
+                    >
+                      Yes, add a sibling
+                    </button>
+                    {otherChildren.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSiblingPromptAccepted(true)
+                          setSiblingChildCountAtPrompt(booking.selectedChildIds.length)
+                          setStep(STEP_INTAKE)
+                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 border border-[#7F77DD] text-[#7F77DD] text-[13px] font-medium rounded-lg hover:bg-[#EEEDFE]"
+                      >
+                        Pick an existing sibling
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSiblingPromptAccepted(false)}
+                      className="flex items-center gap-1.5 px-4 py-2 text-[#1A1A2E]/70 text-[13px] font-medium rounded-lg hover:bg-white/60"
+                    >
+                      No, continue
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 text-[12px] text-[#1A1A2E]/70">
+                    <Check size={12} /> No sibling added — you can still change your mind by tapping
+                    {' '}
+                    <button type="button" onClick={() => setSiblingPromptAccepted(null)} className="underline">here</button>.
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {submitError && (
             <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F] mb-3">{submitError}</div>

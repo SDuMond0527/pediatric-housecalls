@@ -859,6 +859,21 @@ export async function downloadEncounterNoteHtml(id: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
+export const logSiblingPrompt = (body: {
+  visit_type: string | null
+  zone: string | null
+  accepted: boolean
+  sibling_added: boolean
+  child_count_before: number
+  child_count_after: number
+  appointment_id?: string | null
+}) => familyApiFetch<{ ok: true; id: string }>('/api/sibling-prompt-log', { method: 'POST', body: JSON.stringify(body) })
+
+export const getSiblingPromptSummary = (params?: { start?: string; end?: string }) =>
+  apiFetch<{ offered: number; accepted: number; sibling_added: number }>(
+    `/api/sibling-prompt-log${params ? '?' + new URLSearchParams(params as Record<string, string>) : ''}`
+  )
+
 export const draftAviFromNote = (noteId: string) =>
   apiFetch<{ text: string }>(`/api/encounter-notes/${noteId}/draft-avi`, { method: 'POST' })
 

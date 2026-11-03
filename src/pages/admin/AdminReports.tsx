@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
-import { getReports } from '../../lib/api'
+import { getReports, getSiblingPromptSummary } from '../../lib/api'
 import { computeProviderPay, PAIRED_ROLE_PAY, CPR_INSTRUCTOR_PAY, isCprClassVisitType } from '../../lib/payrollRules'
 
 interface ApptRow {
@@ -240,6 +240,13 @@ export function AdminReports() {
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [encounterNotes, setEncounterNotes] = useState<EncounterNoteRow[]>([])
   const [onCallShifts, setOnCallShifts] = useState<OnCallShiftRow[]>([])
+  const [siblingPrompt, setSiblingPrompt] = useState<{ offered: number; accepted: number; sibling_added: number } | null>(null)
+  useEffect(() => {
+    if (!startDate || !endDate || startDate > endDate) return
+    getSiblingPromptSummary({ start: startDate, end: endDate })
+      .then(setSiblingPrompt)
+      .catch(() => setSiblingPrompt(null))
+  }, [startDate, endDate])
   // Bonus leaderboard: pulled from the authoritative broadcasts +
   // waitlist_entries tables (not fragile 'From waitlist' / 'Broadcast:'
   // notes-string matching that undercounted pickups). Sara 2026-10-07.
@@ -670,6 +677,35 @@ export function AdminReports() {
           <SummaryCard label="Waitlist & broadcast pickups" value={totalPickups} color="#EF9F27" bg="#FAEEDA"
             sub={totalPickups > 0 ? `${broadcastTotal} broadcast · ${waitlistTotal} waitlist` : undefined} />
         </div>
+
+        {/* Sibling prompt usage */}
+        {siblingPrompt && siblingPrompt.offered > 0 && (
+          <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Sibling add-on prompt</h3>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">{rangeLabel} · how often the booking confirmation screen's "anyone else at home feeling sick?" prompt was offered and taken.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-[#F1EFE8] p-3">
+                <div className="text-[11px] uppercase tracking-wider text-[#1A1A2E]/60 font-semibold mb-0.5">Shown to</div>
+                <div className="text-[22px] font-display font-semibold text-[#1A1A2E]">{siblingPrompt.offered}</div>
+                <div className="text-[11px] text-[#1A1A2E]/70">bookings</div>
+              </div>
+              <div className="rounded-lg bg-[#EEEDFE] p-3">
+                <div className="text-[11px] uppercase tracking-wider text-[#1A1A2E]/60 font-semibold mb-0.5">Said yes</div>
+                <div className="text-[22px] font-display font-semibold text-[#7F77DD]">{siblingPrompt.accepted}</div>
+                <div className="text-[11px] text-[#1A1A2E]/70">
+                  {siblingPrompt.offered > 0 ? `${Math.round((siblingPrompt.accepted / siblingPrompt.offered) * 100)}% acceptance` : ''}
+                </div>
+              </div>
+              <div className="rounded-lg bg-[#E1F5EE] p-3">
+                <div className="text-[11px] uppercase tracking-wider text-[#1A1A2E]/60 font-semibold mb-0.5">Sibling added</div>
+                <div className="text-[22px] font-display font-semibold text-[#1D9E75]">{siblingPrompt.sibling_added}</div>
+                <div className="text-[11px] text-[#1A1A2E]/70">
+                  {siblingPrompt.accepted > 0 ? `${Math.round((siblingPrompt.sibling_added / siblingPrompt.accepted) * 100)}% follow-through` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Visits by provider */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
