@@ -118,6 +118,10 @@ const COMMON_TESTS = [
   { code: '164640', name: 'Tissue Transglutaminase (tTG)' },
   { code: '001784', name: 'Immunoglobulin A, Quantitative' },
   { code: '001321', name: 'Iron and Total Iron Binding Capacity (TIBC)' },
+  { code: '020321', name: 'PT/PTT' },
+  { code: '117796', name: 'aPTT' },
+  { code: '086282', name: 'von Willebrand Factor Profile' },
+  { code: '001610', name: 'Fibrinogen' },
 ]
 
 function LabStatusBadge({ status }: { status: string }) {
