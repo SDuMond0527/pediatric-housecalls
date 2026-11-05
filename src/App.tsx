@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { FamilyAuthProvider } from './contexts/FamilyAuthContext'
+import { PracticeSettingsProvider } from './contexts/PracticeSettingsContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { FamilyLayout } from './components/layout/FamilyLayout'
@@ -28,6 +29,7 @@ import { AdminWaitlist } from './pages/admin/AdminWaitlist'
 import { AdminClaims } from './pages/admin/AdminClaims'
 import { AdminConvenienceFees } from './pages/admin/AdminConvenienceFees'
 import { AdminProvision } from './pages/admin/AdminProvision'
+import { AdminPracticeSettings } from './pages/admin/AdminPracticeSettings'
 import { AdminAuditLog } from './pages/admin/AdminAuditLog'
 import { AdminSchoolNotes } from './pages/admin/AdminSchoolNotes'
 import { AdminStatements } from './pages/admin/AdminStatements'
@@ -117,6 +119,7 @@ export default function App() {
         {/* Provider & admin portal */}
         <Route path="/*" element={
           <AuthProvider>
+            <PracticeSettingsProvider>
             <Routes>
               <Route path="/login"   element={<Login />} />
               <Route path="/terms"            element={<Terms />} />
@@ -152,6 +155,7 @@ export default function App() {
                 <Route path="providers"      element={<AdminProviders />} />
                 <Route path="availability"   element={<Availability />} />
                 <Route path="provision"  element={<AdminProvision />} />
+                <Route path="practice-settings" element={<AdminPracticeSettings />} />
                 <Route path="settings"   element={<Settings />} />
                 <Route path="audit-log"    element={<AdminAuditLog />} />
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
@@ -170,6 +174,7 @@ export default function App() {
                 <Route path="specialists"        element={<AdminSpecialists />} />
               </Route>
             </Routes>
+            </PracticeSettingsProvider>
           </AuthProvider>
         } />
       </Routes>

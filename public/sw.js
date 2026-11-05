@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-04-bcbs-dep-warn
+// Service worker — deliberate passthrough. Version: 2026-11-04-phase-1-settings
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

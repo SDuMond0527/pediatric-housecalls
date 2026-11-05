@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
@@ -100,6 +100,14 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
               }>
               <Building2 size={16} className="opacity-70" />
               Practices
+            </NavLink>
+            <NavLink to="/admin/practice-settings" onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <Sliders size={16} className="opacity-70" />
+              Practice Settings
             </NavLink>
           </>
         )}

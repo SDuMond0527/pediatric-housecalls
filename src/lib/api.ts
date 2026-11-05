@@ -1300,6 +1300,28 @@ export const createPractice = (body: Record<string, unknown>) =>
 export const createProviderForPractice = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/practices/providers', { method: 'POST', body: JSON.stringify(body) })
 
+// Super-admin only — load one practice's settings + audit history
+export const getAdminPracticeSettings = (practiceId: string) =>
+  apiFetch<{
+    practice_id: string
+    practice_name: string
+    settings: Record<string, unknown>
+    audit: Array<{
+      field_path: string
+      old_value: unknown
+      new_value: unknown
+      changed_by_name: string | null
+      changed_at: string
+    }>
+  }>(`/api/admin/practice-settings?practice_id=${practiceId}`)
+
+// Super-admin only — save a settings patch + audit each change
+export const patchAdminPracticeSettings = (practiceId: string, patch: Record<string, unknown>) =>
+  apiFetch<{ ok: true; changed: number; settings: Record<string, unknown> }>(
+    '/api/admin/practice-settings',
+    { method: 'PATCH', body: JSON.stringify({ practice_id: practiceId, patch }) },
+  )
+
 export const getPracticeZones = (practiceId?: string) =>
   fetch(`/api/practice-zones${practiceId ? `?practice_id=${practiceId}` : ''}`).then(r => r.json()) as Promise<any[]>
 
