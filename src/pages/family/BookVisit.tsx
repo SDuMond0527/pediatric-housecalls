@@ -2041,7 +2041,13 @@ export function BookVisit() {
           {/* Visit type */}
           <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Visit type</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            {Object.entries(VISIT_TYPE_INFO).map(([type, info]) => {
+            {Object.entries(VISIT_TYPE_INFO)
+              // Only render visit types the server still exposes for this
+              // practice — api/practice-visit-types filters by the practice's
+              // feature flags, so turning off e.g. uses_telemedicine via the
+              // Settings tab also hides the "Video telemedicine" card here.
+              .filter(([type]) => byType[type])
+              .map(([type, info]) => {
               const infoAny = info as any
               const displayName: string = infoAny.shortName ?? type
               const details: string[] | undefined = infoAny.details

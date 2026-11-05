@@ -6,6 +6,7 @@ import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, downloadEncounterNoteHtml, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { FlagGate } from '../contexts/PracticeSettingsContext'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -1440,7 +1441,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               </>
             )}
             {/* Supervising-physician co-signature. Optional per Sara's
-                ask 2026-09-19 — visible for MDs on NP-signed notes. */}
+                ask 2026-09-19 — visible for MDs on NP-signed notes.
+                Gated by uses_cosign_workflow — solo-MD practices like
+                Sarah Cash don't need this UI at all. */}
+            <FlagGate flag="uses_cosign_workflow">
             {isSigned && coSignedAt && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#EEF1F8] text-[#31447A]"
                     title={`Co-signed by ${coSignedByName ?? 'supervising physician'} on ${new Date(coSignedAt).toLocaleString()}`}>
@@ -1460,6 +1464,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {coSignError && (
               <span className="text-[11px] text-[#991B1B]">{coSignError}</span>
             )}
+            </FlagGate>
             {!readOnly && (
               <>
                 <Button variant="secondary" size="sm" onClick={saveDraft} loading={saving} disabled={signing}>

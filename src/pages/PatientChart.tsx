@@ -8,6 +8,7 @@ import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests,
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
@@ -557,6 +558,7 @@ export function PatientChart() {
   const vaccineNotes = notes.filter(n => n.note_type === 'In-home vaccine administration' && n.is_signed && n.vaccine_administrations?.length)
   const vaccineCount = vaccineNotes.reduce((sum, n) => sum + (n.vaccine_administrations?.length ?? 0), 0)
 
+  const { settings } = useSettings()
   const tabs = [
     { key: 'overview' as const, label: 'Overview', count: null },
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
@@ -564,8 +566,8 @@ export function PatientChart() {
     { key: 'medical_history' as const, label: 'Medical History', count: null },
     { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
-    { key: 'labs' as const,     label: 'Labs',      count: labOrders.length || null },
-    { key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null },
+    ...(settings.uses_lab_orders       ? [{ key: 'labs'      as const, label: 'Labs',      count: labOrders.length || null }] : []),
+    ...(settings.uses_radiology_orders ? [{ key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null }] : []),
     { key: 'communications' as const, label: 'Communications', count: comms.length || null },
     { key: 'billing' as const,  label: 'Billing',   count: billingEntries.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
