@@ -258,7 +258,9 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
   // send a statement to a family who doesn't owe anything. Only flip
   // draft → paid; a sent statement stays 'sent' (biller handles).
   const paidInFull = patientResp === 0
-  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id} LIMIT 1`
+  // Only touch an ACTIVE statement — voided rows are dead. See
+  // Mackenzie Twigg 2026-10-24 case in api/admin/refetch-known-eras.ts.
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id} AND voided_at IS NULL LIMIT 1`
   if (existing) {
     await sql`
       UPDATE patient_statements SET
@@ -443,7 +445,10 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
     WHERE id = ${claimId}::uuid`
   const patientRespSubtotal = +(cas.patient_deductible + cas.patient_coinsurance + cas.patient_copay + cas.patient_non_covered).toFixed(2)
   const paidInFull = patientRespSubtotal === 0
-  const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  // Only update an ACTIVE statement — voided rows are dead and must not
+  // absorb new ERA totals. ensureStatementForClaim below creates a
+  // fresh statement if the only match was voided.
+  const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid AND voided_at IS NULL LIMIT 1`
   if (stmt) {
     // COALESCE preserves biller category edits. total_amount_due /
     // remaining_balance get repaired only when they were stuck at 0
@@ -491,7 +496,9 @@ async function ensureStatementForClaim(
   amountBilled: number | null,
   insurancePayment: number | null,
 ): Promise<{ created: boolean; statementId?: string }> {
-  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  // Voided statements don't count — see Mackenzie Twigg 2026-10-24
+  // case in api/admin/refetch-known-eras.ts for the full context.
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid AND voided_at IS NULL LIMIT 1`
   if (existing) return { created: false, statementId: existing.id as string }
 
   const [claim] = await sql`

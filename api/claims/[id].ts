@@ -819,7 +819,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // mark statement as already paid (mirrors ensureStatementForClaim
       // in api/cron/stedi-era-poll.ts).
       try {
-        const [existingStmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${id}::uuid LIMIT 1`
+        // Voided statements don't count — mirrors the fix in
+        // ensureStatementForClaim (3 files). Twigg case 2026-10-24.
+        const [existingStmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${id}::uuid AND voided_at IS NULL LIMIT 1`
         if (!existingStmt) {
           const [contactRow] = await sql`
             SELECT ch.parent_email, ch.parent_phone, fp.email AS family_email, fp.phone AS family_phone

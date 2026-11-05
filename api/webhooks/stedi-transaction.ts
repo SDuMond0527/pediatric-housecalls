@@ -179,7 +179,9 @@ async function ensureStatementForClaim(
   amountBilled: number | null,
   insurancePayment: number | null,
 ): Promise<{ created: boolean; statementId?: string }> {
-  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  // Voided statements don't count — see Mackenzie Twigg 2026-10-24
+  // case. Comment in api/admin/refetch-known-eras.ts has the context.
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid AND voided_at IS NULL LIMIT 1`
   if (existing) return { created: false, statementId: existing.id as string }
 
   const [claim] = await sql`
@@ -472,7 +474,11 @@ async function applyCasToClaim(sql: any, claimId: string, cas: CasBreakdown, pay
     WHERE id = ${claimId}::uuid`
   const patientRespSubtotal = +(cas.patient_deductible + cas.patient_coinsurance + cas.patient_copay + cas.patient_non_covered).toFixed(2)
   const paidInFull = patientRespSubtotal === 0
-  const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  // Only update an ACTIVE statement — voided rows are dead and must not
+  // absorb new ERA totals. When the only statement is voided, leave this
+  // UPDATE a no-op; ensureStatementForClaim below will create a fresh
+  // statement with the correct amounts.
+  const [stmt] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid AND voided_at IS NULL LIMIT 1`
   if (stmt) {
     await sql`
       UPDATE patient_statements SET

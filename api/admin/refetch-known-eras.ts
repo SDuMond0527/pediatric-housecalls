@@ -48,7 +48,13 @@ async function ensureStatementForClaim(
   amountBilled: number | null,
   insurancePayment: number | null,
 ): Promise<{ created: boolean; statementId?: string }> {
-  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid LIMIT 1`
+  // Voided statements don't count — when a prior statement was voided
+  // (e.g., self-pay fast-path CV fee that got replaced by Square auto-
+  // charge), a new ERA arriving later with real patient responsibility
+  // must still generate a fresh statement. Mackenzie Twigg case
+  // 2026-10-24: $53.86 deductible came back on ERA but the voided
+  // $150 CV11 row blocked statement creation. Sara 2026-11-05.
+  const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claimId}::uuid AND voided_at IS NULL LIMIT 1`
   if (existing) return { created: false, statementId: existing.id as string }
 
   const [claim] = await sql`
