@@ -59,9 +59,13 @@ async function getDrivingMiles(origin: string, destination: string): Promise<num
   return element.distance.value / 1609.344
 }
 
-// ── Paired-visit aliases (kept in sync with api/appointments/index.ts) ────────
+// ── IV fluids visit types that get the flat $150 CV11 fee ────────────────────
+// NOT identical to api/appointments/index.ts' IV_FLUIDS_ALIASES — this list
+// is about billing (flat CV11), not pairing. Includes 'RN IV fluids
+// (outside referral)' which standalone-bills the same way a paired RN IV
+// visit does. Sara 2026-11-05.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
-const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
+const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids', 'RN IV fluids (outside referral)']
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
 const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
 

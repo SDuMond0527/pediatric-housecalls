@@ -54,6 +54,7 @@ const VISIT_DURATIONS: Record<string, number> = {
   'Video telemedicine': 30,
   'Text visit': 15,
   ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, 90])),
+  'RN IV fluids (outside referral)': 90,
   'In-home CPR class (Heartsaver)': 240,
   'In-home CPR class (BLS)': 240,
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 240,

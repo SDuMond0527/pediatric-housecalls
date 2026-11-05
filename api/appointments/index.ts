@@ -311,6 +311,11 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
 // versions all resolve correctly. Keep in sync with api/lib/dualVisitTypes.ts
 // and src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+// IV fluids visit types that TRIGGER auto-pairing with a telemed
+// screening. Deliberately excludes 'RN IV fluids (outside referral)' —
+// outside-physician referrals come pre-screened, so no pair is created.
+// The standalone type still gets 90-min duration via the explicit
+// entry in VISIT_DURATIONS below. Sara 2026-11-05.
 const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
@@ -338,6 +343,7 @@ const VISIT_DURATIONS: Record<string, number> = {
   'Video telemedicine': 30,
   'Text visit': 15,
   ...Object.fromEntries(IV_FLUIDS_ALIASES.map(k => [k, 90])),
+  'RN IV fluids (outside referral)': 90,
   'In-home CPR class (Heartsaver)': 240,
   'In-home CPR class (BLS)': 240,
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': 240,

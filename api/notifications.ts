@@ -23,10 +23,16 @@ function easternDateStr(): string {
 // Paired-visit aliases. Kept in sync with api/appointments/index.ts,
 // api/appointments/[id].ts, src/lib/dualVisitTypes.ts.
 const CMA_TELE_ALIASES = ['CMA + telemedicine', 'CMA + tele', 'CMA visit — paired with MD/NP telemedicine screening']
+// Includes 'RN IV fluids (outside referral)' so parents of referred
+// patients also get the "IV fluids request received" confirmation email.
+// DUAL_VISIT_TYPES still excludes the standalone — pair-partner routing
+// doesn't fire for it, but parent notifications do. Sara 2026-11-05.
+const IV_FLUIDS_ALIASES_FOR_PARENT_NOTIFY = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids', 'RN IV fluids (outside referral)']
 const IV_FLUIDS_ALIASES = ['In-home IV fluids', 'RN IV fluids', 'RN IV fluid visit — paired with MD/NP screening', 'RN in-home IV fluids administration', 'Video telemedicine screening for IV fluids']
 const DUAL_VISIT_TYPES = [...CMA_TELE_ALIASES, ...IV_FLUIDS_ALIASES]
 const isCmaTelePair  = (v?: string | null) => !!v && CMA_TELE_ALIASES.includes(v)
 const isIvFluidsPair = (v?: string | null) => !!v && IV_FLUIDS_ALIASES.includes(v)
+const isIvFluidsAny  = (v?: string | null) => !!v && IV_FLUIDS_ALIASES_FOR_PARENT_NOTIFY.includes(v)
 
 // Splits practice name into "first words" (white) + "last word" (accent color)
 function logo(accentColor: string): string {
@@ -1705,7 +1711,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, undefined)
 
-      if (isIvFluidsPair(visitType) && parentEmail) {
+      if (isIvFluidsAny(visitType) && parentEmail) {
         await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids parent email failed:', e))
       }
 
@@ -2795,7 +2801,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     // IV fluids gets an extra family email with preparation instructions
-    if (isIvFluidsPair(booking.visit_type) && family?.email) {
+    if (isIvFluidsAny(booking.visit_type) && family?.email) {
       await sendEmail(family.email, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids email failed:', e))
     }
 

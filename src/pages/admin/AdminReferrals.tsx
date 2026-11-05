@@ -54,6 +54,11 @@ export function AdminReferrals() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<'open' | 'all'>('open')
   const [broadcasting, setBroadcasting] = useState<string | null>(null)
+  // Per-referral toggle: does this outside-physician referral need a
+  // telemed screening? Default FALSE — outside MDs have already evaluated
+  // the patient before referring. When true, broadcast uses the paired
+  // RN+MD/NP visit type (current behavior). Sara 2026-11-05.
+  const [needsTelemed, setNeedsTelemed] = useState<Record<string, boolean>>({})
 
   const refresh = async () => {
     const [r, a] = await Promise.all([
@@ -81,7 +86,14 @@ export function AdminReferrals() {
 
   async function sendIvBroadcast(r: ReferralIn) {
     if (!provider) return
-    const ok = window.confirm(`Send an urgent IV RN broadcast for ${r.patient_first_name} ${r.patient_last_name}? Every active RN covering this zone will be alerted.`)
+    const telemedChecked = !!needsTelemed[r.id]
+    const visitType = telemedChecked
+      ? 'RN in-home IV fluids administration'          // paired w/ MD/NP tele screening
+      : 'RN IV fluids (outside referral)'              // standalone, no pair
+    const confirmMsg = telemedChecked
+      ? `Send an urgent IV RN broadcast for ${r.patient_first_name} ${r.patient_last_name}? This will create an RN visit paired with an MD/NP telemed screening.`
+      : `Send an urgent IV RN broadcast for ${r.patient_first_name} ${r.patient_last_name}? This creates a STANDALONE RN visit (no telemed screening — outside physician already evaluated).`
+    const ok = window.confirm(confirmMsg)
     if (!ok) return
     setBroadcasting(r.id)
     try {
@@ -96,14 +108,15 @@ export function AdminReferrals() {
         family_email:       r.parent_email,
         zone,
         state:              'NC',
-        visit_type:         'RN in-home IV fluids administration',
+        visit_type:         visitType,
         request_type:       'standard',
         complaint:          `IV fluids referral from ${r.referring_uc_name}. ${r.iv_intake?.symptoms ?? ''}`.trim(),
         is_urgent:          true,
         created_by:         provider.id,
         created_by_name:    provider.name ?? 'Admin',
       })
-      await updateReferral(r.id, { status: 'contacted', note: 'Sent urgent IV RN broadcast.' })
+      const noteSuffix = telemedChecked ? '(paired w/ telemed screening)' : '(standalone — no telemed)'
+      await updateReferral(r.id, { status: 'contacted', note: `Sent urgent IV RN broadcast ${noteSuffix}.` })
       await refresh()
       alert('IV RN broadcast sent.')
     } catch (e: any) {
@@ -239,8 +252,25 @@ export function AdminReferrals() {
                           ))}
                         </div>
                       )}
+                      <label className="flex items-center gap-2 text-[12px] text-[#1A1A2E] mb-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!needsTelemed[r.id]}
+                          onChange={e => setNeedsTelemed(prev => ({ ...prev, [r.id]: e.target.checked }))}
+                          className="w-3.5 h-3.5 accent-[#7F77DD] cursor-pointer"
+                        />
+                        <span>
+                          Needs MD/NP telemed screening too?{' '}
+                          <span className="text-[#666]">
+                            (default off — outside physician already evaluated)
+                          </span>
+                        </span>
+                      </label>
                       <Button variant="teal" size="sm" onClick={() => sendIvBroadcast(r)} loading={broadcasting === r.id} className="w-full">
-                        <Megaphone size={14} className="mr-1.5" /> Send urgent IV RN broadcast
+                        <Megaphone size={14} className="mr-1.5" />
+                        {needsTelemed[r.id]
+                          ? 'Send IV RN + MD/NP telemed broadcast'
+                          : 'Send standalone IV RN broadcast'}
                       </Button>
                     </div>
 

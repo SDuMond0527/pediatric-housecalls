@@ -1099,6 +1099,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           'In-home IV fluids – RN only':                     ['96360', 'CV11'],
           'RN IV fluids':                                    ['96360', 'CV11'],
           'RN IV fluid visit — paired with MD/NP screening': ['96360', 'CV11'],
+          'RN IV fluids (outside referral)':                 ['96360', 'CV11'],
         }
         const defaultCodes = DEFAULT_CPTS_FOR_VISIT_TYPE[appointment.visit_type] ?? []
         if (defaultCodes.length > 0) {
@@ -1122,6 +1123,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           'In-home IV fluids – RN only':                     [{ code: 'E86.0', name: 'Dehydration' }],
           'RN IV fluids':                                    [{ code: 'E86.0', name: 'Dehydration' }],
           'RN IV fluid visit — paired with MD/NP screening': [{ code: 'E86.0', name: 'Dehydration' }],
+          'RN IV fluids (outside referral)':                 [{ code: 'E86.0', name: 'Dehydration' }],
         }
         const defaultDx = DEFAULT_DX_FOR_VISIT_TYPE[appointment.visit_type] ?? []
         if (defaultDx.length > 0) {
