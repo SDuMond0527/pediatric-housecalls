@@ -1090,6 +1090,9 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           'In-home sick visit':              ['99349'],
           'Video telemedicine':              ['99213'],
           'CMA + telemedicine':              ['99213'],  // MD/NP paired side (CMA can't sign)
+          'CMA + tele':                      ['99213'],  // alias (see CMA_TELE_ALIASES)
+          'CMA visit — paired with MD/NP telemedicine screening': ['99213'],  // alias
+          'Video telemedicine screening for IV fluids':           ['99213'],  // MD/NP screening side of IV pair
           'In-home vaccine administration':  ['90471'],
           'RN in-home IV fluids administration':             ['96360', 'CV11'],
           'In-home IV fluids':                               ['96360', 'CV11'],
