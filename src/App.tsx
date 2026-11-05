@@ -161,8 +161,8 @@ export default function App() {
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
                 <Route path="statements" element={<FlagGuardedRoute flag="uses_self_pay_statements" redirectTo="/admin/analytics"><AdminStatements /></FlagGuardedRoute>} />
                 <Route path="marketing"  element={<AdminMarketing />} />
-                <Route path="referrals"  element={<AdminReferrals />} />
-                <Route path="agencies"   element={<AdminAgencies />} />
+                <Route path="referrals"  element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminReferrals /></FlagGuardedRoute>} />
+                <Route path="agencies"   element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminAgencies /></FlagGuardedRoute>} />
                 <Route path="stud-options" element={<FlagGuardedRoute flag="uses_ear_piercing" redirectTo="/admin/analytics"><AdminStudOptions /></FlagGuardedRoute>} />
                 <Route path="mockup-visit-prep" element={<MockupVisitPrep />} />
                 <Route path="pcps"       element={<AdminPcps />} />
