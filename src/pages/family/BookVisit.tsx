@@ -2038,10 +2038,26 @@ export function BookVisit() {
           title={isCpr ? 'Select visit type' : 'Who needs to be seen?'}
           sub={isCpr ? 'CPR classes are available to households anywhere — Melissa Jesse will come to you.' : 'Select all children being seen at this visit. You can book multiple siblings at once.'}>
 
-          {/* Visit type */}
+          {/* Visit type — canonical bookable list only. VISIT_TYPE_INFO
+              also contains alias entries (CMA + tele, RN IV fluids, etc.)
+              registered for backend lookups; parents should never see
+              those duplicates. Picker iterates an explicit allow-list
+              instead of the full map. Sara 2026-11-05. */}
           <p className="text-[12px] font-semibold text-[#555] uppercase tracking-wider mb-2">Visit type</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            {Object.entries(VISIT_TYPE_INFO).map(([type, info]) => {
+            {([
+              'In-home sick visit',
+              'Video telemedicine',
+              'Sports physical',
+              'CMA + telemedicine',
+              'Text visit',
+              'In-home IV fluids',
+              'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)',
+              'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)',
+            ] as const)
+              .filter(t => (VISIT_TYPE_INFO as any)[t])
+              .map(t => [t, (VISIT_TYPE_INFO as any)[t]] as const)
+              .map(([type, info]) => {
               const infoAny = info as any
               const displayName: string = infoAny.shortName ?? type
               const details: string[] | undefined = infoAny.details
