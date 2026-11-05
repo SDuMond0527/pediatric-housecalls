@@ -41,19 +41,23 @@ export function AdminPracticeSettings() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Load practices on mount
   useEffect(() => {
-    void getPractices().then(ps => {
-      setPractices(ps)
-      if (ps.length > 0) setSelectedId(ps[0].id)
-    }).catch(() => {})
+    void getPractices()
+      .then(ps => {
+        setPractices(ps)
+        if (ps.length > 0) setSelectedId(ps[0].id)
+      })
+      .catch(err => setLoadError(`Couldn't load practice list: ${err?.message ?? err}`))
   }, [])
 
   // Load settings when the selected practice changes
   useEffect(() => {
     if (!selectedId) return
     setLoading(true)
+    setLoadError(null)
     getAdminPracticeSettings(selectedId)
       .then(data => {
         const parsed = parsePracticeSettings(data.settings)
@@ -61,7 +65,12 @@ export function AdminPracticeSettings() {
         setDraft(parsed)
         setAudit(data.audit)
       })
-      .catch(() => {})
+      .catch(err => {
+        setSettings(null)
+        setDraft(null)
+        setAudit([])
+        setLoadError(`Couldn't load settings for this practice: ${err?.message ?? err}`)
+      })
       .finally(() => setLoading(false))
   }, [selectedId])
 
@@ -140,6 +149,13 @@ export function AdminPracticeSettings() {
       {loading && (
         <div className="flex items-center gap-2 text-[#666] text-[13px]">
           <Loader2 size={14} className="animate-spin" /> Loading settings…
+        </div>
+      )}
+
+      {!loading && loadError && (
+        <div className="rounded-md border border-[#FECACA] bg-[#FEE2E2] px-4 py-3 text-[12px] text-[#991B1B] leading-snug">
+          <strong>Couldn't load settings.</strong>
+          <div className="mt-1 font-mono text-[11px] text-[#7F1D1D] break-all whitespace-pre-wrap">{loadError}</div>
         </div>
       )}
 
