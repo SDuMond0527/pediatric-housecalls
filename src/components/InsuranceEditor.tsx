@@ -259,7 +259,7 @@ export function InsuranceEditor({
               <p className="text-[10px] text-[#1A1A2E] mt-1">Required for BCBS NC. 01=subscriber, 02=spouse, 03+=kids by DOB. Check EOB or call BCBS NC.</p>
               {looksLikeBcbsNc(value.insurance_provider) && !value.insurance_dependent_code?.trim() && (
                 <div className="mt-2 rounded-md border border-[#F59E0B] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E] leading-snug">
-                  <strong>Heads up:</strong> BCBS NC claims are rejected without the 2-digit dependent code. You can save without it, but your claim will be blocked from submission until it's added.
+                  <strong>Heads up:</strong> most BCBS NC plans need the 2-digit dependent code or the claim is rejected. You can save without it — if your plan uses one, we'll flag it when the claim goes out so our biller can follow up.
                 </div>
               )}
             </div>
