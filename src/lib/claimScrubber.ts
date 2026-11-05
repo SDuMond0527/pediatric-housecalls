@@ -33,6 +33,8 @@ export type ScrubbableClaim = {
   rendering_provider_npi: string | null
   payer_id: string | null
   payer_name: string | null
+  member_id?: string | null
+  insurance_dependent_code?: string | null
   child_id?: string | null
 }
 
@@ -162,6 +164,27 @@ export function scrubClaim(claim: ScrubbableClaim, ctx: ScrubContext = {}): Scru
 
   if (!claim.patient_dob) {
     errors.push({ code: 'NO_PATIENT_DOB', message: 'Patient date of birth is missing. Fix the chart record before submitting.' })
+  }
+
+  // BCBS NC requires a 2-digit dependent suffix. Claims submit as
+  // member_id[0..12] + dep. If the parent entered a 14-char ID the
+  // suffix is already baked in — but it's the SUBSCRIBER's suffix, not
+  // the child's, so we still want the explicit dep code stored. Block
+  // submit when the claim is routed to UPICO (BCBS NC payer ID) and
+  // isn't an Anthem variant (Anthem routes through UPICO but doesn't
+  // use the suffix — see api/claims/[id].ts memberId builder). This is
+  // the hard-gate half of the intake warning: parents aren't required
+  // to fill the field at family signup, but no BCBS NC claim can leave
+  // the building without it. Sara 2026-11-04.
+  const isBcbsNcClaim = claim.payer_id === 'UPICO' && !/anthem/i.test(claim.payer_name ?? '')
+  if (isBcbsNcClaim) {
+    const dep = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '')
+    if (dep.length !== 2) {
+      errors.push({
+        code: 'MISSING_BCBS_DEP_CODE',
+        message: 'BCBS NC requires a 2-digit dependent code (01=subscriber, 02=spouse, 03+=kids by DOB). Add it to this patient\'s insurance before submitting — the claim will reject without it.',
+      })
+    }
   }
 
   // Fat-finger catcher: any line with charge × units == 0.

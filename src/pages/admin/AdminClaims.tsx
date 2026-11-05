@@ -651,6 +651,8 @@ export function AdminClaims() {
         rendering_provider_npi: claim.rendering_provider_npi ?? null,
         payer_id: claim.payer_id ?? null,
         payer_name: claim.payer_name ?? null,
+        member_id: claim.member_id ?? null,
+        insurance_dependent_code: claim.insurance_dependent_code ?? null,
         child_id: claim.child_id ?? null,
       },
       {

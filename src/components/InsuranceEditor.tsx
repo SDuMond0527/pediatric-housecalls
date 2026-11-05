@@ -49,6 +49,16 @@ export function looksLikeBcbs(providerValue?: string | null): boolean {
   return v.includes('bcbs') || v.includes('blue cross')
 }
 
+/** Narrower check: BCBS NC specifically (NOT Anthem BCBS of Virginia). The 2-digit
+ *  dependent suffix is a BCBS-NC-only format rule; VA has its own payer ID (VABLS)
+ *  and does not use it. Used to decide when to WARN parents at intake for a
+ *  missing dep code — the scrubber blocks claim submit separately. */
+export function looksLikeBcbsNc(providerValue?: string | null): boolean {
+  const v = String(providerValue || '').toLowerCase()
+  if (/anthem/.test(v) && /\b(va|virginia)\b/.test(v)) return false
+  return v.includes('bcbs') || v.includes('blue cross') || /anthem/.test(v)
+}
+
 // Canonical insurance provider dropdown — matches the AR aging report
 // and the Stedi payer resolver (api/claims/index.ts). Entering a canonical
 // name here means every downstream (payer_id lookup, claim submit,
@@ -247,6 +257,11 @@ export function InsuranceEditor({
                 value={value.insurance_dependent_code}
                 onChange={e => onChange({ insurance_dependent_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
               <p className="text-[10px] text-[#1A1A2E] mt-1">Required for BCBS NC. 01=subscriber, 02=spouse, 03+=kids by DOB. Check EOB or call BCBS NC.</p>
+              {looksLikeBcbsNc(value.insurance_provider) && !value.insurance_dependent_code?.trim() && (
+                <div className="mt-2 rounded-md border border-[#F59E0B] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E] leading-snug">
+                  <strong>Heads up:</strong> BCBS NC claims are rejected without the 2-digit dependent code. You can save without it, but your claim will be blocked from submission until it's added.
+                </div>
+              )}
             </div>
           )}
 
