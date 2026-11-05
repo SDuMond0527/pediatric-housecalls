@@ -2,6 +2,8 @@ import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
+import type { PracticeSettings } from '../../lib/practiceSettings'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
 import { getEraCount, getPendingWriteOffCount } from '../../lib/api'
@@ -9,25 +11,33 @@ import { dailyAffirmation } from '../../lib/affirmations'
 import { GlobalPatientSearch } from '../GlobalPatientSearch'
 import { ProviderReplyBell } from '../ProviderReplyBell'
 
-const NAV = [
+type NavItem = {
+  to: string
+  icon: typeof CalendarDays
+  label: string
+  eraBadge?: boolean
+  flag?: keyof PracticeSettings
+}
+
+const NAV: NavItem[] = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
   { to: '/admin/reports',    icon: FileBarChart,  label: 'Reports' },
   { to: '/admin/financial-reports', icon: DollarSign, label: 'Financial' },
   { to: '/admin/reports-schedule',  icon: FileBarChart, label: "Bookkeeping to-do's" },
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
-  { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist' },
-  { to: '/admin/referrals',  icon: Inbox,         label: 'Referral inbox' },
-  { to: '/admin/agencies',   icon: Building2,     label: 'Referral partners' },
-  { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts' },
+  { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist',       flag: 'uses_waitlist' },
+  { to: '/admin/referrals',  icon: Inbox,         label: 'Referral inbox', flag: 'uses_booking_requests' },
+  { to: '/admin/agencies',   icon: Building2,     label: 'Referral partners', flag: 'uses_booking_requests' },
+  { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts',     flag: 'uses_broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
-  { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true },
-  { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees' },
-  { to: '/admin/statements',  icon: FileText,      label: 'Statements' },
+  { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true, flag: 'accepts_insurance' },
+  { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees', flag: 'uses_convenience_fees' },
+  { to: '/admin/statements',  icon: FileText,      label: 'Statements',     flag: 'uses_self_pay_statements' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },
   { to: '/admin/settings',      icon: Settings,      label: 'Settings' },
-  { to: '/admin/stud-options',  icon: Gem,           label: 'Stud options' },
+  { to: '/admin/stud-options',  icon: Gem,           label: 'Stud options', flag: 'uses_ear_piercing' },
   { to: '/admin/pcps',          icon: BookOpen,      label: 'PCP Directory' },
   { to: '/admin/specialists',   icon: Building2,     label: 'Specialists' },
   { to: '/admin/handbook',      icon: Library,       label: 'All things PHC' },
@@ -37,6 +47,8 @@ const NAV = [
 
 function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
+  const { settings } = useSettings()
+  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
       <div className="px-5 py-5 border-b border-white/8 flex items-center justify-between">
@@ -62,7 +74,7 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label, eraBadge }) => (
+        {visibleNav.map(({ to, icon: Icon, label, eraBadge }) => (
           <NavLink key={to} to={to} onClick={onNav}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent

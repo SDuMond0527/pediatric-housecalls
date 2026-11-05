@@ -3,6 +3,7 @@ import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports, getSiblingPromptSummary } from '../../lib/api'
+import { FlagGate } from '../../contexts/PracticeSettingsContext'
 import { computeProviderPay, PAIRED_ROLE_PAY, CPR_INSTRUCTOR_PAY, isCprClassVisitType } from '../../lib/payrollRules'
 
 interface ApptRow {
@@ -781,6 +782,7 @@ export function AdminReports() {
         )}
 
         {/* Payroll report */}
+        <FlagGate flag="uses_payroll_module">
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           {selectedProviderId && selectedProvider ? (
             // ────────── Provider detail view ──────────
@@ -1013,6 +1015,7 @@ export function AdminReports() {
             </>
           )}
         </div>
+        </FlagGate>
 
         {/* Monthly bonus leaderboard */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">

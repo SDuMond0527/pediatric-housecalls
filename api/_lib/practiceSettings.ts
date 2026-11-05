@@ -13,6 +13,7 @@
 // behavior instantly if Phase 2 ever ships a regression. Sara 2026-11-04.
 
 import { neon } from '@neondatabase/serverless'
+import type { VercelResponse } from '@vercel/node'
 import {
   parsePracticeSettings,
   practiceSettingsSchema,
@@ -64,4 +65,57 @@ export function invalidatePracticeSettings(practiceId: string): void {
  */
 export function clearPracticeSettingsCache(): void {
   cache.clear()
+}
+
+/**
+ * Look up the practice_id tied to a Cognito sub, then load that
+ * practice's settings. Centralized here so every API route uses the
+ * same lookup path.
+ *
+ * Returns null if the sub doesn't map to a provider (caller should
+ * 403 in that case).
+ */
+export async function getSettingsForSub(sub: string): Promise<{
+  practiceId: string
+  settings: PracticeSettings
+} | null> {
+  const sql = neon(process.env.DATABASE_URL!)
+  const [provider] = await sql`
+    SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!provider) return null
+  const practiceId = provider.practice_id as string
+  const settings = await getPracticeSettings(practiceId)
+  return { practiceId, settings }
+}
+
+/**
+ * Server-side flag guard. Call at the top of any API route whose
+ * entire operation is gated on one flag. When the flag is off for
+ * this user's practice, the route short-circuits with a 403 and
+ * a descriptive error.
+ *
+ *   const guarded = await requireFlag(sub, 'uses_cpr_classes', res)
+ *   if (!guarded) return
+ *
+ * Returns the loaded settings object so the caller doesn't need a
+ * second load for additional checks.
+ */
+export async function requireFlag(
+  sub: string,
+  flagKey: keyof PracticeSettings,
+  res: VercelResponse,
+): Promise<{ practiceId: string; settings: PracticeSettings } | null> {
+  const loaded = await getSettingsForSub(sub)
+  if (!loaded) {
+    res.status(403).json({ error: 'Provider not found' })
+    return null
+  }
+  if (!loaded.settings[flagKey]) {
+    res.status(403).json({
+      error: `This feature (${String(flagKey)}) is not enabled for your practice.`,
+      flag: flagKey,
+    })
+    return null
+  }
+  return loaded
 }

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { FamilyAuthProvider } from './contexts/FamilyAuthContext'
-import { PracticeSettingsProvider } from './contexts/PracticeSettingsContext'
+import { PracticeSettingsProvider, FlagGuardedRoute } from './contexts/PracticeSettingsContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { FamilyLayout } from './components/layout/FamilyLayout'
@@ -132,11 +132,11 @@ export default function App() {
                 <Route path="patients"       element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="availability"   element={<Availability />} />
-                <Route path="broadcasts"     element={<Broadcasts />} />
+                <Route path="broadcasts"     element={<FlagGuardedRoute flag="uses_broadcasts"><Broadcasts /></FlagGuardedRoute>} />
                 <Route path="waitlist"       element={<Waitlist />} />
                 <Route path="shifts"         element={<Shifts />} />
                 <Route path="settings"       element={<Settings />} />
-                <Route path="cpr-requests"   element={<CprRequests />} />
+                <Route path="cpr-requests"   element={<FlagGuardedRoute flag="uses_cpr_classes"><CprRequests /></FlagGuardedRoute>} />
                 <Route path="handbook"       element={<Handbook />} />
                 <Route path="claim-question/:claimId" element={<ClaimQuestion />} />
               </Route>
@@ -147,7 +147,7 @@ export default function App() {
                 <Route path="bookings"   element={<AdminBookings />} />
                 <Route path="schedule"   element={<AdminSchedule />} />
                 <Route path="waitlist"   element={<AdminWaitlist />} />
-                <Route path="broadcasts" element={<AdminBroadcasts />} />
+                <Route path="broadcasts" element={<FlagGuardedRoute flag="uses_broadcasts" redirectTo="/admin/analytics"><AdminBroadcasts /></FlagGuardedRoute>} />
                 <Route path="claims"     element={<AdminClaims />} />
                 <Route path="convenience-fees" element={<AdminConvenienceFees />} />
                 <Route path="patients"        element={<Patients />} />
@@ -163,7 +163,7 @@ export default function App() {
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<AdminReferrals />} />
                 <Route path="agencies"   element={<AdminAgencies />} />
-                <Route path="stud-options" element={<AdminStudOptions />} />
+                <Route path="stud-options" element={<FlagGuardedRoute flag="uses_ear_piercing" redirectTo="/admin/analytics"><AdminStudOptions /></FlagGuardedRoute>} />
                 <Route path="mockup-visit-prep" element={<MockupVisitPrep />} />
                 <Route path="pcps"       element={<AdminPcps />} />
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />

@@ -1,16 +1,26 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { PRACTICE_NAME } from '../../lib/practice'
+import type { PracticeSettings } from '../../lib/practiceSettings'
 
-const NAV = [
+type NavItem = {
+  to: string
+  icon: typeof CalendarDays
+  label: string
+  badge?: boolean
+  flag?: keyof PracticeSettings  // when set, nav item hides if flag is off
+}
+
+const NAV: NavItem[] = [
   { to: '/today',        icon: CalendarDays,  label: "Today's schedule" },
   { to: '/week',         icon: LayoutGrid,    label: 'Week view' },
   { to: '/patients',     icon: Users,         label: 'Patients' },
   { to: '/availability', icon: Clock,         label: 'Availability' },
-  { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true },
-  { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist' },
-  { to: '/cpr-requests', icon: HeartPulse,    label: 'CPR requests' },
+  { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true, flag: 'uses_broadcasts' },
+  { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist',                flag: 'uses_waitlist' },
+  { to: '/cpr-requests', icon: HeartPulse,    label: 'CPR requests',            flag: 'uses_cpr_classes' },
   { to: '/shifts',       icon: CalendarClock, label: 'On-call shifts' },
   { to: '/handbook',     icon: BookOpen,      label: 'All things PHC' },
   { to: '/settings',     icon: Settings,      label: 'Settings' },
@@ -18,8 +28,11 @@ const NAV = [
 
 export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
   const { provider, signOut } = useAuth()
+  const { settings } = useSettings()
   const navigate = useNavigate()
   if (!provider) return null
+
+  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
 
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col fixed left-0 top-0 z-40">
@@ -40,7 +53,7 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5">
-        {NAV.map(({ to, icon: Icon, label, badge }) => (
+        {visibleNav.map(({ to, icon: Icon, label, badge }) => (
           <NavLink key={to} to={to}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent

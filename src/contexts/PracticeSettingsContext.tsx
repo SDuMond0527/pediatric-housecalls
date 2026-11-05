@@ -9,6 +9,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Navigate } from 'react-router-dom'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { parsePracticeSettings, type PracticeSettings } from '../lib/practiceSettings'
 
@@ -72,4 +73,53 @@ export function PracticeSettingsProvider({ children }: { children: ReactNode }) 
 
 export function useSettings(): PracticeSettingsContextType {
   return useContext(PracticeSettingsContext)
+}
+
+// ─── Flag primitives (Phase 2) ─────────────────────────────────────────
+// Three small helpers the chunks reuse. Each respects the "while loading
+// settings, return PHC defaults" rule — nothing hides while we're still
+// figuring out who the user is.
+
+/** Get the current value of a single flag by key. */
+export function useFlag<K extends keyof PracticeSettings>(key: K): PracticeSettings[K] {
+  const { settings } = useSettings()
+  return settings[key]
+}
+
+/** Renders children only when the flag is true. Simplest form:
+ *  <FlagGate flag="uses_cpr_classes"><CPRNavItem /></FlagGate>
+ *  Also accepts a `fallback` prop to render something else when off.
+ */
+export function FlagGate({
+  flag,
+  children,
+  fallback = null,
+}: {
+  flag: keyof PracticeSettings
+  children: ReactNode
+  fallback?: ReactNode
+}) {
+  const value = useFlag(flag)
+  return value ? <>{children}</> : <>{fallback}</>
+}
+
+/** Route-level guard. When the flag is off, redirects to `redirectTo`
+ *  (default "/today"). Prevents users from landing on a page for a
+ *  feature their practice has disabled by typing the URL directly.
+ *  While settings load, children render (= PHC defaults) so there's no
+ *  flash-of-empty for a legit PHC user during auth bootstrap.
+ */
+export function FlagGuardedRoute({
+  flag,
+  children,
+  redirectTo = '/today',
+}: {
+  flag: keyof PracticeSettings
+  children: ReactNode
+  redirectTo?: string
+}) {
+  const { settings, loading } = useSettings()
+  if (loading) return <>{children}</>
+  if (!settings[flag]) return <Navigate to={redirectTo} replace />
+  return <>{children}</>
 }
