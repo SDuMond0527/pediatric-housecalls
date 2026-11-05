@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { getPracticeSettings } from '../_lib/practiceSettings'
 
 // Neon's JS driver returns `date` and `timestamptz` columns as JS Date objects.
 // `String(dateObj).slice(0, 10)` returns "Fri Oct 09", which Postgres can't
@@ -156,10 +157,17 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
     '87812': { code: 'SelfFluC', description: 'Self-pay rapid flu/COVID test',                   charge_amount: 35 },
     '81002': { code: 'SLFUrine', description: 'Self-pay urine dipstick and lab handling fee',    charge_amount: 10 },
   }
+  // Respect the practice's flag — some practices don't need this
+  // policy-specific swap. PHC has it ON; Sarah Cash-style practices
+  // (cash-pay, no Aetna) will have it OFF. Loaded here instead of
+  // threading through every caller. Sara 2026-11-05.
+  const settings = await getPracticeSettings(practiceId)
+  const aetnaSwapEnabled = !!settings.aetna_poc_swap_enabled
+
   const isAetna = String(child?.insurance_provider ?? '').toLowerCase().trim() === 'aetna'
   const aetnaSwapRecords: Array<{ from: string; to: string }> = []
   let swappedCpts = rawCptCodes
-  if (isAetna && rawCptCodes.length > 0) {
+  if (aetnaSwapEnabled && isAetna && rawCptCodes.length > 0) {
     // Idempotency guard: if the self-pay equivalent is already in the
     // list (biller manually swapped on a prior review), skip. Prevents
     // double-ups on re-signed notes with existing editable claims.

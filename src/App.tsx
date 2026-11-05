@@ -148,8 +148,8 @@ export default function App() {
                 <Route path="schedule"   element={<AdminSchedule />} />
                 <Route path="waitlist"   element={<AdminWaitlist />} />
                 <Route path="broadcasts" element={<FlagGuardedRoute flag="uses_broadcasts" redirectTo="/admin/analytics"><AdminBroadcasts /></FlagGuardedRoute>} />
-                <Route path="claims"     element={<AdminClaims />} />
-                <Route path="convenience-fees" element={<AdminConvenienceFees />} />
+                <Route path="claims"     element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminClaims /></FlagGuardedRoute>} />
+                <Route path="convenience-fees" element={<FlagGuardedRoute flag="uses_convenience_fees" redirectTo="/admin/analytics"><AdminConvenienceFees /></FlagGuardedRoute>} />
                 <Route path="patients"        element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />
                 <Route path="providers"      element={<AdminProviders />} />
@@ -159,7 +159,7 @@ export default function App() {
                 <Route path="settings"   element={<Settings />} />
                 <Route path="audit-log"    element={<AdminAuditLog />} />
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
-                <Route path="statements" element={<AdminStatements />} />
+                <Route path="statements" element={<FlagGuardedRoute flag="uses_self_pay_statements" redirectTo="/admin/analytics"><AdminStatements /></FlagGuardedRoute>} />
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<AdminReferrals />} />
                 <Route path="agencies"   element={<AdminAgencies />} />

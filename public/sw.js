@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-05-phase-2b-clinical-flags
+// Service worker — deliberate passthrough. Version: 2026-11-05-phase-2c-billing-flags
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
