@@ -10,7 +10,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
-import { getPracticeSettings } from '../_lib/practiceSettings'
+import { getPracticeSettings } from '../../src/lib/practiceSettingsServer'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')

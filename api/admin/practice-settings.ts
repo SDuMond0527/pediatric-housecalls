@@ -16,7 +16,7 @@ import {
   parsePracticeSettings,
   type PracticeSettings,
 } from '../../src/lib/practiceSettings'
-import { invalidatePracticeSettings } from '../_lib/practiceSettings'
+import { invalidatePracticeSettings } from '../../src/lib/practiceSettingsServer'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')

@@ -1,16 +1,16 @@
-// Server-side helper to load a practice's settings blob, with an
-// in-memory cache so the DB isn't hit on every request.
+// Server-only helpers for loading + caching practice settings.
 //
-// Lives at api/_lib/ (underscore prefix keeps Vercel from routing to
-// it — only files directly under api/ or api/<route>/ become endpoints).
+// Lives at src/lib/ instead of api/_lib/ because Vercel's serverless
+// function bundler does NOT follow imports into underscore-prefixed
+// folders. Files under src/ ARE followed by Vercel's node-file-trace,
+// so an api/ route importing from here gets the file packed into its
+// deployment bundle. Sara + Claude 2026-11-05 (post-mortem of the
+// Phase 1 Settings tab 500ing in prod).
 //
-// Phase 1: this helper EXISTS but is only called by the new super-admin
-// Settings tab (to render current values) and the audit endpoint. No
-// existing PHC feature calls it yet. That wiring is Phase 2.
-//
-// Kill switch: FORCE_PHC_LEGACY=true in env → every call returns the
-// schema-default blob (all PHC flags ON). Lets us revert to pre-Phase-2
-// behavior instantly if Phase 2 ever ships a regression. Sara 2026-11-04.
+// This file imports `neon` which is a node-runtime module. Client code
+// must NEVER import from here — only from src/lib/practiceSettings.ts
+// which is client-safe. Vite tree-shaking does not save us if a client
+// file transitively pulls `neon` in.
 
 import { neon } from '@neondatabase/serverless'
 import type { VercelResponse } from '@vercel/node'
@@ -18,7 +18,7 @@ import {
   parsePracticeSettings,
   practiceSettingsSchema,
   type PracticeSettings,
-} from '../../src/lib/practiceSettings'
+} from './practiceSettings'
 
 const CACHE_TTL_MS = 5 * 60 * 1000  // 5 min
 
