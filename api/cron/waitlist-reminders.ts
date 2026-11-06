@@ -58,12 +58,12 @@ async function sendSMS(to: string, body: string): Promise<void> {
   if (!r.ok) console.error('[waitlist-reminders] SMS error:', await r.text())
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+async function sendEmail(to: string, subject: string, html: string, fromName: string = PRACTICE_NAME): Promise<void> {
   if (!RESEND_KEY) { console.error('[waitlist-reminders] no RESEND_API_KEY'); return }
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: `${PRACTICE_NAME} <${FROM_EMAIL}>`, to, subject, html }),
+    body: JSON.stringify({ from: `${fromName} <${FROM_EMAIL}>`, to, subject, html }),
   })
   if (!r.ok) console.error('[waitlist-reminders] Email error:', await r.text())
 }
@@ -89,6 +89,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const now = new Date()
 
   // ── 1. Reminder pass ────────────────────────────────────────────────────────
+  // Joins practices so each reminder uses that family's practice name
+  // in the message instead of the env-var fallback. Fallback still
+  // applies if the join returns NULL (orphan family, legacy row).
+  // Sara 2026-11-06.
   const entries = await sql`
     SELECT
       we.id,
@@ -99,9 +103,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       we.created_at,
       fp.email  AS family_email,
       fp.phone  AS family_phone,
-      COALESCE(fp.display_name, (SELECT first_name || ' ' || last_name FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name
+      COALESCE(fp.display_name, (SELECT first_name || ' ' || last_name FROM children WHERE family_id = fp.id LIMIT 1), fp.email) AS family_name,
+      p.name    AS practice_name
     FROM waitlist_entries we
     LEFT JOIN family_profiles fp ON fp.id = we.family_id
+    LEFT JOIN practices p        ON p.id = fp.practice_id
     WHERE we.status = 'waiting'
       AND we.reminder_sent_at IS NULL
       AND we.created_at > NOW() - INTERVAL '48 hours'
@@ -125,6 +131,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const phone = (String(entry.family_phone || '') || noteMap['Phone'] || '').trim()
       const email = (String(entry.family_email || '') || noteMap['Email'] || '').trim()
       const patientLabel = noteMap['Patient'] || String(entry.family_name || 'your child')
+      // Per-practice name from the join; fall back to env default if the
+      // family has no practice assigned (shouldn't happen for post-3B
+      // writes but defensive).
+      const practiceName = String(entry.practice_name || PRACTICE_NAME).trim()
 
       if (!phone && !email) {
         console.error('[waitlist-reminders] no contact for entry', entry.id, '— skipping')
@@ -141,24 +151,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const keepUrl   = `${PORTAL_URL}/api/waitlist/respond?t=${token}&a=keep`
       const removeUrl = `${PORTAL_URL}/api/waitlist/respond?t=${token}&a=remove`
 
-      const bodyText = `Hi! We've been trying hard to find one of our ${PRACTICE_NAME} providers who might be able to add your child to their schedule today, but so far we have been unsuccessful. Let us know if you would like to continue to remain on the waitlist today or if you'd like to remove your child's name from the waitlist. If you choose to remain on the waitlist, we'll keep doing our best to find a provider for you. If we get to the end of the day today and still haven't found anyone to see your child, we will remove you from our waitlist so that you may make other plans to have your child seen elsewhere.
+      const bodyText = `Hi! We've been trying hard to find one of our ${practiceName} providers who might be able to add your child to their schedule today, but so far we have been unsuccessful. Let us know if you would like to continue to remain on the waitlist today or if you'd like to remove your child's name from the waitlist. If you choose to remain on the waitlist, we'll keep doing our best to find a provider for you. If we get to the end of the day today and still haven't found anyone to see your child, we will remove you from our waitlist so that you may make other plans to have your child seen elsewhere.
 
 Keep us on the waitlist: ${keepUrl}
 Remove us from the waitlist: ${removeUrl}`
 
       const emailHtml = `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#1A1A2E;max-width:600px;margin:0 auto;padding:20px;">
-<p style="font-size:16px;line-height:1.5;">Hi! We've been trying hard to find one of our ${PRACTICE_NAME} providers who might be able to add ${patientLabel} to their schedule today, but so far we have been unsuccessful.</p>
+<p style="font-size:16px;line-height:1.5;">Hi! We've been trying hard to find one of our ${practiceName} providers who might be able to add ${patientLabel} to their schedule today, but so far we have been unsuccessful.</p>
 <p style="font-size:16px;line-height:1.5;">Let us know if you would like to continue to remain on the waitlist today or if you'd like to remove your child's name from the waitlist. If you choose to remain on the waitlist, we'll keep doing our best to find a provider for you.</p>
 <p style="font-size:16px;line-height:1.5;">If we get to the end of the day today and still haven't found anyone to see your child, we will remove you from our waitlist so that you may make other plans to have your child seen elsewhere.</p>
 <div style="margin:32px 0;text-align:center;">
   <a href="${keepUrl}" style="display:inline-block;padding:14px 28px;margin:0 8px 12px;background:#1D9E75;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Keep us on the waitlist</a>
   <a href="${removeUrl}" style="display:inline-block;padding:14px 28px;margin:0 8px 12px;background:#DC2626;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Remove us from the waitlist</a>
 </div>
-<p style="font-size:13px;color:#666;">— ${PRACTICE_NAME}</p>
+<p style="font-size:13px;color:#666;">— ${practiceName}</p>
 </body></html>`
 
       if (phone) await sendSMS(phone, bodyText).catch(e => console.error('[waitlist-reminders] sms fail', entry.id, e))
-      if (email) await sendEmail(email, `${PRACTICE_NAME} — Are you still hoping to be seen today?`, emailHtml).catch(e => console.error('[waitlist-reminders] email fail', entry.id, e))
+      if (email) await sendEmail(email, `${practiceName} — Are you still hoping to be seen today?`, emailHtml, practiceName).catch(e => console.error('[waitlist-reminders] email fail', entry.id, e))
 
       console.error('[waitlist-reminders] reminded', entry.id, 'phone:', !!phone, 'email:', !!email)
       remindersSent++
