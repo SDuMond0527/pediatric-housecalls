@@ -61,9 +61,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let practiceId: string
   if (auth.isFamily) {
+    // Phase 3B: practice_id comes strictly from the authed family's
+    // profile — no more env-var fallback. Every family_profiles row in
+    // prod has practice_id set (verified 2026-11-06), so the fallback
+    // was dead code that would have cross-practice-leaked if it ever
+    // fired. The explicit 403 below makes a future NULL loudly visible
+    // instead of silently defaulting to the env practice.
     const rows = await sql`SELECT id, practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
     if (!rows.length) return res.status(403).json({ error: 'Family not found' })
-    practiceId = (rows[0].practice_id || process.env.VITE_PRACTICE_ID) as string
+    if (!rows[0].practice_id) return res.status(403).json({ error: 'Family not assigned to a practice' })
+    practiceId = rows[0].practice_id as string
 
     if (req.method === 'GET') {
       const { family_ids, ids, lookup_first, lookup_last, lookup_dob } = req.query as Record<string, string>

@@ -89,7 +89,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // calls and old client bundles.
       const stateCode = String(state ?? '').trim().toUpperCase()
       if (stateCode) {
-        const resolvedPracticeId = String(practice_id ?? process.env.VITE_PRACTICE_ID ?? '').trim()
+        // Phase 3B: prefer the existing family row's practice_id when
+        // available (for returning families). Fall back to the body's
+        // practice_id (sent by the client bundle at first signup), then
+        // env var (last-ditch). Returning families cannot be yanked to
+        // another practice by a stale client bundle.
+        const [existingFamily] = await sql`SELECT practice_id FROM family_profiles WHERE cognito_sub = ${sub} LIMIT 1`
+        const resolvedPracticeId = String(existingFamily?.practice_id ?? practice_id ?? process.env.VITE_PRACTICE_ID ?? '').trim()
         if (resolvedPracticeId) {
           const zoneStates = await sql`
             SELECT DISTINCT state FROM practice_zones
