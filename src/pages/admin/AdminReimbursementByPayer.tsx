@@ -27,6 +27,10 @@ function money(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
+// Distinct palette for the payer-mix bar. Repeats after 10 payers;
+// in practice PHC has 8-10 payer buckets so no reuse within one report.
+const MIX_COLORS = ['#7F77DD', '#1D9E75', '#EF9F27', '#378ADD', '#D4537E', '#C0392B', '#0F6E56', '#8B5CF6', '#F97316', '#0EA5E9']
+
 function toCsv(data: ReimbursementData): string {
   const header = ['Visit type', ...data.payers, 'Row total (avg)', 'Row total (n)']
   const rows: string[][] = [header]
@@ -146,6 +150,40 @@ export function AdminReimbursementByPayer() {
               <span className="font-medium">{money(data.grand.total_allowable)}</span>
             </div>
           </div>
+
+          {/* Payer mix — horizontal stacked bar with legend. Ordered by
+              total revenue descending so the biggest slice is first. */}
+          {(() => {
+            const mix = data.payers
+              .map(p => ({ payer: p, total: data.payer_totals[p]?.total_allowable ?? 0, n: data.payer_totals[p]?.n ?? 0 }))
+              .sort((a, b) => b.total - a.total)
+              .map(p => ({ ...p, pct: data.grand.total_allowable ? (p.total / data.grand.total_allowable) * 100 : 0 }))
+            if (mix.length === 0 || data.grand.total_allowable === 0) return null
+            return (
+              <div className="mb-5">
+                <div className="text-[11px] uppercase tracking-wide text-[#1A1A2E]/60 mb-1.5">Payer mix (% of total allowable)</div>
+                <div className="flex h-7 rounded-md overflow-hidden border border-[#E8E8E4] bg-white">
+                  {mix.map((p, i) => (
+                    <div
+                      key={p.payer}
+                      style={{ width: `${p.pct}%`, background: MIX_COLORS[i % MIX_COLORS.length] }}
+                      title={`${p.payer}: ${money(p.total)} · ${p.pct.toFixed(1)}% · ${p.n} claims`}
+                      className="h-full first:rounded-l-md last:rounded-r-md"
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 text-[11px] text-[#1A1A2E]">
+                  {mix.map((p, i) => (
+                    <div key={p.payer} className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: MIX_COLORS[i % MIX_COLORS.length] }} />
+                      <span className="font-medium">{p.payer}</span>
+                      <span className="text-[#1A1A2E]/60 tabular-nums">{p.pct.toFixed(1)}% · {money(p.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Pivot table */}
           {data.visit_types.length === 0 ? (
