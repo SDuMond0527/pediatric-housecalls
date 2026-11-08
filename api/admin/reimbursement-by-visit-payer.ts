@@ -82,17 +82,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ELSE TRIM(cl.payer_name)
       END AS payer_bucket,
       COUNT(*)::int AS n_claims,
+      -- Allowable = insurance paid + patient responsibility.
+      -- Equivalent to amount_billed - contractual_adjustment for clean
+      -- ERAs, but correct even when the ERA contains "other adjustments"
+      -- (denials coded CO/50, CO/197, etc.) that are neither
+      -- contractual-write-off nor patient-responsibility. Sara 2026-11-08.
       ROUND(
         AVG(
-          COALESCE(cl.amount_billed_era, cl.total_charge, 0)::numeric
-          - COALESCE(cl.contractual_adjustment_era, 0)::numeric
+          COALESCE(cl.insurance_payment_era,   0)::numeric
+          + COALESCE(cl.patient_deductible_era,  0)::numeric
+          + COALESCE(cl.patient_coinsurance_era, 0)::numeric
+          + COALESCE(cl.patient_copay_era,       0)::numeric
+          + COALESCE(cl.patient_non_covered_era, 0)::numeric
         )::numeric,
         2
       )::float AS avg_allowable,
       ROUND(
         SUM(
-          COALESCE(cl.amount_billed_era, cl.total_charge, 0)::numeric
-          - COALESCE(cl.contractual_adjustment_era, 0)::numeric
+          COALESCE(cl.insurance_payment_era,   0)::numeric
+          + COALESCE(cl.patient_deductible_era,  0)::numeric
+          + COALESCE(cl.patient_coinsurance_era, 0)::numeric
+          + COALESCE(cl.patient_copay_era,       0)::numeric
+          + COALESCE(cl.patient_non_covered_era, 0)::numeric
         )::numeric,
         2
       )::float AS total_allowable
