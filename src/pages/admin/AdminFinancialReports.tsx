@@ -9,6 +9,7 @@ import { PatientStatementModal } from './PatientStatementModal'
 import { ClaimReviewModal } from './ClaimReviewModal'
 import { AdminClaimsPipeline } from './AdminClaimsPipeline'
 import { AdminCollectionsByMonth } from './AdminCollectionsByMonth'
+import { AdminReimbursementByPayer } from './AdminReimbursementByPayer'
 
 type DrillTarget = {
   type: 'insurance' | 'patient'
@@ -82,7 +83,7 @@ function downloadCsv(filename: string, csv: string) {
 export function AdminFinancialReports() {
   const today = new Date()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'reports' | 'pipeline' | 'collections'>('reports')
+  const [tab, setTab] = useState<'reports' | 'pipeline' | 'collections' | 'reimbursement'>('reports')
   const [start, setStart] = useState(format(startOfMonth(subMonths(today, 2)), 'yyyy-MM-dd'))
   const [end, setEnd]     = useState(format(today, 'yyyy-MM-dd'))
   const [data, setData]   = useState<ReportsData | null>(null)
@@ -126,10 +127,15 @@ export function AdminFinancialReports() {
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'collections' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
           Collections by visit month
         </button>
+        <button onClick={() => setTab('reimbursement')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'reimbursement' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
+          Reimbursement by payer
+        </button>
       </div>
 
       {tab === 'pipeline' && <AdminClaimsPipeline />}
       {tab === 'collections' && <AdminCollectionsByMonth />}
+      {tab === 'reimbursement' && <AdminReimbursementByPayer />}
       {tab === 'reports' && <>
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
