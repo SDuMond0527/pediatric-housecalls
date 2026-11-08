@@ -101,7 +101,7 @@ export function AdminReimbursementByPayer() {
         <div>
           <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">Reimbursement by payer</h1>
           <p className="text-[12px] text-[#1A1A2E]/70 mt-0.5 max-w-2xl">
-            Average allowable per visit type, broken down by payer. "Allowable" = what the payer contractually owes us (insurance payment + patient responsibility). Self-pay excluded. Only ERAs received are counted.
+            Average allowable per visit type, broken down by payer. "Allowable" = insurance payment + patient responsibility (what we will collect in total). Self-pay excluded. Claims with ERA received but <strong>zero allowable</strong> (pure denials / pending reworks) excluded so one rejection doesn't pull the average down.
           </p>
         </div>
         <div className="flex items-end gap-2 flex-wrap">

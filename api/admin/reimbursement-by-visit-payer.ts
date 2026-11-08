@@ -115,6 +115,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       AND cl.service_date      BETWEEN ${start}::date AND ${end}::date
       AND cl.payer_id          <> 'PP'               -- exclude self-pay
       AND cl.payer_name        IS NOT NULL
+      -- Exclude claims where the ERA came back with zero money on both
+      -- sides (pure denial or pending-rework). Deductible-only cases
+      -- (ins=$0, patient>$0) stay in — that's still allowable money
+      -- the practice will collect. Sara 2026-11-08.
+      AND (
+        COALESCE(cl.insurance_payment_era,   0)
+        + COALESCE(cl.patient_deductible_era,  0)
+        + COALESCE(cl.patient_coinsurance_era, 0)
+        + COALESCE(cl.patient_copay_era,       0)
+        + COALESCE(cl.patient_non_covered_era, 0)
+      ) > 0
     GROUP BY visit_type, payer_bucket
     ORDER BY visit_type, payer_bucket`
 
