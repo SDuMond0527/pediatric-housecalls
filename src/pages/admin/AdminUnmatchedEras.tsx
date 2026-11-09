@@ -55,9 +55,13 @@ export function AdminUnmatchedEras() {
     setErr('')
     try {
       const r = await inspectUnmatchedEras(120)
-      // Keep only genuine 835 ERAs (the "webhook" source). The 277
-      // acknowledgment transactions are routing receipts, not payments.
-      const filtered = (r.results as UnmatchedEra[]).filter(e => e.source === 'webhook' && !e.error && e.claim_count > 0)
+      // Keep every genuine 835 ERA (the "webhook" source). The 277
+      // acknowledgment transactions are routing receipts, not payments,
+      // so they're filtered out. Errored rows ARE shown — if Stedi
+      // can't return details for a transaction (common after their TTL
+      // elapses), Sara needs to see that explicitly so the page doesn't
+      // falsely claim "all matched."
+      const filtered = (r.results as UnmatchedEra[]).filter(e => e.source === 'webhook')
       setEras(filtered)
     } catch (e: any) {
       setErr(e?.message ?? 'Failed to load unmatched ERAs')
@@ -103,8 +107,32 @@ export function AdminUnmatchedEras() {
         </div>
       )}
 
+      {/* Rows where Stedi returned an error (usually the transaction has
+          aged past Stedi's retention window — can't attach from here,
+          need to call Stedi support or dig directly in their portal). */}
+      {eras.filter(e => e.error || (!e.error && (!e.claims || e.claims.length === 0))).length > 0 && (
+        <div className="mb-4 rounded-xl border border-[#F59E0B] bg-[#FEF3C7] p-4">
+          <div className="flex items-start gap-2 mb-2">
+            <AlertCircle size={16} className="text-[#B45309] flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[13px] font-semibold text-[#78350F]">Stedi couldn't return details for {eras.filter(e => e.error || (!e.error && (!e.claims || e.claims.length === 0))).length} transaction(s).</div>
+              <div className="text-[12px] text-[#78350F] leading-snug mt-1">
+                Usually means the transaction has aged out of Stedi's retention window. The ERA still exists in Stedi's portal, but we can't fetch the details to attach it from here. If any of these matter, check them directly at <a href="https://www.stedi.com" target="_blank" rel="noreferrer" className="underline">stedi.com</a> or email support.
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            {eras.filter(e => e.error || (!e.error && (!e.claims || e.claims.length === 0))).map(e => (
+              <div key={e.transaction_id} className="text-[11px] text-[#78350F] font-mono">
+                {fmtDate(e.processed_at)} · txn {e.transaction_id} {e.error ? `· error: ${e.error}` : '· no claim data in payload'}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {eras.map(era => (
+        {eras.filter(e => !e.error && e.claims && e.claims.length > 0).map(era => (
           <div key={era.transaction_id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#F1EFE8] bg-[#FAFAF8] flex items-center justify-between gap-3">
               <div>
