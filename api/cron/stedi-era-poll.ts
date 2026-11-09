@@ -182,6 +182,86 @@ function walkClaimPayments(body: any): Array<{ pcn: string; stediClaimId: string
   return out
 }
 
+// Inline copy — Vercel serverless does not bundle shared helpers from
+// api/_lib/ or src/lib/, so the underpayment flagger lives here as
+// well as in api/claims/[id].ts and api/webhooks/stedi-era.ts. Keep
+// the three in sync. Sara 2026-11-09.
+async function flagUnderpaymentIfAny(
+  sql: any,
+  claimId: string,
+  practiceId: string,
+): Promise<void> {
+  try {
+    const [c] = await sql`
+      SELECT id, payer_id, payer_name, cpt_codes,
+             insurance_payment_era, patient_first_name, patient_last_name,
+             service_date, stedi_claim_id, payer_control_number
+      FROM claims
+      WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid`
+    if (!c) return
+    if (!c.payer_id || c.payer_id === 'PP') return
+    if (!Array.isArray(c.cpt_codes) || c.cpt_codes.length !== 1) return
+    const cptCode = (c.cpt_codes[0] as any)?.code
+    if (!cptCode) return
+    const paid = parseFloat(String(c.insurance_payment_era ?? 0)) || 0
+    if (paid <= 0) return
+
+    const [rate] = await sql`
+      SELECT contracted_amount, source, sample_size
+      FROM payer_contract_rates
+      WHERE practice_id    = ${practiceId}::uuid
+        AND payer_id       = ${c.payer_id}
+        AND cpt_code       = ${cptCode}
+        AND effective_from <= CURRENT_DATE
+        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+      ORDER BY effective_from DESC
+      LIMIT 1`
+    if (!rate) return
+    const contracted = parseFloat(String(rate.contracted_amount)) || 0
+    const gap = +(contracted - paid).toFixed(2)
+    if (gap < 5) return
+
+    const [existing] = await sql`
+      SELECT id FROM review_queue_items
+      WHERE practice_id = ${practiceId}::uuid
+        AND claim_id    = ${claimId}::uuid
+        AND item_type   = 'underpayment'
+        AND status      = 'open'
+      LIMIT 1`
+    if (existing) return
+
+    const priority = gap > 100 ? 10 : gap > 25 ? 50 : 100
+    const patientName = [c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || 'Unknown patient'
+    const summary =
+      `${c.payer_name ?? 'Payer'} underpaid CPT ${cptCode} by $${gap.toFixed(2)}. ` +
+      `Contracted $${contracted.toFixed(2)}, received $${paid.toFixed(2)}.`
+    const reasoning = {
+      cpt_code: cptCode,
+      contracted_amount: contracted,
+      insurance_payment_era: paid,
+      gap_amount: gap,
+      contract_source: rate.source,
+      contract_sample_size: rate.sample_size,
+      confidence_note: rate.source === 'era_median_seed'
+        ? `Seed rate from ${rate.sample_size} prior ERAs — verify before escalating with the payer.`
+        : 'Rate confirmed from contract document.',
+      stedi_claim_id: c.stedi_claim_id,
+      payer_control_number: c.payer_control_number,
+      source: 'underpayment-flagger',
+    }
+    await sql`
+      INSERT INTO review_queue_items
+        (practice_id, item_type, work_category, claim_id, patient_name,
+         payer_name, service_date, priority, summary, agent_reasoning)
+      VALUES
+        (${practiceId}::uuid, 'underpayment', 'denials', ${claimId}::uuid,
+         ${patientName}, ${c.payer_name ?? null}, ${c.service_date ?? null}::date,
+         ${priority}, ${summary}, ${JSON.stringify(reasoning)}::jsonb)`
+  } catch (e: any) {
+    console.error('[flagUnderpaymentIfAny] non-fatal:', e?.message)
+  }
+}
+
 async function findClaimByStediIdOrPCN(sql: any, stediClaimId: string | null, pcn: string): Promise<any | null> {
   if (stediClaimId) {
     const rows = await sql`
@@ -730,6 +810,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           summary.matched += 1
           if (statementCreated) summary.statementsCreated += 1
           else summary.statementsUpdated += 1
+          await flagUnderpaymentIfAny(sql, localClaim.id, localClaim.practice_id)
         } catch (perClaimErr: any) {
           summary.errors.push(`Claim ${localClaim.id}: ${perClaimErr?.message ?? String(perClaimErr)}`)
         }
@@ -839,6 +920,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 await ensureStatementForClaim(sql, claimId, cas, pc.totalCharge, pc.totalPaid)
               } catch (stmtErr: any) {
                 summary.errors.push(`stmt ${claimId}: ${String(stmtErr?.message ?? stmtErr).slice(0, 200)}`)
+              }
+              // Underpayment check against contracted rate table. Loads
+              // practice_id inline since it's not in scope here. Non-fatal.
+              try {
+                const [pid] = await sql`SELECT practice_id FROM claims WHERE id = ${claimId}::uuid LIMIT 1`
+                if (pid?.practice_id) await flagUnderpaymentIfAny(sql, claimId, pid.practice_id)
+              } catch (upErr: any) {
+                summary.errors.push(`underpayment ${claimId}: ${String(upErr?.message ?? upErr).slice(0, 200)}`)
               }
               summary.cas.claimsUpdated += 1
             }

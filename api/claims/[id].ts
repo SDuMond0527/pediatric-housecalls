@@ -42,6 +42,90 @@ const PAYER_IDS_INLINE: Record<string, string> = {
   'medcost': '56162', 'healthgram': '56162',
   'bright health': '98798', 'bright healthcare': '98798',
 }
+// After any path that writes insurance_payment_era, check whether the
+// payment is at least $5 below the contracted rate stored in
+// payer_contract_rates for (practice_id, payer_id, primary CPT). If so,
+// queue a review-queue item with type 'underpayment'. Scope limited to
+// single-CPT claims because the ERA payment total isn't line-split in
+// our schema — multi-CPT claims would be flagged against the wrong
+// denominator. Threshold + Sara-only notification per decisions
+// 2026-11-09. Non-fatal — failures don't block the main write.
+async function flagUnderpaymentIfAny(
+  sql: any,
+  claimId: string,
+  practiceId: string,
+): Promise<void> {
+  try {
+    const [c] = await sql`
+      SELECT id, payer_id, payer_name, cpt_codes,
+             insurance_payment_era, patient_first_name, patient_last_name,
+             service_date, stedi_claim_id, payer_control_number
+      FROM claims
+      WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid`
+    if (!c) return
+    if (!c.payer_id || c.payer_id === 'PP') return
+    if (!Array.isArray(c.cpt_codes) || c.cpt_codes.length !== 1) return
+    const cptCode = (c.cpt_codes[0] as any)?.code
+    if (!cptCode) return
+    const paid = parseFloat(String(c.insurance_payment_era ?? 0)) || 0
+    if (paid <= 0) return
+
+    const [rate] = await sql`
+      SELECT contracted_amount, source, sample_size
+      FROM payer_contract_rates
+      WHERE practice_id    = ${practiceId}::uuid
+        AND payer_id       = ${c.payer_id}
+        AND cpt_code       = ${cptCode}
+        AND effective_from <= CURRENT_DATE
+        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+      ORDER BY effective_from DESC
+      LIMIT 1`
+    if (!rate) return
+    const contracted = parseFloat(String(rate.contracted_amount)) || 0
+    const gap = +(contracted - paid).toFixed(2)
+    if (gap < 5) return
+
+    const [existing] = await sql`
+      SELECT id FROM review_queue_items
+      WHERE practice_id = ${practiceId}::uuid
+        AND claim_id    = ${claimId}::uuid
+        AND item_type   = 'underpayment'
+        AND status      = 'open'
+      LIMIT 1`
+    if (existing) return
+
+    const priority = gap > 100 ? 10 : gap > 25 ? 50 : 100
+    const patientName = [c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || 'Unknown patient'
+    const summary =
+      `${c.payer_name ?? 'Payer'} underpaid CPT ${cptCode} by $${gap.toFixed(2)}. ` +
+      `Contracted $${contracted.toFixed(2)}, received $${paid.toFixed(2)}.`
+    const reasoning = {
+      cpt_code: cptCode,
+      contracted_amount: contracted,
+      insurance_payment_era: paid,
+      gap_amount: gap,
+      contract_source: rate.source,
+      contract_sample_size: rate.sample_size,
+      confidence_note: rate.source === 'era_median_seed'
+        ? `Seed rate from ${rate.sample_size} prior ERAs — verify before escalating with the payer.`
+        : 'Rate confirmed from contract document.',
+      stedi_claim_id: c.stedi_claim_id,
+      payer_control_number: c.payer_control_number,
+      source: 'underpayment-flagger',
+    }
+    await sql`
+      INSERT INTO review_queue_items
+        (practice_id, item_type, work_category, claim_id, patient_name,
+         payer_name, service_date, priority, summary, agent_reasoning)
+      VALUES
+        (${practiceId}::uuid, 'underpayment', 'denials', ${claimId}::uuid,
+         ${patientName}, ${c.payer_name ?? null}, ${c.service_date ?? null}::date,
+         ${priority}, ${summary}, ${JSON.stringify(reasoning)}::jsonb)`
+  } catch (e: any) {
+    console.error('[flagUnderpaymentIfAny] non-fatal:', e?.message)
+  }
+}
+
 // Deterministic jsonb equality via canonical stringify — same shape in,
 // same string out. Order matters (diagnosis_pointers are ordered arrays),
 // so plain JSON.stringify is correct here. Null/undefined are equivalent
@@ -975,6 +1059,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (stmtErr: any) {
         console.error('[post_insurance_payment] statement creation failed (non-fatal):', stmtErr?.message)
       }
+
+      // Underpayment check — compare insurance_payment_era against the
+      // contracted rate for this payer × primary CPT. Queues a review
+      // item if gap ≥ $5. Sara 2026-11-09.
+      await flagUnderpaymentIfAny(sql, id, practiceId)
 
       const summary =
         `Manual insurance payment posted: billed $${billedForStatement.toFixed(2)}, ` +
