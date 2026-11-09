@@ -531,8 +531,12 @@ export function AdminReports() {
   if (loading && !hasLoadedOnce) return <div className="p-8 text-[#1A1A2E] text-[13px]">Loading reports…</div>
 
   // Summary totals
-  const total     = appts.length
-  const completed = appts.filter(a => a.status === 'done').length
+  // "Total" counts visits that actually happened — i.e., scheduled
+  // minus cancelled. Providers don't reliably click Done, so
+  // status='done' under-counts (standing rule from the payroll logic:
+  // never gate on appt.status='done'). The "Completed" tile was
+  // dropped for the same reason. Sara 2026-11-08.
+  const total     = appts.filter(a => a.status !== 'cancelled').length
   const upcoming  = appts.filter(a => a.status === 'upcoming' || a.status === 'in-progress').length
 
   // Bonus leaderboard — count pickups from the authoritative tables, not
@@ -580,7 +584,11 @@ export function AdminReports() {
       const waitlist   = waitlistPickupProviderId[p.id]  ?? 0
       return {
         ...p,
-        total:     pa.length,
+        // "Total" per provider mirrors the summary tile: visits that
+        // happened = scheduled minus cancelled. Keep completed/upcoming
+        // as diagnostic columns so the admin can see provider
+        // Done-button hygiene, but Total ignores them.
+        total:     pa.filter(a => a.status !== 'cancelled').length,
         completed: pa.filter(a => a.status === 'done').length,
         upcoming:  pa.filter(a => a.status === 'upcoming' || a.status === 'in-progress').length,
         cancelled: pa.filter(a => a.status === 'cancelled').length,
@@ -671,9 +679,8 @@ export function AdminReports() {
       <div className="p-6 max-w-6xl space-y-6">
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <SummaryCard label="Total visits"       value={total}        color="#1A1A2E" bg="#F1EFE8" />
-          <SummaryCard label="Completed"          value={completed}    color="#1D9E75" bg="#E1F5EE" />
           <SummaryCard label="Upcoming / active"  value={upcoming}     color="#7F77DD" bg="#EEEDFE" />
           <SummaryCard label="Waitlist & broadcast pickups" value={totalPickups} color="#EF9F27" bg="#FAEEDA"
             sub={totalPickups > 0 ? `${broadcastTotal} broadcast · ${waitlistTotal} waitlist` : undefined} />
