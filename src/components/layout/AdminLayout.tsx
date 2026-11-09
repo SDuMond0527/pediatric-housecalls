@@ -31,7 +31,8 @@ const NAV: NavItem[] = [
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts',     flag: 'uses_broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true, flag: 'accepts_insurance' },
-  { to: '/admin/billing-agent', icon: Bot,         label: 'Billing agent', flag: 'accepts_insurance' },
+  // Billing agent nav entry moved into the super-admin-only block below
+  // so Andrea / Pam don't see it before Sara talks to them. Sara 2026-11-09.
   { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees', flag: 'uses_convenience_fees' },
   { to: '/admin/statements',  icon: FileText,      label: 'Statements',     flag: 'uses_self_pay_statements' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
@@ -93,6 +94,14 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
         {provider?.is_super_admin && (
           <>
             <div className="mx-5 my-2 border-t border-white/10" />
+            <NavLink to="/admin/billing-agent" onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <Bot size={16} className="opacity-70" />
+              Billing agent
+            </NavLink>
             <NavLink to="/admin/pending-write-offs" onClick={onNav}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent

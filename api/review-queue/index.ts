@@ -72,9 +72,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = neon(process.env.DATABASE_URL!)
   await bootstrap(sql)
 
-  const [provider] = await sql`SELECT id, name, practice_id, is_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  // Super-admin only until Sara green-lights wider visibility — she's
+  // choosing when to loop Andrea / Pam in. 2026-11-09.
+  const [provider] = await sql`SELECT id, name, practice_id, is_super_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
-  if (!provider.is_admin) return res.status(403).json({ error: 'Admin only' })
+  if (!provider.is_super_admin) return res.status(403).json({ error: 'Not available' })
   const practiceId = provider.practice_id as string
 
   if (req.method === 'GET') {

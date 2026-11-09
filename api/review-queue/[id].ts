@@ -25,9 +25,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   catch { return res.status(401).json({ error: 'Unauthorized' }) }
 
   const sql = neon(process.env.DATABASE_URL!)
-  const [provider] = await sql`SELECT id, name, practice_id, is_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  // Super-admin only until Sara widens visibility. 2026-11-09.
+  const [provider] = await sql`SELECT id, name, practice_id, is_super_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
-  if (!provider.is_admin) return res.status(403).json({ error: 'Admin only' })
+  if (!provider.is_super_admin) return res.status(403).json({ error: 'Not available' })
   const practiceId = provider.practice_id as string
   const { id } = req.query as { id: string }
   if (!id) return res.status(400).json({ error: 'id required' })
