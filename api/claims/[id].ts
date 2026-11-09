@@ -42,6 +42,68 @@ const PAYER_IDS_INLINE: Record<string, string> = {
   'medcost': '56162', 'healthgram': '56162',
   'bright health': '98798', 'bright healthcare': '98798',
 }
+// Deterministic jsonb equality via canonical stringify — same shape in,
+// same string out. Order matters (diagnosis_pointers are ordered arrays),
+// so plain JSON.stringify is correct here. Null/undefined are equivalent
+// for diff purposes.
+function sameJsonb(a: unknown, b: unknown): boolean {
+  if (a == null && b == null) return true
+  if (a == null || b == null) return false
+  try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
+}
+
+// Log before/after snapshots of cpt_codes + diagnoses to claim_history.
+// Called after any UPDATE that may have changed those fields. Captures
+// the denial + rejection context at edit time so pattern-learning (Stage
+// 2) can correlate "edit X happened immediately after denial Y."
+// Non-fatal — failures are swallowed with a console log so the caller
+// response path never breaks for an audit write. Sara 2026-11-09.
+async function logClaimCodeHistory(
+  sql: any,
+  before: {
+    id: string; practice_id: string;
+    cpt_codes: unknown; diagnoses: unknown;
+    payer_id: string | null; payer_name: string | null;
+    status: string | null;
+    denial_codes: unknown; claim_rejection_reasons: unknown;
+  },
+  after: { cpt_codes: unknown; diagnoses: unknown },
+  actor: { id: string | null; name: string | null },
+  triggerSource: string,
+): Promise<void> {
+  const changes: { field: string; oldVal: unknown; newVal: unknown }[] = []
+  if (!sameJsonb(before.cpt_codes, after.cpt_codes)) {
+    changes.push({ field: 'cpt_codes', oldVal: before.cpt_codes, newVal: after.cpt_codes })
+  }
+  if (!sameJsonb(before.diagnoses, after.diagnoses)) {
+    changes.push({ field: 'diagnoses', oldVal: before.diagnoses, newVal: after.diagnoses })
+  }
+  if (changes.length === 0) return
+  for (const c of changes) {
+    try {
+      await sql`
+        INSERT INTO claim_history (
+          claim_id, practice_id, created_by, created_by_name,
+          field_name, old_value, new_value,
+          payer_id, payer_name, claim_status_at_edit,
+          denial_codes_at_edit, rejection_reasons_at_edit, trigger_source
+        ) VALUES (
+          ${before.id}::uuid, ${before.practice_id}::uuid,
+          ${actor.id}::uuid, ${actor.name},
+          ${c.field},
+          ${c.oldVal == null ? null : JSON.stringify(c.oldVal)}::jsonb,
+          ${c.newVal == null ? null : JSON.stringify(c.newVal)}::jsonb,
+          ${before.payer_id}, ${before.payer_name}, ${before.status},
+          ${before.denial_codes == null ? null : JSON.stringify(before.denial_codes)}::jsonb,
+          ${before.claim_rejection_reasons == null ? null : JSON.stringify(before.claim_rejection_reasons)}::jsonb,
+          ${triggerSource}
+        )`
+    } catch (e: any) {
+      console.error('claim_history insert failed (non-fatal):', e?.message)
+    }
+  }
+}
+
 function resolvePayer(name: string | null): string | null {
   if (!name) return null
   const normalized = name.toLowerCase().trim()
@@ -433,6 +495,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // When this flag is true, the client-side derivation defers to the
   // raw status column — the biller's explicit choice wins. Sara 2026-11-09.
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS manual_status_override boolean DEFAULT false` } catch {}
+  // Claim-history table. Every edit that mutates cpt_codes or diagnoses
+  // on an existing claim logs an immutable before/after row here, along
+  // with the payer + denial context at the time of edit. The billing
+  // agent's pattern-learning layer (Stage 2) reads this to discover
+  // things like "BCBS denies 87880 with J02.0 third but accepts it
+  // first." Nothing uses this table today — we're just starting the
+  // collection now so the data exists when the agent is ready. Sara
+  // 2026-11-09.
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS claim_history (
+        id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        claim_id               uuid NOT NULL,
+        practice_id            uuid NOT NULL,
+        created_at             timestamptz NOT NULL DEFAULT NOW(),
+        created_by             uuid,
+        created_by_name        text,
+        field_name             text NOT NULL,  -- 'cpt_codes' | 'diagnoses'
+        old_value              jsonb,
+        new_value              jsonb,
+        payer_id               text,
+        payer_name             text,
+        claim_status_at_edit   text,
+        denial_codes_at_edit   jsonb,
+        rejection_reasons_at_edit jsonb,
+        trigger_source         text  -- 'biller_edit' | 'submit_strip' | 'resolve_rework' | ...
+      )`
+  } catch {}
+  try { await sql`CREATE INDEX IF NOT EXISTS idx_claim_history_claim        ON claim_history(claim_id, created_at)` } catch {}
+  try { await sql`CREATE INDEX IF NOT EXISTS idx_claim_history_payer_field  ON claim_history(payer_id, field_name, created_at)` } catch {}
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
@@ -1245,6 +1337,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           cpt_codes = ${JSON.stringify(insuranceCodes)}::jsonb,
           total_charge = ${insuranceTotal}
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+
+      // Submit-time strip of convenience / 99001 / non-covered codes is a
+      // real mutation to cpt_codes. Record it so the history shows the
+      // pre-strip vs post-strip shape and the agent can later distinguish
+      // "biller moved a code" from "the system auto-stripped it."
+      const [submitActor] = await sql`SELECT id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      await logClaimCodeHistory(sql,
+        {
+          id: claim.id, practice_id: claim.practice_id,
+          cpt_codes: claim.cpt_codes, diagnoses: claim.diagnoses,
+          payer_id: claim.payer_id, payer_name: claim.payer_name,
+          status: claim.status,
+          denial_codes: claim.denial_codes, claim_rejection_reasons: claim.claim_rejection_reasons,
+        },
+        { cpt_codes: updated.cpt_codes, diagnoses: updated.diagnoses },
+        { id: submitActor?.id ?? null, name: submitActor?.name ?? null },
+        'submit_strip')
+
       return res.json(updated)
     }
 
@@ -1256,6 +1366,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Subscriber name must include both first and last name (e.g., "Sarah Rodgers").' })
       }
     }
+
+    // Snapshot the current cpt_codes + diagnoses + denial context BEFORE
+    // the UPDATE so claim_history can log a before/after if this edit
+    // actually mutates codes or diagnoses. See logClaimCodeHistory. Sara
+    // 2026-11-09.
+    const [preHistorySnapshot] = await sql`
+      SELECT id, practice_id, cpt_codes, diagnoses, payer_id, payer_name,
+             status, denial_codes, claim_rejection_reasons
+      FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+    const [actor] = await sql`SELECT id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
 
     // General field update (payer_id, payer_name, cpt_codes, etc.)
     const allowed = ['payer_name', 'payer_id', 'member_id', 'group_number',
@@ -1340,6 +1460,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         biller_edited_at           = CASE WHEN ${billerEditedDxOrCpt}::boolean THEN now() ELSE biller_edited_at END,
         updated_at                 = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid RETURNING *`
+
+    // Record the edit for the billing agent's future pattern learning.
+    // Only fires if cpt_codes or diagnoses actually changed (sameJsonb
+    // short-circuits the no-op case). Non-fatal.
+    if (preHistorySnapshot) {
+      await logClaimCodeHistory(sql, preHistorySnapshot as any,
+        { cpt_codes: updated.cpt_codes, diagnoses: updated.diagnoses },
+        { id: actor?.id ?? null, name: actor?.name ?? null },
+        'biller_edit')
+    }
+
     return res.json(updated)
   }
 
