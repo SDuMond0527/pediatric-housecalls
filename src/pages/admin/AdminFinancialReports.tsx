@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
-import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
+import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle, Clock } from 'lucide-react'
 import { getFinancialReports, getArDrill, apiFetch, type ArBucket } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
@@ -208,6 +208,7 @@ export function AdminFinancialReports() {
           <PayerMixSection data={data} start={start} end={end} />
           <ReimbursementByPayerSection data={data} start={start} end={end} />
           <CvFeeSummarySection data={data} start={start} end={end} />
+          <DaysToEraByPayerSection data={data} start={start} end={end} />
           <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
@@ -1010,6 +1011,103 @@ function CvFeeSummarySection({ data: _data, start, end }: { data: ReportsData; s
                   <td className="px-3 py-2 text-right tabular-nums">{m.n}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoney(m.avg)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(m.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Days from submission to ERA by payer ────────────────────────────────
+// How long till we actually get paid, broken out by payer. Scope:
+// claims with both submitted_at + era_received_at populated, service
+// date in the shared window, self-pay excluded. Payer bucketing matches
+// the reimbursement grid (Anthem separate from BCBS NC per Sara's
+// 2026-11-08 rule). Sara 2026-11-08.
+
+type DaysRow = { payer: string; n: number; avg_days: number; median_days: number; min_days: number; max_days: number }
+type DaysSummary = {
+  start: string
+  end: string
+  rows: DaysRow[]
+  overall: { n: number; avg_days: number; median_days: number }
+}
+
+function DaysToEraByPayerSection({ data: _data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const [summary, setSummary] = useState<DaysSummary | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true); setError(null)
+    apiFetch<DaysSummary>(`/api/admin/days-to-era-by-payer?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then(d => { if (!cancelled) setSummary(d) })
+      .catch(e => { if (!cancelled) setError(e?.message ?? 'Failed to load days-to-ERA report') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [_data, start, end])
+
+  // Color helper — slower payers get a louder color so Sara can scan.
+  const dayColor = (days: number) =>
+    days <= 7  ? 'text-[#1D9E75]' :
+    days <= 14 ? 'text-[#B45309]' :
+                 'text-[#991B1B]'
+
+  return (
+    <ReportShell
+      title="Days to payment by payer"
+      icon={Clock}
+      plainEnglish="How long each payer takes to send back an ERA (= pay the claim). Measured from submitted_at to era_received_at in calendar days. Self-pay excluded. Claims with no ERA yet aren't counted — they're the pending pile, not the paid pile. Shorter is better."
+      onExport={() => {
+        if (!summary) return
+        const header = ['Payer', 'Claims', 'Avg days', 'Median days', 'Min days', 'Max days']
+        const lines: string[] = [header.map(c => `"${c}"`).join(',')]
+        for (const r of summary.rows) {
+          lines.push([r.payer, r.n, r.avg_days, r.median_days, r.min_days, r.max_days].map(c => `"${String(c)}"`).join(','))
+        }
+        lines.push(['All payers', summary.overall.n, summary.overall.avg_days, summary.overall.median_days, '', ''].map(c => `"${String(c)}"`).join(','))
+        downloadCsv(`days-to-era-${start}_to_${end}.csv`, lines.join('\n'))
+      }}>
+      {error && (
+        <div className="text-[13px] text-red-600 bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg mb-3">{error}</div>
+      )}
+      {loading && !summary ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">Loading days-to-ERA…</div>
+      ) : !summary || summary.rows.length === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No paid claims in this window.</div>
+      ) : (
+        <>
+          {/* Headline */}
+          <div className="flex flex-wrap gap-5 mb-4 text-[12px] text-[#1A1A2E]">
+            <div><span className="text-[#1A1A2E]/60">Overall avg:</span> <span className="font-semibold">{summary.overall.avg_days} days</span></div>
+            <div><span className="text-[#1A1A2E]/60">Overall median:</span> <span className="font-medium">{summary.overall.median_days} days</span></div>
+            <div><span className="text-[#1A1A2E]/60">Claims counted:</span> <span className="font-medium">{summary.overall.n}</span></div>
+          </div>
+
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+                <th className="text-left px-3 py-2">Payer</th>
+                <th className="text-right px-3 py-2">Claims</th>
+                <th className="text-right px-3 py-2">Avg</th>
+                <th className="text-right px-3 py-2">Median</th>
+                <th className="text-right px-3 py-2">Fastest</th>
+                <th className="text-right px-3 py-2">Slowest</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1EFE8]">
+              {summary.rows.map(r => (
+                <tr key={r.payer}>
+                  <td className="px-3 py-2 text-[#1A1A2E] font-medium">{r.payer}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.n}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${dayColor(r.avg_days)}`}>{r.avg_days}d</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.median_days}d</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[#1A1A2E]/60">{r.min_days}d</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[#1A1A2E]/60">{r.max_days}d</td>
                 </tr>
               ))}
             </tbody>
