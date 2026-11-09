@@ -1715,6 +1715,68 @@ export const forceClaimStatus = (id: string, target: 'ready_for_biller' | 'submi
 export const refreshClaimInsuranceFromChart = (id: string) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'refresh_insurance_from_chart' }) })
 
+// ── Billing agent review queue ──────────────────────────────────────
+// Stage 1 skeleton. Agent-logic jobs land queue items; biller approves,
+// edits, or rejects. Per-work-category auto toggles live in
+// billing_agent_settings and default to false. Sara 2026-11-09.
+export type ReviewWorkCategory = 'claim_submission' | 'rejections' | 'denials'
+export type ReviewItemType =
+  | 'new_claim' | 'stale_claim' | 'underpayment'
+  | 'rejection_fix' | 'denial_fix' | 'appeal_draft'
+
+export interface ReviewQueueItem {
+  id: string
+  item_type: ReviewItemType
+  work_category: ReviewWorkCategory
+  claim_id: string | null
+  patient_name: string | null
+  payer_name: string | null
+  service_date: string | null
+  priority: number
+  summary: string
+  agent_reasoning: Record<string, unknown> | null
+  proposed_change: Record<string, unknown> | null
+  status: 'open' | 'approved' | 'edited' | 'rejected'
+  created_at: string
+}
+export interface ReviewQueueStats {
+  work_category: ReviewWorkCategory
+  approved: number
+  edited: number
+  rejected: number
+  total: number
+}
+export const getReviewQueue = () =>
+  apiFetch<{ items: ReviewQueueItem[]; stats: ReviewQueueStats[] }>('/api/review-queue')
+
+export const batchDecideReviewItems = (ids: string[], action: 'approve' | 'reject', note?: string) =>
+  apiFetch<{ ok: true; count: number }>('/api/review-queue', {
+    method: 'POST', body: JSON.stringify({ ids, action, note }),
+  })
+
+export const decideReviewItem = (
+  id: string,
+  action: 'approve' | 'edit' | 'reject',
+  payload?: { note?: string; edited_payload?: unknown },
+) =>
+  apiFetch<{ ok: true }>(`/api/review-queue/${id}`, {
+    method: 'POST', body: JSON.stringify({ action, ...payload }),
+  })
+
+export interface BillingAgentCategorySetting {
+  work_category: ReviewWorkCategory
+  auto_enabled: boolean
+  updated_at: string | null
+  updated_by_name: string | null
+}
+export const getBillingAgentSettings = () =>
+  apiFetch<{ settings: BillingAgentCategorySetting[] }>('/api/billing-agent-settings')
+
+export const setBillingAgentCategory = (work_category: ReviewWorkCategory, auto_enabled: boolean) =>
+  apiFetch<{ ok: true }>('/api/billing-agent-settings', {
+    method: 'PATCH', body: JSON.stringify({ work_category, auto_enabled }),
+  })
+
 // Andrea posts an insurance payment that arrived outside the Stedi ERA
 // pipeline (paper EOB, EFT without ERA, manually keyed check). Writes
 // the same payment columns the ERA path writes, so downstream — Completed

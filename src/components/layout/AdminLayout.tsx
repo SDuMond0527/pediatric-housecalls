@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts',     flag: 'uses_broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true, flag: 'accepts_insurance' },
+  { to: '/admin/billing-agent', icon: Bot,         label: 'Billing agent', flag: 'accepts_insurance' },
   { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees', flag: 'uses_convenience_fees' },
   { to: '/admin/statements',  icon: FileText,      label: 'Statements',     flag: 'uses_self_pay_statements' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
