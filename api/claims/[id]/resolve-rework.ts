@@ -49,6 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by uuid` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_by_name text` } catch {}
     try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS rework_resolved_note text` } catch {}
+    try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS manual_status_override boolean DEFAULT false` } catch {}
     try {
       await sql`
         CREATE TABLE IF NOT EXISTS claim_activity_log (
@@ -78,6 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rework_resolved_by      = ${provider.id}::uuid,
         rework_resolved_by_name = ${provider.name ?? 'Biller'},
         rework_resolved_note    = ${noteStr},
+        -- Picking "Completed" from the dropdown clears any prior manual
+        -- override — rework_resolved_at itself is what routes it to the
+        -- Completed tab, so derivation can run normally again.
+        manual_status_override  = false,
         updated_at              = NOW()
       WHERE id = ${claimId}::uuid AND practice_id = ${provider.practice_id}::uuid
       RETURNING *

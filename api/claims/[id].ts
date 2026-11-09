@@ -415,6 +415,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // a 2-digit dependent suffix on the member ID; other payers ignore it.
   try { await sql`ALTER TABLE claims   ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
+  // Manual status override. The claim-card "status" badge is a derived
+  // state that promotes a claim to "Completed" when any downstream
+  // signal is present (rework_resolved_at set, submitted + ERA back,
+  // attached statement paid/sent). That derivation is wrong for cases
+  // where the ERA was actually a rejection the system misread, or the
+  // statement was auto-generated against a payment that never happened.
+  // When this flag is true, the client-side derivation defers to the
+  // raw status column — the biller's explicit choice wins. Sara 2026-11-09.
+  try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS manual_status_override boolean DEFAULT false` } catch {}
   const { id } = req.query as Record<string, string>
   if (!id) return res.status(400).json({ error: 'id required' })
 
@@ -500,6 +509,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             rework_resolved_at       = NULL,
             ready_for_biller_at      = NULL,
             ready_for_biller_by      = NULL,
+            manual_status_override   = true,
             updated_at               = NOW()
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
           RETURNING *`
@@ -526,6 +536,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             rework_resolved_at       = NULL,
             ready_for_biller_at      = NOW(),
             ready_for_biller_by      = ${whoName},
+            manual_status_override   = true,
             updated_at               = NOW()
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
           RETURNING *`
@@ -548,6 +559,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           rework_resolved_at       = NULL,
           ready_for_biller_at      = NULL,
           ready_for_biller_by      = NULL,
+          manual_status_override   = true,
           updated_at               = NOW()
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
@@ -1308,6 +1320,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         place_of_service           = COALESCE(${updates.place_of_service ?? null}, place_of_service),
         service_date               = COALESCE(${updates.service_date ?? null}::date, service_date),
         status                     = COALESCE(${updates.status ?? null}, CASE WHEN ${clearStaleError} AND status = 'error' THEN 'pending_review' ELSE status END),
+        -- When the biller explicitly PATCHes a status, pin the display.
+        -- See the ALTER TABLE bootstrap at the top of this handler.
+        manual_status_override     = CASE WHEN ${updates.status != null}::boolean THEN true ELSE manual_status_override END,
         cpt_codes                  = COALESCE(${updates.cpt_codes != null ? JSON.stringify(updates.cpt_codes) : null}::jsonb, cpt_codes),
         diagnoses                  = COALESCE(${updates.diagnoses != null ? JSON.stringify(updates.diagnoses) : null}::jsonb, diagnoses),
         total_charge               = COALESCE(${newTotal}, total_charge),

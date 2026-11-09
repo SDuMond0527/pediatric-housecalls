@@ -526,8 +526,11 @@ export function AdminClaims() {
     const target = claims.find(c => c.id === targetId)
     if (!target) return
     const isReviewTab = target.status === 'pending_review' || target.status === 'error' || target.status === 'draft'
-    const isCompletedTab =
-      (target.status === 'submitted' && !!target.era_received_at) || target.status === 'written_off'
+    // Same override semantics as the per-row effectiveStatus derivation
+    // below — if the biller explicitly set status, honor the raw column.
+    const isCompletedTab = target.manual_status_override
+      ? false
+      : (target.status === 'submitted' && !!target.era_received_at) || target.status === 'written_off'
     setTab(isReviewTab ? 'review' : isCompletedTab ? 'completed' : 'submitted')
     setExpanded(targetId)
     // Clear the param so a back-nav or refresh doesn't re-fire this.
@@ -800,6 +803,10 @@ export function AdminClaims() {
   // off. Sara 2026-10-06.
   const hasReachedTerminalState = (c: any) => {
     if (c.status === 'written_off') return true
+    // Biller explicitly overrode the status — the claim stays visible
+    // (and routes to whatever tab matches its raw status) until she picks
+    // "Completed" or "Written off" herself. Sara 2026-11-09.
+    if (c.manual_status_override) return false
     const stmtDone = c.statement_status === 'sent' || c.statement_status === 'paid' || !!c.statement_sent_at
     if (!stmtDone) return false
     // A sent patient statement alone is NOT terminal if the claim has
@@ -940,18 +947,27 @@ export function AdminClaims() {
   // "NEW ERA" / "ERA received" pill so Andrea sees payer responses on
   // the same claim card. Sara 2026-10-06.
   const submittedClaims = visibleClaims.filter(c =>
-    !isInRework(c) && !c.rework_resolved_at &&
-    c.status === 'submitted')
+    !isInRework(c) &&
+    c.status === 'submitted' &&
+    // rework_resolved_at normally routes a claim to Completed, UNLESS
+    // the biller has explicitly overridden the status back to submitted.
+    (!c.rework_resolved_at || c.manual_status_override))
   // Completed = actionable end-stage queue. Insurance claim with ERA
   // back but statement not yet sent (biller still owes an action —
   // review the draft statement + send it, or write off). Once she
   // sends the statement (or writes off), the claim exits via
   // hasReachedTerminalState. Rework claims the biller marked done
   // also live here until their statement is handled.
-  const completedClaims = visibleClaims.filter(c => !isInRework(c) && (
-    (c.status === 'submitted' && !!c.era_received_at) ||
-    !!c.rework_resolved_at
-  ))
+  //
+  // manual_status_override: when the biller has moved the claim out of
+  // this tab via the dropdown, respect that — the raw status column
+  // drives tab membership, matching the effectiveStatus derivation on
+  // the claim card.
+  const completedClaims = visibleClaims.filter(c =>
+    !isInRework(c) &&
+    !c.manual_status_override &&
+    ((c.status === 'submitted' && !!c.era_received_at) ||
+     !!c.rework_resolved_at))
 
   // Top-right "Ready for biller only" counter — mirror the Ready for
   // biller tab's filter exactly so the two numbers always match. Was
@@ -2533,13 +2549,20 @@ export function AdminClaims() {
                 // resolved, ERA came back for a submitted claim, or the
                 // family already has a sent/paid statement. Matches the
                 // billing log derivation in PatientBillingLog.tsx.
-                const effectiveStatus =
-                  c.rework_resolved_at
-                  || (c.status === 'submitted' && c.era_received_at)
-                  || c.statement_status === 'paid'
-                  || c.statement_status === 'sent'
+                //
+                // manual_status_override wins over the derivation: when the
+                // biller explicitly PATCHes a status via the dropdown below,
+                // the server flips that flag on and we display the raw
+                // status column here. Covers the "ERA came back but it was
+                // a rejection the system misread" case. Sara 2026-11-09.
+                const effectiveStatus = c.manual_status_override
+                  ? c.status
+                  : (c.rework_resolved_at
+                      || (c.status === 'submitted' && c.era_received_at)
+                      || c.statement_status === 'paid'
+                      || c.statement_status === 'sent'
                     ? 'completed'
-                    : c.status
+                    : c.status)
                 const badge = STATUS_BADGE[effectiveStatus] ?? STATUS_BADGE.submitted
                 const isOpen = expanded === c.id
                 const patientBalance = [c.patient_deductible_era, c.patient_coinsurance_era, c.patient_copay_era, c.patient_non_covered_era]

@@ -49,6 +49,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_control_number text`
     } catch {}
+    try {
+      await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS manual_status_override boolean DEFAULT false`
+    } catch {}
 
     const rows = await sql`
       SELECT
@@ -69,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cl.era_received_at,
         cl.submitted_at,
         cl.rework_resolved_at,
+        cl.manual_status_override,
         cl.stedi_claim_id,
         cl.payer_control_number,
         cl.submission_error,

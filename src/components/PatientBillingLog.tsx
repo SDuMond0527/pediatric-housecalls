@@ -21,6 +21,7 @@ export type BillingLogEntry = {
   era_received_at: string | null
   submitted_at: string | null
   rework_resolved_at: string | null
+  manual_status_override: boolean | null
   stedi_claim_id: string | null
   submission_error: string | null
   payer_control_number: string | null
@@ -97,7 +98,13 @@ function effectiveClaimStatus(e: {
   rework_resolved_at: string | null
   era_received_at: string | null
   statement_status: string | null
+  manual_status_override?: boolean | null
 }): string {
+  // Biller override wins. When she explicitly sets the status via the
+  // AdminClaims dropdown, the server flips manual_status_override on and
+  // we defer to the raw status column — covers e.g. "ERA came back but
+  // it was actually a rejection the system misread." Sara 2026-11-09.
+  if (e.manual_status_override) return e.claim_status ?? 'unknown'
   if (e.rework_resolved_at) return 'completed'
   if (e.statement_status === 'paid' || e.statement_status === 'sent') return 'completed'
   if (e.claim_status === 'submitted' && e.era_received_at) return 'completed'
