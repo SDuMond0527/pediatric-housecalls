@@ -1777,6 +1777,25 @@ export const setBillingAgentCategory = (work_category: ReviewWorkCategory, auto_
     method: 'PATCH', body: JSON.stringify({ work_category, auto_enabled }),
   })
 
+// Attach an orphaned Stedi 835 ERA (one that landed at Stedi but
+// never joined to any of our claims — usually because the biller
+// resubmitted outside GoRoam) onto a specific claim in our DB.
+export const attachEraToClaim = (transaction_id: string, claim_id: string, claim_index?: number) =>
+  apiFetch<{
+    ok: true
+    transaction_id: string
+    claim_id: string
+    era: {
+      amount_billed: number
+      insurance_payment: number
+      patient_responsibility: number
+      cas_codes: Array<{ group_code: string; reason_code: string; amount: number }>
+    }
+  }>('/api/admin/attach-era-to-claim', {
+    method: 'POST',
+    body: JSON.stringify({ transaction_id, claim_id, claim_index }),
+  })
+
 // Andrea posts an insurance payment that arrived outside the Stedi ERA
 // pipeline (paper EOB, EFT without ERA, manually keyed check). Writes
 // the same payment columns the ERA path writes, so downstream — Completed

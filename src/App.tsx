@@ -45,6 +45,7 @@ import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
 import { AdminPendingWriteOffs } from './pages/admin/AdminPendingWriteOffs'
 import { AdminBillingAgent } from './pages/admin/AdminBillingAgent'
+import { AdminUnmatchedEras } from './pages/admin/AdminUnmatchedEras'
 import { AdminReportsSchedule } from './pages/admin/AdminReportsSchedule'
 import { FamilyLogin } from './pages/family/FamilyLogin'
 import { FamilySignup } from './pages/family/FamilySignup'
@@ -151,6 +152,7 @@ export default function App() {
                 <Route path="broadcasts" element={<FlagGuardedRoute flag="uses_broadcasts" redirectTo="/admin/analytics"><AdminBroadcasts /></FlagGuardedRoute>} />
                 <Route path="claims"     element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminClaims /></FlagGuardedRoute>} />
                 <Route path="billing-agent" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminBillingAgent /></FlagGuardedRoute>} />
+                <Route path="unmatched-eras" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminUnmatchedEras /></FlagGuardedRoute>} />
                 <Route path="convenience-fees" element={<FlagGuardedRoute flag="uses_convenience_fees" redirectTo="/admin/analytics"><AdminConvenienceFees /></FlagGuardedRoute>} />
                 <Route path="patients"        element={<Patients />} />
                 <Route path="chart/:childId" element={<PatientChart />} />

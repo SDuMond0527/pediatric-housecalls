@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
@@ -101,6 +101,14 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
               }>
               <Bot size={16} className="opacity-70" />
               Billing agent
+            </NavLink>
+            <NavLink to="/admin/unmatched-eras" onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <LinkIcon size={16} className="opacity-70" />
+              Unmatched ERAs
             </NavLink>
             <NavLink to="/admin/pending-write-offs" onClick={onNav}
               className={({ isActive }) =>
