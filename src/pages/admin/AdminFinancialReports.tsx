@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle } from 'lucide-react'
-import { getFinancialReports, getArDrill, type ArBucket } from '../../lib/api'
+import { getFinancialReports, getArDrill, apiFetch, type ArBucket } from '../../lib/api'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
 import { PatientStatementModal } from './PatientStatementModal'
 import { ClaimReviewModal } from './ClaimReviewModal'
 import { AdminClaimsPipeline } from './AdminClaimsPipeline'
 import { AdminCollectionsByMonth } from './AdminCollectionsByMonth'
-import { AdminReimbursementByPayer } from './AdminReimbursementByPayer'
 
 type DrillTarget = {
   type: 'insurance' | 'patient'
@@ -83,7 +82,7 @@ function downloadCsv(filename: string, csv: string) {
 export function AdminFinancialReports() {
   const today = new Date()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'reports' | 'pipeline' | 'collections' | 'reimbursement'>('reports')
+  const [tab, setTab] = useState<'reports' | 'pipeline' | 'collections'>('reports')
   const [start, setStart] = useState(format(startOfMonth(subMonths(today, 2)), 'yyyy-MM-dd'))
   const [end, setEnd]     = useState(format(today, 'yyyy-MM-dd'))
   const [data, setData]   = useState<ReportsData | null>(null)
@@ -127,15 +126,10 @@ export function AdminFinancialReports() {
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'collections' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
           Collections by visit month
         </button>
-        <button onClick={() => setTab('reimbursement')}
-          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'reimbursement' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
-          Reimbursement by payer
-        </button>
       </div>
 
       {tab === 'pipeline' && <AdminClaimsPipeline />}
       {tab === 'collections' && <AdminCollectionsByMonth />}
-      {tab === 'reimbursement' && <AdminReimbursementByPayer />}
       {tab === 'reports' && <>
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
@@ -744,59 +738,186 @@ function PayerMixSection({ data, start, end }: { data: ReportsData; start: strin
 }
 
 // ─── Reimbursement by payer × visit type ──────────────────────────────────
+// Pivot grid: visit types × payer buckets, each cell showing avg
+// allowable (insurance paid + patient responsibility). Payer names are
+// normalized to business-level buckets (Anthem stays its own bucket per
+// Sara 2026-11-08). Claims with zero allowable (pure denials / pending
+// reworks) excluded so one rejection doesn't drag a cell down. Sources
+// its own data from /api/admin/reimbursement-by-visit-payer — refetches
+// whenever the parent re-runs reports (parent's `data` reload is the
+// trigger). Sara 2026-11-08.
 
-function ReimbursementByPayerSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
-  const rows = data.reimbursement_by_payer
+type ReimbursementCell = { n: number; avg_allowable: number; total_allowable: number }
+type ReimbursementGrid = {
+  start: string
+  end: string
+  visit_types: string[]
+  payers: string[]
+  cells: Record<string, Record<string, ReimbursementCell>>
+  payer_totals: Record<string, ReimbursementCell>
+  visit_type_totals: Record<string, ReimbursementCell>
+  grand: { n: number; avg_allowable: number; total_allowable: number }
+}
+
+const REIMB_MIX_COLORS = ['#7F77DD', '#1D9E75', '#EF9F27', '#378ADD', '#D4537E', '#C0392B', '#0F6E56', '#8B5CF6', '#F97316', '#0EA5E9']
+
+function ReimbursementByPayerSection({ data: _data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const [grid, setGrid] = useState<ReimbursementGrid | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Refetch whenever the parent's `data` prop reference changes
+  // (parent fires `load()` on Run → new ReportsData → this effect runs).
+  // Mount is covered because _data is initially null until the first load.
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true); setError(null)
+    apiFetch<ReimbursementGrid>(`/api/admin/reimbursement-by-visit-payer?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then(d => { if (!cancelled) setGrid(d) })
+      .catch(e => { if (!cancelled) setError(e?.message ?? 'Failed to load reimbursement grid') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [_data, start, end])
+
   return (
     <ReportShell
       title="Reimbursement by payer"
       icon={HandCoins}
-      plainEnglish="For visits where insurance paid, what each payer actually gave you for each visit type. Compare the &quot;% of charges&quot; column across payers — a payer paying 30% on a sick visit vs. another paying 65% is your negotiation talking point."
+      plainEnglish="Average allowable per visit type, grouped by payer. 'Allowable' = insurance payment + patient responsibility (the total you'll collect). Payer names are normalized — all BCBS variants roll up, Anthem stays separate. Self-pay excluded. Claims with zero allowable (pure denials / pending reworks) excluded so one rejection doesn't pull an average down."
       onExport={() => {
-        const csv = toCsv(rows, [
-          { key: 'payer_name',     label: 'Payer' },
-          { key: 'visit_type',     label: 'Visit type' },
-          { key: 'claim_count',    label: 'Claims' },
-          { key: 'avg_charged',    label: 'Avg charged' },
-          { key: 'avg_paid',       label: 'Avg paid' },
-          { key: 'avg_adjustment', label: 'Avg adjustment' },
-          { key: 'payment_pct',    label: '% of charges' },
-        ], { title: 'Reimbursement by payer', periodStart: start, periodEnd: end })
-        downloadCsv('reimbursement-by-payer.csv', csv)
+        if (!grid) return
+        const header = ['Visit type', ...grid.payers, 'Row avg', 'Row n']
+        const lines: string[] = [header.map(c => `"${c}"`).join(',')]
+        for (const vt of grid.visit_types) {
+          const row: (string | number)[] = [vt]
+          for (const p of grid.payers) {
+            const c = grid.cells[vt]?.[p]
+            row.push(c ? `${c.avg_allowable.toFixed(2)} (n=${c.n})` : '')
+          }
+          const rt = grid.visit_type_totals[vt]
+          row.push(rt ? rt.avg_allowable.toFixed(2) : '')
+          row.push(rt ? rt.n : '')
+          lines.push(row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+        }
+        const footer: (string | number)[] = ['Column avg']
+        for (const p of grid.payers) {
+          const t = grid.payer_totals[p]
+          footer.push(t ? t.avg_allowable.toFixed(2) : '')
+        }
+        footer.push(grid.grand.avg_allowable.toFixed(2))
+        footer.push(grid.grand.n)
+        lines.push(footer.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+        downloadCsv(`reimbursement-${start}_to_${end}.csv`, lines.join('\n'))
       }}>
-      {rows.length === 0 ? (
-        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No ERAs received in this window — nothing to reimburse-analyze yet.</div>
+      {error && (
+        <div className="text-[13px] text-red-600 bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg mb-3">{error}</div>
+      )}
+      {loading && !grid ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">Loading reimbursement grid…</div>
+      ) : !grid || grid.visit_types.length === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No ERAs with allowable amounts in this window.</div>
       ) : (
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
-              <th className="text-left px-3 py-2">Payer</th>
-              <th className="text-left px-3 py-2">Visit type</th>
-              <th className="text-right px-3 py-2">Claims</th>
-              <th className="text-right px-3 py-2">Avg charged</th>
-              <th className="text-right px-3 py-2">Avg paid</th>
-              <th className="text-right px-3 py-2">Adjustment</th>
-              <th className="text-right px-3 py-2">% paid</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1EFE8]">
-            {rows.map((r: any, i: number) => {
-              const pct = parseFloat(String(r.payment_pct ?? 0))
-              const color = pct >= 60 ? 'text-[#1D9E75]' : pct >= 40 ? 'text-[#B45309]' : 'text-[#991B1B]'
-              return (
-                <tr key={i} className="hover:bg-[#FAFAF8]">
-                  <td className="px-3 py-2 text-[#1A1A2E]">{r.payer_name}</td>
-                  <td className="px-3 py-2 text-[#555]">{r.visit_type}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{r.claim_count}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.avg_charged)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.avg_paid)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[#B45309]">{fmtMoney(r.avg_adjustment)}</td>
-                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${color}`}>{pct.toFixed(1)}%</td>
+        <>
+          {/* Summary row */}
+          <div className="flex flex-wrap items-center gap-5 mb-4 text-[12px] text-[#1A1A2E]">
+            <div><span className="text-[#1A1A2E]/60">Claims counted:</span> <span className="font-medium">{grid.grand.n}</span></div>
+            <div><span className="text-[#1A1A2E]/60">Grand avg allowable:</span> <span className="font-semibold">{fmtMoney(grid.grand.avg_allowable)}</span></div>
+            <div><span className="text-[#1A1A2E]/60">Total allowable:</span> <span className="font-medium">{fmtMoney(grid.grand.total_allowable)}</span></div>
+          </div>
+
+          {/* Payer mix bar */}
+          {(() => {
+            const mix = grid.payers
+              .map(p => ({ payer: p, total: grid.payer_totals[p]?.total_allowable ?? 0, n: grid.payer_totals[p]?.n ?? 0 }))
+              .sort((a, b) => b.total - a.total)
+              .map(p => ({ ...p, pct: grid.grand.total_allowable ? (p.total / grid.grand.total_allowable) * 100 : 0 }))
+            if (mix.length === 0 || grid.grand.total_allowable === 0) return null
+            return (
+              <div className="mb-4">
+                <div className="text-[11px] uppercase tracking-wide text-[#1A1A2E]/60 mb-1.5">Payer mix (% of total allowable)</div>
+                <div className="flex h-6 rounded-md overflow-hidden border border-[#E8E8E4] bg-white">
+                  {mix.map((p, i) => (
+                    <div key={p.payer}
+                      style={{ width: `${p.pct}%`, background: REIMB_MIX_COLORS[i % REIMB_MIX_COLORS.length] }}
+                      title={`${p.payer}: ${fmtMoney(p.total)} · ${p.pct.toFixed(1)}% · ${p.n} claims`}
+                      className="h-full first:rounded-l-md last:rounded-r-md" />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 text-[11px] text-[#1A1A2E]">
+                  {mix.map((p, i) => (
+                    <div key={p.payer} className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: REIMB_MIX_COLORS[i % REIMB_MIX_COLORS.length] }} />
+                      <span className="font-medium">{p.payer}</span>
+                      <span className="text-[#1A1A2E]/60 tabular-nums">{p.pct.toFixed(1)}% · {fmtMoney(p.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Pivot grid */}
+          <div className="overflow-auto border border-[#E8E8E4] rounded-lg">
+            <table className="w-full text-[12px]">
+              <thead className="bg-[#F8F8F4]">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-[#1A1A2E] sticky left-0 bg-[#F8F8F4] z-10">Visit type</th>
+                  {grid.payers.map(p => (
+                    <th key={p} className="text-right px-3 py-2 font-medium text-[#1A1A2E] whitespace-nowrap">{p}</th>
+                  ))}
+                  <th className="text-right px-3 py-2 font-semibold text-[#1A1A2E] bg-[#EEEDFE] whitespace-nowrap">Row avg</th>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {grid.visit_types.map(vt => {
+                  const rt = grid.visit_type_totals[vt]
+                  return (
+                    <tr key={vt} className="border-t border-[#F1EFE8]">
+                      <td className="px-3 py-2 text-[#1A1A2E] sticky left-0 bg-white z-10">{vt}</td>
+                      {grid.payers.map(p => {
+                        const c = grid.cells[vt]?.[p]
+                        return (
+                          <td key={p} className="text-right px-3 py-2 tabular-nums">
+                            {c ? (
+                              <>
+                                <div className="font-medium text-[#1A1A2E]">{fmtMoney(c.avg_allowable)}</div>
+                                <div className="text-[10px] text-[#1A1A2E]/55">n={c.n}</div>
+                              </>
+                            ) : (
+                              <span className="text-[#1A1A2E]/25">—</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                      <td className="text-right px-3 py-2 tabular-nums bg-[#EEEDFE]/40">
+                        <div className="font-semibold text-[#1A1A2E]">{rt ? fmtMoney(rt.avg_allowable) : '—'}</div>
+                        <div className="text-[10px] text-[#1A1A2E]/55">n={rt?.n ?? 0}</div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-[#1A1A2E]/15 bg-[#F8F8F4]">
+                  <td className="px-3 py-2 font-semibold text-[#1A1A2E] sticky left-0 bg-[#F8F8F4] z-10">Column avg</td>
+                  {grid.payers.map(p => {
+                    const t = grid.payer_totals[p]
+                    return (
+                      <td key={p} className="text-right px-3 py-2 tabular-nums">
+                        <div className="font-semibold text-[#1A1A2E]">{t ? fmtMoney(t.avg_allowable) : '—'}</div>
+                        <div className="text-[10px] text-[#1A1A2E]/55">n={t?.n ?? 0}</div>
+                      </td>
+                    )
+                  })}
+                  <td className="text-right px-3 py-2 tabular-nums bg-[#EEEDFE]">
+                    <div className="font-bold text-[#1A1A2E]">{fmtMoney(grid.grand.avg_allowable)}</div>
+                    <div className="text-[10px] text-[#1A1A2E]/55">n={grid.grand.n}</div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
       )}
     </ReportShell>
   )
