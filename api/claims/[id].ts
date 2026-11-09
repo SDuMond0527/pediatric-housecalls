@@ -42,6 +42,67 @@ const PAYER_IDS_INLINE: Record<string, string> = {
   'medcost': '56162', 'healthgram': '56162',
   'bright health': '98798', 'bright healthcare': '98798',
 }
+// Plain-English translations for the top CARC/RARC codes we see.
+// Not exhaustive — raw codes are still included in the queue reasoning,
+// so a code not in the dictionary just shows as "CO-99" to Sara instead
+// of "CO-99: <friendly label>". Extend as new codes appear.
+const CARC_LABEL: Record<string, string> = {
+  '1':   'Deductible amount',
+  '2':   'Coinsurance amount',
+  '3':   'Co-payment amount',
+  '45':  'Charge exceeds fee schedule / contracted allowable',
+  '50':  'Non-covered — not deemed medically necessary',
+  '96':  'Non-covered charges',
+  '97':  'Benefit included in payment for another service (bundled)',
+  '119': 'Benefit maximum has been reached',
+  '197': 'Prior authorization missing or invalid',
+  '204': 'Not covered under the patient\'s plan',
+  '253': 'Sequestration — federal payment reduction',
+}
+const GROUP_LABEL: Record<string, string> = {
+  'CO': 'Contractual Obligation (payer writes off per contract)',
+  'PR': 'Patient Responsibility (family owes)',
+  'OA': 'Other Adjustment',
+  'PI': 'Payer Initiated reduction',
+}
+function describeDenialCodes(codes: any): string[] {
+  if (!Array.isArray(codes)) return []
+  return codes.map((c: any) => {
+    const grp = String(c?.group_code ?? '')
+    const rsn = String(c?.reason_code ?? '')
+    const amt = Number(c?.amount ?? 0)
+    const grpLabel = GROUP_LABEL[grp] ? ` [${GROUP_LABEL[grp]}]` : ''
+    const rsnLabel = CARC_LABEL[rsn] ? `: ${CARC_LABEL[rsn]}` : ''
+    return `${grp}-${rsn}${rsnLabel} — $${amt.toFixed(2)}${grpLabel}`
+  })
+}
+function interpretGap(contractRateSource: string, denialCodes: any): string {
+  const hasCO45 = Array.isArray(denialCodes) && denialCodes.some((c: any) =>
+    String(c?.group_code) === 'CO' && String(c?.reason_code) === '45')
+  if (hasCO45 && contractRateSource === 'era_median_seed') {
+    return (
+      'Payer applied CO-45 (charge exceeds fee schedule). The seeded ' +
+      'contract rate is a median across prior ERAs for this payer × CPT, ' +
+      'which may be noisy across plan variants. This "underpayment" may ' +
+      'simply reflect this specific plan\'s fee schedule. Confirm against ' +
+      'the payer contract document before escalating.'
+    )
+  }
+  if (hasCO45) {
+    return (
+      'Payer applied CO-45 (charge exceeds fee schedule) but your stored ' +
+      'contract rate is from a signed contract document. Real candidate ' +
+      'for a call to the payer — they paid below their own schedule.'
+    )
+  }
+  const hasBundling = Array.isArray(denialCodes) && denialCodes.some((c: any) =>
+    String(c?.reason_code) === '97')
+  if (hasBundling) {
+    return 'Payer bundled this line into another service (CO-97). Confirm whether an unbundling modifier (e.g. 25, 59) belongs on the paired code.'
+  }
+  return 'No obvious CARC/RARC explanation for the gap — worth a direct call to the payer.'
+}
+
 // After any path that writes insurance_payment_era, check whether the
 // payment is at least $5 below the contracted rate stored in
 // payer_contract_rates for (practice_id, payer_id, primary CPT). If so,
@@ -58,7 +119,10 @@ async function flagUnderpaymentIfAny(
   try {
     const [c] = await sql`
       SELECT id, payer_id, payer_name, cpt_codes,
-             insurance_payment_era, patient_first_name, patient_last_name,
+             insurance_payment_era, patient_copay_era, patient_deductible_era,
+             patient_coinsurance_era, patient_non_covered_era,
+             denial_codes, remark_codes,
+             patient_first_name, patient_last_name,
              service_date, stedi_claim_id, payer_control_number
       FROM claims
       WHERE id = ${claimId}::uuid AND practice_id = ${practiceId}::uuid`
@@ -67,8 +131,19 @@ async function flagUnderpaymentIfAny(
     if (!Array.isArray(c.cpt_codes) || c.cpt_codes.length !== 1) return
     const cptCode = (c.cpt_codes[0] as any)?.code
     if (!cptCode) return
-    const paid = parseFloat(String(c.insurance_payment_era ?? 0)) || 0
-    if (paid <= 0) return
+    // TOTAL ALLOWED = payer payment + the family's responsibility. That's
+    // the payer's contract rate for the service; the insurance_payment
+    // column alone is just the payer's cut, systematically lower. Sara
+    // caught this 2026-11-09 — the original math produced 100% false
+    // positives on the first live run.
+    const insurancePaid = parseFloat(String(c.insurance_payment_era ?? 0)) || 0
+    const patientResp =
+      (parseFloat(String(c.patient_copay_era ?? 0)) || 0) +
+      (parseFloat(String(c.patient_deductible_era ?? 0)) || 0) +
+      (parseFloat(String(c.patient_coinsurance_era ?? 0)) || 0) +
+      (parseFloat(String(c.patient_non_covered_era ?? 0)) || 0)
+    const totalAllowed = +(insurancePaid + patientResp).toFixed(2)
+    if (insurancePaid <= 0) return
 
     const [rate] = await sql`
       SELECT contracted_amount, source, sample_size
@@ -82,7 +157,7 @@ async function flagUnderpaymentIfAny(
       LIMIT 1`
     if (!rate) return
     const contracted = parseFloat(String(rate.contracted_amount)) || 0
-    const gap = +(contracted - paid).toFixed(2)
+    const gap = +(contracted - totalAllowed).toFixed(2)
     if (gap < 5) return
 
     const [existing] = await sql`
@@ -96,19 +171,27 @@ async function flagUnderpaymentIfAny(
 
     const priority = gap > 100 ? 10 : gap > 25 ? 50 : 100
     const patientName = [c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || 'Unknown patient'
+    const denialDescriptions = describeDenialCodes(c.denial_codes)
+    const remarkList = Array.isArray(c.remark_codes) ? c.remark_codes.filter((r: any) => typeof r === 'string') : []
+    const interpretation = interpretGap(String(rate.source), c.denial_codes)
     const summary =
-      `${c.payer_name ?? 'Payer'} underpaid CPT ${cptCode} by $${gap.toFixed(2)}. ` +
-      `Contracted $${contracted.toFixed(2)}, received $${paid.toFixed(2)}.`
+      `${c.payer_name ?? 'Payer'} total allowed $${totalAllowed.toFixed(2)} on CPT ${cptCode} vs expected $${contracted.toFixed(2)} (gap $${gap.toFixed(2)}). ` +
+      `${denialDescriptions.length > 0 ? 'Payer says: ' + denialDescriptions.slice(0, 2).join('; ') + '.' : 'No reason code supplied by payer.'}`
     const reasoning = {
       cpt_code: cptCode,
       contracted_amount: contracted,
-      insurance_payment_era: paid,
+      total_allowed: totalAllowed,
+      insurance_payment_era: insurancePaid,
+      patient_responsibility: +patientResp.toFixed(2),
       gap_amount: gap,
       contract_source: rate.source,
       contract_sample_size: rate.sample_size,
       confidence_note: rate.source === 'era_median_seed'
         ? `Seed rate from ${rate.sample_size} prior ERAs — verify before escalating with the payer.`
         : 'Rate confirmed from contract document.',
+      payer_reason_codes: denialDescriptions,
+      payer_remark_codes: remarkList,
+      interpretation,
       stedi_claim_id: c.stedi_claim_id,
       payer_control_number: c.payer_control_number,
       source: 'underpayment-flagger',
