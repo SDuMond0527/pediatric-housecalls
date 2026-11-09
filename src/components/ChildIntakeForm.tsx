@@ -132,13 +132,6 @@ export function childIsComplete(c: ChildEntry): string | null {
   if (!c.self_pay) {
     if (!c.insurance_provider.trim()) return 'Insurance provider'
     if (!c.insurance_member_id.trim()) return 'Member ID'
-    // BCBS NC requires EITHER a 2-digit dep code OR an explicit "my plan
-    // doesn't use one" acknowledgement. Matches InsuranceEditor's gate.
-    const prov = c.insurance_provider.toLowerCase()
-    const isBcbsNc = (prov.includes('bcbs') || prov.includes('blue cross') || prov.includes('anthem')) && !(prov.includes('anthem') && (prov.includes('va') || prov.includes('virginia')))
-    if (isBcbsNc && !c.insurance_dependent_code.trim() && !c.insurance_no_dependent_code) {
-      return 'Dependent code (or check "No dependent code")'
-    }
     if (!c.insurance_group_number.trim()) return 'Group #'
     if (!c.insurance_subscriber_name.trim()) return 'Subscriber name'
     if (!c.insurance_subscriber_dob) return 'Subscriber DOB'

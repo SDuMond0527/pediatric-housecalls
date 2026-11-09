@@ -126,15 +126,6 @@ export function insuranceIsComplete(v: InsuranceValue, opts?: { requireCards?: b
   if (v.self_pay) return null
   if (!v.insurance_provider.trim()) return 'Insurance provider'
   if (!v.insurance_member_id.trim()) return 'Member ID'
-  // BCBS NC specifically requires EITHER a 2-digit dep code OR an
-  // explicit "this plan doesn't use one" acknowledgement — otherwise
-  // the chart intake isn't complete and the claim will be rejected.
-  // Sara 2026-11-09.
-  if (looksLikeBcbsNc(v.insurance_provider) &&
-      !v.insurance_dependent_code.trim() &&
-      !v.insurance_no_dependent_code) {
-    return 'Dependent code (or check "No dependent code")'
-  }
   if (!v.insurance_group_number.trim()) return 'Group #'
   const subName = v.insurance_subscriber_name.trim()
   if (!subName) return 'Subscriber name'
