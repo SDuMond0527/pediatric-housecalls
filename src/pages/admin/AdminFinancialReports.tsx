@@ -209,6 +209,7 @@ export function AdminFinancialReports() {
           <ReimbursementByPayerSection data={data} start={start} end={end} />
           <CvFeeSummarySection data={data} start={start} end={end} />
           <DaysToEraByPayerSection data={data} start={start} end={end} />
+          <StatementPayTimeSection data={data} start={start} end={end} />
           <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
@@ -1108,6 +1109,136 @@ function DaysToEraByPayerSection({ data: _data, start, end }: { data: ReportsDat
                   <td className="px-3 py-2 text-right tabular-nums">{r.median_days}d</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[#1A1A2E]/60">{r.min_days}d</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[#1A1A2E]/60">{r.max_days}d</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Days from statement sent to paid ───────────────────────────────────
+// How long families take to pay the bill once we send it. Counts only
+// paid, non-voided statements where both sent_at + paid_at are set
+// and sent_at falls in the shared window. Statements sent but still
+// unpaid surfaced separately as context — not included in the average.
+// Sara 2026-11-08.
+
+type StatementPayTimeData = {
+  start: string
+  end: string
+  overall: { n: number; avg_days: number; median_days: number; min_days: number; max_days: number }
+  by_month: Array<{ month: string; n: number; avg_days: number; median_days: number }>
+  distribution: { d0_7: number; d8_14: number; d15_30: number; d31_plus: number }
+  unpaid_in_window: number
+}
+
+function StatementPayTimeSection({ data: _data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const [summary, setSummary] = useState<StatementPayTimeData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true); setError(null)
+    apiFetch<StatementPayTimeData>(`/api/admin/statement-pay-time?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then(d => { if (!cancelled) setSummary(d) })
+      .catch(e => { if (!cancelled) setError(e?.message ?? 'Failed to load statement pay-time report') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [_data, start, end])
+
+  return (
+    <ReportShell
+      title="Days from statement sent to paid"
+      icon={Clock}
+      plainEnglish="Once Pam sends a patient statement, how long till the family pays it. Counts only statements that have been both sent AND paid (not voided) in the window. Statements still unpaid are tracked separately as a context number below — they're not pulling down the average."
+      onExport={() => {
+        if (!summary) return
+        const lines: string[] = [
+          'section,label,n,avg_days,median_days',
+          `"overall","YTD",${summary.overall.n},${summary.overall.avg_days},${summary.overall.median_days}`,
+        ]
+        for (const m of summary.by_month) {
+          lines.push(`"monthly","${m.month}",${m.n},${m.avg_days},${m.median_days}`)
+        }
+        lines.push(`"distribution","0-7 days",${summary.distribution.d0_7},,`)
+        lines.push(`"distribution","8-14 days",${summary.distribution.d8_14},,`)
+        lines.push(`"distribution","15-30 days",${summary.distribution.d15_30},,`)
+        lines.push(`"distribution","31+ days",${summary.distribution.d31_plus},,`)
+        downloadCsv(`statement-pay-time-${start}_to_${end}.csv`, lines.join('\n'))
+      }}>
+      {error && (
+        <div className="text-[13px] text-red-600 bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg mb-3">{error}</div>
+      )}
+      {loading && !summary ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">Loading statement pay-time…</div>
+      ) : !summary || summary.overall.n === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No paid statements in this window.</div>
+      ) : (
+        <>
+          {/* Headline */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-[#EEEDFE]/50 border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Avg days to pay</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{summary.overall.avg_days}d</div>
+            </div>
+            <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Median</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{summary.overall.median_days}d</div>
+            </div>
+            <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Paid statements</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{summary.overall.n}</div>
+            </div>
+            <div className={`border rounded-lg px-4 py-3 ${summary.unpaid_in_window > 0 ? 'bg-[#FEF3C7] border-[#F59E0B]' : 'bg-[#FAFAF8] border-[#E8E8E4]'}`}>
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Still unpaid (context)</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{summary.unpaid_in_window}</div>
+            </div>
+          </div>
+
+          {/* Distribution buckets */}
+          <div className="mb-4">
+            <div className="text-[11px] uppercase tracking-wide text-[#1A1A2E]/60 mb-1.5">How fast families paid</div>
+            <div className="grid grid-cols-4 gap-2 text-[12px]">
+              <div className="bg-[#E1F5EE] border border-[#1D9E75]/30 rounded-md px-3 py-2">
+                <div className="text-[10px] text-[#1A1A2E]/60">Within 1 week</div>
+                <div className="font-semibold text-[#1A1A2E] tabular-nums">{summary.distribution.d0_7}</div>
+              </div>
+              <div className="bg-[#EEEDFE] border border-[#7F77DD]/30 rounded-md px-3 py-2">
+                <div className="text-[10px] text-[#1A1A2E]/60">8–14 days</div>
+                <div className="font-semibold text-[#1A1A2E] tabular-nums">{summary.distribution.d8_14}</div>
+              </div>
+              <div className="bg-[#FAEEDA] border border-[#EF9F27]/30 rounded-md px-3 py-2">
+                <div className="text-[10px] text-[#1A1A2E]/60">15–30 days</div>
+                <div className="font-semibold text-[#1A1A2E] tabular-nums">{summary.distribution.d15_30}</div>
+              </div>
+              <div className={`${summary.distribution.d31_plus > 0 ? 'bg-[#FEE2E2] border-[#991B1B]/30' : 'bg-[#FAFAF8] border-[#E8E8E4]'} border rounded-md px-3 py-2`}>
+                <div className="text-[10px] text-[#1A1A2E]/60">31+ days</div>
+                <div className="font-semibold text-[#1A1A2E] tabular-nums">{summary.distribution.d31_plus}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly trend */}
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+                <th className="text-left px-3 py-2">Month sent</th>
+                <th className="text-right px-3 py-2">Paid statements</th>
+                <th className="text-right px-3 py-2">Avg days</th>
+                <th className="text-right px-3 py-2">Median</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1EFE8]">
+              {summary.by_month.map(m => (
+                <tr key={m.month}>
+                  <td className="px-3 py-2 text-[#1A1A2E]">{m.month}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{m.n}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">{m.avg_days}d</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{m.median_days}d</td>
                 </tr>
               ))}
             </tbody>
