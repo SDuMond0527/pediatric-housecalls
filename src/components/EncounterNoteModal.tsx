@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react'
+import { DictationMic, appendDictation } from './DictationMic'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
@@ -1752,7 +1753,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
             {/* Chief Complaint */}
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && <section>
-              <div className={sectionHeader}>Chief Complaint</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={sectionHeader} style={{ marginBottom: 0 }}>Chief Complaint</span>
+                {!readOnly && (
+                  <DictationMic
+                    label="Dictate chief complaint"
+                    onTranscript={t => setChiefComplaint(prev => appendDictation(prev, t))} />
+                )}
+              </div>
               <input type="text" placeholder="e.g. Fever for 2 days" value={chiefComplaint}
                 disabled={readOnly}
                 onChange={e => setChiefComplaint(e.target.value)}
@@ -2261,7 +2269,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {/* Subjective */}
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
-              <div className={sectionHeader}>Subjective</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={sectionHeader} style={{ marginBottom: 0 }}>Subjective</span>
+                {!readOnly && (
+                  <DictationMic
+                    label="Dictate subjective"
+                    onTranscript={t => setSubjective(prev => appendDictation(prev, t))} />
+                )}
+              </div>
               <p className="text-[11px] text-[#1A1A2E] mb-1.5">
                 {(noteType === 'Sports physical' || noteType === 'IV fluids telemedicine screening') && !readOnly
                   ? 'Auto-filled from history above — edit freely'
@@ -2277,7 +2292,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             {/* Objective */}
             {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
             <section>
-              <div className={sectionHeader}>Objective</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={sectionHeader} style={{ marginBottom: 0 }}>Objective</span>
+                {!readOnly && (
+                  <DictationMic
+                    label="Dictate objective"
+                    onTranscript={t => setObjective(prev => appendDictation(prev, t))} />
+                )}
+              </div>
               <p className="text-[11px] text-[#1A1A2E] mb-1.5">Physical exam findings, clinical observations</p>
               {noteType === 'Sports physical' && !readOnly && (
                 <div className="mb-3 bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
@@ -2665,11 +2687,21 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               )}
 
               {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
-                <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
-                  placeholder="Clinical reasoning and assessment notes…" value={assessment}
-                  disabled={readOnly}
-                  onChange={e => setAssessment(e.target.value)}
-                  className={textareaCls} />
+                <>
+                  {!readOnly && (
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Assessment notes</span>
+                      <DictationMic
+                        label="Dictate assessment"
+                        onTranscript={t => setAssessment(prev => appendDictation(prev, t))} />
+                    </div>
+                  )}
+                  <textarea rows={noteType === 'Telemedicine video visit' || noteType === 'IV fluids telemedicine screening' ? 8 : 3}
+                    placeholder="Clinical reasoning and assessment notes…" value={assessment}
+                    disabled={readOnly}
+                    onChange={e => setAssessment(e.target.value)}
+                    className={textareaCls} />
+                </>
               )}
             </section>
 
@@ -2843,6 +2875,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+              {!readOnly && (
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Dictate</span>
+                  <DictationMic
+                    label="Dictate plan"
+                    onTranscript={t => setPlan(prev => appendDictation(prev, t))} />
                 </div>
               )}
               <p className="text-[11px] text-[#1A1A2E] mb-1.5">Treatment, medications, follow-up instructions</p>
