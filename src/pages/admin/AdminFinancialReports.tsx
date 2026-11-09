@@ -957,7 +957,7 @@ function CvFeeSummarySection({ data: _data, start, end }: { data: ReportsData; s
     <ReportShell
       title="Convenience fee per visit"
       icon={DollarSign}
-      plainEnglish="Average CV fee collected per visit, across every visit where a CV charge actually went through (status: auto-charged or manually charged). Pending / failed / reversed CVs are excluded. Monthly trend below the headline so you can see the shape over the year."
+      plainEnglish="Average CV fee attached to signed encounter notes, from September 1 forward (CV workflow matured in September; earlier data is unreliable). Monthly trend below shows the shape over the window."
       onExport={() => {
         if (!summary) return
         const header = ['Month', 'Visits w/ CV', 'Avg CV', 'Total CV']

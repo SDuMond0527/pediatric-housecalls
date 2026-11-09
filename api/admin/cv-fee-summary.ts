@@ -1,9 +1,11 @@
 // Average convenience fee per visit, year to date.
 //
-// Scope: only CV charges that successfully billed (status in
-// 'auto_charged' or 'manually_charged'). `link_sent` and `failed` /
-// `reversed` statuses excluded — those are either not yet collected
-// or explicitly failed.
+// Source: CV codes on signed encounter_notes.cpt_codes. This is the
+// source of truth for what CV was attached to a visit at sign-time;
+// it covers the full year (not just since the auto-charge pipeline
+// was built). CV codes get stripped from claims before submission
+// (insurance doesn't pay them) and moved to patient_statement, so
+// the note's cpt_codes array is the one place they survive.
 //
 // Shape: overall headline (n, avg, total) plus a monthly breakdown
 // so the trend over YTD is visible.
@@ -50,28 +52,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'start and end must be YYYY-MM-DD' })
   }
 
-  // Overall stats
+  // Hardcoded floor: pre-September 2026 CV data is unreliable (the CV
+  // workflow in GoRoam matured in Sep; earlier months have scattered
+  // ghost entries from code migrations). Clamp the window regardless
+  // of what the caller passes. Sara 2026-11-08.
+  const CV_FLOOR = '2026-09-01'
+
+  // Overall stats — pulled from signed encounter_notes.cpt_codes where
+  // any line item code starts with 'CV'. Each CV line counts once.
   const [overall] = await sql`
     SELECT
       COUNT(*)::int AS n,
-      COALESCE(ROUND((SUM(amount_cents) / 100.0)::numeric, 2), 0)::float AS total,
-      COALESCE(ROUND((AVG(amount_cents) / 100.0)::numeric, 2), 0)::float AS avg
-    FROM convenience_fee_charges
-    WHERE practice_id = ${practiceId}::uuid
-      AND service_date BETWEEN ${start}::date AND ${end}::date
-      AND status IN ('auto_charged', 'manually_charged')`
+      COALESCE(ROUND(SUM((cv_line->>'charge_amount')::numeric)::numeric, 2), 0)::float AS total,
+      COALESCE(ROUND(AVG((cv_line->>'charge_amount')::numeric)::numeric, 2), 0)::float AS avg
+    FROM encounter_notes en
+    CROSS JOIN LATERAL jsonb_array_elements(en.cpt_codes) AS cv_line
+    WHERE en.practice_id = ${practiceId}::uuid
+      AND en.is_signed = true
+      AND en.signed_at >= ${CV_FLOOR}::date
+      AND en.signed_at::date BETWEEN ${start}::date AND ${end}::date
+      AND cv_line->>'code' LIKE 'CV%'`
 
   // By month
   const byMonth = await sql`
     SELECT
-      TO_CHAR(service_date, 'YYYY-MM') AS month,
+      TO_CHAR(en.signed_at, 'YYYY-MM') AS month,
       COUNT(*)::int AS n,
-      ROUND((SUM(amount_cents) / 100.0)::numeric, 2)::float AS total,
-      ROUND((AVG(amount_cents) / 100.0)::numeric, 2)::float AS avg
-    FROM convenience_fee_charges
-    WHERE practice_id = ${practiceId}::uuid
-      AND service_date BETWEEN ${start}::date AND ${end}::date
-      AND status IN ('auto_charged', 'manually_charged')
+      ROUND(SUM((cv_line->>'charge_amount')::numeric)::numeric, 2)::float AS total,
+      ROUND(AVG((cv_line->>'charge_amount')::numeric)::numeric, 2)::float AS avg
+    FROM encounter_notes en
+    CROSS JOIN LATERAL jsonb_array_elements(en.cpt_codes) AS cv_line
+    WHERE en.practice_id = ${practiceId}::uuid
+      AND en.is_signed = true
+      AND en.signed_at >= ${CV_FLOOR}::date
+      AND en.signed_at::date BETWEEN ${start}::date AND ${end}::date
+      AND cv_line->>'code' LIKE 'CV%'
     GROUP BY month
     ORDER BY month`
 
