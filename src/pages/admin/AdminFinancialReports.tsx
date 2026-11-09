@@ -207,6 +207,7 @@ export function AdminFinancialReports() {
 
           <PayerMixSection data={data} start={start} end={end} />
           <ReimbursementByPayerSection data={data} start={start} end={end} />
+          <CvFeeSummarySection data={data} start={start} end={end} />
           <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
@@ -917,6 +918,102 @@ function ReimbursementByPayerSection({ data: _data, start, end }: { data: Report
               </tfoot>
             </table>
           </div>
+        </>
+      )}
+    </ReportShell>
+  )
+}
+
+// ─── Convenience fee summary ─────────────────────────────────────────────
+// Headline: average CV per successfully-billed visit. Scope matches the
+// Reimbursement grid above (same date range, same refetch trigger). Only
+// includes CVs with status 'auto_charged' or 'manually_charged' — the
+// actually-collected ones. Sara 2026-11-08.
+
+type CvMonthRow = { month: string; n: number; avg: number; total: number }
+type CvSummary = {
+  start: string
+  end: string
+  overall: { n: number; avg: number; total: number }
+  by_month: CvMonthRow[]
+}
+
+function CvFeeSummarySection({ data: _data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const [summary, setSummary] = useState<CvSummary | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true); setError(null)
+    apiFetch<CvSummary>(`/api/admin/cv-fee-summary?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then(d => { if (!cancelled) setSummary(d) })
+      .catch(e => { if (!cancelled) setError(e?.message ?? 'Failed to load CV summary') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [_data, start, end])
+
+  return (
+    <ReportShell
+      title="Convenience fee per visit"
+      icon={DollarSign}
+      plainEnglish="Average CV fee collected per visit, across every visit where a CV charge actually went through (status: auto-charged or manually charged). Pending / failed / reversed CVs are excluded. Monthly trend below the headline so you can see the shape over the year."
+      onExport={() => {
+        if (!summary) return
+        const header = ['Month', 'Visits w/ CV', 'Avg CV', 'Total CV']
+        const lines: string[] = [header.map(c => `"${c}"`).join(',')]
+        for (const m of summary.by_month) {
+          lines.push([m.month, m.n, m.avg.toFixed(2), m.total.toFixed(2)].map(c => `"${String(c)}"`).join(','))
+        }
+        lines.push(['Total (YTD)', summary.overall.n, summary.overall.avg.toFixed(2), summary.overall.total.toFixed(2)].map(c => `"${String(c)}"`).join(','))
+        downloadCsv(`cv-fee-summary-${start}_to_${end}.csv`, lines.join('\n'))
+      }}>
+      {error && (
+        <div className="text-[13px] text-red-600 bg-[#FCEBEB] border border-[#F5C6C6] px-3 py-2 rounded-lg mb-3">{error}</div>
+      )}
+      {loading && !summary ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">Loading CV summary…</div>
+      ) : !summary || summary.overall.n === 0 ? (
+        <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No successfully-billed CV charges in this window.</div>
+      ) : (
+        <>
+          {/* Headline block */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-[#EEEDFE]/50 border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Avg CV per visit</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{fmtMoney(summary.overall.avg)}</div>
+            </div>
+            <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Visits counted</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{summary.overall.n}</div>
+            </div>
+            <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg px-4 py-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-0.5">Total CV collected</div>
+              <div className="font-display text-[22px] font-semibold text-[#1A1A2E] tabular-nums">{fmtMoney(summary.overall.total)}</div>
+            </div>
+          </div>
+
+          {/* Monthly breakdown */}
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
+                <th className="text-left px-3 py-2">Month</th>
+                <th className="text-right px-3 py-2">Visits with CV</th>
+                <th className="text-right px-3 py-2">Avg CV</th>
+                <th className="text-right px-3 py-2">Total CV</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1EFE8]">
+              {summary.by_month.map(m => (
+                <tr key={m.month}>
+                  <td className="px-3 py-2 text-[#1A1A2E]">{m.month}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{m.n}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoney(m.avg)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(m.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
     </ReportShell>
