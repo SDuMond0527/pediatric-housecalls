@@ -224,7 +224,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '', insurance_card_front_url: '', insurance_card_back_url: '' })
+  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_no_dependent_code: false, insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '', insurance_card_front_url: '', insurance_card_back_url: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -673,6 +673,7 @@ export function PatientChart() {
         insurance_member_id: child?.insurance_member_id || '',
         insurance_group_number: child?.insurance_group_number || '',
         insurance_dependent_code: child?.insurance_dependent_code || '',
+        insurance_no_dependent_code: !!child?.insurance_no_dependent_code,
         insurance_subscriber_name: child?.insurance_subscriber_name || '',
         insurance_subscriber_dob: child?.insurance_subscriber_dob ? String(child.insurance_subscriber_dob).split('T')[0] : '',
         insurance_subscriber_gender: child?.insurance_subscriber_gender || '',
@@ -697,11 +698,16 @@ export function PatientChart() {
         // Self-pay overrides every other insurance field. See memory:
         // feedback_extract_shared_code_first_try.md
         const isSelf = !!insEdit.self_pay
+        // "No dependent code" wins over anything in the dep field — if
+        // the biller ticks the box, nothing lingers to be appended at
+        // claim submit. Sara 2026-11-09.
+        const noDep = !!insEdit.insurance_no_dependent_code
         body = {
           insurance_provider:                isSelf ? 'Self-pay' : (insEdit.insurance_provider || null),
           insurance_member_id:               isSelf ? null : (insEdit.insurance_member_id || null),
           insurance_group_number:            isSelf ? null : (insEdit.insurance_group_number || null),
-          insurance_dependent_code:          isSelf ? null : (insEdit.insurance_dependent_code || null),
+          insurance_dependent_code:          isSelf || noDep ? null : (insEdit.insurance_dependent_code || null),
+          insurance_no_dependent_code:       isSelf ? false : noDep,
           insurance_subscriber_name:         isSelf ? null : (insEdit.insurance_subscriber_name || null),
           insurance_subscriber_dob:          isSelf ? null : (insEdit.insurance_subscriber_dob || null),
           insurance_subscriber_gender:       isSelf ? null : (insEdit.insurance_subscriber_gender || null),
@@ -1381,6 +1387,7 @@ export function PatientChart() {
                           insurance_member_id: insEdit.insurance_member_id,
                           insurance_group_number: insEdit.insurance_group_number,
                           insurance_dependent_code: insEdit.insurance_dependent_code,
+                          insurance_no_dependent_code: insEdit.insurance_no_dependent_code,
                           insurance_subscriber_name: insEdit.insurance_subscriber_name,
                           insurance_subscriber_dob: insEdit.insurance_subscriber_dob,
                           insurance_subscriber_gender: insEdit.insurance_subscriber_gender,
@@ -1412,7 +1419,11 @@ export function PatientChart() {
                             <Field label="Member ID" value={child?.insurance_member_id} />
                             <Field label="Group number" value={child?.insurance_group_number} />
                             {(String(child?.insurance_provider || '').toLowerCase().includes('bcbs') || String(child?.insurance_provider || '').toLowerCase().includes('blue cross')) && (
-                              <Field label="Dependent code (BCBS NC)" value={child?.insurance_dependent_code} />
+                              <Field
+                                label="Dependent code (BCBS NC)"
+                                value={child?.insurance_no_dependent_code
+                                  ? 'No dependent code (plan does not use one)'
+                                  : child?.insurance_dependent_code} />
                             )}
                             <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
                             <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />

@@ -319,13 +319,22 @@ function buildStediPayload(claim: any, testMode = false): object {
         // suffix. Skip the transform when payer_name reads as Anthem so
         // we don't glue a bogus suffix onto an Anthem member ID. Sara
         // 2026-11-01.
+        // Simple rule per Sara 2026-11-09: if a dependent code is stored,
+        // concatenate it onto the end of the member ID as-is. Otherwise
+        // send the member ID unchanged. No length math, no slicing — the
+        // chart holds the member ID the parent provided, and the dep code
+        // (when present) is the 2-digit suffix to append.
+        //
+        // Replaces the prior "slice to 12 then append" logic, which
+        // mangled 15-char member IDs (Sophie Slutzker 10/29 claim, sent
+        // as 13 chars). Only path to a longer ID is now the human-entered
+        // one, which is what the payer expects anyway.
         const raw = String(claim.member_id ?? '').trim()
         if (claim.payer_id !== 'UPICO') return raw
         if (/anthem/i.test(String(claim.payer_name ?? ''))) return raw
         const dep = String(claim.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
         if (!dep) return raw
-        if (raw.length >= 12) return raw.slice(0, 12) + dep
-        return raw
+        return raw + dep
       })(),
       paymentResponsibilityLevelCode: 'P',
       ...(subFirstName ? { firstName: subFirstName } : {}),

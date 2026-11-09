@@ -179,32 +179,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { first: subscriberFirst, last: subscriberLast } = parseSubName(child.insurance_subscriber_name ?? '')
 
-  // BCBS NC requires the 14-position member ID (12-char base +
-  // 2-digit dependent suffix concatenated). Same rule and same bug
-  // fix as api/claims/[id].ts (2026-10-06): the dep code is stored
-  // separately on the child record, but parents frequently paste the
-  // full 14-char ID from their card into the member_id field, so we
-  // need to detect "already includes suffix" and NOT double-append.
-  // Blindly appending produced 16-char IDs that BCBS rejected (4
-  // historical rejections caught during the 277 pipeline recovery).
+  // BCBS NC member ID transform. Sara 2026-11-09: if a dependent code
+  // is stored on the child, concatenate it onto the end of the stored
+  // member ID. No length math. The parent's card is the source of truth
+  // for the member ID; the dep code is the suffix we append when BCBS
+  // requires it. Anthem (except Anthem of VA) routes to UPICO but
+  // doesn't use the suffix, so skip the transform there.
   const depCode = String(child.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
   const transmittedMemberId = (() => {
     const raw = String(child.insurance_member_id ?? '').trim()
     if (payerId !== 'UPICO') return raw
-    // Anthem (except Anthem of VA, which has its own payer ID) routes
-    // to UPICO but doesn't use dependent suffixes. Skip the transform.
-    // Sara 2026-11-01.
     if (/anthem/i.test(String(child.insurance_provider ?? ''))) return raw
     if (!depCode) return raw
-    // Always strip to the 12-char base and append THIS patient's dep
-    // code — the suffix at the end of a parent-entered 14-char ID is
-    // the subscriber's own suffix (often "01"), not the dependent we're
-    // checking eligibility for. Same logic as api/claims/[id].ts.
-    // Length ≥ 12 covers 13 / 15-char IDs too — the old 12-or-14 gate
-    // let those pass through raw, matching the Stedi submit path's old
-    // silent-skip bug. Sara 2026-11-01.
-    if (raw.length >= 12) return raw.slice(0, 12) + depCode
-    return raw
+    return raw + depCode
   })()
 
   const payload = {

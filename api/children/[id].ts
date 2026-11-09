@@ -8,6 +8,53 @@ function easternDateStr(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
+// Normalize values before diffing so cosmetic re-saves (same string,
+// same date-with-time vs date-without-time, etc.) don't log as changes.
+function normAuditValue(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  const s = String(v).trim()
+  if (s === '') return null
+  // DOB columns return "2015-04-20T00:00:00.000Z" from Neon; strip time.
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
+  return s
+}
+
+async function auditInsuranceEdit(
+  sql: any,
+  auth: { sub: string; isFamily: boolean },
+  practiceId: string,
+  childId: string,
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+  fields: readonly string[],
+): Promise<void> {
+  if (!before || !after) return
+  const changed: Record<string, { before: string | null; after: string | null }> = {}
+  for (const f of fields) {
+    const b = normAuditValue(before[f])
+    const a = normAuditValue(after[f])
+    if (b !== a) changed[f] = { before: b, after: a }
+  }
+  if (Object.keys(changed).length === 0) return
+  try {
+    const [actor] = auth.isFamily
+      ? await sql`SELECT NULL::uuid AS id, display_name AS name FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
+      : await sql`SELECT id, name FROM providers WHERE cognito_sub = ${auth.sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    const detail = {
+      actor_kind: auth.isFamily ? 'family' : 'provider',
+      actor_name: actor?.name ?? null,
+      changed,
+    }
+    await sql`
+      INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id, detail)
+      VALUES (${actor?.id ?? null}::uuid, 'edit_insurance', 'child', ${childId}, ${JSON.stringify(detail)}::jsonb)`
+  } catch (e: any) {
+    console.error('edit_insurance audit log insert failed (non-fatal):', e?.message)
+  }
+}
+
 async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; isFamily: boolean }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
@@ -39,8 +86,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Idempotent bootstrap so a PATCH that includes insurance_dependent_code
   // can never fail with "column does not exist" on a fresh deploy.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_no_dependent_code boolean DEFAULT false` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
+  // Audit table — the chart edit PATCH logs every insurance_* mutation
+  // here so we can trace changes after the fact (Sophie Slutzker member
+  // ID silently changed between 10/29 and 10/31 with no trail).
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS phi_audit_log (
+        id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        provider_id   uuid,
+        action        text NOT NULL,
+        resource_type text NOT NULL,
+        resource_id   text,
+        detail        jsonb,
+        created_at    timestamptz NOT NULL DEFAULT NOW()
+      )`
+  } catch {}
+  // Older deployments created phi_audit_log without the detail column.
+  try { await sql`ALTER TABLE phi_audit_log ADD COLUMN IF NOT EXISTS detail jsonb` } catch {}
 
   let practiceId: string
   if (auth.isFamily) {
@@ -148,6 +213,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const newFirst = b.first_name || null
       const newLast  = b.last_name  || null
 
+      // Snapshot of insurance fields BEFORE any UPDATE in this request —
+      // used to decide whether an edit_insurance audit row needs to be
+      // written, and to capture a before/after diff when it does. Sara
+      // 2026-11-09 (Sophie Slutzker member ID silently mutated with no
+      // audit trail — this plugs that gap).
+      const INSURANCE_AUDIT_FIELDS = [
+        'insurance_provider', 'insurance_member_id', 'insurance_group_number',
+        'insurance_dependent_code', 'insurance_no_dependent_code',
+        'insurance_subscriber_name', 'insurance_subscriber_dob',
+        'insurance_subscriber_gender', 'insurance_subscriber_relationship',
+        'insurance_card_front_url', 'insurance_card_back_url',
+      ] as const
+      const [preAudit] = await sql`
+        SELECT insurance_provider, insurance_member_id, insurance_group_number,
+               insurance_dependent_code, insurance_no_dependent_code,
+               insurance_subscriber_name, insurance_subscriber_dob,
+               insurance_subscriber_gender, insurance_subscriber_relationship,
+               insurance_card_front_url, insurance_card_back_url
+        FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+
       // Family-wide fields — cascade to every sibling in the same family.
       // Parents typing these into any child's chart / intake should NOT
       // have to repeat themselves for their other kids. See memory:
@@ -219,6 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           insurance_member_id  = COALESCE(${b.insurance_member_id  || null}, insurance_member_id),
           insurance_group_number = COALESCE(${b.insurance_group_number || null}, insurance_group_number),
           insurance_dependent_code = COALESCE(${b.insurance_dependent_code || null}, insurance_dependent_code),
+          insurance_no_dependent_code = COALESCE(${b.insurance_no_dependent_code ?? null}::boolean, insurance_no_dependent_code),
           insurance_card_front_url     = COALESCE(${b.insurance_card_front_url     || null}, insurance_card_front_url),
           insurance_card_back_url      = COALESCE(${b.insurance_card_back_url      || null}, insurance_card_back_url),
           gender                       = COALESCE(${b.gender                       || null}, gender),
@@ -304,9 +390,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         // Re-fetch after nulls so the response reflects the cleared state.
         const [refreshed] = await sql`SELECT * FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+        await auditInsuranceEdit(sql, auth, practiceId, id, preAudit, refreshed, INSURANCE_AUDIT_FIELDS)
         return res.json(refreshed)
       }
 
+      await auditInsuranceEdit(sql, auth, practiceId, id, preAudit, row, INSURANCE_AUDIT_FIELDS)
       return res.json(row)
     } catch (err: any) {
       return res.status(500).json({ error: err.message ?? String(err) })

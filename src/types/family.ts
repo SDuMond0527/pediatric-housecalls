@@ -30,6 +30,7 @@ export interface Child {
   insurance_member_id: string | null
   insurance_group_number: string | null
   insurance_dependent_code: string | null
+  insurance_no_dependent_code: boolean | null
   insurance_subscriber_name: string | null
   insurance_subscriber_dob: string | null
   insurance_subscriber_gender: string | null

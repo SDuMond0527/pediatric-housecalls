@@ -43,6 +43,7 @@ export type ChildEntry = {
   insurance_member_id: string
   insurance_group_number: string
   insurance_dependent_code: string
+  insurance_no_dependent_code: boolean
   insurance_subscriber_name: string
   insurance_subscriber_dob: string
   insurance_subscriber_gender: string
@@ -61,6 +62,7 @@ export function emptyChild(): ChildEntry {
     preferred_pharmacy: '', dosespot_pharmacy_id: null, pcp: '', vaccination_status: '',
     self_pay: false,
     insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '',
+    insurance_no_dependent_code: false,
     insurance_subscriber_name: '', insurance_subscriber_dob: '',
     insurance_subscriber_gender: '', insurance_subscriber_relationship: 'child',
     insurance_card_front_url: '', insurance_card_back_url: '',
@@ -103,6 +105,7 @@ export function emptyChildInheritingFrom(sibling: any): ChildEntry {
     insurance_member_id:     isSelfPay ? '' : String(s.insurance_member_id     ?? ''),
     insurance_group_number:  isSelfPay ? '' : String(s.insurance_group_number  ?? ''),
     insurance_dependent_code:'',  // dep code is child-specific for BCBS NC — never inherit
+    insurance_no_dependent_code: !!s.insurance_no_dependent_code,
     insurance_subscriber_name:     isSelfPay ? '' : String(s.insurance_subscriber_name     ?? ''),
     insurance_subscriber_dob:      isSelfPay ? '' : subDob,
     insurance_subscriber_gender:   isSelfPay ? '' : String(s.insurance_subscriber_gender   ?? ''),
@@ -129,6 +132,13 @@ export function childIsComplete(c: ChildEntry): string | null {
   if (!c.self_pay) {
     if (!c.insurance_provider.trim()) return 'Insurance provider'
     if (!c.insurance_member_id.trim()) return 'Member ID'
+    // BCBS NC requires EITHER a 2-digit dep code OR an explicit "my plan
+    // doesn't use one" acknowledgement. Matches InsuranceEditor's gate.
+    const prov = c.insurance_provider.toLowerCase()
+    const isBcbsNc = (prov.includes('bcbs') || prov.includes('blue cross') || prov.includes('anthem')) && !(prov.includes('anthem') && (prov.includes('va') || prov.includes('virginia')))
+    if (isBcbsNc && !c.insurance_dependent_code.trim() && !c.insurance_no_dependent_code) {
+      return 'Dependent code (or check "No dependent code")'
+    }
     if (!c.insurance_group_number.trim()) return 'Group #'
     if (!c.insurance_subscriber_name.trim()) return 'Subscriber name'
     if (!c.insurance_subscriber_dob) return 'Subscriber DOB'
@@ -167,7 +177,8 @@ export function buildChildCreatePayload(
     insurance_provider:                 child.self_pay ? 'Self-pay' : child.insurance_provider.trim(),
     insurance_member_id:                child.self_pay ? null : child.insurance_member_id.trim(),
     insurance_group_number:             child.self_pay ? null : child.insurance_group_number.trim(),
-    insurance_dependent_code:           child.self_pay ? null : (child.insurance_dependent_code?.trim() || null),
+    insurance_dependent_code:           child.self_pay || child.insurance_no_dependent_code ? null : (child.insurance_dependent_code?.trim() || null),
+    insurance_no_dependent_code:        child.self_pay ? false : !!child.insurance_no_dependent_code,
     insurance_subscriber_name:          child.self_pay ? null : child.insurance_subscriber_name.trim(),
     insurance_subscriber_dob:           child.self_pay ? null : child.insurance_subscriber_dob,
     insurance_subscriber_gender:        child.self_pay ? null : child.insurance_subscriber_gender,
@@ -211,6 +222,7 @@ export function ChildIntakeForm({
     insurance_member_id: child.insurance_member_id,
     insurance_group_number: child.insurance_group_number,
     insurance_dependent_code: child.insurance_dependent_code,
+    insurance_no_dependent_code: child.insurance_no_dependent_code,
     insurance_subscriber_name: child.insurance_subscriber_name,
     insurance_subscriber_dob: child.insurance_subscriber_dob,
     insurance_subscriber_gender: child.insurance_subscriber_gender,

@@ -19,6 +19,12 @@ export type InsuranceValue = {
   insurance_member_id: string
   insurance_group_number: string
   insurance_dependent_code: string
+  // Affirmative "this BCBS plan does not use a 2-digit dependent suffix"
+  // flag. Lets Sara clear + suppress the warning permanently for plans
+  // that genuinely don't use one (e.g. Sophie Slutzker's 15-char plan).
+  // When true: dep_code is persisted as null, the dep input is hidden,
+  // and the yellow heads-up banner is suppressed. Sara 2026-11-09.
+  insurance_no_dependent_code: boolean
   insurance_subscriber_name: string
   insurance_subscriber_dob: string
   insurance_subscriber_gender: string
@@ -34,6 +40,7 @@ export function emptyInsurance(): InsuranceValue {
     insurance_member_id: '',
     insurance_group_number: '',
     insurance_dependent_code: '',
+    insurance_no_dependent_code: false,
     insurance_subscriber_name: '',
     insurance_subscriber_dob: '',
     insurance_subscriber_gender: '',
@@ -119,6 +126,15 @@ export function insuranceIsComplete(v: InsuranceValue, opts?: { requireCards?: b
   if (v.self_pay) return null
   if (!v.insurance_provider.trim()) return 'Insurance provider'
   if (!v.insurance_member_id.trim()) return 'Member ID'
+  // BCBS NC specifically requires EITHER a 2-digit dep code OR an
+  // explicit "this plan doesn't use one" acknowledgement — otherwise
+  // the chart intake isn't complete and the claim will be rejected.
+  // Sara 2026-11-09.
+  if (looksLikeBcbsNc(v.insurance_provider) &&
+      !v.insurance_dependent_code.trim() &&
+      !v.insurance_no_dependent_code) {
+    return 'Dependent code (or check "No dependent code")'
+  }
   if (!v.insurance_group_number.trim()) return 'Group #'
   const subName = v.insurance_subscriber_name.trim()
   if (!subName) return 'Subscriber name'
@@ -138,11 +154,16 @@ export function insuranceIsComplete(v: InsuranceValue, opts?: { requireCards?: b
 
 /** Turn a validated InsuranceValue into API-payload fields. */
 export function insurancePayload(v: InsuranceValue): Record<string, unknown> {
+  // The "No dependent code" flag forces dep_code to null regardless of
+  // anything in the input field — if the biller ticks the box, nothing
+  // we might've captured gets through to the claim transform.
+  const noDep = !!v.insurance_no_dependent_code
   return {
     insurance_provider:                v.self_pay ? 'Self-pay' : v.insurance_provider.trim(),
     insurance_member_id:               v.self_pay ? null : v.insurance_member_id.trim(),
     insurance_group_number:            v.self_pay ? null : v.insurance_group_number.trim(),
-    insurance_dependent_code:          v.self_pay ? null : (v.insurance_dependent_code?.trim() || null),
+    insurance_dependent_code:          v.self_pay || noDep ? null : (v.insurance_dependent_code?.trim() || null),
+    insurance_no_dependent_code:       v.self_pay ? false : noDep,
     insurance_subscriber_name:         v.self_pay ? null : v.insurance_subscriber_name.trim(),
     insurance_subscriber_dob:          v.self_pay ? null : v.insurance_subscriber_dob,
     insurance_subscriber_gender:       v.self_pay ? null : v.insurance_subscriber_gender,
@@ -251,15 +272,41 @@ export function InsuranceEditor({
 
           {looksLikeBcbs(value.insurance_provider) && (
             <div>
-              <Input label="Dependent code (BCBS NC) — 2 digits"
-                placeholder="e.g. 03"
-                maxLength={2}
-                value={value.insurance_dependent_code}
-                onChange={e => onChange({ insurance_dependent_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
-              <p className="text-[10px] text-[#1A1A2E] mt-1">Required for BCBS NC. 01=subscriber, 02=spouse, 03+=kids by DOB. Check EOB or call BCBS NC.</p>
-              {looksLikeBcbsNc(value.insurance_provider) && !value.insurance_dependent_code?.trim() && (
+              {!value.insurance_no_dependent_code && (
+                <>
+                  <Input label="Dependent code (BCBS NC) — 2 digits"
+                    placeholder="e.g. 03"
+                    maxLength={2}
+                    value={value.insurance_dependent_code}
+                    onChange={e => onChange({ insurance_dependent_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
+                  <p className="text-[10px] text-[#1A1A2E] mt-1">Required for BCBS NC. 01=subscriber, 02=spouse, 03+=kids by DOB. Check EOB or call BCBS NC.</p>
+                </>
+              )}
+              {/* Affirmative "my plan doesn't have one" opt-out — kills the
+                  yellow warning + clears any stale value on save. Only shown
+                  for BCBS NC since that's the only payer the suffix matters
+                  for. Sara 2026-11-09. */}
+              {looksLikeBcbsNc(value.insurance_provider) && (
+                <label className="mt-2 flex items-start gap-2 p-2 border border-[#E8E8E4] rounded-lg cursor-pointer hover:bg-[#FAFAF8]">
+                  <input type="checkbox"
+                    checked={!!value.insurance_no_dependent_code}
+                    onChange={e => onChange({
+                      insurance_no_dependent_code: e.target.checked,
+                      // Clear the text value whenever the box flips on so
+                      // nothing lingers to be appended at claim submit.
+                      ...(e.target.checked ? { insurance_dependent_code: '' } : {}),
+                    })}
+                    className="mt-0.5" />
+                  <span className="text-[12px] text-[#1A1A2E] leading-snug">
+                    <strong>No dependent code.</strong> My BCBS NC plan does not use a 2-digit dependent suffix (e.g. 15-character member IDs).
+                  </span>
+                </label>
+              )}
+              {looksLikeBcbsNc(value.insurance_provider) &&
+               !value.insurance_dependent_code?.trim() &&
+               !value.insurance_no_dependent_code && (
                 <div className="mt-2 rounded-md border border-[#F59E0B] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E] leading-snug">
-                  <strong>Heads up:</strong> most BCBS NC plans need the 2-digit dependent code or the claim is rejected. You can save without it — if your plan uses one, we'll flag it when the claim goes out so our biller can follow up.
+                  <strong>Heads up:</strong> most BCBS NC plans need the 2-digit dependent code or the claim is rejected. If your plan truly doesn't use one, check the box above.
                 </div>
               )}
             </div>
