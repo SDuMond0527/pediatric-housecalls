@@ -919,6 +919,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           patient_coinsurance_era    = ${coinsurance},
           patient_non_covered_era    = ${nonCovered},
           era_received_at            = ${paymentDate}::timestamptz,
+          -- Stamp era_seen_at at the same time as the manual post. The
+          -- biller IS the one who saw this payment — she typed it in
+          -- from a paper EOB. Without this, the "NEW ERA" flashing
+          -- purple badge keeps pinging her about an ERA she already
+          -- handled. Sara 2026-11-09.
+          era_seen_at                = NOW(),
           payment_source             = 'manual',
           payment_posted_at          = NOW(),
           payment_posted_by          = ${whoName},

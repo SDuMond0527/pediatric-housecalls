@@ -74,6 +74,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('[stale-claims] bootstrap error (non-fatal):', e?.message)
   }
 
+  // Self-clean: close any open stale_claim items whose underlying claim
+  // no longer matches the stale criteria. Happens when the biller posts
+  // a manual payment (sets era_received_at) or when a Stedi ERA lands.
+  // Keeps the queue honest without requiring humans to Reject rows the
+  // system itself has resolved. Sara 2026-11-09 (Peter Gagliano case).
+  const closed = await sql`
+    UPDATE review_queue_items
+    SET status          = 'auto_resolved',
+        decided_at      = NOW(),
+        decided_by_name = 'system (stale-claims cron)',
+        decision_note   = 'Claim no longer stale — ERA received or status changed.'
+    WHERE item_type = 'stale_claim'
+      AND status    = 'open'
+      AND claim_id IN (
+        SELECT id FROM claims
+        WHERE era_received_at IS NOT NULL
+           OR status NOT IN ('submitted')
+      )
+    RETURNING id`
+
   // Pull every candidate across every practice so this cron doubles as
   // the multi-tenant watcher the platform will eventually need.
   const candidates = await sql`
@@ -160,6 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     ran_at: new Date().toISOString(),
+    auto_closed: closed.length,
     candidates: candidates.length,
     inserted,
     updated,
