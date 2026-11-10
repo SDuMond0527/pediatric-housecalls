@@ -32,6 +32,62 @@ const ITEM_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   appeal_draft:  { label: 'Appeal draft',  cls: 'bg-[#EEEDFE] text-[#3C3489]' },
 }
 
+// Buttons are contextual per item type. Stage 1 items (stale_claim,
+// underpayment) are NOTIFICATIONS — the "action" is "I handled this"
+// with a note describing WHAT the biller did. Stage 2 items (new_claim,
+// rejection_fix, denial_fix, appeal_draft) are PROPOSALS the biller is
+// accepting or rejecting — "Approve" / "Reject" wording fits those.
+// Sara 2026-11-09.
+const ACTION_LABELS: Record<string, {
+  primary: string
+  dismiss: string
+  notePrompt: string
+  noteRequired: boolean
+}> = {
+  stale_claim: {
+    primary: 'Mark handled',
+    dismiss: 'Dismiss',
+    notePrompt: 'What did you do about it? (e.g. "called Cigna, claim being reprocessed" or "posted payment manually")',
+    noteRequired: true,
+  },
+  underpayment: {
+    primary: 'Mark handled',
+    dismiss: 'Dismiss',
+    notePrompt: 'What did you do about it? (e.g. "called payer, confirmed fee schedule" or "wrote off the gap")',
+    noteRequired: true,
+  },
+  new_claim: {
+    primary: 'Approve + submit',
+    dismiss: 'Reject',
+    notePrompt: 'Optional note:',
+    noteRequired: false,
+  },
+  rejection_fix: {
+    primary: 'Approve fix',
+    dismiss: 'Reject',
+    notePrompt: 'Optional note:',
+    noteRequired: false,
+  },
+  denial_fix: {
+    primary: 'Approve fix',
+    dismiss: 'Reject',
+    notePrompt: 'Optional note:',
+    noteRequired: false,
+  },
+  appeal_draft: {
+    primary: 'Send appeal',
+    dismiss: 'Reject',
+    notePrompt: 'Optional note:',
+    noteRequired: false,
+  },
+}
+const DEFAULT_ACTION_LABELS = {
+  primary: 'Mark handled',
+  dismiss: 'Dismiss',
+  notePrompt: 'Note (optional):',
+  noteRequired: false,
+}
+
 function fmtDate(d: string | null | undefined) {
   if (!d) return '—'
   try {
@@ -265,12 +321,14 @@ function QueueTab(props: {
             <>
               <span className="text-[12px] text-[#555]">{selected.size} selected</span>
               <button onClick={() => void props.doBatch('approve')} disabled={deciding === 'batch'}
+                title="Mark selected as handled (you did something about each)"
                 className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white bg-[#1D9E75] hover:bg-[#188960] rounded-lg px-3 py-1.5 disabled:opacity-50">
-                <CheckCircle2 size={12} /> Approve selected
+                <CheckCircle2 size={12} /> Mark selected handled
               </button>
               <button onClick={() => void props.doBatch('reject')} disabled={deciding === 'batch'}
+                title="Dismiss selected (false alarm or won't act)"
                 className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#7F1D1D] border border-[#FDA4AF] rounded-lg px-3 py-1.5 hover:bg-[#FEE2E2] disabled:opacity-50">
-                <X size={12} /> Reject selected
+                <X size={12} /> Dismiss selected
               </button>
               <button onClick={props.clearSelection}
                 className="text-[12px] text-[#555] hover:text-[#1A1A2E] px-2">
@@ -306,7 +364,9 @@ function QueueTab(props: {
         {items.map(it => {
           const checked = selected.has(it.id)
           const badge = ITEM_TYPE_BADGE[it.item_type] ?? { label: it.item_type, cls: 'bg-[#F1EFE8] text-[#555]' }
+          const labels = ACTION_LABELS[it.item_type] ?? DEFAULT_ACTION_LABELS
           const open = expanded === it.id
+          const isStage2Proposal = ['new_claim', 'rejection_fix', 'denial_fix', 'appeal_draft'].includes(it.item_type)
           return (
             <div key={it.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
               <div className="flex items-start gap-3 p-4">
@@ -323,22 +383,43 @@ function QueueTab(props: {
                   <div className="text-[11px] text-[#777] mt-1">Queued {fmtDateTime(it.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => void props.doDecide(it.id, 'approve')} disabled={deciding === it.id}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-white bg-[#1D9E75] hover:bg-[#188960] rounded-lg px-2.5 py-1.5 disabled:opacity-50">
-                    <CheckCircle2 size={11} /> Approve
-                  </button>
-                  <button
-                    onClick={() => alert('Edit opens a side-by-side diff — wires in with Stage 2 when the agent is producing real proposals. Sara 2026-11-09.')}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-[#555] border border-[#E8E8E4] rounded-lg px-2.5 py-1.5 hover:bg-[#F1EFE8]">
-                    <Pencil size={11} /> Edit
-                  </button>
                   <button onClick={() => {
-                      const note = window.prompt('Reject reason (optional):') ?? undefined
-                      void props.doDecide(it.id, 'reject', note || undefined)
+                      // Notification-style items (stale_claim, underpayment) need
+                      // a note describing WHAT was done so the audit trail is
+                      // useful. Proposal-style items (Stage 2) can skip the note.
+                      let note: string | undefined
+                      if (labels.noteRequired) {
+                        const entered = window.prompt(labels.notePrompt)
+                        if (entered == null) return  // user cancelled
+                        if (!entered.trim()) {
+                          alert('A short note is required so the audit trail says what happened.')
+                          return
+                        }
+                        note = entered.trim()
+                      }
+                      void props.doDecide(it.id, 'approve', note)
                     }}
                     disabled={deciding === it.id}
+                    title={labels.primary}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-white bg-[#1D9E75] hover:bg-[#188960] rounded-lg px-2.5 py-1.5 disabled:opacity-50">
+                    <CheckCircle2 size={11} /> {labels.primary}
+                  </button>
+                  {isStage2Proposal && (
+                    <button
+                      onClick={() => alert('Edit opens a side-by-side diff — wires in with Stage 2 when the agent is producing real proposals. Sara 2026-11-09.')}
+                      className="inline-flex items-center gap-1 text-[12px] font-medium text-[#555] border border-[#E8E8E4] rounded-lg px-2.5 py-1.5 hover:bg-[#F1EFE8]">
+                      <Pencil size={11} /> Edit
+                    </button>
+                  )}
+                  <button onClick={() => {
+                      const entered = window.prompt('Reason for dismissing (optional):')
+                      if (entered == null) return  // cancelled
+                      void props.doDecide(it.id, 'reject', entered.trim() || undefined)
+                    }}
+                    disabled={deciding === it.id}
+                    title={labels.dismiss}
                     className="inline-flex items-center gap-1 text-[12px] font-medium text-[#7F1D1D] border border-[#FDA4AF] rounded-lg px-2.5 py-1.5 hover:bg-[#FEE2E2] disabled:opacity-50">
-                    <X size={11} /> Reject
+                    <X size={11} /> {labels.dismiss}
                   </button>
                   <button onClick={() => props.setExpanded(open ? null : it.id)}
                     className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#555]"

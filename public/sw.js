@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-09-unmatched-eras-show-errors
+// Service worker — deliberate passthrough. Version: 2026-11-09-contextual-queue-buttons
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
