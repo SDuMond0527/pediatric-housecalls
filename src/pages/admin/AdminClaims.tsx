@@ -117,6 +117,10 @@ export function AdminClaims() {
   const [expanded, setExpandedRaw] = useState<string | null>(null)
   // Claim id of the "Post payment" modal when open. Sara 2026-10-19.
   const [postPaymentClaimId, setPostPaymentClaimId] = useState<string | null>(null)
+  // Separate state for the EDIT flow so the modal knows to pre-fill
+  // from existing ERA values + call the edit endpoint. Only valid for
+  // claims where payment_source='manual'. Sara 2026-11-09.
+  const [editPaymentClaimId, setEditPaymentClaimId] = useState<string | null>(null)
   // Tracks which claim's status dropdown is currently PATCHing so the
   // select disables during the in-flight write. Sara 2026-09-30.
   const [statusChanging, setStatusChanging] = useState<string | null>(null)
@@ -2646,6 +2650,19 @@ export function AdminClaims() {
                                 <Zap size={9} /> ERA received
                               </span>
                             )}
+                            {/* Edit a previously-posted MANUAL payment — only
+                                shown for payment_source='manual' so Stedi ERAs
+                                stay untouched. Sara 2026-11-09. */}
+                            {c.era_received_at && c.payment_source === 'manual' && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEditPaymentClaimId(c.id) }}
+                                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE] whitespace-nowrap"
+                                title="Edit the amounts of the manually-posted payment on this claim."
+                              >
+                                <Pencil size={10} /> Edit payment
+                              </button>
+                            )}
                             {/* Manual "Post payment" — for payments that arrived
                                 outside the Stedi ERA pipeline (paper EOB, EFT
                                 without ERA). Only visible on Submitted claims
@@ -3581,6 +3598,22 @@ export function AdminClaims() {
             onPosted={(updated) => {
               setClaims(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
               setPostPaymentClaimId(null)
+            }}
+          />
+        )
+      })()}
+
+      {editPaymentClaimId && (() => {
+        const c = claims.find(x => x.id === editPaymentClaimId)
+        if (!c) return null
+        return (
+          <PostPaymentModal
+            claim={c}
+            mode="edit"
+            onClose={() => setEditPaymentClaimId(null)}
+            onPosted={(updated) => {
+              setClaims(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
+              setEditPaymentClaimId(null)
             }}
           />
         )

@@ -2,13 +2,18 @@ import { useState } from 'react'
 import { X, DollarSign, AlertCircle } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
-import { postInsurancePayment } from '../lib/api'
+import { postInsurancePayment, editInsurancePayment } from '../lib/api'
 
 // Modal for Andrea to post an insurance payment that arrived outside the
 // Stedi ERA pipeline (paper EOB, EFT without ERA, manually keyed check).
 // Server writes the same columns the ERA path writes, so downstream
 // behavior — Completed-tab routing, patient-statement generation — is
 // identical. Sara 2026-10-19.
+//
+// Also handles editing a previously-posted manual payment — pre-fills
+// from the claim's existing ERA fields and routes to the edit endpoint.
+// Edit mode is only meaningful for payment_source='manual' rows; caller
+// gates visibility of the Edit button. Sara 2026-11-09.
 
 interface Props {
   claim: {
@@ -18,7 +23,18 @@ interface Props {
     service_date?: string | null
     total_charge?: number | string | null
     payer_name?: string | null
+    // Present only in edit mode — used to pre-fill the form
+    amount_billed_era?: number | string | null
+    insurance_payment_era?: number | string | null
+    contractual_adjustment_era?: number | string | null
+    patient_copay_era?: number | string | null
+    patient_deductible_era?: number | string | null
+    patient_coinsurance_era?: number | string | null
+    patient_non_covered_era?: number | string | null
+    payment_reference?: string | null
+    era_received_at?: string | null
   }
+  mode?: 'create' | 'edit'
   onClose: () => void
   onPosted: (updatedClaim: any) => void
 }
@@ -28,17 +44,30 @@ function toNum(v: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-export function PostPaymentModal({ claim, onClose, onPosted }: Props) {
-  const defaultBilled = claim.total_charge ? String(claim.total_charge) : ''
+function fmtFieldNum(v: number | string | null | undefined): string {
+  if (v == null || v === '') return ''
+  const n = parseFloat(String(v))
+  if (!Number.isFinite(n) || n === 0) return ''
+  return n.toFixed(2)
+}
+
+export function PostPaymentModal({ claim, mode = 'create', onClose, onPosted }: Props) {
+  const isEdit = mode === 'edit'
+  const defaultBilled = isEdit
+    ? fmtFieldNum(claim.amount_billed_era) || (claim.total_charge ? String(claim.total_charge) : '')
+    : (claim.total_charge ? String(claim.total_charge) : '')
+  const defaultDate = isEdit && claim.era_received_at
+    ? String(claim.era_received_at).slice(0, 10)
+    : new Date().toISOString().slice(0, 10)
   const [amountBilled, setAmountBilled]           = useState(defaultBilled)
-  const [insurancePayment, setInsurancePayment]   = useState('')
-  const [contractualAdj, setContractualAdj]       = useState('')
-  const [copay, setCopay]                         = useState('')
-  const [deductible, setDeductible]               = useState('')
-  const [coinsurance, setCoinsurance]             = useState('')
-  const [nonCovered, setNonCovered]               = useState('')
-  const [paymentReference, setPaymentReference]   = useState('')
-  const [paymentDate, setPaymentDate]             = useState(() => new Date().toISOString().slice(0, 10))
+  const [insurancePayment, setInsurancePayment]   = useState(isEdit ? fmtFieldNum(claim.insurance_payment_era) : '')
+  const [contractualAdj, setContractualAdj]       = useState(isEdit ? fmtFieldNum(claim.contractual_adjustment_era) : '')
+  const [copay, setCopay]                         = useState(isEdit ? fmtFieldNum(claim.patient_copay_era) : '')
+  const [deductible, setDeductible]               = useState(isEdit ? fmtFieldNum(claim.patient_deductible_era) : '')
+  const [coinsurance, setCoinsurance]             = useState(isEdit ? fmtFieldNum(claim.patient_coinsurance_era) : '')
+  const [nonCovered, setNonCovered]               = useState(isEdit ? fmtFieldNum(claim.patient_non_covered_era) : '')
+  const [paymentReference, setPaymentReference]   = useState(isEdit ? (claim.payment_reference ?? '') : '')
+  const [paymentDate, setPaymentDate]             = useState(defaultDate)
   const [submitting, setSubmitting]               = useState(false)
   const [error, setError]                         = useState<string | null>(null)
 
@@ -60,7 +89,7 @@ export function PostPaymentModal({ claim, onClose, onPosted }: Props) {
     }
     setSubmitting(true)
     try {
-      const updated = await postInsurancePayment(claim.id, {
+      const body = {
         amount_billed: amountBilled,
         insurance_payment: insurancePayment,
         contractual_adjustment: contractualAdj,
@@ -70,10 +99,13 @@ export function PostPaymentModal({ claim, onClose, onPosted }: Props) {
         patient_non_covered: nonCovered,
         payment_reference: paymentReference.trim() || undefined,
         payment_date: paymentDate,
-      })
+      }
+      const updated = isEdit
+        ? await editInsurancePayment(claim.id, body)
+        : await postInsurancePayment(claim.id, body)
       onPosted(updated)
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to post payment')
+      setError(e?.message ?? (isEdit ? 'Failed to edit payment' : 'Failed to post payment'))
     } finally {
       setSubmitting(false)
     }
@@ -86,7 +118,9 @@ export function PostPaymentModal({ claim, onClose, onPosted }: Props) {
       <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#E8E8E4]">
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-[#1A1A2E]/60">Post insurance payment</div>
+            <div className="text-[11px] uppercase tracking-wide text-[#1A1A2E]/60">
+              {isEdit ? 'Edit insurance payment' : 'Post insurance payment'}
+            </div>
             <h2 className="font-display text-[17px] font-semibold text-[#1A1A2E] mt-0.5">{patientName}</h2>
             <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
               {claim.payer_name || 'Payer'} · DOS {claim.service_date ? new Date(claim.service_date).toLocaleDateString() : '—'}
@@ -137,16 +171,22 @@ export function PostPaymentModal({ claim, onClose, onPosted }: Props) {
           </div>
 
           <div className="text-[11px] text-[#1A1A2E]/60 leading-relaxed">
-            Posting this moves the claim to <strong>Completed</strong> and creates a draft patient statement for ${patientResp.toFixed(2)}.
-            If the patient owes $0 and insurance paid the full billed amount, the statement is created as already paid.
-            This is for payments that arrived outside the Stedi ERA pipeline — Stedi-posted ERAs are handled automatically.
+            {isEdit ? (
+              <>
+                Saving overwrites the amounts on this manually-posted payment. If the attached patient statement is still in <strong>draft</strong>, its amounts update too. Statements already <strong>sent</strong> or <strong>paid</strong> are not altered — adjust those separately so the family version and the server version don't diverge.
+              </>
+            ) : (
+              <>
+                Posting this moves the claim to <strong>Completed</strong> and creates a draft patient statement for ${patientResp.toFixed(2)}. If the patient owes $0 and insurance paid the full billed amount, the statement is created as already paid. This is for payments that arrived outside the Stedi ERA pipeline — Stedi-posted ERAs are handled automatically.
+              </>
+            )}
           </div>
         </div>
 
         <div className="px-5 py-3 border-t border-[#E8E8E4] bg-[#FAFAF8] flex items-center justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onClose} disabled={submitting}>Cancel</Button>
           <Button variant="teal" size="sm" loading={submitting} onClick={submit}>
-            <DollarSign size={12} /> Post payment
+            <DollarSign size={12} /> {isEdit ? 'Save changes' : 'Post payment'}
           </Button>
         </div>
       </div>

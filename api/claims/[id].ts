@@ -1163,6 +1163,113 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(updated)
     }
 
+    // Edit a previously-posted MANUAL payment. Only allowed on claims
+    // where payment_source = 'manual' — Stedi ERAs are the source of
+    // truth and shouldn't be hand-edited from the UI (if an ERA is
+    // wrong, the fix is to re-fetch it, not to overwrite). Statement
+    // amounts are updated too, but only if the statement is still in
+    // 'draft' — once sent to the family we leave the statement alone
+    // so the family version and the server version don't disagree.
+    // Sara 2026-11-09.
+    if (action === 'edit_insurance_payment') {
+      const num = (v: any): number => {
+        const n = parseFloat(String(v ?? '').trim().replace(/[^0-9.-]/g, ''))
+        return Number.isFinite(n) ? n : 0
+      }
+      const amountBilled    = num((fields as any).amount_billed)
+      const insurancePayment = num((fields as any).insurance_payment)
+      const contractualAdj   = num((fields as any).contractual_adjustment)
+      const copay            = num((fields as any).patient_copay)
+      const deductible       = num((fields as any).patient_deductible)
+      const coinsurance      = num((fields as any).patient_coinsurance)
+      const nonCovered       = num((fields as any).patient_non_covered)
+      const paymentReference = String((fields as any).payment_reference ?? '').trim() || null
+      const paymentDateIn    = String((fields as any).payment_date ?? '').trim()
+      const paymentDate      = paymentDateIn ? new Date(paymentDateIn + 'T12:00:00Z') : null
+      if (paymentDateIn && (!paymentDate || isNaN(paymentDate.getTime()))) {
+        return res.status(400).json({ error: 'Invalid payment_date — use YYYY-MM-DD' })
+      }
+
+      const [claim] = await sql`
+        SELECT id, status, practice_id, payment_source, era_received_at, total_charge
+        FROM claims
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!claim) return res.status(404).json({ error: 'Claim not found' })
+      if (claim.status === 'written_off') {
+        return res.status(400).json({ error: 'This claim is written off. Reopen it before editing the payment.' })
+      }
+      if (claim.payment_source !== 'manual') {
+        return res.status(400).json({ error: 'Can only edit payments that were posted manually. Stedi ERAs are the source of truth — re-fetch instead of editing.' })
+      }
+      if (!claim.era_received_at) {
+        return res.status(400).json({ error: 'No payment to edit — post one first.' })
+      }
+
+      const billedForStatement = amountBilled > 0 ? amountBilled : (parseFloat(String(claim.total_charge ?? 0)) || 0)
+      const patientResp = +(copay + deductible + coinsurance + nonCovered).toFixed(2)
+      const remaining   = +(billedForStatement - insurancePayment - contractualAdj).toFixed(2)
+
+      const [meEdit] = await sql`SELECT name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const whoNameEdit = (meEdit as any)?.name ?? 'Biller'
+
+      const [updated] = await sql`
+        UPDATE claims SET
+          amount_billed_era          = ${billedForStatement},
+          insurance_payment_era      = ${insurancePayment},
+          contractual_adjustment_era = ${contractualAdj},
+          patient_copay_era          = ${copay},
+          patient_deductible_era     = ${deductible},
+          patient_coinsurance_era    = ${coinsurance},
+          patient_non_covered_era    = ${nonCovered},
+          era_received_at            = COALESCE(${paymentDate}::timestamptz, era_received_at),
+          era_seen_at                = NOW(),
+          payment_reference          = ${paymentReference},
+          updated_at                 = NOW()
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+
+      // Statement sync — only update draft statements. Once sent/paid,
+      // the family has seen the number and we don't rewrite under them.
+      try {
+        const [existingStmt] = await sql`
+          SELECT id, status FROM patient_statements WHERE claim_id = ${id}::uuid AND voided_at IS NULL LIMIT 1`
+        if (existingStmt && existingStmt.status === 'draft') {
+          await sql`
+            UPDATE patient_statements SET
+              amount_billed          = ${billedForStatement},
+              insurance_payment      = ${insurancePayment},
+              contractual_adjustment = ${contractualAdj},
+              patient_copay          = ${copay},
+              patient_deductible     = ${deductible},
+              patient_coinsurance    = ${coinsurance},
+              patient_non_covered    = ${nonCovered},
+              remaining_balance      = ${remaining},
+              total_amount_due       = ${patientResp},
+              total_amount_due_text  = ${String(patientResp)},
+              updated_at             = NOW()
+            WHERE id = ${existingStmt.id}::uuid`
+        }
+      } catch (stmtErr: any) {
+        console.error('[edit_insurance_payment] statement update failed (non-fatal):', stmtErr?.message)
+      }
+
+      // Re-run the underpayment flagger — gap may have changed.
+      await flagUnderpaymentIfAny(sql, id, practiceId)
+
+      const editSummary =
+        `Manual insurance payment edited: billed $${billedForStatement.toFixed(2)}, ` +
+        `insurance paid $${insurancePayment.toFixed(2)}, contractual adj $${contractualAdj.toFixed(2)}, ` +
+        `patient resp $${patientResp.toFixed(2)}` +
+        (paymentReference ? `. Ref: ${paymentReference}` : '')
+      try {
+        await sql`
+          INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+          VALUES (${id}::uuid, ${whoNameEdit}, 'manual_payment_edited', ${editSummary})`
+      } catch { /* non-fatal */ }
+
+      return res.status(200).json(updated)
+    }
+
     // Submit to Stedi (live or test)
     if (action === 'submit' || action === 'test') {
       const testMode = action === 'test'

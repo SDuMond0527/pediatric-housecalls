@@ -1801,6 +1801,22 @@ export const attachEraToClaim = (transaction_id: string, claim_id: string, claim
 // the same payment columns the ERA path writes, so downstream — Completed
 // routing, patient-statement generation — behaves identically. Server
 // 409s if a payment is already posted. Sara 2026-10-19.
+// Edit a previously-posted MANUAL payment (not Stedi ERAs). Server
+// gates to payment_source='manual' and updates the attached draft
+// patient_statement in lockstep. Sara 2026-11-09.
+export const editInsurancePayment = (id: string, body: {
+  amount_billed?: string
+  insurance_payment?: string
+  contractual_adjustment?: string
+  patient_copay?: string
+  patient_deductible?: string
+  patient_coinsurance?: string
+  patient_non_covered?: string
+  payment_reference?: string
+  payment_date?: string
+}) =>
+  apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'edit_insurance_payment', ...body }) })
+
 export const postInsurancePayment = (id: string, body: {
   amount_billed?: number | string
   insurance_payment: number | string
