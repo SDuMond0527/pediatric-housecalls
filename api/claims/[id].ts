@@ -209,6 +209,112 @@ async function flagUnderpaymentIfAny(
   }
 }
 
+// NCCI PTP (Procedure-to-Procedure) bundling check. Reads a per-pair
+// lookup from the ncci_edits table (seeded from CMS's quarterly CSV
+// at scripts/import-ncci-ptp.mjs) and returns any violations found on
+// the claim. Rules:
+//   - modifier_indicator = 0 → "mutually exclusive" / cannot unbundle.
+//     Hard block regardless of modifiers on the claim.
+//   - modifier_indicator = 1 → can unbundle with an allowed modifier
+//     (25, 59, 24, 57, 79, XE, XS, XP, XU). Soft warning if no allowed
+//     modifier is present on either line.
+//   - modifier_indicator = 9 → NCCI deemed not applicable; ignore.
+// Sara 2026-11-10.
+const NCCI_UNBUNDLING_MODIFIERS = new Set(['25', '59', '24', '57', '79', 'XE', 'XS', 'XP', 'XU'])
+
+type NcciViolation = {
+  severity: 'error' | 'warning'
+  primary_code: string
+  bundled_code: string
+  modifier_indicator: number
+  effective_date: string | null
+  rationale: string | null
+  suggestion: string
+}
+
+async function checkNcciViolations(
+  sql: any,
+  claim: { service_date: any; cpt_codes: any },
+): Promise<NcciViolation[]> {
+  if (!Array.isArray(claim.cpt_codes) || claim.cpt_codes.length < 2) return []
+  const cpts = (claim.cpt_codes as any[])
+    .map((c: any) => ({
+      code: String(c?.code ?? '').trim(),
+      modifiers: Array.isArray(c?.modifiers)
+        ? c.modifiers.map((m: any) => String(m).toUpperCase())
+        : String(c?.modifier ?? '').split(/\s*,\s*/).map((m: string) => m.toUpperCase()).filter(Boolean),
+    }))
+    .filter((c: any) => c.code)
+  if (cpts.length < 2) return []
+
+  // Build unique unordered pairs for the single SQL lookup.
+  const codes = cpts.map((c: any) => c.code)
+  const uniqueCodes = Array.from(new Set(codes))
+  const dosDate = claim.service_date
+    ? String(claim.service_date).slice(0, 10)
+    : new Date().toISOString().slice(0, 10)
+
+  let rows: any[] = []
+  try {
+    rows = await sql`
+      SELECT column_1, column_2, modifier_indicator,
+             effective_date::text AS effective_date,
+             deletion_date::text AS deletion_date,
+             rationale
+      FROM ncci_edits
+      WHERE column_1 = ANY(${uniqueCodes}::text[])
+        AND column_2 = ANY(${uniqueCodes}::text[])
+        AND effective_date <= ${dosDate}::date
+        AND (deletion_date IS NULL OR deletion_date > ${dosDate}::date)
+        AND modifier_indicator IN (0, 1)`
+  } catch (e: any) {
+    // Table doesn't exist yet (pre-import). Nothing to enforce.
+    console.error('[ncci-check] table not ready (returning no violations):', e?.message)
+    return []
+  }
+
+  const violations: NcciViolation[] = []
+  for (const row of rows) {
+    const primary = String(row.column_1)
+    const bundled = String(row.column_2)
+    const primaryLine = cpts.find((c: any) => c.code === primary)
+    const bundledLine = cpts.find((c: any) => c.code === bundled)
+    if (!primaryLine || !bundledLine) continue
+
+    const indicator = Number(row.modifier_indicator)
+    if (indicator === 0) {
+      violations.push({
+        severity: 'error',
+        primary_code: primary,
+        bundled_code: bundled,
+        modifier_indicator: 0,
+        effective_date: row.effective_date,
+        rationale: row.rationale ?? null,
+        suggestion: `NCCI PTP: ${primary} and ${bundled} cannot be billed together on the same date of service (no modifier override allowed). Remove one code or split the visits.`,
+      })
+    } else if (indicator === 1) {
+      // Modifier allowed. Check whether an unbundling modifier is on
+      // either line — order the CMS documentation recommends is "attach
+      // to the Column 2 (bundled) code" but practice varies, so accept
+      // the modifier on either side.
+      const allMods = [...primaryLine.modifiers, ...bundledLine.modifiers]
+      const hasUnbundler = allMods.some((m: string) => NCCI_UNBUNDLING_MODIFIERS.has(m))
+      if (!hasUnbundler) {
+        violations.push({
+          severity: 'warning',
+          primary_code: primary,
+          bundled_code: bundled,
+          modifier_indicator: 1,
+          effective_date: row.effective_date,
+          rationale: row.rationale ?? null,
+          suggestion: `NCCI PTP: ${primary} and ${bundled} are a bundled pair. Attach modifier 25 (separately identifiable E/M) or 59/XE/XS/XP/XU (distinct procedural service) to the appropriate code — or remove one — to avoid a denial.`,
+        })
+      }
+    }
+  }
+  return violations
+}
+
 // Deterministic jsonb equality via canonical stringify — same shape in,
 // same string out. Order matters (diagnosis_pointers are ordered arrays),
 // so plain JSON.stringify is correct here. Null/undefined are equivalent
@@ -662,6 +768,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // When this flag is true, the client-side derivation defers to the
   // raw status column — the biller's explicit choice wins. Sara 2026-11-09.
   try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS manual_status_override boolean DEFAULT false` } catch {}
+  // NCCI PTP edits table — seeded from CMS's quarterly CSV by
+  // scripts/import-ncci-ptp.mjs. Bootstrap here so the submit path
+  // never 500s if the table hasn't been created yet. Sara 2026-11-10.
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS ncci_edits (
+        column_1            text NOT NULL,
+        column_2            text NOT NULL,
+        modifier_indicator  int NOT NULL,          -- 0 = not allowed, 1 = allowed, 9 = NA
+        effective_date      date NOT NULL,
+        deletion_date       date,
+        rationale           text,
+        file_type           text NOT NULL DEFAULT 'practitioner',
+        imported_at         timestamptz NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (column_1, column_2, effective_date, file_type)
+      )`
+    await sql`CREATE INDEX IF NOT EXISTS idx_ncci_edits_lookup ON ncci_edits(column_1, column_2) WHERE deletion_date IS NULL`
+  } catch {}
   // Claim-history table. Every edit that mutates cpt_codes or diagnoses
   // on an existing claim logs an immutable before/after row here, along
   // with the payer + denial context at the time of edit. The billing
@@ -1413,6 +1537,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                      ${`Pre-submit eligibility check infrastructure error: ${eligErr?.message ?? 'unknown'}. Claim submitted anyway.`})`
           } catch {}
         }
+      }
+
+      // NCCI PTP scrubber — check for CPT-pair bundling violations
+      // against the CMS edits table. Hard block on indicator=0 pairs
+      // (mutually exclusive, no modifier override possible); soft
+      // warning on indicator=1 pairs (modifier allowed) that don't
+      // already have an unbundling modifier. User can override soft
+      // warnings with force_submit=true in the body. Sara 2026-11-10.
+      const ncciViolations = await checkNcciViolations(sql, {
+        service_date: claim.service_date, cpt_codes: claim.cpt_codes,
+      })
+      const ncciErrors = ncciViolations.filter(v => v.severity === 'error')
+      const ncciWarnings = ncciViolations.filter(v => v.severity === 'warning')
+      const forceSubmit = !!(fields as any)?.force_submit
+      if (ncciErrors.length > 0) {
+        return res.status(400).json({
+          error: `NCCI PTP mutually-exclusive code pair${ncciErrors.length > 1 ? 's' : ''} detected. ${ncciErrors.map(v => v.suggestion).join(' ')}`,
+          ncci_violations: ncciErrors,
+        })
+      }
+      if (ncciWarnings.length > 0 && !forceSubmit) {
+        return res.status(400).json({
+          error: `NCCI PTP bundling warning${ncciWarnings.length > 1 ? 's' : ''}. ${ncciWarnings.map(v => v.suggestion).join(' ')}`,
+          ncci_violations: ncciWarnings,
+          force_submit_allowed: true,
+        })
+      }
+      // Log the override to the audit trail so Pam's "submit anyway"
+      // decision is traceable later if the claim denies.
+      if (ncciWarnings.length > 0 && forceSubmit) {
+        try {
+          await sql`
+            INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+            VALUES (${id}::uuid, 'system (ncci-scrubber)', 'ncci_warning_overridden',
+                   ${`Submitted despite NCCI PTP bundling warning: ${ncciWarnings.map(v => `${v.primary_code}+${v.bundled_code}`).join('; ')}`})`
+        } catch {}
       }
 
       // If the claim's snapshot of patient address or subscriber info
