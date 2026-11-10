@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Search, UserRound, Camera, Trash2, BookmarkPlus, ChevronDown, FlaskConical, Pencil, Droplet, TestTube, Star, Plus, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react'
 import { DictationMic, appendDictation } from './DictationMic'
+import { AgentChat } from './AgentChat'
 import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
@@ -3071,6 +3072,14 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           </div>
         </div>
       )}
+      {/* AI agent sidebar — the primary provider surface during a visit
+          is this modal, not the chart (Sara 2026-11-10). Context includes
+          both the appointment and the linked child so the agent can
+          answer about either. */}
+      <AgentChat context={{
+        child_id: linkedChildId ?? undefined,
+        appointment_id: appointment.id,
+      }} />
     </div>
   )
 }
