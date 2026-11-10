@@ -6,7 +6,7 @@ import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
-import { getEraCount, getPendingWriteOffCount } from '../../lib/api'
+import { getEraCount, getPendingWriteOffCount, getEligibilityFailCount } from '../../lib/api'
 import { dailyAffirmation } from '../../lib/affirmations'
 import { GlobalPatientSearch } from '../GlobalPatientSearch'
 import { ProviderReplyBell } from '../ProviderReplyBell'
@@ -16,6 +16,7 @@ type NavItem = {
   icon: typeof CalendarDays
   label: string
   eraBadge?: boolean
+  eligibilityFailBadge?: boolean
   flag?: keyof PracticeSettings
 }
 
@@ -31,6 +32,7 @@ const NAV: NavItem[] = [
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts',     flag: 'uses_broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true, flag: 'accepts_insurance' },
+  { to: '/admin/eligibility-fails', icon: ShieldCheck, label: 'Eligibility fails', eligibilityFailBadge: true, flag: 'accepts_insurance' },
   // Billing agent nav entry moved into the super-admin-only block below
   // so Andrea / Pam don't see it before Sara talks to them. Sara 2026-11-09.
   { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees', flag: 'uses_convenience_fees' },
@@ -47,7 +49,7 @@ const NAV: NavItem[] = [
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
 ]
 
-function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; onNav?: () => void }) {
+function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   const { settings } = useSettings()
   const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
@@ -76,7 +78,7 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
-        {visibleNav.map(({ to, icon: Icon, label, eraBadge }) => (
+        {visibleNav.map(({ to, icon: Icon, label, eraBadge, eligibilityFailBadge }) => (
           <NavLink key={to} to={to} onClick={onNav}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
@@ -87,6 +89,11 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, onN
             {eraBadge && eraCount > 0 && (
               <span className="ml-auto bg-[#1D9E75] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
                 {eraCount}
+              </span>
+            )}
+            {eligibilityFailBadge && eligibilityFailCount > 0 && (
+              <span className="ml-auto bg-[#DC2626] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                {eligibilityFailCount}
               </span>
             )}
           </NavLink>
@@ -172,6 +179,7 @@ export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [eraCount, setEraCount] = useState(0)
   const [pendingWriteOffCount, setPendingWriteOffCount] = useState(0)
+  const [eligibilityFailCount, setEligibilityFailCount] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -182,6 +190,7 @@ export function AdminLayout() {
     const refresh = () => {
       getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
       getPendingWriteOffCount().then(d => setPendingWriteOffCount(d?.count ?? 0)).catch(() => {})
+      getEligibilityFailCount().then(d => setEligibilityFailCount(d?.count ?? 0)).catch(() => {})
     }
     refresh()
     const interval = setInterval(refresh, 60000)
@@ -206,7 +215,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Desktop sidebar */}
       <div className="hidden md:fixed md:left-0 md:top-0 md:block md:z-40">
-        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount}/>
+        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount}/>
       </div>
 
       {/* Mobile overlay sidebar */}
@@ -214,7 +223,7 @@ export function AdminLayout() {
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
           <div className="relative">
-            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} onNav={() => setSidebarOpen(false)} />
+            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount} onNav={() => setSidebarOpen(false)} />
           </div>
         </div>
       )}

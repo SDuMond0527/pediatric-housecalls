@@ -1805,6 +1805,33 @@ export const getPreVisitPreview = (appointmentId: string) =>
 export const regeneratePreVisitPreview = (appointmentId: string) =>
   apiFetch<{ data: PreVisitPreviewData; generated_at: string }>(`/api/pre-visit-preview/${appointmentId}`, { method: 'POST' })
 
+// ── Eligibility fails — standalone admin tab for Pam ─────────────────
+// Backing data is review_queue_items filtered to item_type =
+// 'eligibility_blocked'. Sara 2026-11-10.
+export interface EligibilityFailItem {
+  id: string
+  item_type: 'eligibility_blocked'
+  work_category: 'claim_submission'
+  claim_id: string | null
+  patient_name: string | null
+  payer_name: string | null
+  service_date: string | null
+  priority: number
+  summary: string
+  agent_reasoning: Record<string, unknown> | null
+  status: 'open'
+  created_at: string
+}
+export const getEligibilityFails = () =>
+  apiFetch<{ items: EligibilityFailItem[]; count: number }>('/api/eligibility-fails')
+export const getEligibilityFailCount = () =>
+  apiFetch<{ count: number }>('/api/eligibility-fails?count=1')
+export const decideEligibilityFail = (id: string, action: 'approve' | 'reject', note?: string) =>
+  apiFetch<{ ok: true }>('/api/eligibility-fails', {
+    method: 'POST',
+    body: JSON.stringify({ id, action, note }),
+  })
+
 // ── Provider AI Agent ──────────────────────────────────────────────
 // Week 1 MVP: read-only tool access + conversational chat. Write tools
 // (prescription / lab / follow-up / etc.) land in Week 2+. Every
