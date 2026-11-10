@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
 import { PreVisitPreviewButton } from '../components/PreVisitPreview'
+import { AgentChat } from '../components/AgentChat'
 import { format, addDays, subDays, isToday, parseISO, startOfWeek } from 'date-fns'
 import {
   getAppointments, createAppointmentWithOverlapRetry, updateAppointment,
@@ -2173,6 +2174,10 @@ export function Today() {
           {orderToast}
         </div>
       )}
+      {/* AI agent sidebar — no fixed patient context on this page; the
+          agent will ask which patient when the clinician mentions one.
+          Sara 2026-11-10. */}
+      <AgentChat />
     </div>
   )
 }

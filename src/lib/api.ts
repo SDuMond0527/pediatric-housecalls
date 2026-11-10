@@ -1805,6 +1805,23 @@ export const getPreVisitPreview = (appointmentId: string) =>
 export const regeneratePreVisitPreview = (appointmentId: string) =>
   apiFetch<{ data: PreVisitPreviewData; generated_at: string }>(`/api/pre-visit-preview/${appointmentId}`, { method: 'POST' })
 
+// ── Provider AI Agent ──────────────────────────────────────────────
+// Week 1 MVP: read-only tool access + conversational chat. Write tools
+// (prescription / lab / follow-up / etc.) land in Week 2+. Every
+// utterance is audit-logged. Sara 2026-11-10.
+export interface AgentChatResponse {
+  conversation_id: string
+  reply: string
+  tool_calls: Array<{ name: string; arguments: any; result: any }>
+  proposals: Array<{ id: string; kind: string; payload: any }>
+}
+export const agentChat = (body: {
+  message: string
+  context?: { child_id?: string; appointment_id?: string }
+  conversation_id?: string
+}) =>
+  apiFetch<AgentChatResponse>('/api/agent/chat', { method: 'POST', body: JSON.stringify(body) })
+
 // Attach an orphaned Stedi 835 ERA (one that landed at Stedi but
 // never joined to any of our claims — usually because the biller
 // resubmitted outside GoRoam) onto a specific claim in our DB.

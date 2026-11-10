@@ -13,6 +13,7 @@ import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
 import { PreVisitPreviewForChildButton } from '../components/PreVisitPreview'
+import { AgentChat } from '../components/AgentChat'
 import { ChartNumberPill } from '../components/ChartNumberPill'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
@@ -3128,6 +3129,8 @@ export function PatientChart() {
           onClose={() => setReferralOpen(false)}
         />
       )}
+      {/* AI agent sidebar — knows which patient chart is open via context. Sara 2026-11-10. */}
+      {child && <AgentChat context={{ child_id: child.id }} />}
     </div>
   )
 }
