@@ -24,12 +24,13 @@ const CATEGORY_LABEL: Record<ReviewWorkCategory, string> = {
 }
 
 const ITEM_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
-  new_claim:     { label: 'New claim',     cls: 'bg-[#EEF1F8] text-[#31447A]' },
-  stale_claim:   { label: 'Stale claim',   cls: 'bg-[#FEF3E8] text-[#633806]' },
-  underpayment:  { label: 'Underpayment',  cls: 'bg-[#FDECEC] text-[#7F1D1D]' },
-  rejection_fix: { label: 'Rejection fix', cls: 'bg-[#FEE2E2] text-[#7F1D1D]' },
-  denial_fix:    { label: 'Denial fix',    cls: 'bg-[#FFE4E6] text-[#9F1239]' },
-  appeal_draft:  { label: 'Appeal draft',  cls: 'bg-[#EEEDFE] text-[#3C3489]' },
+  new_claim:            { label: 'New claim',            cls: 'bg-[#EEF1F8] text-[#31447A]' },
+  stale_claim:          { label: 'Stale claim',          cls: 'bg-[#FEF3E8] text-[#633806]' },
+  underpayment:         { label: 'Underpayment',         cls: 'bg-[#FDECEC] text-[#7F1D1D]' },
+  rejection_fix:        { label: 'Rejection fix',        cls: 'bg-[#FEE2E2] text-[#7F1D1D]' },
+  denial_fix:           { label: 'Denial fix',           cls: 'bg-[#FFE4E6] text-[#9F1239]' },
+  appeal_draft:         { label: 'Appeal draft',         cls: 'bg-[#EEEDFE] text-[#3C3489]' },
+  eligibility_blocked:  { label: 'Eligibility failed',   cls: 'bg-[#FEE2E2] text-[#7F1D1D]' },
 }
 
 // Buttons are contextual per item type. Stage 1 items (stale_claim,
@@ -54,6 +55,12 @@ const ACTION_LABELS: Record<string, {
     primary: 'Mark handled',
     dismiss: 'Dismiss',
     notePrompt: 'What did you do about it? (e.g. "called payer, confirmed fee schedule" or "wrote off the gap")',
+    noteRequired: true,
+  },
+  eligibility_blocked: {
+    primary: 'Mark handled',
+    dismiss: 'Dismiss',
+    notePrompt: 'What did you do about it? (e.g. "called family — insurance is now active, retrying" or "switched to self-pay")',
     noteRequired: true,
   },
   new_claim: {

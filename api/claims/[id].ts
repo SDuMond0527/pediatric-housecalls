@@ -1310,6 +1310,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: `Line(s) ${codes} have a $0 charge. Set a valid charge amount before submitting.` })
       }
 
+      // Auto-eligibility pre-submit check. Stage 1 billing agent — Sara
+      // 2026-11-09 decision: run eligibility automatically on every claim
+      // and hold any that fail. Only fires on live submits (not tests),
+      // only for insurance-billable payers, only when we have a child_id
+      // to check. If the payer tells us the member is NOT active, block
+      // the submit and queue a review_queue_item for Sara. Any other
+      // outcome (active, ambiguous, infrastructure error) → proceed.
+      // Infrastructure glitches should never block billing.
+      if (!testMode && claim.payer_id !== 'PP' && claim.child_id) {
+        try {
+          const protocol = String(req.headers['x-forwarded-proto'] ?? 'https')
+          const host = String(req.headers.host ?? process.env.VERCEL_URL ?? '')
+          if (host) {
+            const eligRes = await fetch(`${protocol}://${host}/api/eligibility`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': String(req.headers.authorization ?? ''),
+              },
+              body: JSON.stringify({ child_id: claim.child_id }),
+            })
+            if (eligRes.ok) {
+              const elig = await eligRes.json() as any
+              if (elig?.active === false) {
+                // Record on the claim's activity log so the audit trail
+                // shows the auto-check fired and what it found.
+                try {
+                  await sql`
+                    INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+                    VALUES (${id}::uuid, 'system (auto-eligibility)', 'eligibility_blocked',
+                           ${`Pre-submit eligibility check reported member not active for ${claim.payer_name ?? 'payer'}. Claim held for review.`})`
+                } catch {}
+                // Queue a review item so Sara sees this surface in the
+                // Billing agent UI alongside stale claims + underpayments.
+                try {
+                  await sql`
+                    CREATE TABLE IF NOT EXISTS review_queue_items (
+                      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                      practice_id uuid NOT NULL, item_type text NOT NULL,
+                      work_category text NOT NULL, claim_id uuid,
+                      patient_name text, payer_name text, service_date date,
+                      priority int NOT NULL DEFAULT 100, summary text NOT NULL,
+                      agent_reasoning jsonb, proposed_change jsonb,
+                      status text NOT NULL DEFAULT 'open',
+                      decided_at timestamptz, decided_by uuid,
+                      decided_by_name text, decision_note text,
+                      created_at timestamptz NOT NULL DEFAULT NOW()
+                    )`
+                } catch {}
+                try {
+                  // Only insert if there isn't already an open
+                  // eligibility_blocked item for this claim — avoids
+                  // flooding the queue if Sara re-tries submit multiple
+                  // times before fixing coverage.
+                  const [existing] = await sql`
+                    SELECT id FROM review_queue_items
+                    WHERE practice_id = ${practiceId}::uuid
+                      AND claim_id    = ${id}::uuid
+                      AND item_type   = 'eligibility_blocked'
+                      AND status      = 'open'
+                    LIMIT 1`
+                  if (!existing) {
+                    const patientName = [claim.patient_first_name, claim.patient_last_name].filter(Boolean).join(' ') || 'Unknown patient'
+                    const summary =
+                      `${claim.payer_name ?? 'Payer'} reports member not active as of DOS ${claim.service_date}. ` +
+                      `Claim held — verify coverage with family or payer before resubmit.`
+                    const reasoning = {
+                      payer_name: claim.payer_name,
+                      payer_id: claim.payer_id,
+                      member_id: claim.member_id,
+                      eligibility_response: elig,
+                      source: 'auto-eligibility pre-submit',
+                    }
+                    await sql`
+                      INSERT INTO review_queue_items
+                        (practice_id, item_type, work_category, claim_id, patient_name,
+                         payer_name, service_date, priority, summary, agent_reasoning)
+                      VALUES
+                        (${practiceId}::uuid, 'eligibility_blocked', 'claim_submission', ${id}::uuid,
+                         ${patientName}, ${claim.payer_name ?? null}, ${claim.service_date ?? null}::date,
+                         50, ${summary}, ${JSON.stringify(reasoning)}::jsonb)`
+                  }
+                } catch (qErr: any) {
+                  console.error('[auto-eligibility] queue insert failed:', qErr?.message)
+                }
+                return res.status(400).json({
+                  error: `Eligibility check reports ${claim.payer_name ?? 'payer'} member not active for this patient. Claim was NOT sent. See Billing agent → Review queue.`,
+                  eligibility: elig,
+                })
+              }
+            }
+          }
+        } catch (eligErr: any) {
+          // Infrastructure error — don't block the submit. Log for
+          // traceability so Sara can see the check attempted.
+          console.error('[auto-eligibility] non-fatal (allowing submit):', eligErr?.message)
+          try {
+            await sql`
+              INSERT INTO claim_activity_log (claim_id, created_by_name, kind, body)
+              VALUES (${id}::uuid, 'system (auto-eligibility)', 'eligibility_check_error',
+                     ${`Pre-submit eligibility check infrastructure error: ${eligErr?.message ?? 'unknown'}. Claim submitted anyway.`})`
+          } catch {}
+        }
+      }
+
       // If the claim's snapshot of patient address or subscriber info
       // is stale, refresh from the linked child/family record at
       // submit time and persist. This prevents Stedi rejections like
