@@ -12,6 +12,7 @@ import { useSettings } from '../contexts/PracticeSettingsContext'
 import { PatientStatementModal } from './admin/PatientStatementModal'
 import { Badge } from '../components/ui/Badge'
 import { InsuranceEditor } from '../components/InsuranceEditor'
+import { PreVisitPreviewForChildButton } from '../components/PreVisitPreview'
 import { ChartNumberPill } from '../components/ChartNumberPill'
 import { BookAppointmentModal } from '../components/BookAppointmentModal'
 import { EncounterNoteModal } from '../components/EncounterNoteModal'
@@ -870,6 +871,20 @@ export function PatientChart() {
                 <PriorVisitStatus
                   child={child}
                   onSaved={(next) => setChild((prev: any) => ({ ...prev, previously_seen_by_phc: next }))}
+                />
+                {/* Pre-Visit Preview — opens one-screen summary for the
+                    child's next upcoming appointment. Sara 2026-11-10. */}
+                <PreVisitPreviewForChildButton
+                  childId={child.id}
+                  upcomingAppointmentId={(() => {
+                    const todayIso = new Date().toISOString().slice(0, 10)
+                    const upcoming = (bookingRequests ?? [])
+                      .filter((a: any) => a._source === 'appointment' &&
+                                          a.status !== 'cancelled' && a.status !== 'done' &&
+                                          String(a.preferred_date ?? '').slice(0, 10) >= todayIso)
+                      .sort((a: any, b: any) => (a.preferred_date ?? '').localeCompare(b.preferred_date ?? ''))
+                    return upcoming[0]?.id ?? null
+                  })()}
                 />
               </div>
             )}

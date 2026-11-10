@@ -1777,6 +1777,34 @@ export const setBillingAgentCategory = (work_category: ReviewWorkCategory, auto_
     method: 'PATCH', body: JSON.stringify({ work_category, auto_enabled }),
   })
 
+// ── Pre-Visit Preview ──────────────────────────────────────────────
+// Structured summary for an upcoming visit. Every bullet carries a
+// source citation (source_type + source_id) — Sara's rule 2026-11-10.
+export type PreviewBullet = {
+  text: string
+  source_type: string
+  source_id: string | null
+  source_label?: string | null
+}
+export type PreviewSection = { bullets: PreviewBullet[] }
+export type PreVisitPreviewData = {
+  version: 1
+  appointment_id: string
+  patient: {
+    kind: 'child' | 'patient_profile'
+    id: string
+    name: string
+    age_display: string | null
+  }
+  sections: Record<string, PreviewSection | null>
+}
+
+export const getPreVisitPreview = (appointmentId: string) =>
+  apiFetch<{ data: PreVisitPreviewData; generated_at: string }>(`/api/pre-visit-preview/${appointmentId}`)
+
+export const regeneratePreVisitPreview = (appointmentId: string) =>
+  apiFetch<{ data: PreVisitPreviewData; generated_at: string }>(`/api/pre-visit-preview/${appointmentId}`, { method: 'POST' })
+
 // Attach an orphaned Stedi 835 ERA (one that landed at Stedi but
 // never joined to any of our claims — usually because the biller
 // resubmitted outside GoRoam) onto a specific claim in our DB.

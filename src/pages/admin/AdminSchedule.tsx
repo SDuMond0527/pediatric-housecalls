@@ -12,6 +12,7 @@ import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { displayVisitType } from '../../lib/appointmentDisplay'
+import { PreVisitPreviewButton } from '../../components/PreVisitPreview'
 import type { Appointment, Provider } from '../../types'
 
 function EligibilityCard({ state, onCheck }: { state: { loading: boolean; data: any; error: string | null } | undefined; onCheck: () => void }) {
@@ -852,6 +853,9 @@ export function AdminSchedule() {
                       {(appt as any).previously_seen_by_phc === false && <Badge variant="amber">New patient</Badge>}
                       {(appt as any).previously_seen_by_phc === true && <Badge variant="gray">Established</Badge>}
                       {appt.status === 'done' && <Badge variant="teal">Done</Badge>}
+                      {appt.status !== 'cancelled' && appt.status !== 'done' && (
+                        <PreVisitPreviewButton appointmentId={appt.id} />
+                      )}
                       <ChevronDown size={13} className={`text-[#1A1A2E] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                     {isExpanded && (

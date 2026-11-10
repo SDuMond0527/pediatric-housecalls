@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Navigation, Plus, X, AlertTriangle, Ban, ChevronLeft, ChevronRight, CreditCard, FileText, Video, Phone, Pencil, Droplet, TestTube } from 'lucide-react'
+import { PreVisitPreviewButton } from '../components/PreVisitPreview'
 import { format, addDays, subDays, isToday, parseISO, startOfWeek } from 'date-fns'
 import {
   getAppointments, createAppointmentWithOverlapRetry, updateAppointment,
@@ -1114,6 +1115,11 @@ export function Today() {
                     {(appt as any).previously_seen_by_phc === true && <Badge variant="gray">Established</Badge>}
                     {appt.status === 'done' && <Badge variant="teal">Completed</Badge>}
                     {appt.status === 'in-progress' && <Badge variant="purple">In progress</Badge>}
+                    {/* Pre-Visit Preview pill — opens the one-screen summary.
+                        Visible on every appointment card for providers. Sara 2026-11-10. */}
+                    {appt.status !== 'cancelled' && (
+                      <PreVisitPreviewButton appointmentId={appt.id} />
+                    )}
                     <ChevronDown size={14} className={`text-[#1A1A2E] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
 
