@@ -109,6 +109,14 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eli
               <Bot size={16} className="opacity-70" />
               Billing agent
             </NavLink>
+            <NavLink to="/admin/ncci-preview" onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <ShieldCheck size={16} className="opacity-70" />
+              NCCI modal preview
+            </NavLink>
             <NavLink to="/admin/unmatched-eras" onClick={onNav}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
