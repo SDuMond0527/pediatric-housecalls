@@ -486,6 +486,23 @@ export function AdminClaims() {
     claimId: string
     result: ScrubResult
   } | null>(null)
+  // NCCI PTP bundling violation modal — shown when the server blocks
+  // a submit because of a CPT-pair conflict. Soft warnings allow
+  // "Submit anyway"; hard errors (modifier_indicator=0) do not.
+  // Sara 2026-11-11.
+  const [ncciModal, setNcciModal] = useState<{
+    claimId: string
+    violations: Array<{
+      severity: 'error' | 'warning'
+      primary_code: string
+      bundled_code: string
+      modifier_indicator: number
+      effective_date: string | null
+      rationale: string | null
+      suggestion: string
+    }>
+    forceSubmitAllowed: boolean
+  } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -614,12 +631,25 @@ export function AdminClaims() {
   }
 
   // Internal: actual submit after any scrubber errors/warnings cleared.
-  async function performSubmit(claimId: string) {
+  async function performSubmit(claimId: string, opts: { forceSubmit?: boolean } = {}) {
     setSubmitting(claimId)
     try {
-      await submitClaim(claimId)
+      await submitClaim(claimId, opts)
       await load()
     } catch (e: any) {
+      // NCCI PTP bundling violation path. Server returns ncci_violations
+      // when a CPT pair conflicts with a CMS edit. Route to the
+      // dedicated modal so Pam sees the specific pair + suggestion
+      // + "Submit anyway" button (soft warnings only). Sara 2026-11-11.
+      if (Array.isArray(e.ncci_violations) && e.ncci_violations.length > 0) {
+        setNcciModal({
+          claimId,
+          violations: e.ncci_violations,
+          forceSubmitAllowed: !!e.force_submit_allowed,
+        })
+        await load()
+        return
+      }
       const details = e.details
       const summary = extractStediErrorSummary(details) || e.message || 'Submission failed'
       setRejectionModal({
@@ -3535,6 +3565,92 @@ export function AdminClaims() {
           </div>
         </div>
       )}
+
+      {ncciModal && (() => {
+        const hardErrors = ncciModal.violations.filter(v => v.severity === 'error')
+        const softWarnings = ncciModal.violations.filter(v => v.severity === 'warning')
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setNcciModal(null)}>
+            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {hardErrors.length > 0
+                    ? <AlertOctagon size={18} className="text-[#B91C1C]" />
+                    : <AlertCircle size={18} className="text-[#B45309]" />}
+                  <h3 className="font-display text-base font-semibold text-neutral-900">
+                    {hardErrors.length > 0 ? 'NCCI bundling — cannot bill together' : 'NCCI bundling warning'}
+                  </h3>
+                </div>
+                <button onClick={() => setNcciModal(null)} className="text-neutral-500 hover:text-neutral-900">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-auto flex-1 space-y-2">
+                <div className="text-[13px] text-[#555] leading-snug">
+                  Medicare's NCCI PTP edits (which most commercial payers mirror) flag these CPT pairs. The claim was NOT sent.
+                </div>
+                {hardErrors.map((v, i) => (
+                  <div key={'e' + i} className="bg-[#FEE2E2] border border-[#FCA5A5] text-[#7F1D1D] rounded p-3 text-sm">
+                    <div className="font-semibold text-xs uppercase tracking-wide mb-1">Must not bill together</div>
+                    <div className="font-mono text-[13px] mb-1">
+                      CPT {v.primary_code} + CPT {v.bundled_code}
+                    </div>
+                    <div>{v.suggestion}</div>
+                    {v.rationale && (
+                      <div className="text-[11px] text-[#7F1D1D]/70 mt-1 italic">
+                        CMS rationale: {v.rationale}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {softWarnings.map((v, i) => (
+                  <div key={'w' + i} className="bg-[#FEF3C7] border border-[#FCD34D] text-[#78350F] rounded p-3 text-sm">
+                    <div className="font-semibold text-xs uppercase tracking-wide mb-1">Modifier needed</div>
+                    <div className="font-mono text-[13px] mb-1">
+                      CPT {v.primary_code} + CPT {v.bundled_code}
+                    </div>
+                    <div>{v.suggestion}</div>
+                    {v.rationale && (
+                      <div className="text-[11px] text-[#78350F]/70 mt-1 italic">
+                        CMS rationale: {v.rationale}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t bg-[#FAFAF8] flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setNcciModal(null)}
+                  className="px-3 py-2 text-[13px] text-[#555] border border-[#E8E8E4] rounded-md hover:bg-[#F1EFE8]"
+                >
+                  {hardErrors.length > 0 ? 'Close — fix the claim' : 'Cancel'}
+                </button>
+                {hardErrors.length === 0 && ncciModal.forceSubmitAllowed && (
+                  <button
+                    onClick={async () => {
+                      const id = ncciModal.claimId
+                      setNcciModal(null)
+                      // Warn-on-override — the activity log captures
+                      // the override too, server-side.
+                      if (!confirm(
+                        'Submit this claim anyway?\n\n' +
+                        'The payer will likely deny the bundled line unless you have a documented reason. ' +
+                        'Your override will be logged on the claim\'s activity log.',
+                      )) return
+                      await performSubmit(id, { forceSubmit: true })
+                    }}
+                    className="px-3 py-2 text-[13px] bg-[#7F77DD] text-white rounded-md hover:bg-[#6C64C8] font-medium"
+                  >
+                    I know — submit anyway
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {rejectionModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRejectionModal(null)}>

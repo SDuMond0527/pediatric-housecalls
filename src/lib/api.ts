@@ -1258,21 +1258,25 @@ export const getClaim = (id: string) =>
 export const updateClaim = (id: string, body: Record<string, unknown>) =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify(body) })
 
-export async function submitClaim(id: string) {
+export async function submitClaim(id: string, opts: { forceSubmit?: boolean } = {}) {
   const headers = await authHeaders()
   const res = await fetch(`/api/claims/${id}`, {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'submit' }),
+    body: JSON.stringify({ action: 'submit', force_submit: !!opts.forceSubmit }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
-    // Attach the payload dependent Stedi received so the UI can show
-    // exactly what was submitted when a rejection message like
-    // "dependent.address missing" doesn't match what the user sees.
     const err: any = new Error(body.error || res.statusText || `HTTP ${res.status}`)
     err.details = body.details
     err.sentDependent = body.sentDependent
+    // NCCI PTP scrubber violation fields — present when the server
+    // blocks the submit because of a bundling conflict. Client can
+    // read err.ncci_violations to render a specific modal and set
+    // forceSubmit=true on retry if force_submit_allowed is true.
+    // Sara 2026-11-11.
+    err.ncci_violations = body.ncci_violations
+    err.force_submit_allowed = body.force_submit_allowed
     throw err
   }
   return res.status === 204 ? undefined : res.json()
