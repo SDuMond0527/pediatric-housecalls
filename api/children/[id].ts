@@ -21,6 +21,30 @@ function normAuditValue(v: unknown): string | null {
   return s
 }
 
+// Audit log for provider-only sticky-note edits. Content isn't stored
+// in the audit log on purpose — the live text lives on the chart row
+// and may be PHI; the audit row just records the fact of an edit +
+// who did it so we have a change trail. Sara 2026-11-11.
+async function auditStickyNoteEditIfAny(
+  sql: any,
+  auth: { sub: string; isFamily: boolean },
+  practiceId: string,
+  childId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  if (!('provider_sticky_notes' in (body ?? {}))) return
+  try {
+    const [actor] = auth.isFamily
+      ? [{ id: null, name: null }]
+      : await sql`SELECT id, name FROM providers WHERE cognito_sub = ${auth.sub} AND practice_id = ${practiceId}::uuid LIMIT 1`
+    await sql`
+      INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
+      VALUES (${actor?.id ?? null}::uuid, 'edit_sticky_notes', 'child', ${childId})`
+  } catch (e: any) {
+    console.error('sticky-note audit log insert failed (non-fatal):', e?.message)
+  }
+}
+
 async function auditInsuranceEdit(
   sql: any,
   auth: { sub: string; isFamily: boolean },
@@ -87,6 +111,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // can never fail with "column does not exist" on a fresh deploy.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_no_dependent_code boolean DEFAULT false` } catch {}
+  // Provider-only sticky-note field. Free text, never surfaced to the
+  // family portal. Audit-logged on every edit. Sara 2026-11-11.
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS provider_sticky_notes text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS provider_sticky_notes_updated_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS provider_sticky_notes_updated_by_name text` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_id integer` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS dosespot_pharmacy_source_text text` } catch {}
   // Audit table — the chart edit PATCH logs every insurance_* mutation
@@ -122,6 +151,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { id } = req.query as { id: string }
+
+  // Strip provider-only fields (sticky notes) from responses if the
+  // caller is a family. Any accidental RETURNING * must not leak
+  // provider-visible-only data to the parent portal. Sara 2026-11-11.
+  const safeForCaller = (row: any) => {
+    if (!row || !auth.isFamily) return row
+    const clone = { ...row }
+    delete clone.provider_sticky_notes
+    delete clone.provider_sticky_notes_updated_at
+    delete clone.provider_sticky_notes_updated_by_name
+    return clone
+  }
 
   if (req.method === 'PATCH') {
     try {
@@ -159,7 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
           RETURNING *`
         if (!row) return res.status(404).json({ error: 'Not found' })
-        return res.json(row)
+        return res.json(safeForCaller(row))
       }
 
       if (b._action === 'unarchive') {
@@ -168,7 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
           RETURNING *`
         if (!row) return res.status(404).json({ error: 'Not found' })
-        return res.json(row)
+        return res.json(safeForCaller(row))
       }
 
       // ── Archive current insurance and clear it ────────────────────────────────
@@ -206,12 +247,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             insurance_card_back_url      = NULL
           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
           RETURNING *`
-        return res.json(row)
+        return res.json(safeForCaller(row))
       }
 
       const dob = b.date_of_birth || null
       const newFirst = b.first_name || null
       const newLast  = b.last_name  || null
+
+      // Sticky notes: never trust the client to tell us who's editing.
+      // Resolve the authenticated actor and inject the name server-side
+      // so the audit trail is tamper-proof. Sara 2026-11-11.
+      if ('provider_sticky_notes' in (b ?? {})) {
+        if (auth.isFamily) {
+          return res.status(403).json({ error: 'Provider sticky notes are not editable by families.' })
+        }
+        const [actorRow] = await sql`SELECT name FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
+        b.provider_sticky_notes_updated_by_name = actorRow?.name ?? 'Provider'
+      }
 
       // Snapshot of insurance fields BEFORE any UPDATE in this request —
       // used to decide whether an edit_insurance audit row needs to be
@@ -315,6 +367,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           allergies            = COALESCE(${b.allergies            || null}, allergies),
           current_medications  = COALESCE(${b.current_medications  || null}, current_medications),
           medical_history      = COALESCE(${b.medical_history      || null}, medical_history),
+          -- Provider-only sticky notes. When present in the body, the
+          -- update also stamps who + when so the chart UI can show
+          -- "last edited by X on Y." Clearing goes through the _clear
+          -- machinery below.
+          provider_sticky_notes = COALESCE(${b.provider_sticky_notes ?? null}, provider_sticky_notes),
+          provider_sticky_notes_updated_at = CASE WHEN ${b.provider_sticky_notes ?? null}::text IS NOT NULL THEN NOW() ELSE provider_sticky_notes_updated_at END,
+          provider_sticky_notes_updated_by_name = CASE WHEN ${b.provider_sticky_notes ?? null}::text IS NOT NULL THEN ${b.provider_sticky_notes_updated_by_name ?? null}::text ELSE provider_sticky_notes_updated_by_name END,
           preferred_pharmacy   = COALESCE(${b.preferred_pharmacy   || null}, preferred_pharmacy),
           dosespot_pharmacy_id = COALESCE(${b.dosespot_pharmacy_id ?? null}, dosespot_pharmacy_id),
           pcp                  = COALESCE(${b.pcp                  || null}, pcp),
@@ -343,7 +402,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // feedback_extract_shared_code_first_try.md.
       const CLEARABLE = new Set([
         'nickname',
-        'allergies', 'current_medications', 'medical_history',
+        'allergies', 'current_medications', 'medical_history', 'provider_sticky_notes',
         'preferred_pharmacy', 'dosespot_pharmacy_id', 'pcp', 'pcp_id', 'vaccination_status',
         'insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code',
         'insurance_subscriber_name', 'insurance_subscriber_dob',
@@ -367,6 +426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             case 'allergies':                           await sql`UPDATE children SET allergies = NULL                           WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'current_medications':                 await sql`UPDATE children SET current_medications = NULL                 WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'medical_history':                     await sql`UPDATE children SET medical_history = NULL                     WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'provider_sticky_notes':               await sql`UPDATE children SET provider_sticky_notes = NULL, provider_sticky_notes_updated_at = NULL, provider_sticky_notes_updated_by_name = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'preferred_pharmacy':                  await sql`UPDATE children SET preferred_pharmacy = NULL                  WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'pcp':                                 await sql`UPDATE children SET pcp = NULL                                 WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'pcp_id':                              await sql`UPDATE children SET pcp_id = NULL                              WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
@@ -391,10 +451,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Re-fetch after nulls so the response reflects the cleared state.
         const [refreshed] = await sql`SELECT * FROM children WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
         await auditInsuranceEdit(sql, auth, practiceId, id, preAudit, refreshed, INSURANCE_AUDIT_FIELDS)
-        return res.json(refreshed)
+        await auditStickyNoteEditIfAny(sql, auth, practiceId, id, b)
+        return res.json(safeForCaller(refreshed))
       }
 
       await auditInsuranceEdit(sql, auth, practiceId, id, preAudit, row, INSURANCE_AUDIT_FIELDS)
+      await auditStickyNoteEditIfAny(sql, auth, practiceId, id, b)
       return res.json(row)
     } catch (err: any) {
       return res.status(500).json({ error: err.message ?? String(err) })

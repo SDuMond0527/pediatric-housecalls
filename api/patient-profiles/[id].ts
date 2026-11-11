@@ -39,6 +39,10 @@ const WRITABLE_FIELDS = new Set([
   'insurance_subscriber_gender', 'insurance_subscriber_relationship',
   'insurance_card_front_url', 'insurance_card_back_url',
   'chart_number', 'archived', 'archived_reason',
+  // Provider-only sticky notes. Server derives the updated_at + actor
+  // name on write; client-supplied values for those fields are ignored
+  // for integrity. Sara 2026-11-11.
+  'provider_sticky_notes',
 ])
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -47,8 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   catch { return res.status(401).json({ error: 'Unauthorized' }) }
 
   const sql = neon(process.env.DATABASE_URL!)
+  // Provider-only sticky notes — mirrors the field on `children`.
+  // Sara 2026-11-11.
+  try { await sql`ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS provider_sticky_notes text` } catch {}
+  try { await sql`ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS provider_sticky_notes_updated_at timestamptz` } catch {}
+  try { await sql`ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS provider_sticky_notes_updated_by_name text` } catch {}
+
   const [provider] = await sql`
-    SELECT id, practice_id
+    SELECT id, name, practice_id
     FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = provider.practice_id as string
@@ -179,9 +189,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         archived                          = COALESCE(${('archived'                          in patch ? patch.archived                          : null) as any}::boolean, archived),
         archived_at                       = CASE WHEN ${'archived_at' in patch}::boolean THEN ${(patch.archived_at ?? null) as any}::timestamptz ELSE archived_at END,
         archived_reason                   = CASE WHEN ${'archived_reason' in patch}::boolean THEN ${(patch.archived_reason ?? null) as any} ELSE archived_reason END,
+        provider_sticky_notes             = CASE WHEN ${'provider_sticky_notes' in patch}::boolean THEN ${(patch.provider_sticky_notes ?? null) as any} ELSE provider_sticky_notes END,
+        provider_sticky_notes_updated_at  = CASE WHEN ${'provider_sticky_notes' in patch}::boolean THEN NOW() ELSE provider_sticky_notes_updated_at END,
+        provider_sticky_notes_updated_by_name = CASE WHEN ${'provider_sticky_notes' in patch}::boolean THEN ${provider.name as any} ELSE provider_sticky_notes_updated_by_name END,
         updated_at                        = NOW()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`
+
+    // Sticky-note edits log to phi_audit_log — just the fact of the
+    // edit, never the content. Sara 2026-11-11.
+    if ('provider_sticky_notes' in patch) {
+      try {
+        await sql`
+          INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
+          VALUES (${provider.id}::uuid, 'edit_sticky_notes', 'patient_profile', ${id})`
+      } catch (e: any) {
+        console.error('sticky-note audit log insert failed (non-fatal):', e?.message)
+      }
+    }
+
     return res.json(row)
   }
 

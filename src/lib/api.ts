@@ -1809,6 +1809,17 @@ export const getPreVisitPreview = (appointmentId: string) =>
 export const regeneratePreVisitPreview = (appointmentId: string) =>
   apiFetch<{ data: PreVisitPreviewData; generated_at: string }>(`/api/pre-visit-preview/${appointmentId}`, { method: 'POST' })
 
+// Provider-only sticky notes — free-text area the clinical team types
+// into. Server audits every edit and stamps the actor/time. Never
+// surfaced to the family portal. Sara 2026-11-11.
+export const updateStickyNotes = (childId: string, text: string | null) =>
+  apiFetch<any>(`/api/children/${childId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(text && text.trim()
+      ? { provider_sticky_notes: text }
+      : { provider_sticky_notes: null, _clear: ['provider_sticky_notes'] }),
+  })
+
 // ── Eligibility fails — standalone admin tab for Pam ─────────────────
 // Backing data is review_queue_items filtered to item_type =
 // 'eligibility_blocked'. Sara 2026-11-10.

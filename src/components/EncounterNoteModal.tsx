@@ -1418,6 +1418,17 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Open the full chart in a new tab so the provider can look
+                up allergies / meds / past visits without losing the
+                draft note. Sara 2026-11-11 — she doesn't want to have
+                to save draft + close modal + re-search the patient. */}
+            {linkedChildId && (
+              <a href={`/admin/chart/${linkedChildId}`} target="_blank" rel="noreferrer"
+                title="Open the patient's full chart in a new tab — your draft stays here"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE]">
+                <FileText size={11} /> Open chart
+              </a>
+            )}
             {isSigned && (
               <>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#E1F5EE] text-[#085041]">

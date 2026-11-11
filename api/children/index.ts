@@ -49,6 +49,21 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: st
   return { sub: payload.sub, isFamily: false }
 }
 
+// Strip provider-only fields from any row headed to a family caller.
+// Sticky notes are explicitly provider-only — the family portal must
+// never see them. Sara 2026-11-11.
+function stripProviderOnlyFields<T extends Record<string, any>>(row: T | null | undefined): T | null {
+  if (!row) return row ?? null
+  const clone: any = { ...row }
+  delete clone.provider_sticky_notes
+  delete clone.provider_sticky_notes_updated_at
+  delete clone.provider_sticky_notes_updated_by_name
+  return clone
+}
+function stripProviderOnlyFieldsFromRows<T extends Record<string, any>>(rows: T[]): T[] {
+  return rows.map(r => stripProviderOnlyFields(r) as T)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   let auth: { sub: string; isFamily: boolean }
   try {
@@ -93,12 +108,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const idList = ids.split(',').filter(Boolean)
         if (!idList.length) return res.json([])
         const result = await sql`SELECT * FROM children WHERE id = ANY(${idList}::uuid[]) AND practice_id = ${practiceId}::uuid`
-        return res.json(result)
+        return res.json(stripProviderOnlyFieldsFromRows(result as any[]))
       }
       if (!family_ids) return res.json([])
       const famIds = family_ids.split(',').filter(Boolean)
       const result = await sql`SELECT * FROM children WHERE family_id = ANY(${famIds}::uuid[]) AND practice_id = ${practiceId}::uuid`
-      return res.json(result)
+      return res.json(stripProviderOnlyFieldsFromRows(result as any[]))
     }
 
     if (req.method === 'POST') {
@@ -351,7 +366,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${chartNumber}
           )
           RETURNING *`
-        return res.json(row)
+        return res.json(stripProviderOnlyFields(row))
       } catch (e: any) {
         return res.status(500).json({ error: e.message ?? String(e) })
       }

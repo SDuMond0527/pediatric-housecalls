@@ -55,13 +55,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `
     if (!family) return res.status(404).json({ error: 'Family not found' })
 
-    const children = await sql`
+    const childrenRaw = await sql`
       SELECT * FROM children
       WHERE family_id = ${family_id}::uuid
         AND practice_id = ${provider.practice_id}::uuid
         AND (is_archived IS NULL OR is_archived = false)
       ORDER BY date_of_birth DESC NULLS LAST
     `
+    // Strip provider-only fields — this endpoint mirrors what the
+    // parent actually sees in their family portal. Sticky notes are
+    // never shown to the parent, so they're never shown in this view
+    // either (keeps admin's "view as parent" honest). Sara 2026-11-11.
+    const children = (childrenRaw as any[]).map(c => {
+      const clone = { ...c }
+      delete clone.provider_sticky_notes
+      delete clone.provider_sticky_notes_updated_at
+      delete clone.provider_sticky_notes_updated_by_name
+      return clone
+    })
 
     const bookings = await sql`
       SELECT * FROM booking_requests

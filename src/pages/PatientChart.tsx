@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye, Send } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pencil, CheckCircle2, X, UserPlus, CalendarPlus, FlaskConical, RefreshCw, Archive, Trash2, ZoomIn, Download, Eye, Send, FileText } from 'lucide-react'
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, updateStickyNotes, type ChronicProblem } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -959,6 +959,10 @@ export function PatientChart() {
           <>
             {activeTab === 'overview' && (
               <div className="space-y-4">
+                {/* Sticky notes — provider-only internal notes. Family
+                    never sees this. Audit-logged on every save.
+                    Sara 2026-11-11. */}
+                <StickyNotes child={child} onSaved={(updated) => setChild((prev: any) => prev ? { ...prev, ...updated } : prev)} />
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -3218,6 +3222,97 @@ function MedicalHistoryTab({ child, setChild }: { child: any; setChild: (updater
 // current state as a colored pill; clicking opens a select that lets
 // any provider flip between Established / New patient / Not set.
 // Saves immediately on change via the existing PATCH endpoint.
+// Provider-only sticky notes section — yellow sticky-note styling,
+// edit/save flow, shows who last edited + when. Server audits every
+// edit to phi_audit_log. Family portal never receives this field.
+// Sara 2026-11-11.
+function StickyNotes({ child, onSaved }: {
+  child: any
+  onSaved: (updated: any) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!child) return null
+
+  const current = String(child.provider_sticky_notes ?? '').trim()
+  const lastEditedAt = child.provider_sticky_notes_updated_at
+  const lastEditedBy = child.provider_sticky_notes_updated_by_name
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await updateStickyNotes(child.id, draft.trim() || null)
+      onSaved(updated)
+      setEditing(false)
+    } catch (e: any) {
+      setError(e?.message ?? 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function startEdit() {
+    setDraft(current)
+    setError(null)
+    setEditing(true)
+  }
+
+  return (
+    <div className="bg-[#FFF8DC] border border-[#F4D35E] rounded-xl p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="text-[#8B6914]" />
+          <div className="text-[10px] font-semibold text-[#8B6914] uppercase tracking-wider">Sticky notes</div>
+          <span className="text-[10px] text-[#8B6914]/70 italic">(provider-only — family never sees this)</span>
+        </div>
+        {!editing && (
+          <button onClick={startEdit} className="flex items-center gap-1 text-[11px] text-[#8B6914] font-medium hover:underline">
+            <Pencil size={11} /> {current ? 'Edit' : 'Add a note'}
+          </button>
+        )}
+      </div>
+      {error && (
+        <div className="mb-2 text-[12px] text-[#991B1B] bg-[#FEE2E2] border border-[#FCA5A5] rounded px-2 py-1">{error}</div>
+      )}
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            rows={5}
+            placeholder="Private details about this patient only the clinical team should see…"
+            className="w-full px-3 py-2 border border-[#F4D35E] rounded-lg text-[13px] bg-white focus:border-[#8B6914] outline-none resize-y"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => { setEditing(false); setError(null) }} disabled={saving}
+              className="px-3 py-1.5 text-[12px] text-[#8B6914] hover:bg-[#F4D35E]/20 rounded-md">
+              Cancel
+            </button>
+            <button onClick={() => void save()} disabled={saving}
+              className="px-3 py-1.5 text-[12px] bg-[#8B6914] text-white rounded-md hover:bg-[#6D5410] disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      ) : current ? (
+        <div>
+          <p className="text-[13px] text-[#1A1A2E] whitespace-pre-wrap leading-snug">{current}</p>
+          {lastEditedAt && (
+            <div className="text-[10px] text-[#8B6914]/70 mt-2">
+              Last updated {formatDob(String(lastEditedAt).split('T')[0])}{lastEditedBy ? ` by ${lastEditedBy}` : ''}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-[12px] text-[#8B6914]/70 italic">No sticky notes yet.</div>
+      )}
+    </div>
+  )
+}
+
 function PriorVisitStatus({ child, onSaved }: { child: any; onSaved: (next: boolean | null) => void }) {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)

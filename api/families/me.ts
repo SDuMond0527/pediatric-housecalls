@@ -60,7 +60,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sql`SELECT * FROM children WHERE family_id = (SELECT id FROM family_profiles WHERE cognito_sub = ${sub}) ORDER BY created_at`,
     ])
     if (profiles.length === 0) return res.status(404).json({ error: 'Family not found' })
-    return res.json({ family: profiles[0], children: kids })
+    // Strip provider-only fields — this is the family portal's own
+    // read of their kids. Sticky notes are provider-visible only.
+    // Sara 2026-11-11.
+    const safeKids = (kids as any[]).map(k => {
+      const clone = { ...k }
+      delete clone.provider_sticky_notes
+      delete clone.provider_sticky_notes_updated_at
+      delete clone.provider_sticky_notes_updated_by_name
+      return clone
+    })
+    return res.json({ family: profiles[0], children: safeKids })
   }
 
   if (req.method === 'PATCH') {
