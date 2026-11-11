@@ -1307,7 +1307,21 @@ export function Today() {
                             )}
                             {(name || familyName || dob || sex || phone || email || address) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
-                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Patient</div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">Patient</div>
+                                  {/* Open the full chart in a new tab — Sara
+                                      2026-11-11 wanted the same shortcut
+                                      from the Today appointment card that
+                                      she has from the encounter note modal. */}
+                                  {appt.child_id && (
+                                    <a href={`/admin/chart/${appt.child_id}`} target="_blank" rel="noreferrer"
+                                       onClick={e => e.stopPropagation()}
+                                       title="Open the patient's full chart in a new tab"
+                                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE]">
+                                      <FileText size={10} /> Open chart
+                                    </a>
+                                  )}
+                                </div>
                                 {name && <div className="text-[13px]"><span className="text-[#1A1A2E] text-[11px] block">Name</span><span className="inline-flex items-center gap-2 flex-wrap"><strong>{name}</strong><ChartNumberPill value={child?.chart_number} size="xs" /></span></div>}
                                 <F label="Family" value={familyName} />
                                 <F label="Date of birth" value={dob} />
