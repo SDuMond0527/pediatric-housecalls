@@ -116,7 +116,11 @@ Draft the after-visit instructions.`
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-7',
+        // Switched Opus → Sonnet 2026-11-11. Opus was ~11 seconds per
+        // draft and Sara mistook the wait for a broken feature. This
+        // task is pure summarization — no complex reasoning required —
+        // so Sonnet gives comparable output in ~3-4 seconds.
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         thinking: { type: 'adaptive' },
         system: SYSTEM_PROMPT,
