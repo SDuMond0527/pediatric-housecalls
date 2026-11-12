@@ -2188,10 +2188,21 @@ export function Today() {
           {orderToast}
         </div>
       )}
-      {/* AI agent sidebar — no fixed patient context on this page; the
-          agent will ask which patient when the clinician mentions one.
-          Sara 2026-11-10. */}
-      <AgentChat />
+      {/* AI agent sidebar — follows which appointment card is currently
+          expanded so the agent is tied to that patient instead of the
+          whole page. Sara 2026-11-11: she saw "No patient open" in the
+          header while an appointment card was expanded right next to
+          it. When nothing's expanded the agent falls back to no
+          context (clinician can name the patient conversationally). */}
+      <AgentChat context={(() => {
+        if (!expanded) return undefined
+        const a = appts.find(x => x.id === expanded)
+        if (!a) return undefined
+        return {
+          child_id: a.child_id ?? undefined,
+          appointment_id: a.id,
+        }
+      })()} />
     </div>
   )
 }
