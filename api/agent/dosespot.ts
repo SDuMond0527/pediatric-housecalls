@@ -1,11 +1,12 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 
 // Shared DoseSpot v2 REST API helpers used by the agent authorize +
-// prepare paths. The underscore-PREFIXED FILENAME is what Vercel
-// honors as "not an endpoint" — underscore-prefixed DIRECTORIES
-// (api/_lib/) are NOT bundled at all. Production ERR_MODULE_NOT_FOUND
-// on 2026-11-11 caught the directory form; keep this file next to
-// its callers.
+// prepare paths. Vercel's bundler skips ANY underscore-prefixed path
+// segment in api/ — files AND directories — so this lives at a
+// regular filename. The default handler at the bottom is a stub
+// that refuses the accidental endpoint; the real work is the named
+// exports imported by chat.ts and authorize/[proposalId].ts.
 //
 // The existing api/dosespot/sso.ts deliberately duplicates its own
 // auth + patient-create code rather than importing from here —
@@ -362,4 +363,12 @@ export async function ensureDoseSpotPatient(
 
   await sql`UPDATE children SET dosespot_patient_id = ${id} WHERE id = ${childId}::uuid`
   return id
+}
+
+// Stub endpoint so Vercel treats this file as a regular function file
+// and bundles it. Never intended to be called directly — the real
+// consumers import the named exports above. Any accidental hit gets
+// a flat 404 rather than leaking that a DoseSpot helper lives here.
+export default function handler(_req: VercelRequest, res: VercelResponse) {
+  return res.status(404).json({ error: 'Not found' })
 }

@@ -9,7 +9,7 @@ import {
   parseDispenseQty,
   matchDispenseUnit,
   isLikelyControlled,
-} from './_dosespot'
+} from './dosespot'
 
 // Provider AI Agent — Week 1 MVP. Sara 2026-11-10.
 //
