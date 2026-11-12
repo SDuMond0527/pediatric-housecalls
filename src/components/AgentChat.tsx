@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Sparkles, Send, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { agentChat, apiFetch, type AgentChatResponse } from '../lib/api'
 import { AgentActionConfirmModal } from './AgentActionConfirmModal'
+import { DictationMic, appendDictation } from './DictationMic'
 
 // Floating AI Agent chat. Sara 2026-11-10 (Phase 1 Week 1).
 //
@@ -202,6 +203,15 @@ export function AgentChat({ context }: {
                 placeholder="Ask the agent anything…"
                 rows={1}
                 className="flex-1 resize-none px-3 py-2 border border-[#E8E8E4] rounded-xl text-[13px] outline-none focus:border-[#7F77DD] max-h-32"
+              />
+              {/* Dictation — same Deepgram pipeline as encounter notes.
+                  Appends to whatever the clinician's already typed so
+                  partial text + partial dictation combine cleanly.
+                  Sara 2026-11-11. */}
+              <DictationMic
+                label="Dictate to agent"
+                disabled={sending}
+                onTranscript={chunk => setInput(prev => appendDictation(prev, chunk))}
               />
               <button
                 onClick={() => void send()}
