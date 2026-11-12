@@ -2691,24 +2691,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Shift claimed ─────────────────────────────────────────────────────────
+    // Sara 2026-11-11: no notifications for on-call pickups. Nobody
+    // needs to be pinged when a provider claims a shift — the Shifts
+    // page is the authoritative source and anyone who needs to know
+    // who's on call can look there. Endpoint stays a no-op success
+    // so the client-side firing code doesn't need to be ripped out.
     if (body.type === 'shift_claimed') {
-      const { providerName, providerId, date, state } = body
-      const dateFormatted = new Date(String(date) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-      const stateLabel = state === 'NC' ? 'North Carolina' : state === 'SC' ? 'South Carolina' : state === 'VA' ? 'Virginia' : String(state)
-      const [provRow] = await sql`SELECT practice_id FROM providers WHERE id = ${String(providerId)}::uuid LIMIT 1`
-      const shiftPracticeId: string | undefined = provRow?.practice_id ?? undefined
-      const desc = `the ${stateLabel} on-call shift for ${dateFormatted}`
-      const shiftSms = `${PRACTICE_NAME}: ${providerName} picked up ${desc}. View: ${PORTAL_URL}/shifts`
-      await notifyAllProviders(
-        sql,
-        shiftSms,
-        `[Shift Pickup] ${providerName} claimed ${desc}`,
-        (name) => pickupNotificationEmail({ recipientName: name, acceptedBy: String(providerName), description: desc }),
-        String(providerId) ?? null,
-        shiftPracticeId,
-      )
-      await notifyAdmins(sql, `${PRACTICE_NAME}: ${providerName} picked up ${desc}. View: ${PORTAL_URL}/admin/schedule`, shiftPracticeId)
-      return res.json({ ok: true })
+      return res.json({ ok: true, suppressed: true })
     }
 
     // ── Booking notification (default flow) ───────────────────────────────────
