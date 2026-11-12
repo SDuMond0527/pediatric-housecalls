@@ -1,6 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import {
+  getDoseSpotToken,
+  searchDrugCandidates,
+  pickBestDrugMatch,
+  getDispenseUnits,
+  parseDispenseQty,
+  matchDispenseUnit,
+  isLikelyControlled,
+} from '../_lib/dosespot'
 
 // Provider AI Agent — Week 1 MVP. Sara 2026-11-10.
 //
@@ -204,6 +213,14 @@ async function runPrepareRx(
     return { error: `Missing required fields for a prescription: ${missing.join(', ')}. Ask the clinician for each one before calling this tool again.` }
   }
 
+  // Phase 1: hard-refuse obvious controlled substances. DoseSpot's own
+  // /send endpoint would reject them too (they need EPCS + PIN which
+  // we haven't wired), but a keyword check lets the agent fail
+  // conversationally instead of staging a doomed proposal.
+  if (isLikelyControlled(drug_name)) {
+    return { error: `"${drug_name}" looks like a controlled substance (Schedule II-V). The agent only handles non-controlled prescriptions in this phase. Ask the clinician to prescribe this directly in DoseSpot.` }
+  }
+
   // Look up patient + prescribing provider + pharmacy for the modal.
   const [child] = await sql`
     SELECT id, first_name, last_name, date_of_birth::text AS date_of_birth,
@@ -221,9 +238,46 @@ async function runPrepareRx(
     return { error: 'This patient does not have a DoseSpot-matched preferred pharmacy on file. Ask the clinician to set one on the chart before using the agent to prescribe.' }
   }
 
+  // Resolve the drug + dispense unit via DoseSpot at PREPARE time so
+  // Sara sees the canonical name in the modal before authorizing.
+  // Failures here return a conversational error — Claude asks for a
+  // different name or clarification — rather than exploding at the
+  // authorize step after she's already clicked Send.
+  const parsedQty = parseDispenseQty(dispense_qty)
+  if (!parsedQty) {
+    return { error: `Could not parse dispense quantity "${dispense_qty}". Ask the clinician to re-state it in the form "150 mL" or "30 tablets".` }
+  }
+  let dsCanonical: { DispensableDrugId: number; NameWithRouteDoseForm: string; Strength: string | null; confidence: 'strong' | 'weak' } | null = null
+  let dsDispenseUnitId: number | null = null
+  let dsUnitLabel: string | null = null
+  try {
+    const token = await getDoseSpotToken(prescriber.dosespot_clinician_id)
+    const candidates = await searchDrugCandidates(drug_name, token)
+    const match = pickBestDrugMatch(candidates, strength, form)
+    if (!match) {
+      return { error: `DoseSpot found no active drug matching "${drug_name}". Ask the clinician for another name or spelling.` }
+    }
+    dsCanonical = {
+      DispensableDrugId: match.pick.DispensableDrugId,
+      NameWithRouteDoseForm: match.pick.NameWithRouteDoseForm,
+      Strength: match.pick.Strength,
+      confidence: match.confidence,
+    }
+    const units = await getDispenseUnits(token)
+    const unit = matchDispenseUnit(units, parsedQty.unit)
+    if (!unit) {
+      return { error: `DoseSpot has no dispense unit matching "${parsedQty.unit}". Ask the clinician to pick a standard unit (mL, tablet, capsule, gram).` }
+    }
+    dsDispenseUnitId = unit.StandardDispenseUnitTypeID
+    dsUnitLabel = unit.Name
+  } catch (e: any) {
+    return { error: `DoseSpot lookup failed: ${e?.message ?? 'unknown error'}. The clinician can prescribe directly in DoseSpot instead.` }
+  }
+
   // Shape the proposal payload the modal will render + the authorizer
   // will consume. Keep names 1:1 with the tool args so Claude can't
-  // silently reformat values.
+  // silently reformat values. The dosespot_* fields are what the
+  // authorize step will transmit — Sara will see them in the modal.
   const payload = {
     patient: {
       child_id: child.id,
@@ -253,6 +307,15 @@ async function runPrepareRx(
       prn,
       indication,
       notes_to_pharmacist,
+    },
+    dosespot: {
+      canonical_name: dsCanonical.NameWithRouteDoseForm,
+      canonical_strength: dsCanonical.Strength,
+      dispensable_drug_id: dsCanonical.DispensableDrugId,
+      dispense_unit_id: dsDispenseUnitId,
+      dispense_unit_label: dsUnitLabel,
+      parsed_quantity: parsedQty.qty,
+      match_confidence: dsCanonical.confidence,
     },
     appointment_id: ctx.appointment_id ?? null,
     kind_description: 'Prescription (non-controlled only)',

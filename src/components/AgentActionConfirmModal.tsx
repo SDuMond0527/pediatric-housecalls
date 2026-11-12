@@ -118,6 +118,7 @@ function PrescriptionProposalBody({ payload }: { payload: any }) {
   const patient = payload?.patient ?? {}
   const prescriber = payload?.prescriber ?? {}
   const pharmacy = payload?.pharmacy ?? {}
+  const ds = payload?.dosespot ?? {}
   const allergyFlag = String(patient?.allergies ?? '').toLowerCase().includes(String(p?.drug_name ?? '').toLowerCase().slice(0, 4))
     && String(p?.drug_name ?? '').trim().length >= 4
 
@@ -163,6 +164,26 @@ function PrescriptionProposalBody({ payload }: { payload: any }) {
         <Field label="Indication" value={p.indication} />
         {p.notes_to_pharmacist && <Field label="Pharmacist note" value={p.notes_to_pharmacist} />}
       </div>
+
+      {/* DoseSpot match — shows the canonical name DoseSpot resolved
+          our free-text drug_name to. Sara reviews this to catch any
+          wrong-strength / wrong-form matches BEFORE clicking Authorize.
+          Confidence 'weak' highlights that strength or form didn't
+          exact-match any formulary entry. */}
+      {ds?.canonical_name && (
+        <div className={`rounded-lg border p-3 ${ds.match_confidence === 'weak' ? 'bg-[#FEF3C7] border-[#F5B041]' : 'bg-[#EEFBF1] border-[#A7E3B8]'}`}>
+          <div className="text-[10px] uppercase tracking-wide text-[#1A1A2E]/60 mb-1">
+            DoseSpot match {ds.match_confidence === 'weak' && '(review carefully)'}
+          </div>
+          <div className="text-[13px] font-medium text-[#1A1A2E]">
+            {ds.canonical_name}
+            {ds.canonical_strength && <span className="text-[#1A1A2E]/70"> · {ds.canonical_strength}</span>}
+          </div>
+          <div className="text-[11px] text-[#1A1A2E]/60 mt-0.5 font-mono">
+            Will transmit: {ds.parsed_quantity} {ds.dispense_unit_label}
+          </div>
+        </div>
+      )}
 
       {/* Pharmacy + prescriber */}
       <div className="rounded-lg border border-[#E8E8E4] p-3">

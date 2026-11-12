@@ -166,7 +166,7 @@ export function AgentChat({ context }: {
 
           {/* Guardrails banner — Sara's rule that clinicians should know what the agent is + is not. */}
           <div className="px-4 py-2 border-b border-[#F1EFE8] bg-[#FEF9E7] text-[11px] text-[#78350F] leading-snug">
-            Prescription staging is live (non-controlled only). Lab orders, radiology, and follow-ups are still being built. Nothing fires without your Authorize click.
+            Prescribing is live (non-controlled only). Lab orders, radiology, and follow-ups are still being built. Nothing transmits to the pharmacy without your Authorize click.
           </div>
 
           {/* Transcript */}

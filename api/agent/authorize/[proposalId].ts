@@ -1,6 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import {
+  getDoseSpotToken,
+  ensureDoseSpotPatient,
+  createCodedPrescription,
+  sendPrescriptions,
+} from '../../_lib/dosespot'
 
 // POST /api/agent/authorize/[proposalId]
 //
@@ -86,26 +92,122 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  // action === 'authorize'. Commit 2 stops here (staging only). Commit
-  // 3 will replace this block with:
-  //   case 'prescription': await fireDoseSpotPrescription(proposal.payload)
-  //   case 'lab_order':    await fireLabOrder(proposal.payload)
-  //   etc.
+  // action === 'authorize' — dispatch by proposal kind.
+  if (proposal.kind !== 'prescription') {
+    // Other kinds (lab_order, follow_up, etc.) will land in later
+    // commits. Explicit refusal so we never silently flip a non-Rx
+    // proposal through a path it isn't wired for yet.
+    return res.status(501).json({ error: `Authorize is not implemented for proposal kind '${proposal.kind}' yet.` })
+  }
+
+  const payload = proposal.payload as any
+  const rx = payload?.prescription ?? {}
+  const ds = payload?.dosespot ?? {}
+  const pharmacy = payload?.pharmacy ?? {}
+  const patient = payload?.patient ?? {}
+  const prescriber = payload?.prescriber ?? {}
+
+  // Hard-check everything the DoseSpot calls need before we touch the
+  // vendor. Each missing piece would be caught by DoseSpot anyway, but
+  // failing early gives Sara a clean actionable error instead of a
+  // vendor stack trace in the modal.
+  const miss: string[] = []
+  if (!patient.child_id) miss.push('child_id')
+  if (!pharmacy.dosespot_pharmacy_id) miss.push('pharmacy_id')
+  if (!ds.dispensable_drug_id) miss.push('dispensable_drug_id')
+  if (!ds.dispense_unit_id) miss.push('dispense_unit_id')
+  if (typeof ds.parsed_quantity !== 'number') miss.push('parsed_quantity')
+  if (typeof rx.refills !== 'number') miss.push('refills')
+  if (typeof rx.days_supply !== 'number') miss.push('days_supply')
+  if (!rx.sig) miss.push('sig')
+  if (!prescriber.dosespot_clinician_id) miss.push('dosespot_clinician_id')
+  if (miss.length) {
+    return res.status(422).json({ error: `Proposal is missing fields needed to transmit: ${miss.join(', ')}. The proposal was not sent.` })
+  }
+
+  let executionResult: any
+  try {
+    // Use the PRESCRIBER's clinician ID for the token so DoseSpot
+    // attributes the Rx to the right provider, not the admin fallback.
+    const token = await getDoseSpotToken(prescriber.dosespot_clinician_id)
+
+    // Ensure the patient exists in DoseSpot. Reuses the same create
+    // shape as the SSO flow, so a patient already launched via the
+    // DoseSpot button carries over without re-create.
+    const dsPatientId = await ensureDoseSpotPatient(patient.child_id, provider.practice_id, token, sql)
+
+    // Create the prescription.
+    const created = await createCodedPrescription({
+      patientId:         dsPatientId,
+      pharmacyId:        pharmacy.dosespot_pharmacy_id,
+      dispensableDrugId: ds.dispensable_drug_id,
+      dispenseUnitId:    ds.dispense_unit_id,
+      quantity:          ds.parsed_quantity,
+      refills:           rx.refills,
+      daysSupply:        rx.days_supply,
+      directions:        rx.sig,
+      pharmacyNotes:     rx.notes_to_pharmacist ?? null,
+    }, token)
+
+    // Transmit to the pharmacy. If send fails, the Rx is still in
+    // DoseSpot in draft form — Sara can finish it in DoseSpot's UI.
+    // We surface that distinction in the response so she knows
+    // whether CVS has it or whether she needs to intervene.
+    let sent: any
+    let sendError: string | null = null
+    try {
+      sent = await sendPrescriptions(dsPatientId, [created.PrescriptionId], token)
+    } catch (e: any) {
+      sendError = e?.message ?? String(e)
+    }
+
+    executionResult = {
+      dosespot_patient_id: dsPatientId,
+      dosespot_prescription_id: created.PrescriptionId,
+      sent: !sendError,
+      send_error: sendError,
+      send_response: sent ?? null,
+    }
+  } catch (e: any) {
+    // Mark the proposal as failed (not cancelled) and surface the
+    // vendor error verbatim. Status 'execution_failed' is distinct
+    // from 'cancelled' so audit can distinguish "clinician said no"
+    // from "DoseSpot refused".
+    await sql`
+      UPDATE agent_proposals
+      SET status = 'execution_failed', decided_at = NOW(),
+          execution_result = ${JSON.stringify({ error: e?.message ?? String(e) })}::jsonb
+      WHERE id = ${proposalId}::uuid`
+    try {
+      await sql`
+        INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
+        VALUES (${provider.id}::uuid, 'agent_proposal_execution_failed', 'agent_proposal', ${proposalId})`
+    } catch {}
+    return res.status(502).json({
+      error: `DoseSpot refused the prescription: ${e?.message ?? 'unknown error'}. The clinician should prescribe directly in DoseSpot.`,
+      proposalId,
+    })
+  }
+
+  const finalStatus = executionResult.sent ? 'executed' : 'authorized_pending_send'
   const [updated] = await sql`
     UPDATE agent_proposals
-    SET status = 'authorized_pending_execution', decided_at = NOW()
+    SET status = ${finalStatus}, decided_at = NOW(),
+        execution_result = ${JSON.stringify(executionResult)}::jsonb
     WHERE id = ${proposalId}::uuid
-    RETURNING id, kind, status, payload, decided_at`
+    RETURNING id, kind, status, payload, decided_at, execution_result`
   try {
     await sql`
       INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
-      VALUES (${provider.id}::uuid, 'agent_proposal_authorized', 'agent_proposal', ${proposalId})`
+      VALUES (${provider.id}::uuid, ${executionResult.sent ? 'agent_proposal_executed' : 'agent_proposal_sent_failed'}, 'agent_proposal', ${proposalId})`
   } catch {}
 
   return res.status(200).json({
     ok: true,
     proposal: updated,
-    pending_execution: true,
-    message: `Authorized. DoseSpot send-off is wired in the next commit; for now the prescription is staged safely and nothing has been transmitted to the pharmacy.`,
+    pending_execution: !executionResult.sent,
+    message: executionResult.sent
+      ? `Sent to pharmacy. DoseSpot prescription ID ${executionResult.dosespot_prescription_id}.`
+      : `Prescription created in DoseSpot (ID ${executionResult.dosespot_prescription_id}) but the transmission to the pharmacy failed: ${executionResult.send_error}. Open DoseSpot to transmit manually.`,
   })
 }
