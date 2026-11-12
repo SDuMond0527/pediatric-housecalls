@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, Send, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import { agentChat, type AgentChatResponse } from '../lib/api'
+import { agentChat, apiFetch, type AgentChatResponse } from '../lib/api'
 
 // Floating AI Agent chat. Sara 2026-11-10 (Phase 1 Week 1).
 //
@@ -10,8 +10,38 @@ import { agentChat, type AgentChatResponse } from '../lib/api'
 // visible to the server so the agent knows which patient / visit is
 // open.
 //
-// Week 1 MVP: read-only conversation with one tool (get_patient_context).
-// Write tools and the authorization panel land in Week 2+.
+// Rev 2026-11-11: when patient context is present, the floating button
+// and chat header show the patient's name + initials so the agent
+// surface feels patient-specific instead of generic. Sara flagged that
+// the previous version looked like "a general GoRoam feature" rather
+// than one that's clearly tied to the open chart.
+
+type PatientSummary = {
+  name: string
+  initials: string
+  dob: string | null
+  chart_number: string | null
+}
+
+async function fetchPatientSummary(childId: string): Promise<PatientSummary | null> {
+  try {
+    const rows = await apiFetch<any[]>(`/api/children?ids=${childId}`)
+    const row = rows?.[0]
+    if (!row) return null
+    const first = String(row.first_name ?? '').trim()
+    const last  = String(row.last_name  ?? '').trim()
+    const name  = [first, last].filter(Boolean).join(' ') || row.display_label || 'Unknown'
+    const initials = ((first[0] ?? '') + (last[0] ?? '')).toUpperCase() || name.slice(0, 2).toUpperCase()
+    return {
+      name,
+      initials,
+      dob: row.date_of_birth ? String(row.date_of_birth).slice(0, 10) : null,
+      chart_number: row.chart_number ?? null,
+    }
+  } catch {
+    return null
+  }
+}
 
 export function AgentChat({ context }: {
   context?: { child_id?: string; appointment_id?: string }
@@ -26,7 +56,15 @@ export function AgentChat({ context }: {
   }>>([])
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
+  const [patient, setPatient] = useState<PatientSummary | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!context?.child_id) { setPatient(null); return }
+    let cancelled = false
+    void fetchPatientSummary(context.child_id).then(p => { if (!cancelled) setPatient(p) })
+    return () => { cancelled = true }
+  }, [context?.child_id])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -56,15 +94,23 @@ export function AgentChat({ context }: {
 
   return (
     <>
-      {/* Floating button — bottom right, non-intrusive */}
+      {/* Floating button. When patient context is set, the pill shows
+          the patient's initials + first name so the agent reads as
+          "about this one patient" instead of "generic GoRoam
+          feature." Sara 2026-11-11. */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          title="Open AI agent (Phase 1 Week 1 — read-only tools)"
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-[#7F77DD] text-white shadow-lg hover:bg-[#6B64C8] text-[13px] font-medium"
+          title={patient ? `Open AI agent for ${patient.name}` : 'Open AI agent (no patient open)'}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 pl-1 pr-3.5 py-1 rounded-full bg-[#7F77DD] text-white shadow-lg hover:bg-[#6B64C8] text-[13px] font-medium"
         >
-          <Sparkles size={14} /> Agent
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-[#7F77DD] text-[11px] font-semibold">
+            {patient ? patient.initials : <Sparkles size={13} />}
+          </span>
+          <span className="pr-1">
+            Agent{patient ? ` · ${patient.name.split(' ')[0]}` : ''}
+          </span>
         </button>
       )}
 
@@ -72,19 +118,28 @@ export function AgentChat({ context }: {
         <div className="fixed bottom-6 right-6 z-40 w-[90vw] sm:w-[420px] max-w-[500px] bg-white border border-[#E8E8E4] rounded-2xl shadow-2xl flex flex-col" style={{ maxHeight: '75vh' }}>
           {/* Header */}
           <div className="px-4 py-3 border-b border-[#E8E8E4] flex items-center justify-between bg-[#FAFAF8] rounded-t-2xl">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-[#EEEDFE] flex items-center justify-center text-[#7F77DD]">
-                <Sparkles size={13} />
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-full bg-[#EEEDFE] flex items-center justify-center text-[#7F77DD] text-[12px] font-semibold flex-shrink-0">
+                {patient ? patient.initials : <Sparkles size={15} />}
               </div>
-              <div>
-                <div className="text-[13px] font-semibold text-[#1A1A2E]">AI agent</div>
-                <div className="text-[10px] text-[#1A1A2E]/60">
-                  {context?.child_id ? 'Patient context active' : 'No patient open'}
-                  {context?.appointment_id && ' · visit context active'}
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-[#1A1A2E] truncate">
+                  {patient ? patient.name : 'AI agent'}
+                </div>
+                <div className="text-[10px] text-[#1A1A2E]/60 truncate">
+                  {patient ? (
+                    <>
+                      Agent · {patient.chart_number ? `Chart ${patient.chart_number}` : 'Patient open'}
+                      {patient.dob && ` · DOB ${patient.dob}`}
+                      {context?.appointment_id && ' · visit'}
+                    </>
+                  ) : (
+                    <>No patient open{context?.appointment_id && ' · visit context'}</>
+                  )}
                 </div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E]"><X size={16} /></button>
+            <button onClick={() => setOpen(false)} className="text-[#1A1A2E]/60 hover:text-[#1A1A2E] flex-shrink-0 ml-2"><X size={16} /></button>
           </div>
 
           {/* Guardrails banner — Sara's rule that clinicians should know what the agent is + is not. */}
