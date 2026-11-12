@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, Send, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { agentChat, apiFetch, type AgentChatResponse } from '../lib/api'
+import { AgentActionConfirmModal } from './AgentActionConfirmModal'
 
 // Floating AI Agent chat. Sara 2026-11-10 (Phase 1 Week 1).
 //
@@ -57,6 +58,7 @@ export function AgentChat({ context }: {
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
   const [patient, setPatient] = useState<PatientSummary | null>(null)
+  const [pendingProposal, setPendingProposal] = useState<{ id: string; kind: string; payload: any } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -85,6 +87,11 @@ export function AgentChat({ context }: {
       })
       setConversationId(r.conversation_id)
       setTurns(prev => [...prev, { role: 'agent', text: r.reply, tool_calls: r.tool_calls }])
+      // If the agent staged a proposal (e.g., prescription), pop the
+      // confirmation modal. Only one at a time for now — Sara 2026-11-11.
+      if (r.proposals && r.proposals.length > 0) {
+        setPendingProposal(r.proposals[0])
+      }
     } catch (e: any) {
       setErr(e?.message ?? 'Agent error')
     } finally {
@@ -112,6 +119,20 @@ export function AgentChat({ context }: {
             Agent{patient ? ` · ${patient.name.split(' ')[0]}` : ''}
           </span>
         </button>
+      )}
+
+      {pendingProposal && (
+        <AgentActionConfirmModal
+          proposal={pendingProposal}
+          onClose={() => setPendingProposal(null)}
+          onDecided={({ authorized, message }) => {
+            setPendingProposal(null)
+            setTurns(prev => [...prev, {
+              role: 'agent',
+              text: authorized ? `✓ ${message}` : `Cancelled. ${message}`,
+            }])
+          }}
+        />
       )}
 
       {open && (
@@ -144,7 +165,7 @@ export function AgentChat({ context }: {
 
           {/* Guardrails banner — Sara's rule that clinicians should know what the agent is + is not. */}
           <div className="px-4 py-2 border-b border-[#F1EFE8] bg-[#FEF9E7] text-[11px] text-[#78350F] leading-snug">
-            Read-only in Phase 1 Week 1. The agent can look up chart facts but can't prescribe, order, or schedule yet. Write tools are being built — nothing commits without your explicit click.
+            Prescription staging is live (non-controlled only). Lab orders, radiology, and follow-ups are still being built. Nothing fires without your Authorize click.
           </div>
 
           {/* Transcript */}

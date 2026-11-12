@@ -74,8 +74,9 @@ HARD RULES:
 
 TONE: Terse, clinician-to-clinician. Match the pace of a busy provider mid-day. Skip pleasantries.`
 
-// Tool definitions — only ONE wired for Week 1 (read-only patient
-// context). Write tools land in later weeks.
+// Tool definitions. Read tool (get_patient_context) + one write-prep
+// tool (prepare_prescription) live here. Write tools do NOT execute —
+// they stage a proposal row the clinician authorizes via a modal.
 const TOOLS: any[] = [
   {
     name: 'get_patient_context',
@@ -101,6 +102,32 @@ const TOOLS: any[] = [
         },
       },
       required: ['fields'],
+    },
+  },
+  {
+    name: 'prepare_prescription',
+    description: `Stage a prescription for the clinician to authorize. This does NOT send to a pharmacy — it creates a proposal row and returns a proposal_id. The clinician reviews the structured proposal in a confirmation modal and clicks Authorize to fire it to DoseSpot.
+
+Call this when the clinician describes a medication to prescribe (name + strength + sig). If any required field is missing (strength, sig, duration, dispense quantity, refills), ASK for it before calling this tool. Do not guess doses.
+
+Controlled substances (Schedule II-V) are NOT supported yet — if the drug is controlled, refuse and tell the clinician to prescribe it directly in DoseSpot.
+
+Fields must be exact clinician intent. Do not reformat the sig unless the clinician asked you to. Preserve clinician decimals exactly.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        drug_name:     { type: 'string', description: 'Drug name as the clinician said it (brand or generic). Will be matched against DoseSpot formulary at authorization time.' },
+        strength:      { type: 'string', description: 'Strength + units (e.g., "250 mg/5 mL", "500 mg", "0.05%").' },
+        form:          { type: 'string', description: 'Dosage form (e.g., "suspension", "tablet", "cream", "solution").' },
+        sig:           { type: 'string', description: 'Full sig the parent will read (e.g., "Give 5 mL by mouth three times a day for 10 days").' },
+        dispense_qty:  { type: 'string', description: 'Dispense quantity + unit (e.g., "150 mL", "30 tablets").' },
+        refills:       { type: 'number', description: 'Number of refills. 0 if none.' },
+        days_supply:   { type: 'number', description: 'Days supply covered.' },
+        prn:           { type: 'boolean', description: 'True if PRN (as-needed).' },
+        indication:    { type: 'string', description: 'Reason for prescribing (e.g., "acute otitis media"). Short — one line.' },
+        notes_to_pharmacist: { type: 'string', description: 'Optional pharmacist notes. Omit if none.' },
+      },
+      required: ['drug_name', 'strength', 'form', 'sig', 'dispense_qty', 'refills', 'days_supply', 'indication'],
     },
   },
 ]
@@ -129,13 +156,141 @@ async function callAnthropic(messages: any[], systemPrompt: string): Promise<any
   return res.json()
 }
 
+// Stage a prescription proposal for authorization. This is the whole
+// "prepare" half of the prepare-then-authorize contract: we inspect the
+// clinician's intent, gather the patient + prescribing provider + pharmacy
+// data the modal needs, write a pending row to agent_proposals, and
+// return the proposal_id. The actual DoseSpot fire-off happens in
+// /api/agent/authorize/[proposalId] when the clinician clicks Authorize.
+//
+// IMPORTANT: this function is still allowed to "fail" conversationally.
+// If a required field is missing or the patient has no pharmacy on
+// file, return an error payload — Claude will use that to ask the
+// clinician for the missing piece instead of silently staging a broken
+// proposal.
+async function runPrepareRx(
+  sql: any,
+  practiceId: string,
+  providerId: string,
+  conversationId: string,
+  args: any,
+  ctx: { child_id?: string; appointment_id?: string },
+  proposalsOut: Array<{ id: string; kind: string; payload: any }>,
+): Promise<object> {
+  const childId = ctx.child_id
+  if (!childId) return { error: 'No patient is currently open. Ask the clinician which patient they mean before preparing a prescription.' }
+
+  const drug_name = String(args?.drug_name ?? '').trim()
+  const strength  = String(args?.strength ?? '').trim()
+  const form      = String(args?.form ?? '').trim()
+  const sig       = String(args?.sig ?? '').trim()
+  const dispense_qty = String(args?.dispense_qty ?? '').trim()
+  const refills = Number.isFinite(args?.refills) ? Number(args.refills) : null
+  const days_supply = Number.isFinite(args?.days_supply) ? Number(args.days_supply) : null
+  const indication = String(args?.indication ?? '').trim()
+  const prn = !!args?.prn
+  const notes_to_pharmacist = String(args?.notes_to_pharmacist ?? '').trim() || null
+
+  const missing: string[] = []
+  if (!drug_name)    missing.push('drug_name')
+  if (!strength)     missing.push('strength')
+  if (!form)         missing.push('form')
+  if (!sig)          missing.push('sig')
+  if (!dispense_qty) missing.push('dispense_qty')
+  if (refills === null) missing.push('refills')
+  if (days_supply === null) missing.push('days_supply')
+  if (!indication)   missing.push('indication')
+  if (missing.length > 0) {
+    return { error: `Missing required fields for a prescription: ${missing.join(', ')}. Ask the clinician for each one before calling this tool again.` }
+  }
+
+  // Look up patient + prescribing provider + pharmacy for the modal.
+  const [child] = await sql`
+    SELECT id, first_name, last_name, date_of_birth::text AS date_of_birth,
+           allergies, preferred_pharmacy, dosespot_pharmacy_id
+    FROM children WHERE id = ${childId}::uuid AND practice_id = ${practiceId}::uuid`
+  if (!child) return { error: 'Patient not found in this practice.' }
+
+  const [prescriber] = await sql`
+    SELECT id, name, role, dosespot_clinician_id
+    FROM providers WHERE id = ${providerId}::uuid AND practice_id = ${practiceId}::uuid`
+  if (!prescriber?.dosespot_clinician_id) {
+    return { error: 'The signed-in provider does not have a DoseSpot clinician ID configured. They must prescribe directly in DoseSpot instead.' }
+  }
+  if (!child.dosespot_pharmacy_id) {
+    return { error: 'This patient does not have a DoseSpot-matched preferred pharmacy on file. Ask the clinician to set one on the chart before using the agent to prescribe.' }
+  }
+
+  // Shape the proposal payload the modal will render + the authorizer
+  // will consume. Keep names 1:1 with the tool args so Claude can't
+  // silently reformat values.
+  const payload = {
+    patient: {
+      child_id: child.id,
+      first_name: child.first_name,
+      last_name: child.last_name,
+      date_of_birth: child.date_of_birth,
+      allergies: child.allergies ?? null,
+    },
+    prescriber: {
+      provider_id: prescriber.id,
+      name: prescriber.name,
+      role: prescriber.role,
+      dosespot_clinician_id: prescriber.dosespot_clinician_id,
+    },
+    pharmacy: {
+      label: child.preferred_pharmacy ?? null,
+      dosespot_pharmacy_id: child.dosespot_pharmacy_id,
+    },
+    prescription: {
+      drug_name,
+      strength,
+      form,
+      sig,
+      dispense_qty,
+      refills,
+      days_supply,
+      prn,
+      indication,
+      notes_to_pharmacist,
+    },
+    appointment_id: ctx.appointment_id ?? null,
+    kind_description: 'Prescription (non-controlled only)',
+  }
+
+  const [row] = await sql`
+    INSERT INTO agent_proposals (conversation_id, practice_id, provider_id, kind, payload)
+    VALUES (${conversationId}::uuid, ${practiceId}::uuid, ${providerId}::uuid, 'prescription', ${JSON.stringify(payload)}::jsonb)
+    RETURNING id`
+  try {
+    await sql`
+      INSERT INTO phi_audit_log (provider_id, action, resource_type, resource_id)
+      VALUES (${providerId}::uuid, 'agent_proposal_created', 'agent_proposal', ${row.id})`
+  } catch {}
+
+  proposalsOut.push({ id: row.id, kind: 'prescription', payload })
+
+  return {
+    staged: true,
+    proposal_id: row.id,
+    kind: 'prescription',
+    message: 'Prescription staged. The clinician will review the structured proposal in a confirmation modal and click Authorize to fire it to DoseSpot. Tell the clinician you have staged the prescription and ask them to review the modal.',
+  }
+}
+
 async function runTool(
   sql: any,
   practiceId: string,
+  providerId: string,
+  conversationId: string,
   toolName: string,
   args: any,
   ctx: { child_id?: string; appointment_id?: string },
+  proposalsOut: Array<{ id: string; kind: string; payload: any }>,
 ): Promise<object> {
+  if (toolName === 'prepare_prescription') {
+    return runPrepareRx(sql, practiceId, providerId, conversationId, args, ctx, proposalsOut)
+  }
   if (toolName !== 'get_patient_context') {
     return { error: `Tool '${toolName}' is not available in this phase.` }
   }
@@ -320,6 +475,7 @@ CURRENT CONTEXT:
 
   // Agentic loop — up to 4 tool rounds per turn. Keeps latency bounded.
   const toolCallsLog: Array<{ name: string; arguments: any; result: any }> = []
+  const proposalsOut: Array<{ id: string; kind: string; payload: any }> = []
   let finalText = ''
   let claudeResp: any = null
   for (let round = 0; round < 4; round++) {
@@ -344,7 +500,7 @@ CURRENT CONTEXT:
       if (b.type !== 'tool_use') continue
       let result: object
       try {
-        result = await runTool(sql, practiceId, String(b.name), b.input ?? {}, ctx)
+        result = await runTool(sql, practiceId, provider.id, conversationId, String(b.name), b.input ?? {}, ctx, proposalsOut)
       } catch (e: any) {
         result = { error: `Tool crashed: ${e?.message ?? String(e)}` }
       }
@@ -375,6 +531,6 @@ CURRENT CONTEXT:
     conversation_id: conversationId,
     reply: finalText || '(no text reply)',
     tool_calls: toolCallsLog,
-    proposals: [],  // Week 2+ populates this when write tools arrive.
+    proposals: proposalsOut,
   })
 }

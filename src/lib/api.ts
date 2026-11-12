@@ -1864,6 +1864,18 @@ export const agentChat = (body: {
 }) =>
   apiFetch<AgentChatResponse>('/api/agent/chat', { method: 'POST', body: JSON.stringify(body) })
 
+export interface AgentAuthorizeResponse {
+  ok: true
+  proposal: { id: string; kind: string; status: string; payload: any; decided_at: string }
+  pending_execution?: boolean
+  message: string
+}
+export const agentAuthorizeProposal = (proposalId: string, action: 'authorize' | 'cancel') =>
+  apiFetch<AgentAuthorizeResponse>(`/api/agent/authorize/${proposalId}`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  })
+
 // Attach an orphaned Stedi 835 ERA (one that landed at Stedi but
 // never joined to any of our claims — usually because the biller
 // resubmitted outside GoRoam) onto a specific claim in our DB.
