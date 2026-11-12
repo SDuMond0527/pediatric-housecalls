@@ -1,9 +1,11 @@
 import { neon } from '@neondatabase/serverless'
 
 // Shared DoseSpot v2 REST API helpers used by the agent authorize +
-// prepare paths. Vercel treats any file whose path has an underscore
-// segment as internal (not deployable as an endpoint) but will still
-// bundle it when it's imported from a sibling route.
+// prepare paths. The underscore-PREFIXED FILENAME is what Vercel
+// honors as "not an endpoint" — underscore-prefixed DIRECTORIES
+// (api/_lib/) are NOT bundled at all. Production ERR_MODULE_NOT_FOUND
+// on 2026-11-11 caught the directory form; keep this file next to
+// its callers.
 //
 // The existing api/dosespot/sso.ts deliberately duplicates its own
 // auth + patient-create code rather than importing from here —
@@ -29,13 +31,16 @@ export function dsHeaders(token: string): Record<string, string> {
 }
 
 // OAuth2 password grant — identical shape to api/dosespot/sso.ts.
-export async function getDoseSpotToken(clinicianId?: string): Promise<string> {
-  const user = clinicianId || DS_CLINICIAN
+// Auth is CLINIC-level: the env DS_CLINICIAN is the API user DoseSpot
+// authenticates with, not the prescribing provider. Per-prescription
+// clinician attribution is handled by DoseSpot server-side — do NOT
+// pass the prescriber's clinician ID as the OAuth username.
+export async function getDoseSpotToken(): Promise<string> {
   const body = new URLSearchParams({
     grant_type:    'password',
     client_id:     DS_CLINIC_ID,
     client_secret: DS_CLINIC_KEY,
-    username:      user,
+    username:      DS_CLINICIAN,
     password:      DS_CLINIC_KEY,
     scope:         'api',
   })

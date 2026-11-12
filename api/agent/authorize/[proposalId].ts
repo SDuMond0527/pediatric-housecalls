@@ -6,7 +6,7 @@ import {
   ensureDoseSpotPatient,
   createCodedPrescription,
   sendPrescriptions,
-} from '../../_lib/dosespot'
+} from '../_dosespot'
 
 // POST /api/agent/authorize/[proposalId]
 //

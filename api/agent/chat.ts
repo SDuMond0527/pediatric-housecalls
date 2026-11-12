@@ -9,7 +9,7 @@ import {
   parseDispenseQty,
   matchDispenseUnit,
   isLikelyControlled,
-} from '../_lib/dosespot'
+} from './_dosespot'
 
 // Provider AI Agent — Week 1 MVP. Sara 2026-11-10.
 //
@@ -251,7 +251,7 @@ async function runPrepareRx(
   let dsDispenseUnitId: number | null = null
   let dsUnitLabel: string | null = null
   try {
-    const token = await getDoseSpotToken(prescriber.dosespot_clinician_id)
+    const token = await getDoseSpotToken()
     const candidates = await searchDrugCandidates(drug_name, token)
     const match = pickBestDrugMatch(candidates, strength, form)
     if (!match) {
