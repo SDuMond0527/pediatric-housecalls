@@ -916,7 +916,19 @@ export function AdminClaims() {
       triggers.push(c.claim_rejection_at)
     }
     if (c.status === 'submitted' && hasActionableDenial(c)) {
-      triggers.push(c.era_received_at ?? c.updated_at ?? null)
+      // Only treat the denial as an active rework trigger if the biller
+      // has NOT already edited + resubmitted the claim since the ERA.
+      // Without this guard, Fix+Resubmit sets status='submitted' but
+      // leaves the OLD denial_codes on the row, so hasActionableDenial
+      // stays true forever and the claim lives in Rework until the
+      // next ERA (even though the biller already did the work).
+      // Mackenzie Twigg 2026-11-13 — fixed Nov 3, still showing in
+      // Rework today because her resubmit hasn't adjudicated yet.
+      const billerFixedAfterDenial = c.biller_edited_at && c.era_received_at &&
+        new Date(c.biller_edited_at).getTime() > new Date(c.era_received_at).getTime()
+      if (!billerFixedAfterDenial) {
+        triggers.push(c.era_received_at ?? c.updated_at ?? null)
+      }
     }
     const activeTriggerTs = triggers.filter(Boolean) as string[]
     if (activeTriggerTs.length === 0) return false
