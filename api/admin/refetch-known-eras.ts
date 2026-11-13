@@ -430,6 +430,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             case '2':  totals.patient_coinsurance += c.amount; break
             case '3':  totals.patient_copay       += c.amount; break
             case '96': totals.patient_non_covered += c.amount; break
+            // PR-31/32 are payer-can't-identify denials, not real
+            // patient obligations. Skip so no bogus statement seeds.
+            // See api/stedi/era.ts for full context.
+            case '31': break
+            case '32': break
             default:   totals.patient_non_covered += c.amount; break
           }
         } else if (c.group === 'CO' && CONTRACTUAL_CO_CODES.has(c.reason)) {

@@ -98,6 +98,10 @@ function parseEraClaims(era835: any): EraClaim[] {
               if (rsn === '3') claim.patient_copay += amt
               else if (rsn === '1') claim.patient_deductible += amt
               else if (rsn === '2') claim.patient_coinsurance += amt
+              // PR-31/32 are payer-can't-identify denials, not real
+              // patient obligations. Skip so no bogus statement seeds.
+              // See api/stedi/era.ts for full context.
+              else if (rsn === '31' || rsn === '32') { /* skip */ }
               else claim.patient_non_covered += amt
             }
           }

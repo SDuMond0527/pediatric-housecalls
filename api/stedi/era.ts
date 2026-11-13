@@ -210,6 +210,14 @@ function bucketCasFromX12(cas: X12CasEntry[]) {
         case '2':  totals.patient_coinsurance += c.amount; break
         case '3':  totals.patient_copay       += c.amount; break
         case '96': totals.patient_non_covered += c.amount; break
+        // PR-31 / PR-32 are "payer can't identify patient/insured" —
+        // formally PR but semantically "can't process; resubmit with
+        // correct info." These are NOT real patient obligations and
+        // must NOT seed a patient_statement. Sara 2026-11-13 after
+        // Sophie Slutzker's mom auto-paid $200 on a PR-31 member-ID
+        // denial that was then fix+resubmitted.
+        case '31': break
+        case '32': break
         default:   totals.patient_non_covered += c.amount; break
       }
     } else if (c.group === 'CO' && CONTRACTUAL_CO_CODES.has(c.reason)) {
