@@ -107,7 +107,12 @@ function pickAction(denialCodes, remarkCodes) {
 const apply = process.argv.includes('--apply')
 const sql = neon(process.env.DATABASE_URL)
 
-// Find claims with denial_codes populated and no existing open denial_fix/appeal_draft.
+// Find claims with denial_codes populated AND no existing open denial
+// proposal AND where the biller has NOT already resubmitted. The last
+// check (biller_edited_at <= era_received_at OR either is null) is what
+// prevents the Mackenzie Twigg regression from 2026-11-13 — if the
+// biller already fixed the denial and resubmitted, we wait for the
+// next ERA rather than re-queueing the same resolved issue.
 const candidates = await sql`
   SELECT c.id, c.practice_id, c.payer_name,
          c.service_date::text AS service_date,
@@ -117,6 +122,7 @@ const candidates = await sql`
   LEFT JOIN children ch ON ch.id = c.child_id
   WHERE c.denial_codes IS NOT NULL
     AND jsonb_array_length(c.denial_codes) > 0
+    AND (c.biller_edited_at IS NULL OR c.era_received_at IS NULL OR c.biller_edited_at <= c.era_received_at)
     AND NOT EXISTS (
       SELECT 1 FROM review_queue_items r
       WHERE r.claim_id = c.id

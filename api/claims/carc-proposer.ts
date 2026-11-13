@@ -258,7 +258,14 @@ function buildProposedChange(
 /**
  * Write the proposal to review_queue_items. Idempotent per claim —
  * if a denial-category row already exists for this claim with
- * status 'open', we don't create a duplicate.
+ * status 'open', OR the biller has already edited the claim after
+ * the denial ERA arrived (meaning they've already acted on it and
+ * resubmitted), we don't create a proposal.
+ *
+ * The biller_edited_at gate is what prevents the "Mackenzie Twigg
+ * 2026-11-13" regression — resubmitted claims awaiting a second ERA
+ * must stay in whatever tab the biller moved them to, not drop back
+ * into Rework because the ORIGINAL denial still sits on the row.
  */
 export async function recordProposal(
   sql: any,
@@ -270,17 +277,30 @@ export async function recordProposal(
     service_date?: string | null
   },
   proposal: Proposal,
-): Promise<{ created: boolean; id?: string }> {
-  // Idempotency check: if there's already an open denial_fix or
-  // appeal_draft for this claim, skip. Prevents duplicate rows when
-  // the ERA polling cron runs twice on the same remit.
+): Promise<{ created: boolean; id?: string; skipReason?: string }> {
+  // Idempotency check #1: already queued (open) proposal for this claim.
   const [existing] = await sql`
     SELECT id FROM review_queue_items
     WHERE claim_id = ${claim.id}::uuid
       AND item_type IN ('denial_fix', 'appeal_draft')
       AND status = 'open'
     LIMIT 1`
-  if (existing) return { created: false, id: existing.id }
+  if (existing) return { created: false, id: existing.id, skipReason: 'already-queued' }
+
+  // Idempotency check #2: biller has already acted since the ERA
+  // arrived. If biller_edited_at is set AND falls after era_received_at,
+  // the biller has seen this denial, fixed the claim, and (presumably)
+  // resubmitted. Don't re-queue — wait for the next ERA to tell us
+  // whether the resubmit worked.
+  const [claimState] = await sql`
+    SELECT biller_edited_at, era_received_at
+    FROM claims
+    WHERE id = ${claim.id}::uuid
+    LIMIT 1`
+  if (claimState?.biller_edited_at && claimState?.era_received_at &&
+      new Date(claimState.biller_edited_at) > new Date(claimState.era_received_at)) {
+    return { created: false, skipReason: 'biller-already-acted' }
+  }
 
   const [row] = await sql`
     INSERT INTO review_queue_items (
