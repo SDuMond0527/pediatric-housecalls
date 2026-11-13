@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { pickActionForDenialCodes, recordProposal } from '../claims/carc-proposer.js'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -368,6 +369,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // Stedi remittance transaction ID → drives /api/claims/[id]/era-pdf.
             await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS stedi_era_transaction_id text`
             await sql`UPDATE claims SET stedi_era_transaction_id = ${String(remId)} WHERE id = ${claimId}::uuid`
+
+            // Stage 2 billing agent: propose an action for actionable
+            // denials. Idempotent — won't duplicate if a review-queue
+            // row already exists for this claim. Passive codes (CO-45,
+            // PR-1/2/3) return null and don't queue anything.
+            if (codes.length > 0) {
+              const proposal = pickActionForDenialCodes(codes, pc.remarks ?? [])
+              if (proposal) {
+                const [claimRow] = await sql`
+                  SELECT c.id, c.practice_id, c.payer_name, c.service_date::text AS service_date,
+                         (ch.first_name || ' ' || ch.last_name) AS patient_name
+                  FROM claims c LEFT JOIN children ch ON ch.id = c.child_id
+                  WHERE c.id = ${claimId}::uuid LIMIT 1`
+                if (claimRow) await recordProposal(sql, claimRow, proposal)
+              }
+            }
           } catch (denialErr: any) {
             console.error('[stedi/era] denial-code capture failed (non-fatal):', denialErr?.message)
           }

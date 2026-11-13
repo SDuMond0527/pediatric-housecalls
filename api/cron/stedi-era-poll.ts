@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { pickActionForDenialCodes, recordProposal } from '../claims/carc-proposer.js'
 
 // Poll Stedi's remittances (835 ERAs) every 30 min as a catch-up in
 // case the webhook (api/webhooks/stedi-era.ts) missed a notification.
@@ -396,6 +397,25 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     const codes = extractDenialCodes(eraRaw)
     if (codes.length > 0) {
       await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claim.id}`
+      // Stage 2 billing agent: auto-propose a Review Queue action for
+      // actionable denials. Idempotent — safe when the cron re-processes
+      // the same remittance. See api/claims/carc-proposer.ts. We skip
+      // remark extraction here because the cron path doesn't currently
+      // parse LQ segments; the proposer handles an empty array by
+      // flagging the proposal as medium-confidence rather than high.
+      try {
+        const proposal = pickActionForDenialCodes(codes, [])
+        if (proposal) {
+          const [claimRow] = await sql`
+            SELECT c.id, c.practice_id, c.payer_name, c.service_date::text AS service_date,
+                   (ch.first_name || ' ' || ch.last_name) AS patient_name
+            FROM claims c LEFT JOIN children ch ON ch.id = c.child_id
+            WHERE c.id = ${claim.id} LIMIT 1`
+          if (claimRow) await recordProposal(sql, claimRow, proposal)
+        }
+      } catch (propErr: any) {
+        console.error('[cron/stedi-era-poll] CARC proposer failed (non-fatal):', propErr?.message)
+      }
     }
   } catch (denialErr: any) {
     console.error('[cron/stedi-era-poll] denial-code capture failed (non-fatal):', denialErr?.message)
