@@ -441,6 +441,12 @@ function QueueTab(props: {
                   <pre className="text-[11px] text-[#1A1A2E] font-mono whitespace-pre-wrap bg-white rounded-lg border border-[#E8E8E4] p-3 overflow-x-auto">
                     {JSON.stringify(it.agent_reasoning ?? {}, null, 2)}
                   </pre>
+                  {(it.proposed_change as any)?.demographics_diff && (
+                    <>
+                      <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5 mt-3">Demographics diff — claim vs chart</div>
+                      <DemographicsDiffBlock diff={(it.proposed_change as any).demographics_diff} />
+                    </>
+                  )}
                   {it.proposed_change && (
                     <>
                       <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5 mt-3">Proposed change</div>
@@ -538,5 +544,52 @@ function SettingsTab(props: {
         </ul>
       </div>
     </>
+  )
+}
+
+// Pretty render for PR-31 demographics-diff proposals. Three visual
+// states:
+//   - Mismatches present → red rows, side-by-side claim vs chart
+//   - All fields match → amber banner recommending card review
+// Sara 2026-11-13 after Sophie Slutzker's PR-31 showed the raw
+// JSON wasn't fast enough to scan.
+function DemographicsDiffBlock({ diff }: { diff: {
+  diffs: Array<{ field: string; claim_value: string | null; chart_value: string | null }>
+  all_match: boolean
+  fields_checked: string[]
+  summary: string
+} }) {
+  if (diff.all_match) {
+    return (
+      <div className="rounded-lg border border-[#F5B041] bg-[#FEF3C7] p-3 text-[12px] text-[#78350F] leading-relaxed">
+        {diff.summary}
+        <div className="mt-2 text-[10px] text-[#78350F]/70">
+          Checked: {diff.fields_checked.join(' · ')}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-[#E8E8E4] bg-white overflow-hidden">
+      <div className="grid grid-cols-[1fr_1fr_1fr] text-[10px] uppercase tracking-wider font-semibold text-[#1A1A2E]/60 bg-[#FAFAF8] border-b border-[#E8E8E4]">
+        <div className="px-3 py-2">Field</div>
+        <div className="px-3 py-2 border-l border-[#E8E8E4]">On claim</div>
+        <div className="px-3 py-2 border-l border-[#E8E8E4]">On chart</div>
+      </div>
+      {diff.diffs.map((d, i) => (
+        <div key={i} className="grid grid-cols-[1fr_1fr_1fr] text-[12px] border-b border-[#F1EFE8] last:border-b-0">
+          <div className="px-3 py-2 font-medium text-[#1A1A2E]">{d.field}</div>
+          <div className="px-3 py-2 border-l border-[#E8E8E4] font-mono text-[#991B1B] bg-[#FEE2E2]/40">
+            {d.claim_value ?? <span className="italic text-[#1A1A2E]/40">(empty)</span>}
+          </div>
+          <div className="px-3 py-2 border-l border-[#E8E8E4] font-mono text-[#065F46] bg-[#D1FAE5]/40">
+            {d.chart_value ?? <span className="italic text-[#1A1A2E]/40">(empty)</span>}
+          </div>
+        </div>
+      ))}
+      <div className="px-3 py-2 bg-[#FAFAF8] border-t border-[#E8E8E4] text-[11px] text-[#1A1A2E]/70">
+        Update the <strong>claim</strong> to match the chart, then resubmit. (Per Sara's rule: never auto-fix the chart from a denial.)
+      </div>
+    </div>
   )
 }

@@ -255,6 +255,77 @@ function buildProposedChange(
   }
 }
 
+// PR-31 demographics diff detector. Compares the data submitted on
+// the claim against the current chart — payer can't identify the
+// patient, so we surface the exact field(s) that differ. If
+// everything matches, the proposal says so and recommends reviewing
+// the insurance card (the chart itself might be wrong, or the
+// patient may have a new policy the chart hasn't been updated for).
+// Sara's rule from 2026-11-13 still holds: only propose fixes TO
+// THE CLAIM. Chart updates are a separate action the clinician
+// approves.
+type FieldDiff = {
+  field: string
+  claim_value: string | null
+  chart_value: string | null
+}
+export async function detectDemographicsDiff(
+  sql: any,
+  claimId: string,
+): Promise<{
+  diffs: FieldDiff[]
+  all_match: boolean
+  fields_checked: string[]
+  summary: string
+} | null> {
+  const [row] = await sql`
+    SELECT c.member_id,
+           c.subscriber_name,
+           c.subscriber_dob::text AS subscriber_dob,
+           c.subscriber_gender,
+           c.subscriber_relationship,
+           c.group_number,
+           c.insurance_dependent_code,
+           ch.insurance_member_id,
+           ch.insurance_group_number,
+           ch.insurance_dependent_code AS chart_dependent_code,
+           ch.insurance_subscriber_name AS chart_subscriber_name,
+           ch.insurance_subscriber_dob::text AS chart_subscriber_dob,
+           ch.insurance_subscriber_gender AS chart_subscriber_gender,
+           ch.insurance_subscriber_relationship AS chart_subscriber_relationship
+    FROM claims c
+    LEFT JOIN children ch ON ch.id = c.child_id
+    WHERE c.id = ${claimId}::uuid
+    LIMIT 1`
+  if (!row) return null
+  const norm = (s: any): string => String(s ?? '').trim().toLowerCase()
+  const pairs: Array<[string, any, any]> = [
+    ['Member ID',             row.member_id,                row.insurance_member_id],
+    ['Subscriber name',       row.subscriber_name,          row.chart_subscriber_name],
+    ['Subscriber DOB',        row.subscriber_dob,           row.chart_subscriber_dob],
+    ['Subscriber gender',     row.subscriber_gender,        row.chart_subscriber_gender],
+    ['Subscriber relationship', row.subscriber_relationship, row.chart_subscriber_relationship],
+    ['Group number',          row.group_number,             row.insurance_group_number],
+    ['Dependent code',        row.insurance_dependent_code, row.chart_dependent_code],
+  ]
+  const fieldsChecked = pairs.map(p => p[0])
+  const diffs: FieldDiff[] = []
+  for (const [field, claimVal, chartVal] of pairs) {
+    if (norm(claimVal) !== norm(chartVal)) {
+      diffs.push({
+        field,
+        claim_value: claimVal != null ? String(claimVal) : null,
+        chart_value: chartVal != null ? String(chartVal) : null,
+      })
+    }
+  }
+  const all_match = diffs.length === 0
+  const summary = all_match
+    ? "Claim data matches the chart exactly. The payer still couldn't ID the patient — possible causes: (1) missing/wrong dependent code on both claim AND chart, (2) typo on the insurance card the chart was built from, (3) patient has a new policy the chart hasn't been updated for. Pull the current insurance card and verify member ID + DOB + dep code."
+    : `${diffs.length} field${diffs.length > 1 ? 's' : ''} differ between claim and chart: ${diffs.map(d => d.field).join(', ')}. Update the claim to match chart, then resubmit.`
+  return { diffs, all_match, fields_checked: fieldsChecked, summary }
+}
+
 /**
  * Write the proposal to review_queue_items. Idempotent per claim —
  * if a denial-category row already exists for this claim with
@@ -302,6 +373,23 @@ export async function recordProposal(
     return { created: false, skipReason: 'biller-already-acted' }
   }
 
+  // Enrichment: for PR-31 "patient can't be identified" proposals,
+  // compute the exact field-level diff between the claim's
+  // demographics and the chart's. The resulting demographics_diff
+  // payload is what the Review Queue renders so Andrea sees "member
+  // ID on claim vs chart" rather than a generic "check the chart"
+  // nudge. If the diff finds no field differences, the summary
+  // explicitly says so (so she doesn't go chasing a nonexistent fix).
+  let proposedChange = proposal.proposed_change
+  if (proposal.kind === 'resubmit_fix_demographics') {
+    try {
+      const diff = await detectDemographicsDiff(sql, claim.id)
+      if (diff) proposedChange = { ...proposedChange, demographics_diff: diff }
+    } catch (e: any) {
+      console.error('[carc-proposer] detectDemographicsDiff failed (non-fatal):', e?.message)
+    }
+  }
+
   const [row] = await sql`
     INSERT INTO review_queue_items (
       practice_id, item_type, work_category, claim_id,
@@ -311,7 +399,7 @@ export async function recordProposal(
       ${claim.practice_id}::uuid, ${proposal.item_type}, ${proposal.work_category}, ${claim.id}::uuid,
       ${claim.patient_name ?? null}, ${claim.payer_name ?? null}, ${claim.service_date ?? null}::date,
       ${proposal.priority}, ${proposal.summary},
-      ${JSON.stringify(proposal.reasoning)}::jsonb, ${JSON.stringify(proposal.proposed_change)}::jsonb
+      ${JSON.stringify(proposal.reasoning)}::jsonb, ${JSON.stringify(proposedChange)}::jsonb
     )
     RETURNING id`
   return { created: true, id: row?.id }
