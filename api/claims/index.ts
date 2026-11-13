@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { canonicalPayerName } from './payers.js'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -102,8 +103,12 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
   // rejected. Family's insurance-on-file is irrelevant here.
   const forceSelfPay = allCptCodes.length > 0 && insuranceCodes.length === 0
   const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
-  const payerName = forceSelfPay ? 'Self Pay' : (child?.insurance_provider ?? null)
   const payerId   = forceSelfPay ? 'PP'       : resolvePayer(child?.insurance_provider ?? null)
+  // Canonical display name derived from the resolved payer_id so
+  // claims always store "BCBS of NC" instead of whatever free-text
+  // the parent typed. Falls back to the raw provider string if we
+  // can't map (e.g. new payer). Sara 2026-11-13.
+  const payerName = forceSelfPay ? 'Self Pay' : (canonicalPayerName(payerId) ?? child?.insurance_provider ?? null)
 
   const [claim] = await sql`
     INSERT INTO claims (

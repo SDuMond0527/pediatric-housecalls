@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { canonicalPayerName } from '../claims/payers.js'
 
 // Neon's JS driver returns `date` and `timestamptz` columns as JS Date objects.
 // `String(dateObj).slice(0, 10)` returns "Fri Oct 09", which Postgres can't
@@ -226,8 +227,10 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
   const isTextVisit = appt?.visit_type === 'Text visit'
   const forceSelfPay = isTextVisit || (allCptCodes.length > 0 && insuranceCodes.length === 0)
   const pos = insuranceCodes[0]?.place_of_service ?? (appt?.visit_type?.toLowerCase().includes('tele') ? '10' : '12')
-  const payerName = forceSelfPay ? 'Self Pay' : (child?.insurance_provider ?? null)
   const payerId   = forceSelfPay ? 'PP'       : resolvePayer(child?.insurance_provider ?? null)
+  // Canonical display name derived from the resolved payer_id.
+  // Sara 2026-11-13; see api/claims/payers.ts for the map.
+  const payerName = forceSelfPay ? 'Self Pay' : (canonicalPayerName(payerId) ?? child?.insurance_provider ?? null)
 
   let claim: any
   if (existing) {
