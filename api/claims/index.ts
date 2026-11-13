@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { canonicalPayerName } from './payers.js'
+import { validateCptsForVisitType } from './visit-type-cpt-rules.js'
 
 async function verifyToken(authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
@@ -91,6 +92,22 @@ async function generateClaim(sql: any, encounterNoteId: string, practiceId: stri
   const renderingProvider = supervisingMd ?? provider
 
   const allCptCodes = Array.isArray(note.cpt_codes) ? note.cpt_codes : []
+
+  // Defense in depth: verify the CPTs line up with the visit_type
+  // before writing a claim. The sign path blocks this up front, but a
+  // direct claim-create POST (or a legacy unsigned-note path) would
+  // otherwise slip through. Emma Peters 2026-11-13 — if the sign gate
+  // is ever bypassed, this catches it before Stedi hears about it.
+  {
+    const v = validateCptsForVisitType(appt?.visit_type, allCptCodes)
+    if (!v.ok) {
+      return res.status(422).json({
+        error: 'Coding issue — the claim does not match the visit type:\n• ' + v.errors.join('\n• '),
+        coding_errors: v.errors,
+      })
+    }
+  }
+
   // Include all codes on the claim (convenience fees show for admin review).
   // Non-Covered Services are stripped from the Stedi payload at submission time.
   const cptCodes = allCptCodes

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { canonicalPayerName } from '../claims/payers.js'
+import { validateCptsForVisitType } from '../claims/visit-type-cpt-rules.js'
 
 // Neon's JS driver returns `date` and `timestamptz` columns as JS Date objects.
 // `String(dateObj).slice(0, 10)` returns "Fri Oct 09", which Postgres can't
@@ -960,9 +961,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Vaccine encounters may only be signed by Dr. Sara DuMond. She is the
       // supervising physician on all vaccine claims (the RN/CMA who runs the
       // visit can draft the note but not sign it).
+      //
+      // Also the visit_type ↔ CPT consistency check (Sara 2026-11-13,
+      // Emma Peters incident). Blocks signing when:
+      //   - an in-home visit carries POS 10 (telehealth)
+      //   - a telemedicine visit carries POS 12
+      //   - an in-home sick visit has no home-visit E/M code
+      // The client-side default rules were only populating initial state;
+      // this is the server-side enforcement that should have caught
+      // 99214 on the Emma Peters sign.
       if (signing) {
         const [ap] = await sql`
-          SELECT a.visit_type
+          SELECT a.visit_type, en.cpt_codes AS existing_cpt_codes
           FROM encounter_notes en
           LEFT JOIN appointments a ON a.id = en.appointment_id
           WHERE en.id = ${id}::uuid AND en.practice_id = ${practiceId}::uuid
@@ -970,6 +980,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `
         if (ap?.visit_type === 'In-home vaccine administration' && currentProviderName !== 'Dr. Sara DuMond') {
           return res.status(403).json({ error: 'Vaccine encounter notes can only be signed by Dr. Sara DuMond.' })
+        }
+
+        // Use the incoming cpt_codes if the client is updating them;
+        // otherwise validate the ones already on the note.
+        const cptsBeingSigned = Array.isArray(cpt_codes) ? cpt_codes : (ap?.existing_cpt_codes ?? [])
+        const validation = validateCptsForVisitType(ap?.visit_type, cptsBeingSigned)
+        if (!validation.ok) {
+          // apiFetch surfaces only the `error` field to the UI, so the
+          // itemized list is inlined into the message text as well.
+          return res.status(422).json({
+            error: 'Coding issue — please fix before signing:\n• ' + validation.errors.join('\n• '),
+            coding_errors: validation.errors,
+          })
         }
       }
 
