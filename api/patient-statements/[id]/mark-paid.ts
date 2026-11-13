@@ -86,19 +86,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (payment_note   && String(payment_note).trim())   noteParts.push(String(payment_note).trim())
     const combinedNote = noteParts.length ? noteParts.join(' — ') : null
 
-    // remaining_balance = 0 whenever we mark a statement paid, mirror
-    // of the Square webhook fix. UI reads remaining_balance for
-    // "still owed" rollups; if we leave it at the original billed
-    // amount after a biller marks paid, the statement shows as paid
-    // AND still owed at the same time. See Sophie Slutzker
-    // 2026-11-13 for the case that surfaced this.
     const [updated] = await sql`
       UPDATE patient_statements SET
         status            = 'paid',
         paid_at           = ${paidAtIso}::timestamptz,
         paid_amount_cents = ${cents},
         payment_note      = ${combinedNote},
-        remaining_balance = 0,
         updated_at        = NOW()
       WHERE id = ${statementId} AND practice_id = ${practiceId}::uuid
       RETURNING *

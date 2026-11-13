@@ -96,21 +96,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ received: true, note: 'already paid' })
     }
 
-    // Also zero out remaining_balance so UI surfaces stop showing the
-    // statement as "still owed" after payment. Before this fix,
-    // Sophie Slutzker's paid statement kept showing $200 owed in the
-    // biller UI (and the voided-but-restored path that confused me)
-    // because paid_at got set but the balance fields never dropped.
-    // total_amount_due stays as the original billed amount for audit;
-    // remaining_balance is the "how much is still outstanding" field
-    // the UI actually keys off. Sara 2026-11-13.
     await sql`
       UPDATE patient_statements SET
-        status            = 'paid',
-        paid_at           = ${paidAt},
+        status   = 'paid',
+        paid_at  = ${paidAt},
         paid_amount_cents = ${paidAmount ?? null},
-        remaining_balance = 0,
-        updated_at        = NOW()
+        updated_at = NOW()
       WHERE id = ${stmt.id}
     `
 
