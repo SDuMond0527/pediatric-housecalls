@@ -31,17 +31,30 @@ export function dsHeaders(token: string): Record<string, string> {
   }
 }
 
-// OAuth2 password grant — identical shape to api/dosespot/sso.ts.
-// Auth is CLINIC-level: the env DS_CLINICIAN is the API user DoseSpot
-// authenticates with, not the prescribing provider. Per-prescription
-// clinician attribution is handled by DoseSpot server-side — do NOT
-// pass the prescriber's clinician ID as the OAuth username.
-export async function getDoseSpotToken(): Promise<string> {
+// OAuth2 password grant. The token's operation-group permissions are
+// tied to the CLINICIAN we authenticate as (username). The env
+// DS_CLINICIAN is an integration user that can read + create drafts
+// but can't SEND prescriptions to pharmacies — DoseSpot rejected the
+// first live send 2026-11-13 with 401 "Authorization has been denied
+// based on configured operation group."
+//
+// Fix: when the caller knows WHICH clinician is prescribing (the
+// authorize endpoint does — it's the provider who clicked Authorize),
+// pass that dosespot_clinician_id as the OAuth username. The clinic
+// key authenticates any clinician under the clinic; the token
+// inherits that clinician's operation-group rights, which for actual
+// prescribers includes send.
+//
+// For non-send operations (drug search, dispense units, etc.) the
+// caller can still call getDoseSpotToken() with no arg and get the
+// integration user's token.
+export async function getDoseSpotToken(clinicianId?: string): Promise<string> {
+  const user = (clinicianId ?? '').trim() || DS_CLINICIAN
   const body = new URLSearchParams({
     grant_type:    'password',
     client_id:     DS_CLINIC_ID,
     client_secret: DS_CLINIC_KEY,
-    username:      DS_CLINICIAN,
+    username:      user,
     password:      DS_CLINIC_KEY,
     scope:         'api',
   })
