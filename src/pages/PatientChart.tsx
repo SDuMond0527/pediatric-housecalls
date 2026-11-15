@@ -566,7 +566,9 @@ export function PatientChart() {
     { key: 'appointments' as const, label: 'Appointments', count: bookingRequests.length },
     { key: 'encounters' as const, label: 'Encounters', count: notes.length },
     { key: 'medical_history' as const, label: 'Medical History', count: null },
-    { key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null },
+    ...(settings.uses_pediatric_patients !== false
+      ? [{ key: 'vaccines' as const, label: 'Vaccines', count: vaccineCount || null }]
+      : []),
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     ...(settings.uses_lab_orders       ? [{ key: 'labs'      as const, label: 'Labs',      count: labOrders.length || null }] : []),
     ...(settings.uses_radiology_orders ? [{ key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null }] : []),
