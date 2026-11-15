@@ -2,7 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
+// Returns { sub, kind } — kind='family' or 'provider' so the caller
+// can resolve the right practice_id from the right table.
+async function verifyAnyToken(authHeader: string | undefined): Promise<{ sub: string; kind: 'family' | 'provider' }> {
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing token')
   const token = authHeader.slice(7)
   const region = process.env.VITE_AWS_REGION || 'us-east-2'
@@ -11,24 +13,40 @@ async function verifyAnyToken(authHeader: string | undefined): Promise<void> {
     try {
       const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${familyPoolId}/.well-known/jwks.json`))
       const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${familyPoolId}` })
-      if (payload.sub) return
+      if (payload.sub) return { sub: payload.sub as string, kind: 'family' }
     } catch {}
   }
   const userPoolId = process.env.VITE_AWS_USER_POOL_ID || ''
   const JWKS = createRemoteJWKSet(new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`))
   const { payload } = await jwtVerify(token, JWKS, { issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` })
   if (!payload.sub) throw new Error('No sub in token')
+  return { sub: payload.sub as string, kind: 'provider' }
+}
+
+async function resolvePracticeId(sql: any, auth: { sub: string; kind: 'family' | 'provider' }): Promise<string | null> {
+  if (auth.kind === 'family') {
+    const [row] = await sql`SELECT practice_id FROM family_profiles WHERE cognito_sub = ${auth.sub} LIMIT 1`
+    return row?.practice_id ?? null
+  }
+  const [row] = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${auth.sub} LIMIT 1`
+  return row?.practice_id ?? null
 }
 
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try { await verifyAnyToken(req.headers.authorization) } catch {
+  let auth
+  try { auth = await verifyAnyToken(req.headers.authorization) } catch {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
+  const practiceId = await resolvePracticeId(sql, auth)
+  if (!practiceId) return res.status(403).json({ error: 'No practice associated with this account' })
 
-  // GET — list/search PCP directory
+  // GET — list/search PCP directory. Scoped to caller's practice.
+  // Sara 2026-11-15 after Sarah Cash's PCP directory showed all of
+  // PHC's PCPs (the whole table was global pre-fix, no practice_id
+  // column at all).
   if (req.method === 'GET') {
     const q    = (req.query.q   as string ?? '').trim()
     const all  = req.query.all === 'true'
@@ -37,7 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? await sql`
           SELECT id, name, aliases, fax_number, state, is_active
           FROM pcps
-          WHERE (${all} OR is_active = true)
+          WHERE practice_id = ${practiceId}::uuid
+            AND (${all} OR is_active = true)
             AND (
               name ILIKE ${'%' + q + '%'}
               OR EXISTS (
@@ -49,27 +68,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `
       : await sql`
           SELECT id, name, aliases, fax_number, state, is_active,
-            (SELECT count(*) FROM children WHERE pcp_id = pcps.id) AS patient_count
+            (SELECT count(*) FROM children WHERE pcp_id = pcps.id AND practice_id = ${practiceId}::uuid) AS patient_count
           FROM pcps
-          WHERE (${all} OR is_active = true)
+          WHERE practice_id = ${practiceId}::uuid
+            AND (${all} OR is_active = true)
           ORDER BY fax_number IS NOT NULL, name
         `
 
     return res.status(200).json(rows)
   }
 
-  // POST — add a new PCP to the directory
+  // POST — add a new PCP to the directory. Pinned to caller's practice.
   if (req.method === 'POST') {
     const { name, aliases, fax_number, state } = req.body ?? {}
     if (!name) return res.status(400).json({ error: 'name is required' })
 
     const [row] = await sql`
-      INSERT INTO pcps (name, aliases, fax_number, state)
+      INSERT INTO pcps (name, aliases, fax_number, state, practice_id)
       VALUES (
         ${name},
         ${aliases ? JSON.stringify(aliases) : '{}'}::text[],
         ${fax_number ?? null},
-        ${state ?? 'NC'}
+        ${state ?? 'NC'},
+        ${practiceId}::uuid
       )
       RETURNING *
     `

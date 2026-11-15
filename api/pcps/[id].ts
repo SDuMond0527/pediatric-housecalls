@@ -14,11 +14,17 @@ async function verifyToken(authHeader: string | undefined): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try { await verifyToken(req.headers.authorization) } catch {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  let sub: string
+  try { sub = await verifyToken(req.headers.authorization) }
+  catch { return res.status(401).json({ error: 'Unauthorized' }) }
 
   const sql = neon(process.env.DATABASE_URL!)
+  // Scope every mutation to the caller's practice — cross-practice
+  // PCP edits are a multi-tenant data leak. Sara 2026-11-15.
+  const [provider] = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!provider) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = provider.practice_id as string
+
   const { id } = req.query as { id: string }
 
   if (req.method === 'PATCH') {
@@ -31,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           aliases    = COALESCE(${aliases    != null ? JSON.stringify(aliases) : null}::text[], aliases),
           state      = COALESCE(${state      ?? null}, state),
           is_active  = COALESCE(${is_active  ?? null}, is_active)
-        WHERE id = ${id}::uuid
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
       if (!row) return res.status(404).json({ error: 'Not found' })
       return res.json(row)
@@ -42,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
-    await sql`UPDATE pcps SET is_active = false WHERE id = ${id}::uuid`
+    await sql`UPDATE pcps SET is_active = false WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
     return res.status(204).end()
   }
 
