@@ -1360,6 +1360,7 @@ export function PatientChart() {
                   )}
                 </div>
 
+                {settings.accepts_insurance && (
                 <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -1621,6 +1622,7 @@ export function PatientChart() {
                     </>
                   )}
                 </div>
+                )}
                 {editSaved && (
                   <div className="flex items-center gap-2 text-[13px] text-[#085041]">
                     <CheckCircle2 size={14} /> Saved!
