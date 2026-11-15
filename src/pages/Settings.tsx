@@ -6,6 +6,7 @@ import { KeyRound, CheckCircle2, Phone, MapPin } from 'lucide-react'
 import { updatePassword } from 'aws-amplify/auth'
 import { updateProvider, getPracticeZones } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 
@@ -21,6 +22,8 @@ type FormData = z.infer<typeof schema>
 
 export function Settings() {
   const { provider, refreshProvider } = useAuth()
+  const { settings } = useSettings()
+  const usesZones = !!settings.uses_zones
   const [success, setSuccess] = useState(false)
   const [serverError, setServerError] = useState('')
   const [phone, setPhone] = useState((provider as any)?.phone || '')
@@ -132,7 +135,9 @@ export function Settings() {
           </div>
         </div>
 
-        {/* Service areas the provider covers */}
+        {/* Service areas the provider covers — hidden for non-mobile
+            practices (Direct Dermatology). Sara 2026-11-15. */}
+        {usesZones && (
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <MapPin size={16} className="text-[#7F77DD]" />
@@ -158,6 +163,7 @@ export function Settings() {
           {zonesSaved && <div className="flex items-center gap-2 text-[13px] text-[#085041] mt-3"><CheckCircle2 size={14} /> Saved!</div>}
           {zonesError && <div className="text-[13px] text-[#791F1F] mt-3">{zonesError}</div>}
         </div>
+        )}
 
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
