@@ -181,6 +181,22 @@ function greetingFor(): string {
   return 'Good evening'
 }
 
+// Prefer an explicit greeting_name the provider set (Option C per
+// Sara 2026-11-15 after Sarah Cash's "Good morning, Cash,!" bug).
+// Falls back to parsing provider.name: strip comma-suffixed
+// credentials ("Sarah Cash, MD" → "Sarah Cash") so the old
+// slice(-2)[0] convention still picks the first name correctly
+// for formats like "Dr. Sara DuMond" AND "Sarah Cash, MD".
+function greetingNameFor(provider: any): string {
+  if (provider?.greeting_name && String(provider.greeting_name).trim()) {
+    return String(provider.greeting_name).trim()
+  }
+  const raw = String(provider?.name ?? 'friend')
+    .replace(/,\s*(MD|DO|NP|PA|RN|PhD|DNP|DMD|DDS|LCSW|MBA)\.?$/i, '')
+    .trim()
+  return raw.split(/\s+/).slice(-2)[0] ?? 'friend'
+}
+
 export function AdminLayout() {
   const { user, provider, loading, signOut } = useAuth()
   const navigate = useNavigate()
@@ -252,7 +268,7 @@ export function AdminLayout() {
           <div className="bg-white border-b border-[#E8E8E4] px-6 md:px-8 py-4 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="font-display text-[18px] font-medium text-[#1A1A2E] truncate">
-                {greetingFor()}, {(provider.name || 'friend').split(' ').slice(-2)[0]}!
+                {greetingFor()}, {greetingNameFor(provider)}!
               </div>
               <div className="text-[12px] text-[#7F77DD] mt-0.5 font-medium truncate">
                 {dailyAffirmation()}

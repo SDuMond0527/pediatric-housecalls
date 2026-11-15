@@ -13,6 +13,7 @@ export interface Provider {
   is_admin: boolean
   is_super_admin?: boolean
   photo_url?: string | null
+  greeting_name?: string | null
   created_at: string
 }
 
