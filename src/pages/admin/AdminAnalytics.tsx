@@ -17,6 +17,7 @@ interface OnCallRow { provider_id: string; date: string; state: string; start_ti
 
 import { CMA_TELE_ALIASES, IV_FLUIDS_ALIASES } from '../../lib/dualVisitTypes'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 
 const VT_COLOR: Record<string, string> = {
   'In-home sick visit':  '#7F77DD',
@@ -56,6 +57,21 @@ function HBar({ label, count, max, color }: { label: string; count: number; max:
 }
 
 export function AdminAnalytics() {
+  const { settings } = useSettings()
+  // Multi-tenant gates — Sara 2026-11-15. For non-pediatric practices
+  // the "family" language and the waitlist card don't apply.
+  const isPediatric = settings.uses_pediatric_patients !== false
+  const usesWaitlist = !!settings.uses_waitlist
+  // Label map for family vs patient language. Keeps the ternaries
+  // out of the JSX.
+  const L = {
+    accountsLabel:       isPediatric ? 'Families on file'               : 'Patients on file',
+    accountsSub:         'Registered accounts',
+    bookingTrendCopy:    isPediatric ? 'New family booking requests — last 8 weeks'  : 'New patient booking requests — last 8 weeks',
+    newVsReturningTitle: isPediatric ? 'New vs. returning families'     : 'New vs. returning patients',
+    requestsCopy:        isPediatric ? 'What families are requesting — all booking requests' : 'What patients are requesting — all booking requests',
+  }
+
   const [appts, setAppts]           = useState<ApptRow[]>([])
   const [bookings, setBookings]     = useState<BookingRow[]>([])
   const [waitlist, setWaitlist]     = useState<WaitlistRow[]>([])
@@ -386,12 +402,15 @@ export function AdminAnalytics() {
 
       <div className="p-6 max-w-5xl space-y-6">
 
-        {/* KPI row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* KPI row — column count adjusts so the grid stays balanced
+            when the waitlist card hides for non-waitlist practices. */}
+        <div className={`grid grid-cols-2 gap-3 ${usesWaitlist ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
           <StatCard label="Completed visits"  value={totalDone}    sub="All time"                          color="#1D9E75" bg="#E1F5EE" />
           <StatCard label="This month"        value={thisMonth}    sub={format(new Date(), 'MMMM yyyy')}   color="#7F77DD" bg="#EEEDFE" />
-          <StatCard label="Families on file"  value={familyCount}  sub="Registered accounts"               color="#378ADD" bg="#E6F1FB" />
-          <StatCard label="Waitlist open"     value={openWaitlist} sub={`${conversionPct}% conversion rate`} color="#EF9F27" bg="#FAEEDA" />
+          <StatCard label={L.accountsLabel}   value={familyCount}  sub={L.accountsSub}                     color="#378ADD" bg="#E6F1FB" />
+          {usesWaitlist && (
+            <StatCard label="Waitlist open"   value={openWaitlist} sub={`${conversionPct}% conversion rate`} color="#EF9F27" bg="#FAEEDA" />
+          )}
         </div>
 
         {/* Visit type + Status */}
@@ -509,7 +528,7 @@ export function AdminAnalytics() {
         {/* Bookings trend */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Booking trend</h3>
-          <p className="text-[12px] text-[#1A1A2E] mb-5">New family booking requests — last 8 weeks</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-5">{L.bookingTrendCopy}</p>
           <div className="flex items-end gap-2 h-36">
             {weekCounts.map(w => (
               <div key={w.label} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
@@ -729,7 +748,7 @@ export function AdminAnalytics() {
         <div className="grid lg:grid-cols-2 gap-5">
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
-            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">New vs. returning families</h3>
+            <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">{L.newVsReturningTitle}</h3>
             <p className="text-[12px] text-[#1A1A2E] mb-4">Based on confirmed bookings</p>
             {confirmedBookings.length === 0 ? (
               <p className="text-[13px] text-[#1A1A2E]">No confirmed bookings yet.</p>
@@ -920,7 +939,7 @@ export function AdminAnalytics() {
         {bVtSorted.length > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Booking request mix</h3>
-            <p className="text-[12px] text-[#1A1A2E] mb-4">What families are requesting — all booking requests</p>
+            <p className="text-[12px] text-[#1A1A2E] mb-4">{L.requestsCopy}</p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               {bVtSorted.map(([type, count]) => {
                 const pct = Math.round((count / bookings.length) * 100)
