@@ -2707,6 +2707,7 @@ export function PatientChart() {
                 actionBusy={resultsActionBusy}
                 onSign={id => signChartResult(id, 'pathology')}
                 onAck={(id, ch) => ackChartResult(id, 'pathology', ch)}
+                onUpload={() => childId && navigate(`/results/pathology/new?child_id=${childId}`)}
               />
             )}
 
@@ -2718,6 +2719,7 @@ export function PatientChart() {
                 actionBusy={resultsActionBusy}
                 onSign={id => signChartResult(id, 'lab')}
                 onAck={(id, ch) => ackChartResult(id, 'lab', ch)}
+                onUpload={() => childId && navigate(`/results/lab/new?child_id=${childId}`)}
               />
             )}
 
@@ -3452,23 +3454,36 @@ function ResultsTab(props: {
   actionBusy: string | null
   onSign: (id: string) => void
   onAck: (id: string, channel: string) => void
+  onUpload: () => void
 }) {
-  const { items, type, loaded, actionBusy, onSign, onAck } = props
+  const { items, type, loaded, actionBusy, onSign, onAck, onUpload } = props
   const [expanded, setExpanded] = useState<string | null>(null)
-  const label = type === 'pathology' ? 'Pathology' : 'Lab'
+  const uploadLabel = type === 'pathology' ? 'Upload pathology report' : 'Upload lab result'
 
   if (!loaded) {
     return <div className="text-[13px] text-[#1A1A2E]/60 py-8 text-center">Loading…</div>
   }
   if (items.length === 0) {
     return (
-      <div className="text-[13px] text-[#1A1A2E]/60 py-12 text-center bg-white rounded-xl border border-[#E8E8E4]">
-        No {type} results for this patient yet. Use the top-nav {label} inbox to upload one.
+      <div className="text-center bg-white rounded-xl border border-[#E8E8E4] py-12 px-6">
+        <div className="text-[13px] text-[#1A1A2E]/60 mb-4">
+          No {type} results for this patient yet.
+        </div>
+        <button onClick={onUpload}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8]">
+          + {uploadLabel}
+        </button>
       </div>
     )
   }
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={onUpload}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8]">
+          + {uploadLabel}
+        </button>
+      </div>
       {items.map(r => {
         const isOpen = expanded === r.id
         const statusChip =

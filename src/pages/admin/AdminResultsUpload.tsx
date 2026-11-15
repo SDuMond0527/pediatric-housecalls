@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Upload, ArrowLeft, Search } from 'lucide-react'
-import { apiFetch, createResult, type ResultType } from '../../lib/api'
+import { apiFetch, createResult, getChildrenByIds, type ResultType } from '../../lib/api'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 
 // Manual upload intake for a new pathology or lab result. Phase 1:
@@ -14,9 +14,10 @@ type PatientOption = { id: string; label: string; model: 'patient_profile' | 'ch
 
 export function AdminResultsUpload() {
   const { type: urlType } = useParams<{ type: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { settings } = useSettings()
-  const type: ResultType = urlType === 'labs' ? 'lab' : 'pathology'
+  const type: ResultType = urlType === 'labs' || urlType === 'lab' ? 'lab' : 'pathology'
   const label = type === 'pathology' ? 'Pathology' : 'Lab'
   const isPediatric = settings.uses_pediatric_patients !== false
 
@@ -24,6 +25,24 @@ export function AdminResultsUpload() {
   const [patientSearch, setPatientSearch] = useState('')
   const [patientResults, setPatientResults] = useState<PatientOption[]>([])
   const [patient, setPatient] = useState<PatientOption | null>(null)
+
+  // Pre-fill patient when the chart links in with ?child_id=<uuid>
+  // (or ?patient_profile_id=<uuid> for adult practices once that's
+  // wired). Lets Sarah upload directly from a patient's chart tab
+  // without re-picking the patient.
+  useEffect(() => {
+    const childIdParam = searchParams.get('child_id')
+    if (!childIdParam) return
+    void getChildrenByIds([childIdParam]).then(rows => {
+      const r = Array.isArray(rows) && rows[0]
+      if (!r) return
+      setPatient({
+        id: r.id,
+        label: `${r.first_name ?? ''} ${r.last_name ?? ''} ${r.date_of_birth ? '· DOB ' + String(r.date_of_birth).slice(0, 10) : ''}`.trim(),
+        model: 'child',
+      })
+    }).catch(() => {})
+  }, [searchParams])
 
   useEffect(() => {
     const q = patientSearch.trim()
