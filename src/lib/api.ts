@@ -2075,6 +2075,77 @@ export const getDoseSpotNotifications = () =>
   apiFetch<{ count: number; breakdown: { renewals: number; rxChanges: number; errors: number } }>('/api/dosespot/notifications')
 
 
+// ── Results (Pathology + Labs unified table) ──────────────────
+// Sara 2026-11-15. One table underneath, two UX surfaces on top
+// (Pathology tab + Labs tab on the patient chart, and two
+// corresponding top-nav inboxes).
+export type ResultType = 'pathology' | 'lab'
+export type ResultStatus = 'pending_review' | 'signed' | 'acknowledged'
+export interface ResultRow {
+  id: string
+  type: ResultType
+  status: ResultStatus
+  patient_profile_id: string | null
+  child_id: string | null
+  encounter_note_id: string | null
+  received_at: string
+  specimen_date: string | null
+  specimen_type: string | null
+  specimen_site: string | null
+  source_lab: string | null
+  source_provider: string | null
+  report_text: string | null
+  report_pdf_url: string | null
+  margins_status: string | null
+  breslow_depth_mm: number | null
+  clark_level: number | null
+  test_name: string | null
+  result_value: string | null
+  result_unit: string | null
+  reference_range: string | null
+  abnormal_flag: string | null
+  icd10_codes: string[] | null
+  signed_by_provider_id: string | null
+  signed_at: string | null
+  sign_note: string | null
+  acknowledged_at: string | null
+  ack_channel: string | null
+  ack_note: string | null
+  patient_name: string | null
+  signed_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+export const getResults = (params: {
+  type?: ResultType
+  status?: ResultStatus
+  child_id?: string
+  patient_profile_id?: string
+  limit?: number
+}) => {
+  const q = new URLSearchParams()
+  if (params.type)               q.set('type', params.type)
+  if (params.status)             q.set('status', params.status)
+  if (params.child_id)           q.set('child_id', params.child_id)
+  if (params.patient_profile_id) q.set('patient_profile_id', params.patient_profile_id)
+  if (params.limit)              q.set('limit', String(params.limit))
+  return apiFetch<ResultRow[]>(`/api/results?${q.toString()}`)
+}
+export const getResult = (id: string) =>
+  apiFetch<ResultRow>(`/api/results/${id}`)
+export const createResult = (body: Partial<ResultRow> & { type: ResultType }) =>
+  apiFetch<{ id: string }>('/api/results', { method: 'POST', body: JSON.stringify(body) })
+export const updateResult = (id: string, body: Partial<ResultRow>) =>
+  apiFetch<ResultRow>(`/api/results/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const signResult = (id: string, sign_note?: string) =>
+  apiFetch<ResultRow>(`/api/results/${id}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'sign', sign_note }),
+  })
+export const acknowledgeResult = (id: string, body: { ack_channel?: string; ack_note?: string }) =>
+  apiFetch<ResultRow>(`/api/results/${id}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'acknowledge', ...body }),
+  })
+
 // ── Labs ──────────────────────────────────────────────────────
 export const getLabOrders = (childId: string) =>
   apiFetch<any[]>(`/api/labs/results?child_id=${encodeURIComponent(childId)}`)

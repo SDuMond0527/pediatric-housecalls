@@ -87,6 +87,13 @@ const featureFlags = {
   // a handbook built out flip this false.
   uses_handbook:               z.boolean().default(true),
 
+  // Results module (Pathology + Labs tabs on patient charts +
+  // Pathology/Labs inboxes in top nav). Default false — PHC keeps
+  // using its existing labs-in-encounter-note flow. Flipped true for
+  // practices that need a first-class pathology/labs inbox
+  // (Direct Dermatology for biopsies, etc.).
+  uses_results_module:         z.boolean().default(false),
+
   // Scheduling model
   uses_zones:                  z.boolean().default(true),
   uses_office_room_scheduling: z.boolean().default(false),
