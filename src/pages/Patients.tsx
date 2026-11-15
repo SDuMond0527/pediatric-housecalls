@@ -175,7 +175,7 @@ export function Patients() {
       [form.medical_history.trim(), 'Medical history is required (enter "None" if none)'],
       [form.preferred_pharmacy.trim(), 'Preferred pharmacy is required'],
       [form.pcp.trim(), 'Primary care provider is required'],
-      [form.vaccination_status, 'Vaccination status is required'],
+      ...(isPediatric ? [[form.vaccination_status, 'Vaccination status is required'] as [string, string]] : []),
     ]
     const insuranceChecks: [string, string][] = (!acceptsInsurance || form.self_pay) ? [] : [
       [form.insurance_provider.trim(), 'Insurance company is required'],
@@ -227,7 +227,13 @@ export function Patients() {
         insurance_subscriber_relationship: (!acceptsInsurance || form.self_pay) ? null : form.insurance_subscriber_relationship,
       })
 
-      if (!form.self_pay) {
+      // Only upload insurance cards when the practice actually
+      // accepts insurance AND the biller didn't check self-pay. For
+      // non-insurance practices (acceptsInsurance=false) the Insurance
+      // section is hidden entirely, so cardFront + cardBack are
+      // always null — attempting the upload would createObjectURL
+      // on null and 500 the whole save.
+      if (acceptsInsurance && !form.self_pay) {
         const [frontUrl, backUrl] = await Promise.all([
           providerUploadInsuranceCard(row.id, cardFront!, 'front'),
           providerUploadInsuranceCard(row.id, cardBack!, 'back'),
@@ -487,12 +493,14 @@ export function Patients() {
                 </div>
                 <Input label="Primary care provider" required placeholder="Dr. Jane Smith" {...field('pcp')} />
               </div>
-              <Select label="Vaccination status" required {...field('vaccination_status')}>
-                <option value="">— select —</option>
-                <option value="fully_vaccinated">Fully vaccinated on schedule</option>
-                <option value="delayed">Delayed / alternative schedule</option>
-                <option value="unvaccinated">Not vaccinated</option>
-              </Select>
+              {isPediatric && (
+                <Select label="Vaccination status" required {...field('vaccination_status')}>
+                  <option value="">— select —</option>
+                  <option value="fully_vaccinated">Fully vaccinated on schedule</option>
+                  <option value="delayed">Delayed / alternative schedule</option>
+                  <option value="unvaccinated">Not vaccinated</option>
+                </Select>
+              )}
             </div>
           </div>
 
