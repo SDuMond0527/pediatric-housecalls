@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck } from 'lucide-react'
 import { getProviders, updateProvider, apiFetch, getPracticeZones, uploadProviderPhoto } from '../../lib/api'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -22,11 +23,17 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function AdminProviders() {
   const { settings } = useSettings()
+  const { provider: currentProvider } = useAuth()
   // Per-practice gates — Sara 2026-11-15. Non-mobile practices don't
   // need service zones or home addresses on provider cards (both are
   // PHC's in-home + convenience-fee infrastructure).
   const usesZones = !!settings.uses_zones
   const usesConvenienceFees = !!settings.uses_convenience_fees
+  // Bulk password reset is a platform-level tool (resets to a shared
+  // default password, bypasses user challenge). Super-admin only. Also
+  // removes the hardcoded "Skips Kiaira / Cecilia / Dr. Sara DuMond"
+  // copy leaking PHC provider names onto other practices' views.
+  const isSuperAdmin = !!currentProvider?.is_super_admin
 
   const [providers, setProviders] = useState<ProviderWithContact[]>([])
   const [practiceZones, setPracticeZones] = useState<string[]>([])
@@ -185,7 +192,8 @@ export function AdminProviders() {
       </div>
 
       <div className="p-6 space-y-6 max-w-3xl">
-        {/* Bulk password reset */}
+        {/* Bulk password reset — super-admin (platform owner) only. */}
+        {isSuperAdmin && (
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -222,6 +230,7 @@ export function AdminProviders() {
             </div>
           )}
         </div>
+        )}
 
         {usesConvenienceFees && missingAddress.length > 0 && (
           <div className="flex items-start gap-2 bg-[#FAEEDA] border border-[#FAC775] rounded-lg px-4 py-3 text-[13px] text-[#633806]">
