@@ -424,7 +424,9 @@ export function Patients() {
           <div>
             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Contact</div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label={contactNameLabel} placeholder="John Smith" {...field('parent_name')} />
+              {isPediatric && (
+                <Input label={contactNameLabel} placeholder="John Smith" {...field('parent_name')} />
+              )}
               <Input label="Phone" required type="tel" placeholder="(704) 555-0100" {...field('parent_phone')} />
               <div className="col-span-2">
                 <Input label="Email" required type="email" placeholder={emailPlaceholder} {...field('parent_email')} />
