@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, updateStickyNotes, type ChronicProblem } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, updateStickyNotes, type ChronicProblem, getResults, signResult, acknowledgeResult, type ResultRow } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -158,7 +158,7 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing' | 'communications'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing' | 'communications' | 'pathology_results' | 'lab_results'>('overview')
   // Billing tab: log-book of every claim + statement for this child.
   // Loaded lazily on first tab visit to avoid a round-trip on every
   // chart open — same pattern as `labsLoaded` below.
@@ -242,11 +242,20 @@ export function PatientChart() {
   // Referral modal — Sara 2026-09-21
   const [referralOpen, setReferralOpen] = useState(false)
 
-  // Labs
+  // Labs (PHC's lab-ordering flow — gated on uses_lab_orders)
   const [labOrders, setLabOrders] = useState<any[]>([])
   const [labsLoading, setLabsLoading] = useState(false)
   const [labsLoaded, setLabsLoaded] = useState(false)
   const [labsError, setLabsError] = useState<string | null>(null)
+
+  // Results module (Pathology + Labs RESULTS — for practices on the
+  // new results table instead of PHC's ordering flow). Each type lazy-
+  // loads when its tab is first opened.
+  const [pathologyResults, setPathologyResults] = useState<any[]>([])
+  const [pathologyLoaded, setPathologyLoaded] = useState(false)
+  const [labResults, setLabResults] = useState<any[]>([])
+  const [labResultsLoaded, setLabResultsLoaded] = useState(false)
+  const [resultsActionBusy, setResultsActionBusy] = useState<string | null>(null)
   const [orderFormOpen, setOrderFormOpen] = useState(false)
   const [orderTests, setOrderTests] = useState<{ code: string; name: string }[]>([])
   const [orderDiagnoses, setOrderDiagnoses] = useState('')
@@ -283,6 +292,45 @@ export function PatientChart() {
     } finally {
       setLabsLoading(false)
     }
+  }
+
+  // Results-module loaders — one per type, mirrors the lazy-load
+  // pattern loadLabs uses. Results are rendered chronologically on
+  // the Pathology / Labs chart tabs (separate from the top-nav
+  // inboxes which aggregate across the whole practice).
+  async function loadPathologyResults() {
+    if (!childId) return
+    try {
+      const data = await getResults({ type: 'pathology', child_id: childId, limit: 200 })
+      setPathologyResults(data ?? [])
+      setPathologyLoaded(true)
+    } catch { setPathologyLoaded(true) }
+  }
+  async function loadLabResults() {
+    if (!childId) return
+    try {
+      const data = await getResults({ type: 'lab', child_id: childId, limit: 200 })
+      setLabResults(data ?? [])
+      setLabResultsLoaded(true)
+    } catch { setLabResultsLoaded(true) }
+  }
+  async function signChartResult(id: string, type: 'pathology' | 'lab') {
+    setResultsActionBusy(id)
+    try {
+      await signResult(id)
+      if (type === 'pathology') await loadPathologyResults()
+      else                      await loadLabResults()
+    } catch (e: any) { alert('Sign failed: ' + (e?.message ?? '')) }
+    finally { setResultsActionBusy(null) }
+  }
+  async function ackChartResult(id: string, type: 'pathology' | 'lab', channel: string) {
+    setResultsActionBusy(id)
+    try {
+      await acknowledgeResult(id, { ack_channel: channel })
+      if (type === 'pathology') await loadPathologyResults()
+      else                      await loadLabResults()
+    } catch (e: any) { alert('Acknowledge failed: ' + (e?.message ?? '')) }
+    finally { setResultsActionBusy(null) }
   }
 
   async function submitLabOrder() {
@@ -572,6 +620,11 @@ export function PatientChart() {
     { key: 'prescribe' as const, label: 'Prescribe', count: dsNotifCount || null },
     ...(settings.uses_lab_orders       ? [{ key: 'labs'      as const, label: 'Labs',      count: labOrders.length || null }] : []),
     ...(settings.uses_radiology_orders ? [{ key: 'radiology' as const, label: 'Radiology', count: radiologyOrders.length || null }] : []),
+    // Results-module tabs — separate from the PHC Labs ordering tab
+    // above. Shows the incoming pathology/lab reports from the new
+    // unified results table.
+    ...(settings.uses_results_module   ? [{ key: 'pathology_results' as const, label: 'Pathology', count: pathologyResults.length || null }] : []),
+    ...(settings.uses_results_module   ? [{ key: 'lab_results'       as const, label: 'Labs',      count: labResults.length       || null }] : []),
     { key: 'communications' as const, label: 'Communications', count: comms.length || null },
     { key: 'billing' as const,  label: 'Billing',   count: billingEntries.length || null },
     ...(showGrowthTab ? [{ key: 'growth' as const, label: 'Growth Chart', count: null }] : []),
@@ -932,6 +985,8 @@ export function PatientChart() {
                 if (tab.key === 'labs' && !labsLoaded) loadLabs()
                 if (tab.key === 'radiology' && !radiologyLoaded) loadRadiology()
                 if (tab.key === 'communications' && !commsLoaded) loadCommunications()
+                if (tab.key === 'pathology_results' && !pathologyLoaded) loadPathologyResults()
+                if (tab.key === 'lab_results' && !labResultsLoaded) loadLabResults()
                 if (tab.key === 'billing' && !billingLoaded) loadBilling()
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
@@ -2644,6 +2699,28 @@ export function PatientChart() {
               </div>
             )}
 
+            {activeTab === 'pathology_results' && (
+              <ResultsTab
+                items={pathologyResults}
+                type="pathology"
+                loaded={pathologyLoaded}
+                actionBusy={resultsActionBusy}
+                onSign={id => signChartResult(id, 'pathology')}
+                onAck={(id, ch) => ackChartResult(id, 'pathology', ch)}
+              />
+            )}
+
+            {activeTab === 'lab_results' && (
+              <ResultsTab
+                items={labResults}
+                type="lab"
+                loaded={labResultsLoaded}
+                actionBusy={resultsActionBusy}
+                onSign={id => signChartResult(id, 'lab')}
+                onAck={(id, ch) => ackChartResult(id, 'lab', ch)}
+              />
+            )}
+
             {activeTab === 'communications' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -3362,5 +3439,141 @@ function PriorVisitStatus({ child, onSaved }: { child: any; onSaved: (next: bool
       {saving && <span className="text-[10px] text-[#1A1A2E]/50">Saving…</span>}
       {err && <span className="text-[10px] text-[#991B1B]">{err}</span>}
     </span>
+  )
+}
+
+// Chronological list of results for a single patient, one row per
+// report. Mirrors the inbox card pattern from AdminResultsInbox but
+// scoped to this patient. Sara 2026-11-15.
+function ResultsTab(props: {
+  items: ResultRow[]
+  type: 'pathology' | 'lab'
+  loaded: boolean
+  actionBusy: string | null
+  onSign: (id: string) => void
+  onAck: (id: string, channel: string) => void
+}) {
+  const { items, type, loaded, actionBusy, onSign, onAck } = props
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const label = type === 'pathology' ? 'Pathology' : 'Lab'
+
+  if (!loaded) {
+    return <div className="text-[13px] text-[#1A1A2E]/60 py-8 text-center">Loading…</div>
+  }
+  if (items.length === 0) {
+    return (
+      <div className="text-[13px] text-[#1A1A2E]/60 py-12 text-center bg-white rounded-xl border border-[#E8E8E4]">
+        No {type} results for this patient yet. Use the top-nav {label} inbox to upload one.
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {items.map(r => {
+        const isOpen = expanded === r.id
+        const statusChip =
+          r.status === 'pending_review' ? { label: 'Pending review', cls: 'bg-[#FEF3C7] text-[#78350F] border-[#F5B041]' }
+          : r.status === 'signed'       ? { label: 'Signed',         cls: 'bg-[#EEEDFE] text-[#3C3489] border-[#AFA9EC]' }
+          :                               { label: 'Acknowledged',   cls: 'bg-[#D1FAE5] text-[#065F46] border-[#A7E3B8]' }
+        return (
+          <div key={r.id} className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
+            <button
+              onClick={() => setExpanded(isOpen ? null : r.id)}
+              className="w-full text-left px-4 py-3 flex items-start justify-between gap-3 hover:bg-[#FAFAF8]">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[13px] font-medium text-[#1A1A2E]">
+                    {type === 'pathology'
+                      ? (r.specimen_type ?? 'Specimen')
+                      : (r.test_name ?? 'Lab test')}
+                  </span>
+                  <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusChip.cls}`}>
+                    {statusChip.label}
+                  </span>
+                </div>
+                <div className="text-[12px] text-[#1A1A2E]/70 truncate">
+                  {type === 'pathology' ? (
+                    <>
+                      {r.specimen_site ? `${r.specimen_site} · ` : ''}
+                      {r.source_lab ?? ''}
+                    </>
+                  ) : (
+                    <>
+                      {r.result_value ? `${r.result_value}${r.result_unit ? ' ' + r.result_unit : ''} · ` : ''}
+                      {r.abnormal_flag ? `${r.abnormal_flag} · ` : ''}
+                      {r.source_lab ?? ''}
+                    </>
+                  )}
+                </div>
+                <div className="text-[11px] text-[#1A1A2E]/50 mt-0.5">
+                  {r.specimen_date ? `Specimen ${r.specimen_date}` : ''}
+                  {r.received_at && ` · received ${r.received_at.slice(0, 10)}`}
+                </div>
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="px-4 py-3 border-t border-[#F1EFE8] bg-[#FAFAF8] space-y-3">
+                {r.report_pdf_url && (
+                  <a href={r.report_pdf_url} target="_blank" rel="noopener noreferrer"
+                     className="inline-block text-[12px] text-[#7F77DD] hover:underline">Open report PDF</a>
+                )}
+                {r.report_text && (
+                  <div className="text-[12px] text-[#1A1A2E] whitespace-pre-wrap bg-white rounded-lg border border-[#E8E8E4] p-3 max-h-64 overflow-y-auto">
+                    {r.report_text}
+                  </div>
+                )}
+                {type === 'pathology' && (r.margins_status || r.breslow_depth_mm || r.clark_level) && (
+                  <div className="flex flex-wrap gap-3 text-[12px]">
+                    {r.margins_status && <div><span className="text-[#1A1A2E]/60">Margins:</span> <span className="font-medium">{r.margins_status}</span></div>}
+                    {r.breslow_depth_mm != null && <div><span className="text-[#1A1A2E]/60">Breslow:</span> <span className="font-medium font-mono">{r.breslow_depth_mm} mm</span></div>}
+                    {r.clark_level != null && <div><span className="text-[#1A1A2E]/60">Clark:</span> <span className="font-medium">{r.clark_level}</span></div>}
+                  </div>
+                )}
+                {type === 'lab' && r.reference_range && (
+                  <div className="text-[12px]"><span className="text-[#1A1A2E]/60">Reference:</span> <span className="font-mono">{r.reference_range}</span></div>
+                )}
+                {r.signed_at && (
+                  <div className="text-[11px] text-[#1A1A2E]/60">
+                    Signed {r.signed_at.slice(0, 10)}{r.signed_by_name ? ` by ${r.signed_by_name}` : ''}
+                    {r.sign_note ? ` — ${r.sign_note}` : ''}
+                  </div>
+                )}
+                {r.acknowledged_at && (
+                  <div className="text-[11px] text-[#1A1A2E]/60">
+                    Acknowledged to patient {r.acknowledged_at.slice(0, 10)}
+                    {r.ack_channel ? ` via ${r.ack_channel}` : ''}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  {r.status === 'pending_review' && (
+                    <button onClick={() => onSign(r.id)} disabled={actionBusy === r.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8] disabled:opacity-50">
+                      Sign
+                    </button>
+                  )}
+                  {r.status === 'signed' && (
+                    <>
+                      <button onClick={() => onAck(r.id, 'phone')} disabled={actionBusy === r.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">
+                        Ack by phone
+                      </button>
+                      <button onClick={() => onAck(r.id, 'email')} disabled={actionBusy === r.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">
+                        Ack by email
+                      </button>
+                      <button onClick={() => onAck(r.id, 'portal')} disabled={actionBusy === r.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">
+                        Via portal
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
