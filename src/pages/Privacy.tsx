@@ -13,7 +13,7 @@ export function Privacy() {
         <p className="text-[13px] text-[#1A1A2E] mb-10">Effective Date: July 1, 2026 · Last Updated: June 30, 2026</p>
 
         <Section title="1. Introduction">
-          <p>GoRoam Health, LLC ("GoRoam Health," "we," "us," or "our") operates the GoRoam Health provider platform ("Platform") located at phc-team.com. This Privacy Policy describes how we collect, use, protect, and handle information in connection with the Platform.</p>
+          <p>GoRoam Health, LLC ("GoRoam Health," "we," "us," or "our") operates the GoRoam Health provider platform ("Platform") located at app.goroam.health. This Privacy Policy describes how we collect, use, protect, and handle information in connection with the Platform.</p>
           <p>The Platform handles Protected Health Information (PHI) on behalf of medical practices ("Covered Entities") under HIPAA. GoRoam Health acts as a Business Associate as defined under HIPAA and processes PHI only as directed by and on behalf of the Covered Entity, in accordance with an executed Business Associate Agreement (BAA).</p>
         </Section>
 
