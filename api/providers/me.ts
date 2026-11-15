@@ -54,6 +54,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch {
       row.practice_states = row.states ?? []
     }
+    // Count of active providers in the practice — lets UI collapse
+    // redundant admin surfaces for solo practices (e.g. hide the
+    // admin Availability nav when there's only one provider to
+    // pick, since the provider's own /availability covers it).
+    try {
+      const [countRow] = await sql`
+        SELECT COUNT(*)::int AS n
+        FROM providers
+        WHERE practice_id = ${row.practice_id}::uuid
+          AND is_active = true`
+      row.practice_provider_count = countRow?.n ?? 1
+    } catch {
+      row.practice_provider_count = 1
+    }
     res.json(row)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)

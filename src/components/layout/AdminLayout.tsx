@@ -52,7 +52,14 @@ const NAV: NavItem[] = [
 function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   const { settings } = useSettings()
-  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
+  const soloPractice = (provider?.practice_provider_count ?? 2) <= 1
+  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag]).filter(item => {
+    // Hide the admin Availability nav for solo practices — redundant
+    // with the provider's own /availability page since there's only
+    // one provider to pick from anyway. Sara 2026-11-15.
+    if (item.to === '/admin/availability' && soloPractice) return false
+    return true
+  })
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
       <div className="px-5 py-5 border-b border-white/8 flex items-center justify-between">

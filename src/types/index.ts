@@ -16,6 +16,7 @@ export interface Provider {
   greeting_name?: string | null
   practice_name?: string | null
   practice_states?: string[] | null
+  practice_provider_count?: number | null
   created_at: string
 }
 
