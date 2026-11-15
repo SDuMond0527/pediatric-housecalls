@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck } from 'lucide-react'
 import { getProviders, updateProvider, apiFetch, getPracticeZones, uploadProviderPhoto } from '../../lib/api'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -20,6 +21,13 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export function AdminProviders() {
+  const { settings } = useSettings()
+  // Per-practice gates — Sara 2026-11-15. Non-mobile practices don't
+  // need service zones or home addresses on provider cards (both are
+  // PHC's in-home + convenience-fee infrastructure).
+  const usesZones = !!settings.uses_zones
+  const usesConvenienceFees = !!settings.uses_convenience_fees
+
   const [providers, setProviders] = useState<ProviderWithContact[]>([])
   const [practiceZones, setPracticeZones] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -169,9 +177,11 @@ export function AdminProviders() {
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
         <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Providers</div>
-        <div className="text-[12px] text-[#1A1A2E] mt-0.5">
-          Set home addresses so convenience fees calculate correctly for the first appointment of the day.
-        </div>
+        {usesConvenienceFees && (
+          <div className="text-[12px] text-[#1A1A2E] mt-0.5">
+            Set home addresses so convenience fees calculate correctly for the first appointment of the day.
+          </div>
+        )}
       </div>
 
       <div className="p-6 space-y-6 max-w-3xl">
@@ -213,7 +223,7 @@ export function AdminProviders() {
           )}
         </div>
 
-        {missingAddress.length > 0 && (
+        {usesConvenienceFees && missingAddress.length > 0 && (
           <div className="flex items-start gap-2 bg-[#FAEEDA] border border-[#FAC775] rounded-lg px-4 py-3 text-[13px] text-[#633806]">
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
             <span>
@@ -260,12 +270,14 @@ export function AdminProviders() {
                             <Mail size={10} className={p.email ? 'text-[#7F77DD]' : 'text-[#D0D0CC]'} />
                             <span className={p.email ? 'text-[#555]' : 'text-[#D0D0CC]'}>{p.email || 'No email'}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[12px]">
-                            <MapPin size={10} className={ha ? 'text-[#F5943A]' : 'text-[#D0D0CC]'} />
-                            <span className={ha ? 'text-[#555]' : 'text-[#D0D0CC]'}>{ha || 'No home address — convenience fees may not calculate'}</span>
-                          </div>
+                          {usesConvenienceFees && (
+                            <div className="flex items-center gap-1.5 text-[12px]">
+                              <MapPin size={10} className={ha ? 'text-[#F5943A]' : 'text-[#D0D0CC]'} />
+                              <span className={ha ? 'text-[#555]' : 'text-[#D0D0CC]'}>{ha || 'No home address — convenience fees may not calculate'}</span>
+                            </div>
+                          )}
                         </div>
-                        {(p.zones ?? []).length > 0 && (
+                        {usesZones && (p.zones ?? []).length > 0 && (
                           <div className="text-[11px] text-[#1A1A2E] mt-1 truncate">{(p.zones ?? []).join(' · ')}</div>
                         )}
                       </div>
@@ -331,9 +343,11 @@ export function AdminProviders() {
                         </div>
                         <Input label="Email address" placeholder="provider@example.com"
                           value={edit.email} onChange={e => setField(p.id, 'email', e.target.value)} />
-                        <Input label="Home address (for convenience fee calculation)"
-                          placeholder="e.g. 123 Main St, Charlotte, NC 28205"
-                          value={edit.home_address} onChange={e => setField(p.id, 'home_address', e.target.value)} />
+                        {usesConvenienceFees && (
+                          <Input label="Home address (for convenience fee calculation)"
+                            placeholder="e.g. 123 Main St, Charlotte, NC 28205"
+                            value={edit.home_address} onChange={e => setField(p.id, 'home_address', e.target.value)} />
+                        )}
                         <div className="grid grid-cols-2 gap-3">
                           <Input label="NPI" placeholder="1234567890"
                             value={edit.npi} onChange={e => setField(p.id, 'npi', e.target.value)} />
@@ -376,7 +390,7 @@ export function AdminProviders() {
                           </div>
                         </div>
 
-                        {practiceZones.length > 0 && (
+                        {usesZones && practiceZones.length > 0 && (
                           <div className="border-t border-[#E8E8E4] pt-3">
                             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-2">Service Zones</div>
                             <div className="flex flex-wrap gap-2">
