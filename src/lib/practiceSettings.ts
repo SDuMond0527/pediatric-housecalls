@@ -70,6 +70,14 @@ const featureFlags = {
   // without agency relationships can hide it.
   uses_referral_partners:      z.boolean().default(true),
 
+  // Specialist directory — the outbound referral destinations ("people
+  // you refer to"). PHC uses it for ped specialist handoffs. Adult-
+  // specialty practices (Direct Dermatology) typically don't maintain
+  // this; their referrals go through PCP Directory instead. Separate
+  // from uses_booking_requests + uses_referral_partners so each nav
+  // tab is independently gated.
+  uses_specialist_directory:   z.boolean().default(true),
+
   // Scheduling model
   uses_zones:                  z.boolean().default(true),
   uses_office_room_scheduling: z.boolean().default(false),

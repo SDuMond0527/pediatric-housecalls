@@ -43,7 +43,7 @@ const NAV: NavItem[] = [
   { to: '/admin/settings',      icon: Settings,      label: 'Settings' },
   { to: '/admin/stud-options',  icon: Gem,           label: 'Stud options', flag: 'uses_ear_piercing' },
   { to: '/admin/pcps',          icon: BookOpen,      label: 'PCP Directory' },
-  { to: '/admin/specialists',   icon: Building2,     label: 'Specialists' },
+  { to: '/admin/specialists',   icon: Building2,     label: 'Specialists', flag: 'uses_specialist_directory' },
   { to: '/admin/handbook',      icon: Library,       label: 'All things PHC' },
   { to: '/admin/school-notes',  icon: GraduationCap, label: 'School notes' },
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
@@ -52,16 +52,7 @@ const NAV: NavItem[] = [
 function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   const { settings } = useSettings()
-  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag]).map(item => {
-    // Rename "Specialists" → "Referring physicians" for adult-specialty
-    // practices (e.g. Direct Dermatology). Primary care practices refer
-    // OUT to specialists; specialist practices receive FROM PCPs.
-    // Same data model, different label per practice. Sara 2026-11-15.
-    if (item.to === '/admin/specialists' && !settings.uses_pediatric_patients) {
-      return { ...item, label: 'Referring physicians' }
-    }
-    return item
-  })
+  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
       <div className="px-5 py-5 border-b border-white/8 flex items-center justify-between">
