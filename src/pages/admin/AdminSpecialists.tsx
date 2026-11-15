@@ -2,13 +2,31 @@ import { useEffect, useState } from 'react'
 import { Stethoscope, Plus, Pencil, Trash2, Check, X, AlertCircle } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { getSpecialists, createSpecialist, updateSpecialist, archiveSpecialist, type Specialist } from '../../lib/api'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 
-// Practice-wide directory of specialists that receive referrals via
-// fax. Mirrors the AdminPcps directory pattern. Sara 2026-09-21.
+// Practice-wide directory of external physicians. For pediatric
+// primary care practices (PHC) this is specialists we refer OUT to.
+// For adult specialty practices (Direct Dermatology) same table
+// stores PCPs who refer IN to us — same data model, different
+// framing. Labels derive from settings.uses_pediatric_patients.
+// Sara 2026-09-21, relabel 2026-11-15.
 
 const emptyForm = { name: '', specialty: '', phone: '', fax_number: '', address: '', notes: '' }
 
 export function AdminSpecialists() {
+  const { settings } = useSettings()
+  const isPediatric = settings.uses_pediatric_patients !== false
+  const L = {
+    directory:          isPediatric ? 'Specialist directory'      : 'Referring physician directory',
+    tagline:            isPediatric
+      ? 'People you refer to. Add anyone here; they show up in the "New referral" picker on a patient chart.'
+      : 'People who refer patients to you. Keep this list current so consult notes and acknowledgments go to the right fax.',
+    addButton:          isPediatric ? 'Add specialist'            : 'Add referring physician',
+    emptyState:         isPediatric ? 'No specialists yet.'       : 'No referring physicians yet.',
+    addFirst:           isPediatric ? 'Add your first specialist' : 'Add your first referring physician',
+    faxWarning:         isPediatric ? 'referrals to this specialist will fail' : 'faxes to this physician will fail',
+    loadError:          isPediatric ? 'Failed to load specialists' : 'Failed to load referring physicians',
+  }
   const [rows, setRows] = useState<Specialist[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +40,7 @@ export function AdminSpecialists() {
   async function load() {
     setLoading(true); setError(null)
     try { setRows(await getSpecialists({ includeInactive })) }
-    catch (e: any) { setError(e?.message ?? 'Failed to load specialists') }
+    catch (e: any) { setError(e?.message ?? L.loadError) }
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [includeInactive])
@@ -96,8 +114,8 @@ export function AdminSpecialists() {
         <div className="flex items-center gap-2">
           <Stethoscope size={18} className="text-[#7F77DD]" />
           <div>
-            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Specialist directory</div>
-            <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">People you refer to. Add anyone here; they show up in the "New referral" picker on a patient chart.</div>
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">{L.directory}</div>
+            <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">{L.tagline}</div>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -106,7 +124,7 @@ export function AdminSpecialists() {
             Show archived
           </label>
           <Button size="sm" variant="secondary" onClick={() => { setAddOpen(true); setForm({ ...emptyForm }) }}>
-            <Plus size={13} /> Add specialist
+            <Plus size={13} /> {L.addButton}
           </Button>
         </div>
       </div>
@@ -161,9 +179,9 @@ export function AdminSpecialists() {
         {!loading && rows.length === 0 && (
           <div className="text-center py-16">
             <Stethoscope size={32} className="text-[#1A1A2E]/20 mx-auto mb-3" />
-            <div className="text-[14px] text-[#1A1A2E]/70">No specialists yet.</div>
+            <div className="text-[14px] text-[#1A1A2E]/70">{L.emptyState}</div>
             <Button className="mt-4" size="sm" variant="teal" onClick={() => setAddOpen(true)}>
-              <Plus size={13} /> Add your first specialist
+              <Plus size={13} /> {L.addFirst}
             </Button>
           </div>
         )}
@@ -209,7 +227,7 @@ export function AdminSpecialists() {
                   {s.notes && <div className="text-[12px] text-[#1A1A2E]/60 mt-1 whitespace-pre-wrap">{s.notes}</div>}
                   {!s.fax_number && (
                     <div className="text-[11px] text-[#8A4B00] bg-[#FFF4E5] border border-[#F5D5A6] rounded px-2 py-1 inline-block mt-2">
-                      ⚠ No fax on file — referrals to this specialist will fail
+                      ⚠ No fax on file — {L.faxWarning}
                     </div>
                   )}
                 </div>
