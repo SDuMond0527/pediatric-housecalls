@@ -10,6 +10,8 @@ import {
   type MarketingCampaign,
   type MarketingFilters,
 } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 
 type ActivityWindow = 'any' | 'within' | 'older_than' | 'never'
 
@@ -29,13 +31,20 @@ function fmtDateTime(d: string | null): string {
 }
 
 export function AdminMarketing() {
+  const { provider } = useAuth()
+  const { settings } = useSettings()
+  // Multi-tenant gates. Sara 2026-11-15.
+  const practiceStates = (provider?.practice_states ?? ['NC', 'SC', 'VA']) as string[]
+  const practiceName = provider?.practice_name || 'Pediatric Housecalls'
+  const usesPediatricPatients = settings.uses_pediatric_patients !== false
+
   const [tab, setTab] = useState<'compose' | 'history'>('compose')
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([])
 
   // Compose state
   const [subject, setSubject] = useState('')
-  const [html, setHtml] = useState('<p>Hi there,</p>\n<p></p>\n<p>— Pediatric Housecalls</p>')
-  const [states, setStates] = useState<Set<'NC' | 'SC' | 'VA'>>(new Set())
+  const [html, setHtml] = useState(`<p>Hi there,</p>\n<p></p>\n<p>— ${practiceName}</p>`)
+  const [states, setStates] = useState<Set<string>>(new Set())
   const [ageMin, setAgeMin] = useState('')
   const [ageMax, setAgeMax] = useState('')
   const [activity, setActivity] = useState<ActivityWindow>('any')
@@ -72,7 +81,7 @@ export function AdminMarketing() {
     previewRef.current.srcdoc = `<style>body{font-family:-apple-system,Segoe UI,sans-serif;color:#1A1A2E;padding:12px;margin:0;}</style>${html}`
   }, [html])
 
-  const toggleState = (s: 'NC' | 'SC' | 'VA') => {
+  const toggleState = (s: string) => {
     setStates(prev => {
       const next = new Set(prev)
       if (next.has(s)) next.delete(s); else next.add(s)
@@ -160,7 +169,7 @@ export function AdminMarketing() {
           <div className="space-y-4">
             <div>
               <label className={labelCls}>Subject</label>
-              <input value={subject} onChange={e => setSubject(e.target.value)} className={inputCls} placeholder="e.g. Flu season is here — book your sick visits in-home" />
+              <input value={subject} onChange={e => setSubject(e.target.value)} className={inputCls} placeholder="A short subject line that'll make them open the email" />
             </div>
 
             <div>
@@ -191,37 +200,41 @@ export function AdminMarketing() {
             <div className="bg-white border border-[#E8E8E4] rounded-xl p-4 space-y-4">
               <div className="text-[13px] font-semibold text-[#1A1A2E]">Audience filters</div>
 
-              <div>
-                <label className={labelCls}>State</label>
-                <div className="flex gap-2">
-                  {(['NC', 'SC', 'VA'] as const).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => toggleState(s)}
-                      className={`px-3 py-1.5 text-[12px] font-medium rounded-lg border transition-colors ${
-                        states.has(s)
-                          ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
-                          : 'bg-white border-[#E8E8E4] text-[#1A1A2E] hover:border-[#7F77DD]'
-                      }`}
-                    >{s}</button>
-                  ))}
+              {practiceStates.length > 1 && (
+                <div>
+                  <label className={labelCls}>State</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {practiceStates.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => toggleState(s)}
+                        className={`px-3 py-1.5 text-[12px] font-medium rounded-lg border transition-colors ${
+                          states.has(s)
+                            ? 'bg-[#7F77DD] border-[#7F77DD] text-white'
+                            : 'bg-white border-[#E8E8E4] text-[#1A1A2E] hover:border-[#7F77DD]'
+                        }`}
+                      >{s}</button>
+                    ))}
+                  </div>
+                  {states.size === 0 && (
+                    <p className="text-[11px] text-[#1A1A2E]/50 mt-1">No filter → all states.</p>
+                  )}
                 </div>
-                {states.size === 0 && (
-                  <p className="text-[11px] text-[#1A1A2E]/50 mt-1">No filter → all states.</p>
-                )}
-              </div>
+              )}
 
-              <div>
-                <label className={labelCls}>Child age (years)</label>
-                <div className="flex items-center gap-2">
-                  <input value={ageMin} onChange={e => setAgeMin(e.target.value.replace(/\D/g, ''))} placeholder="Min" className={`${inputCls} w-20`} />
-                  <span className="text-[12px] text-[#1A1A2E]/50">to</span>
-                  <input value={ageMax} onChange={e => setAgeMax(e.target.value.replace(/\D/g, ''))} placeholder="Max" className={`${inputCls} w-20`} />
+              {usesPediatricPatients && (
+                <div>
+                  <label className={labelCls}>Child age (years)</label>
+                  <div className="flex items-center gap-2">
+                    <input value={ageMin} onChange={e => setAgeMin(e.target.value.replace(/\D/g, ''))} placeholder="Min" className={`${inputCls} w-20`} />
+                    <span className="text-[12px] text-[#1A1A2E]/50">to</span>
+                    <input value={ageMax} onChange={e => setAgeMax(e.target.value.replace(/\D/g, ''))} placeholder="Max" className={`${inputCls} w-20`} />
+                  </div>
+                  <p className="text-[11px] text-[#1A1A2E]/50 mt-1">
+                    Family qualifies if youngest ≥ min AND oldest ≤ max.
+                  </p>
                 </div>
-                <p className="text-[11px] text-[#1A1A2E]/50 mt-1">
-                  Family qualifies if youngest ≥ min AND oldest ≤ max.
-                </p>
-              </div>
+              )}
 
               <div>
                 <label className={labelCls}>Last visit</label>

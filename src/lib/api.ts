@@ -990,7 +990,7 @@ export const submitProviderReply = (claimId: string, body: string) =>
   apiFetch<{ ok: true }>(`/api/claims/${claimId}/provider-reply`, { method: 'POST', body: JSON.stringify({ body }) })
 
 export type MarketingFilters = {
-  states?: Array<'NC' | 'SC' | 'VA'>
+  states?: string[]
   age_min?: number | null
   age_max?: number | null
   last_visit_within_days?: number | null

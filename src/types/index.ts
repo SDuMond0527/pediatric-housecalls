@@ -15,6 +15,7 @@ export interface Provider {
   photo_url?: string | null
   greeting_name?: string | null
   practice_name?: string | null
+  practice_states?: string[] | null
   created_at: string
 }
 

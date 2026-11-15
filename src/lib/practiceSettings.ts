@@ -56,6 +56,13 @@ const featureFlags = {
   uses_booking_requests:       z.boolean().default(true),
   uses_phi_secure_links:       z.boolean().default(true),
 
+  // Patient model — pediatric families (children table) vs individual
+  // adult patients (patient_profiles table). Pediatric default for
+  // backward compat; Direct Dermatology etc. flip to false. Gates
+  // pediatric-only UI (child-age filters, "family qualifies" copy,
+  // kid-flavored labels throughout the admin surface).
+  uses_pediatric_patients:     z.boolean().default(true),
+
   // Scheduling model
   uses_zones:                  z.boolean().default(true),
   uses_office_room_scheduling: z.boolean().default(false),

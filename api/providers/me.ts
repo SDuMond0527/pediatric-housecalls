@@ -39,6 +39,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const row = rows[0]
     row.zones = row.zones ?? []
     row.states = row.states ?? []
+    // Union of all provider states in the practice — lets UI
+    // surfaces (marketing audience filter, on-call schedule, etc.)
+    // show only states the practice actually operates in instead of
+    // hardcoded ['NC','SC','VA'].
+    try {
+      const stateRows = await sql`
+        SELECT DISTINCT UNNEST(states) AS state
+        FROM providers
+        WHERE practice_id = ${row.practice_id}::uuid
+          AND is_active = true
+        ORDER BY state`
+      row.practice_states = stateRows.map((r: any) => r.state).filter(Boolean)
+    } catch {
+      row.practice_states = row.states ?? []
+    }
     res.json(row)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
