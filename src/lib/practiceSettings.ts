@@ -63,6 +63,13 @@ const featureFlags = {
   // kid-flavored labels throughout the admin surface).
   uses_pediatric_patients:     z.boolean().default(true),
 
+  // Referral-partner directory. Distinct from uses_booking_requests
+  // (which gates the broader Referral INBOX for incoming patient
+  // bookings). Referral partners is specifically the agency/org
+  // directory PHC uses for IV fluids referral sources. Solo practices
+  // without agency relationships can hide it.
+  uses_referral_partners:      z.boolean().default(true),
+
   // Scheduling model
   uses_zones:                  z.boolean().default(true),
   uses_office_room_scheduling: z.boolean().default(false),

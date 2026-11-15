@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
   { to: '/admin/waitlist',   icon: Clock,         label: 'Waitlist',       flag: 'uses_waitlist' },
   { to: '/admin/referrals',  icon: Inbox,         label: 'Referral inbox', flag: 'uses_booking_requests' },
-  { to: '/admin/agencies',   icon: Building2,     label: 'Referral partners', flag: 'uses_booking_requests' },
+  { to: '/admin/agencies',   icon: Building2,     label: 'Referral partners', flag: 'uses_referral_partners' },
   { to: '/admin/broadcasts', icon: Radio,         label: 'Broadcasts',     flag: 'uses_broadcasts' },
   { to: '/admin/marketing',  icon: Megaphone,     label: 'Marketing' },
   { to: '/admin/claims',      icon: Receipt,       label: 'Claims', eraBadge: true, flag: 'accepts_insurance' },
