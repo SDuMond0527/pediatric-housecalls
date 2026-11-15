@@ -11,6 +11,7 @@ import { EncounterNoteModal } from '../../components/EncounterNoteModal'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { usePracticeZones } from '../../hooks/usePracticeZones'
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { displayVisitType } from '../../lib/appointmentDisplay'
 import { PreVisitPreviewButton } from '../../components/PreVisitPreview'
 import type { Appointment, Provider } from '../../types'
@@ -152,6 +153,7 @@ function t(time24: string): string {
 export function AdminSchedule() {
   const { zipToZone } = usePracticeZones()
   const { visitTypes, byType } = usePracticeVisitTypes()
+  const { settings } = useSettings()
   const [providers, setProviders] = useState<Provider[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [filterProvider, setFilterProvider] = useState('')
@@ -695,18 +697,36 @@ export function AdminSchedule() {
         </div>
       </div>
 
-      {/* ── On-call telemedicine schedule ── */}
+      {/* ── On-call telemedicine schedule ──
+          Only renders for practices that actually DO pairing: either
+          they have CMAs on staff (CMA + telemedicine workflow) or
+          they offer IV fluids (RN-run with NP tele screening). Sarah
+          Cash (solo derm, no CMAs, no IV fluids) doesn't see this
+          block at all. PHC sees it as before. Sara 2026-11-15.
+
+          State iteration + labels are also derived from active
+          provider states rather than hardcoded ['NC','SC'] — solo-
+          state practices don't see empty "South Carolina" sections. */}
+      {(providers.some(p => p.role === 'CMA') || !!settings.uses_iv_fluids) && (() => {
+        const activeStates: ('NC' | 'SC')[] = []
+        if (ncProviders.length > 0) activeStates.push('NC')
+        if (scProviders.length > 0) activeStates.push('SC')
+        if (activeStates.length === 0) return null
+        const showStateHeaders = activeStates.length > 1
+        return (
       <div className="px-6 py-5 border-b border-[#E8E8E4] space-y-5">
         <div className="flex items-center gap-2">
           <Phone size={14} className="text-[#7F77DD]" />
           <span className="text-[13px] font-semibold text-[#1A1A2E]">On-call telemedicine schedule</span>
           <span className="text-[11px] text-[#1A1A2E]">— covers CMA + telemedicine and IV fluids telemedicine screening</span>
         </div>
-        {(['NC', 'SC'] as const).map(state => {
+        {activeStates.map(state => {
           const stateProviders = state === 'NC' ? ncProviders : scProviders
           return (
             <div key={state}>
-              <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">{state === 'NC' ? 'North Carolina' : 'South Carolina'}</div>
+              {showStateHeaders && (
+                <div className="text-[11px] font-semibold text-[#555] uppercase tracking-wider mb-2">{state === 'NC' ? 'North Carolina' : 'South Carolina'}</div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                 {onCallDays.map(date => {
                   const key = `${date}::${state}`
@@ -753,6 +773,8 @@ export function AdminSchedule() {
           )
         })}
       </div>
+        )
+      })()}
 
       <div className="p-6 space-y-6">
         {viewMode === 'week' && (
