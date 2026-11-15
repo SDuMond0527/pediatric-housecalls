@@ -46,7 +46,7 @@ const NAV: NavItem[] = [
   { to: '/admin/specialists',   icon: Building2,     label: 'Specialists', flag: 'uses_specialist_directory' },
   { to: '/admin/handbook',      icon: Library,       label: 'All things PHC' },
   { to: '/admin/school-notes',  icon: GraduationCap, label: 'School notes' },
-  { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log' },
+  { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log', flag: 'accepts_insurance' },
 ]
 
 function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; onNav?: () => void }) {
