@@ -118,7 +118,7 @@ export function AdminResultsUpload() {
         body.abnormal_flag = abnormalFlag || null
       }
       await createResult(body)
-      navigate(`/admin/results/${urlType}`)
+      navigate(`/results/${urlType}`)
     } catch (e: any) {
       setErr(e?.message ?? 'Save failed')
     } finally {
@@ -132,7 +132,7 @@ export function AdminResultsUpload() {
   return (
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => navigate(`/admin/results/${urlType}`)}
+        <button onClick={() => navigate(`/results/${urlType}`)}
           className="p-1.5 rounded-lg hover:bg-[#F1EFE8]">
           <ArrowLeft size={16} className="text-[#1A1A2E]/70" />
         </button>
@@ -294,7 +294,7 @@ export function AdminResultsUpload() {
         )}
 
         <div className="flex items-center justify-end gap-2">
-          <button onClick={() => navigate(`/admin/results/${urlType}`)}
+          <button onClick={() => navigate(`/results/${urlType}`)}
             className="px-3 py-1.5 text-[12px] font-medium text-[#1A1A2E] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8]">
             Cancel
           </button>

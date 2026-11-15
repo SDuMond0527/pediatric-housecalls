@@ -141,6 +141,8 @@ export default function App() {
                 <Route path="broadcasts"     element={<FlagGuardedRoute flag="uses_broadcasts"><Broadcasts /></FlagGuardedRoute>} />
                 <Route path="waitlist"       element={<Waitlist />} />
                 <Route path="shifts"         element={<Shifts />} />
+                <Route path="results/:type/new" element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsUpload /></FlagGuardedRoute>} />
+                <Route path="results/:type"     element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsInbox /></FlagGuardedRoute>} />
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<FlagGuardedRoute flag="uses_cpr_classes"><CprRequests /></FlagGuardedRoute>} />
                 <Route path="handbook"       element={<Handbook />} />
@@ -158,8 +160,6 @@ export default function App() {
                 <Route path="billing-agent" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminBillingAgent /></FlagGuardedRoute>} />
                 <Route path="unmatched-eras" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminUnmatchedEras /></FlagGuardedRoute>} />
                 <Route path="eligibility-fails" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminEligibilityFails /></FlagGuardedRoute>} />
-                <Route path="results/:type/new" element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminResultsUpload /></FlagGuardedRoute>} />
-                <Route path="results/:type" element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminResultsInbox /></FlagGuardedRoute>} />
                 <Route path="ncci-preview" element={<FlagGuardedRoute flag="accepts_insurance" redirectTo="/admin/analytics"><AdminNcciPreview /></FlagGuardedRoute>} />
                 <Route path="convenience-fees" element={<FlagGuardedRoute flag="uses_convenience_fees" redirectTo="/admin/analytics"><AdminConvenienceFees /></FlagGuardedRoute>} />
                 <Route path="patients"        element={<Patients />} />

@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon, FlaskConical } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
@@ -37,8 +37,6 @@ const NAV: NavItem[] = [
   // so Andrea / Pam don't see it before Sara talks to them. Sara 2026-11-09.
   { to: '/admin/convenience-fees', icon: CreditCard, label: 'Convenience Fees', flag: 'uses_convenience_fees' },
   { to: '/admin/statements',  icon: FileText,      label: 'Statements',     flag: 'uses_self_pay_statements' },
-  { to: '/admin/results/pathology', icon: FlaskConical, label: 'Pathology inbox', flag: 'uses_results_module' },
-  { to: '/admin/results/labs',      icon: FileText,     label: 'Labs inbox',      flag: 'uses_results_module' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },

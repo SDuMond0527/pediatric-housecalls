@@ -5,8 +5,8 @@ import { format, formatDistanceToNowStrict } from 'date-fns'
 import { getResults, signResult, acknowledgeResult, type ResultRow, type ResultType, type ResultStatus } from '../../lib/api'
 
 // Pathology inbox + Labs inbox — same component, different type filter
-// driven by the URL. Mounted at /admin/results/pathology and
-// /admin/results/labs. Sara 2026-11-15 for Direct Dermatology.
+// driven by the URL. Mounted at /results/pathology and
+// /results/labs. Sara 2026-11-15 for Direct Dermatology.
 
 type StatusFilter = 'all' | 'pending_review' | 'signed' | 'acknowledged'
 
@@ -94,7 +94,7 @@ export function AdminResultsInbox() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(`/admin/results/${urlType}/new`)}
+            onClick={() => navigate(`/results/${urlType}/new`)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8]">
             <Upload size={12} /> Upload {type === 'pathology' ? 'report' : 'result'}
           </button>
