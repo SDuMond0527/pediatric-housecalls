@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle, Clock } from 'lucide-react'
 import { getFinancialReports, getArDrill, apiFetch, type ArBucket } from '../../lib/api'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
 import { PatientStatementModal } from './PatientStatementModal'
@@ -82,6 +83,13 @@ function downloadCsv(filename: string, csv: string) {
 export function AdminFinancialReports() {
   const today = new Date()
   const navigate = useNavigate()
+  const { settings } = useSettings()
+  // Self-pay-only practices (accepts_insurance = false) don't need any
+  // of the payer-keyed reports — AR insurance aging, payer mix,
+  // reimbursement/days-to-ERA/denials by payer, pipeline tab, etc.
+  // Gated below. Sara 2026-11-15 after Sarah Cash's view showed a
+  // bunch of insurance reports that are structurally empty for her.
+  const showsInsurance = !!settings.accepts_insurance
   const [tab, setTab] = useState<'reports' | 'pipeline' | 'collections'>('reports')
   const [start, setStart] = useState(format(startOfMonth(subMonths(today, 2)), 'yyyy-MM-dd'))
   const [end, setEnd]     = useState(format(today, 'yyyy-MM-dd'))
@@ -118,10 +126,12 @@ export function AdminFinancialReports() {
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'reports' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
           Monthly reports
         </button>
-        <button onClick={() => setTab('pipeline')}
-          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'pipeline' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
-          Claims pipeline
-        </button>
+        {showsInsurance && (
+          <button onClick={() => setTab('pipeline')}
+            className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'pipeline' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
+            Claims pipeline
+          </button>
+        )}
         <button onClick={() => setTab('collections')}
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === 'collections' ? 'border-[#7F77DD] text-[#7F77DD]' : 'border-transparent text-[#1A1A2E]/70 hover:text-[#1A1A2E]'}`}>
           Collections by visit month
@@ -161,20 +171,22 @@ export function AdminFinancialReports() {
 
       {data && (
         <div className="space-y-8">
-          <ArAgingSection
-            title="AR aging — insurance"
-            icon={Users}
-            plainEnglish="Money that insurance companies still owe you, sorted by how long you've been waiting. Numbers in the &quot;120+&quot; column are the ones your biller should chase first — anything past 90 days is at risk of hitting the payer's filing deadline."
-            rows={data.ar_insurance}
-            groupLabel="Payer"
-            groupKey="payer_name"
-            countKey="claim_count"
-            filenameStem="ar-aging-insurance"
-            drillType="insurance"
-            onDrill={setDrill}
-            start={start}
-            end={end}
-          />
+          {showsInsurance && (
+            <ArAgingSection
+              title="AR aging — insurance"
+              icon={Users}
+              plainEnglish="Money that insurance companies still owe you, sorted by how long you've been waiting. Numbers in the &quot;120+&quot; column are the ones your biller should chase first — anything past 90 days is at risk of hitting the payer's filing deadline."
+              rows={data.ar_insurance}
+              groupLabel="Payer"
+              groupKey="payer_name"
+              countKey="claim_count"
+              filenameStem="ar-aging-insurance"
+              drillType="insurance"
+              onDrill={setDrill}
+              start={start}
+              end={end}
+            />
+          )}
 
           <ArAgingSection
             title="AR aging — patient"
@@ -199,18 +211,31 @@ export function AdminFinancialReports() {
 
           <RefundsSection data={data} start={start} end={end} />
 
-          {/* ── Phase 2: practice health ─────────────────────────────── */}
-          <div className="pt-4 mt-2 border-t border-[#E8E8E4]">
-            <div className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Practice health (quarterly review)</div>
-            <p className="text-[12px] text-[#1A1A2E]/70">Reports below are less about closing the month and more about spotting trends — payer concentration, contract quality, and problem payers.</p>
-          </div>
+          {/* ── Phase 2: practice health ───────────────────────────────
+              Entire block is payer-health reports for insurance
+              practices, except StatementPayTime (patient-side) and
+              CvFeeSummary (in-home convenience fees). Hide the whole
+              header + payer-keyed reports when the practice doesn't
+              accept insurance; keep the two non-insurance ones
+              rendering standalone below. */}
+          {showsInsurance && (
+            <>
+              <div className="pt-4 mt-2 border-t border-[#E8E8E4]">
+                <div className="text-[11px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">Practice health (quarterly review)</div>
+                <p className="text-[12px] text-[#1A1A2E]/70">Reports below are less about closing the month and more about spotting trends — payer concentration, contract quality, and problem payers.</p>
+              </div>
 
-          <PayerMixSection data={data} start={start} end={end} />
-          <ReimbursementByPayerSection data={data} start={start} end={end} />
-          <CvFeeSummarySection data={data} start={start} end={end} />
-          <DaysToEraByPayerSection data={data} start={start} end={end} />
+              <PayerMixSection data={data} start={start} end={end} />
+              <ReimbursementByPayerSection data={data} start={start} end={end} />
+              <DaysToEraByPayerSection data={data} start={start} end={end} />
+              <DenialsByPayerSection data={data} start={start} end={end} />
+            </>
+          )}
+
+          {!!settings.uses_convenience_fees && (
+            <CvFeeSummarySection data={data} start={start} end={end} />
+          )}
           <StatementPayTimeSection data={data} start={start} end={end} />
-          <DenialsByPayerSection data={data} start={start} end={end} />
         </div>
       )}
       </>}
