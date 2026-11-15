@@ -684,7 +684,10 @@ export function AdminAnalytics() {
           </div>
         </div>
 
-        {/* Waitlist losses */}
+        {/* Waitlist losses + Losses by state — both waitlist-keyed.
+            Hide both for practices that don't use a waitlist (Direct
+            Dermatology). */}
+        {usesWaitlist && (
         <div className="grid lg:grid-cols-2 gap-5">
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Waitlist losses</h3>
@@ -743,6 +746,7 @@ export function AdminAnalytics() {
             )}
           </div>
         </div>
+        )}
 
         {/* New vs. returning families + Broadcast pickup rate */}
         <div className="grid lg:grid-cols-2 gap-5">
@@ -776,6 +780,7 @@ export function AdminAnalytics() {
             )}
           </div>
 
+          {!!settings.uses_broadcasts && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Broadcast pickup rate</h3>
             <p className="text-[12px] text-[#1A1A2E] mb-4">How often urgent/open requests get claimed</p>
@@ -809,6 +814,7 @@ export function AdminAnalytics() {
               </>
             )}
           </div>
+          )}
 
         </div>
 
@@ -825,7 +831,10 @@ export function AdminAnalytics() {
           </div>
         )}
 
-        {/* On-call shifts */}
+        {/* On-call shifts — only renders for practices that actually
+            use on-call (CMAs on staff OR IV fluids workflow, matching
+            the Schedule page's on-call gate). Sara 2026-11-15. */}
+        {(providers.some(p => p.role === 'CMA') || !!settings.uses_iv_fluids) && (
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">On-call hours</h3>
           <p className="text-[12px] text-[#1A1A2E] mb-5">MD/NP on-call coverage — last 8 weeks</p>
@@ -934,6 +943,7 @@ export function AdminAnalytics() {
             </div>
           )}
         </div>
+        )}
 
         {/* Booking mix (from requests) */}
         {bVtSorted.length > 0 && (
