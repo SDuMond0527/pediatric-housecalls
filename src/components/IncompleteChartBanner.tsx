@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, Send, Pencil, X } from 'lucide-react'
 import { providerUpdateChild, apiFetch, uploadNotePhoto } from '../lib/api'
 import { getMissingChildFields, type RequiredField } from '../lib/childCompleteness'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 
@@ -29,11 +30,13 @@ const GENDER_OPTIONS = [
 ]
 
 export function IncompleteChartBanner({ child, onUpdated }: Props) {
+  const { settings } = useSettings()
+  const isPediatric = settings.uses_pediatric_patients !== false
   const missing = getMissingChildFields(child, {
     phone:         child?.family_phone,
     email:         child?.family_email,
     address_line1: child?.family_address_line1,
-  })
+  }, { isPediatric })
   const [fillOpen, setFillOpen] = useState(false)
   const [textSending, setTextSending] = useState(false)
   const [textSent, setTextSent] = useState(false)
@@ -84,12 +87,12 @@ export function IncompleteChartBanner({ child, onUpdated }: Props) {
         </div>
       </div>
 
-      {fillOpen && <FillInModal child={child} onClose={() => setFillOpen(false)} onSaved={(patched) => { onUpdated(patched); setFillOpen(false) }} />}
+      {fillOpen && <FillInModal child={child} isPediatric={isPediatric} onClose={() => setFillOpen(false)} onSaved={(patched) => { onUpdated(patched); setFillOpen(false) }} />}
     </>
   )
 }
 
-function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => void; onSaved: (updated: any) => void }) {
+function FillInModal({ child, isPediatric, onClose, onSaved }: { child: any; isPediatric: boolean; onClose: () => void; onSaved: (updated: any) => void }) {
   // Derive missing INSIDE the modal from the current child prop so we react
   // to external edits (e.g., staff saving via the chart's own "Edit" buttons
   // while the modal is open, or having saved values just before opening it).
@@ -98,7 +101,7 @@ function FillInModal({ child, onClose, onSaved }: { child: any; onClose: () => v
     phone:         child?.family_phone,
     email:         child?.family_email,
     address_line1: child?.family_address_line1,
-  })
+  }, { isPediatric })
   if (missing.length === 0) {
     // Nothing left to fill in — close automatically.
     onClose()

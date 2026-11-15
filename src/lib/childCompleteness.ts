@@ -10,7 +10,12 @@ export interface RequiredField {
   key: string
   label: string
   section: 'Identity' | 'Contact' | 'Clinical' | 'Insurance' | 'Cards' | 'Consent'
-  scope: 'always' | 'if-not-self-pay'
+  scope: 'always' | 'if-not-self-pay' | 'if-pediatric'
+}
+
+/** Per-practice context for completeness checks. Sara 2026-11-15. */
+export interface CompletenessContext {
+  isPediatric?: boolean  // defaults true for backward compat (PHC)
 }
 
 export const REQUIRED_CHILD_FIELDS: RequiredField[] = [
@@ -26,7 +31,7 @@ export const REQUIRED_CHILD_FIELDS: RequiredField[] = [
   { key: 'medical_history',                label: 'Medical history (PMH)',     section: 'Clinical', scope: 'always' },
   { key: 'preferred_pharmacy',             label: 'Preferred pharmacy',        section: 'Clinical', scope: 'always' },
   { key: 'pcp',                            label: 'Primary care provider',     section: 'Clinical', scope: 'always' },
-  { key: 'vaccination_status',             label: 'Vaccination status',        section: 'Clinical', scope: 'always' },
+  { key: 'vaccination_status',             label: 'Vaccination status',        section: 'Clinical', scope: 'if-pediatric' },
   { key: 'insurance_provider',             label: 'Insurance provider',        section: 'Insurance', scope: 'if-not-self-pay' },
   { key: 'insurance_member_id',            label: 'Member ID',                 section: 'Insurance', scope: 'if-not-self-pay' },
   { key: 'insurance_group_number',         label: 'Group #',                   section: 'Insurance', scope: 'if-not-self-pay' },
@@ -54,16 +59,19 @@ function isEmpty(v: unknown): boolean {
 export function getMissingChildFields(
   child: Record<string, any> | null | undefined,
   family?: Record<string, any> | null,
+  ctx?: CompletenessContext,
 ): RequiredField[] {
   if (!child) return REQUIRED_CHILD_FIELDS
   const isSelfPay = String(child.insurance_provider || '').toLowerCase() === 'self-pay'
+  const isPediatric = ctx?.isPediatric !== false   // defaults true (PHC)
   const familyFallback: Record<string, unknown> = {
     parent_phone:   family?.phone,
     parent_email:   family?.email,
     parent_address: family?.address_line1,
   }
   return REQUIRED_CHILD_FIELDS.filter(f => {
-    if (f.scope === 'if-not-self-pay' && isSelfPay) return false
+    if (f.scope === 'if-not-self-pay' && isSelfPay)    return false
+    if (f.scope === 'if-pediatric'    && !isPediatric) return false
     // PCP is satisfied by EITHER the free-text `pcp` column OR a
     // `pcp_id` reference to the pcps table. The patient chart display
     // resolves via pcp_id first, so a chart that visually shows a
@@ -78,6 +86,7 @@ export function getMissingChildFields(
 export function isChildComplete(
   child: Record<string, any> | null | undefined,
   family?: Record<string, any> | null,
+  ctx?: CompletenessContext,
 ): boolean {
-  return getMissingChildFields(child, family).length === 0
+  return getMissingChildFields(child, family, ctx).length === 0
 }
