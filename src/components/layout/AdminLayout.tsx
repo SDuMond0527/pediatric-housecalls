@@ -44,7 +44,7 @@ const NAV: NavItem[] = [
   { to: '/admin/stud-options',  icon: Gem,           label: 'Stud options', flag: 'uses_ear_piercing' },
   { to: '/admin/pcps',          icon: BookOpen,      label: 'PCP Directory' },
   { to: '/admin/specialists',   icon: Building2,     label: 'Specialists', flag: 'uses_specialist_directory' },
-  { to: '/admin/handbook',      icon: Library,       label: 'All things PHC' },
+  { to: '/admin/handbook',      icon: Library,       label: 'All things PHC', flag: 'uses_handbook' },
   { to: '/admin/school-notes',  icon: GraduationCap, label: 'School notes' },
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log', flag: 'accepts_insurance' },
 ]

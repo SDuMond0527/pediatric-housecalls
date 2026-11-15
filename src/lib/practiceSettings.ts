@@ -78,6 +78,15 @@ const featureFlags = {
   // tab is independently gated.
   uses_specialist_directory:   z.boolean().default(true),
 
+  // On-call shift tracking on the provider sidebar. PHC + any practice
+  // running after-hours coverage needs it. Solo practices don't.
+  uses_oncall_shifts:          z.boolean().default(true),
+
+  // Practice handbook / wiki — "All things <PRACTICE>" nav item.
+  // Default true so PHC + Crestview keep theirs. New practices without
+  // a handbook built out flip this false.
+  uses_handbook:               z.boolean().default(true),
+
   // Scheduling model
   uses_zones:                  z.boolean().default(true),
   uses_office_room_scheduling: z.boolean().default(false),

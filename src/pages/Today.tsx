@@ -811,7 +811,20 @@ export function Today() {
 
   if (!provider) return null
 
-  const firstName = provider.name.split(' ').slice(-2)[0]
+  // Match the AdminLayout greeting logic — prefer explicit
+  // greeting_name override, else strip credential suffixes before
+  // taking the second-to-last word. "Sarah Cash, MD" with
+  // greeting_name = "Dr. Cash" shows "Good afternoon, Dr. Cash!"
+  // instead of the old "Good afternoon, Cash,!" bug. Sara
+  // 2026-11-15.
+  const firstName = (() => {
+    const g = (provider as any)?.greeting_name
+    if (g && String(g).trim()) return String(g).trim()
+    const stripped = provider.name
+      .replace(/,\s*(MD|DO|NP|PA|RN|PhD|DNP|DMD|DDS|LCSW|MBA)\.?$/i, '')
+      .trim()
+    return stripped.split(/\s+/).slice(-2)[0] ?? 'friend'
+  })()
 
   // Available end times must come after the selected start time
   const endTimeOptions = blockForm.startTime

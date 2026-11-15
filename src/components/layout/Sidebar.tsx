@@ -21,8 +21,8 @@ const NAV: NavItem[] = [
   { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true, flag: 'uses_broadcasts' },
   { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist',                flag: 'uses_waitlist' },
   { to: '/cpr-requests', icon: HeartPulse,    label: 'CPR requests',            flag: 'uses_cpr_classes' },
-  { to: '/shifts',       icon: CalendarClock, label: 'On-call shifts' },
-  { to: '/handbook',     icon: BookOpen,      label: 'All things PHC' },
+  { to: '/shifts',       icon: CalendarClock, label: 'On-call shifts',          flag: 'uses_oncall_shifts' },
+  { to: '/handbook',     icon: BookOpen,      label: 'All things PHC',          flag: 'uses_handbook' },
   { to: '/settings',     icon: Settings,      label: 'Settings' },
 ]
 
@@ -37,7 +37,7 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col fixed left-0 top-0 z-40">
       <div className="px-5 py-5 border-b border-white/8">
-        <div className="font-display text-base font-medium text-white leading-snug">{PRACTICE_NAME}</div>
+        <div className="font-display text-base font-medium text-white leading-snug">{provider?.practice_name || PRACTICE_NAME}</div>
         <div className="text-[11px] text-white/40 mt-0.5">Provider portal</div>
       </div>
 
