@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, ChevronRight, Plus, Upload, X } from 'lucide-react'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { searchChildren, providerCreateChild, providerUpdateChild, providerUploadInsuranceCard, searchPharmacies } from '../lib/api'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { ChartNumberPill } from '../components/ChartNumberPill'
@@ -120,7 +121,16 @@ function formatDob(raw: string): string {
 export function Patients() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { settings } = useSettings()
   const isAdmin = location.pathname.startsWith('/admin')
+  // Per-practice gates for the Add Patient form. Sara 2026-11-15.
+  // Non-insurance practices skip the entire Insurance section +
+  // validation. Non-pediatric practices relabel "Parent / guardian
+  // name" → "Contact name" and the email placeholder.
+  const acceptsInsurance = !!settings.accepts_insurance
+  const isPediatric = settings.uses_pediatric_patients !== false
+  const contactNameLabel = isPediatric ? 'Parent / guardian name' : 'Contact name'
+  const emailPlaceholder = isPediatric ? 'parent@email.com' : 'email@example.com'
   const [tab, setTab] = useState<'active' | 'archived'>('active')
   const [allChildren, setAllChildren] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -167,7 +177,7 @@ export function Patients() {
       [form.pcp.trim(), 'Primary care provider is required'],
       [form.vaccination_status, 'Vaccination status is required'],
     ]
-    const insuranceChecks: [string, string][] = form.self_pay ? [] : [
+    const insuranceChecks: [string, string][] = (!acceptsInsurance || form.self_pay) ? [] : [
       [form.insurance_provider.trim(), 'Insurance company is required'],
       [form.insurance_member_id.trim(), 'Member ID is required'],
       [form.insurance_group_number.trim(), 'Group number is required'],
@@ -205,13 +215,16 @@ export function Patients() {
         dosespot_pharmacy_id: form.dosespot_pharmacy_id,
         pcp: form.pcp.trim(),
         vaccination_status: form.vaccination_status,
-        insurance_provider:                form.self_pay ? 'Self-pay' : form.insurance_provider.trim(),
-        insurance_member_id:               form.self_pay ? null : form.insurance_member_id.trim(),
-        insurance_group_number:            form.self_pay ? null : form.insurance_group_number.trim(),
-        insurance_subscriber_name:         form.self_pay ? null : form.insurance_subscriber_name.trim(),
-        insurance_subscriber_dob:          form.self_pay ? null : form.insurance_subscriber_dob,
-        insurance_subscriber_gender:       form.self_pay ? null : form.insurance_subscriber_gender,
-        insurance_subscriber_relationship: form.self_pay ? null : form.insurance_subscriber_relationship,
+        // Insurance fields — for non-insurance practices, force
+        // 'Self-pay' marker + null for the rest. Otherwise honor the
+        // in-form self_pay checkbox.
+        insurance_provider:                (!acceptsInsurance || form.self_pay) ? 'Self-pay' : form.insurance_provider.trim(),
+        insurance_member_id:               (!acceptsInsurance || form.self_pay) ? null : form.insurance_member_id.trim(),
+        insurance_group_number:            (!acceptsInsurance || form.self_pay) ? null : form.insurance_group_number.trim(),
+        insurance_subscriber_name:         (!acceptsInsurance || form.self_pay) ? null : form.insurance_subscriber_name.trim(),
+        insurance_subscriber_dob:          (!acceptsInsurance || form.self_pay) ? null : form.insurance_subscriber_dob,
+        insurance_subscriber_gender:       (!acceptsInsurance || form.self_pay) ? null : form.insurance_subscriber_gender,
+        insurance_subscriber_relationship: (!acceptsInsurance || form.self_pay) ? null : form.insurance_subscriber_relationship,
       })
 
       if (!form.self_pay) {
@@ -405,10 +418,10 @@ export function Patients() {
           <div>
             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Contact</div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Parent / guardian name" placeholder="John Smith" {...field('parent_name')} />
+              <Input label={contactNameLabel} placeholder="John Smith" {...field('parent_name')} />
               <Input label="Phone" required type="tel" placeholder="(704) 555-0100" {...field('parent_phone')} />
               <div className="col-span-2">
-                <Input label="Email" required type="email" placeholder="parent@email.com" {...field('parent_email')} />
+                <Input label="Email" required type="email" placeholder={emailPlaceholder} {...field('parent_email')} />
               </div>
               <div className="col-span-2">
                 <Input label="Street address" required placeholder="123 Main St" {...field('parent_address')} />
@@ -483,7 +496,9 @@ export function Patients() {
             </div>
           </div>
 
-          {/* Insurance */}
+          {/* Insurance — hidden entirely for non-insurance practices
+              (e.g. Direct Dermatology). Sara 2026-11-15. */}
+          {acceptsInsurance && (
           <div>
             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-3">Insurance</div>
 
@@ -528,6 +543,7 @@ export function Patients() {
             </>
             )}
           </div>
+          )}
 
           {saveError && (
             <div className="px-3 py-2 bg-[#FCEBEB] text-[#791F1F] text-[13px] rounded-lg">{saveError}</div>
