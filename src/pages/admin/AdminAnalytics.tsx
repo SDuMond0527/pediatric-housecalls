@@ -584,7 +584,9 @@ export function AdminAnalytics() {
           )}
         </div>
 
-        {/* Waitlist */}
+        {/* Waitlist overview + Waitlist by state — both waitlist-
+            keyed. Hide both for practices without a waitlist. */}
+        {usesWaitlist && (
         <div className="grid lg:grid-cols-2 gap-5">
 
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
@@ -683,6 +685,7 @@ export function AdminAnalytics() {
             )}
           </div>
         </div>
+        )}
 
         {/* Waitlist losses + Losses by state — both waitlist-keyed.
             Hide both for practices that don't use a waitlist (Direct
