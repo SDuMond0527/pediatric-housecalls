@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { usePracticeVisitTypes } from '../hooks/usePracticeVisitTypes'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { isCmaTelePair } from '../lib/dualVisitTypes'
 import type { ZoneRestriction, TimeBlock } from '../types'
 
@@ -88,7 +89,9 @@ function defaultVisitTypeAvail(providerId: string, visitTypeNames: string[]): Vi
 
 export function Availability() {
   const { provider } = useAuth()
+  const { settings } = useSettings()
   const isAdmin = !!provider?.is_admin
+  const usesZones = !!settings.uses_zones
   const { visitTypes, byType, refresh: refreshVisitTypes } = usePracticeVisitTypes()
 
   // Admin provider picker
@@ -459,7 +462,9 @@ export function Availability() {
           </Button>
         </div>
 
-        {/* ZONE-HOUR CUSTOMIZATIONS */}
+        {/* ZONE-HOUR CUSTOMIZATIONS — hidden for non-mobile practices
+            (Direct Dermatology doesn't operate in zones). Sara 2026-11-15. */}
+        {usesZones && (
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">
           <div className="font-display text-[16px] font-medium text-[#1A1A2E] mb-1">Zone-hour customizations</div>
           <p className="text-[13px] text-[#555] mb-4 leading-relaxed">Restrict hours you're available within specific zones.</p>
@@ -481,6 +486,7 @@ export function Availability() {
             <Plus size={13} /> Add zone restriction
           </Button>
         </div>
+        )}
 
         {/* TIME BLOCKS */}
         <div className="bg-white border border-[#E8E8E4] rounded-lg p-5 shadow-sm">

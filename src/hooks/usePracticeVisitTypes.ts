@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { apiFetch } from '../lib/api'
 
 export interface PracticeVisitType {
   id: string
@@ -22,8 +23,12 @@ interface VisitTypeData {
   byType: Record<string, PracticeVisitType>
 }
 
-let cache: VisitTypeData | null = null
-let pending: Promise<VisitTypeData> | null = null
+// Module-level cache removed 2026-11-15. It was global (not per-user),
+// so it both served stale data across tenant switches AND silently
+// hid the "no auth header" bug introduced when I auth-gated
+// /api/practice-visit-types (every empty-cache load would just
+// swallow the 401 and cache an empty array). Pay the per-mount
+// fetch cost — small payload, infrequent calls.
 
 function build(rows: PracticeVisitType[]): VisitTypeData {
   const byType: Record<string, PracticeVisitType> = {}
@@ -31,28 +36,19 @@ function build(rows: PracticeVisitType[]): VisitTypeData {
   return { visitTypes: rows, byType }
 }
 
-function load(): Promise<VisitTypeData> {
-  if (cache) return Promise.resolve(cache)
-  if (pending) return pending
-  pending = fetch('/api/practice-visit-types')
-    .then(r => { if (!r.ok) throw new Error('visit types fetch failed'); return r.json() })
-    .then(rows => { cache = build(Array.isArray(rows) ? rows : []); pending = null; return cache! })
-    .catch(() => { pending = null; return build([]) })
-  return pending
-}
-
 export function usePracticeVisitTypes() {
-  const [data, setData] = useState<VisitTypeData>(() => cache ?? build([]))
-  const [loading, setLoading] = useState(!cache)
-  useEffect(() => {
-    if (cache) return
-    load().then(d => { setData(d); setLoading(false) })
+  const [data, setData] = useState<VisitTypeData>(() => build([]))
+  const [loading, setLoading] = useState(true)
+  const load = useCallback(async () => {
+    try {
+      const rows = await apiFetch<PracticeVisitType[]>('/api/practice-visit-types')
+      setData(build(Array.isArray(rows) ? rows : []))
+    } catch {
+      setData(build([]))
+    } finally {
+      setLoading(false)
+    }
   }, [])
-  const refresh = useCallback(() => {
-    cache = null
-    pending = null
-    setLoading(true)
-    load().then(d => { setData(d); setLoading(false) })
-  }, [])
-  return { ...data, loading, refresh }
+  useEffect(() => { void load() }, [load])
+  return { ...data, loading, refresh: load }
 }
