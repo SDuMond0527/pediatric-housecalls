@@ -57,7 +57,7 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eli
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col">
       <div className="px-5 py-5 border-b border-white/8 flex items-center justify-between">
         <div>
-          <div className="font-display text-base font-medium text-white leading-snug">{PRACTICE_NAME}</div>
+          <div className="font-display text-base font-medium text-white leading-snug">{provider?.practice_name || PRACTICE_NAME}</div>
           <div className="text-[11px] text-white/40 mt-0.5">Admin portal</div>
         </div>
         {onNav && (
@@ -259,7 +259,7 @@ export function AdminLayout() {
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-white/10">
             <Menu size={18} className="text-white" />
           </button>
-          <span className="font-display font-medium text-white">{PRACTICE_NAME}</span>
+          <span className="font-display font-medium text-white">{provider?.practice_name || PRACTICE_NAME}</span>
         </div>
         {/* Greeting bar — visible above every admin page. Mirrors the
             Today page's header so admins get the same warm welcome as

@@ -14,6 +14,7 @@ export interface Provider {
   is_super_admin?: boolean
   photo_url?: string | null
   greeting_name?: string | null
+  practice_name?: string | null
   created_at: string
 }
 

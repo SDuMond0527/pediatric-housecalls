@@ -25,7 +25,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!sub) return res.status(401).json({ error: 'No sub in token' })
 
     const sql = neon(dbUrl)
-    const rows = await sql`SELECT * FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+    // Join practice so the client gets the practice display name
+    // alongside the provider object. Multi-tenant seam: the sidebar
+    // header shows practice_name per-user instead of the build-time
+    // VITE_PRACTICE_NAME env var. Sara 2026-11-15.
+    const rows = await sql`
+      SELECT p.*, pr.name AS practice_name
+      FROM providers p
+      LEFT JOIN practices pr ON pr.id = p.practice_id
+      WHERE p.cognito_sub = ${sub}
+      LIMIT 1`
     if (rows.length === 0) return res.status(404).json({ error: 'Provider not found', sub })
     const row = rows[0]
     row.zones = row.zones ?? []
