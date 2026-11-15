@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { RefreshCw, Check, ExternalLink, Coffee, Trophy, AlertTriangle } from 'lucide-react'
 import { getReportsSchedule, markReportReviewed } from '../../lib/api'
+import { useSettings } from '../../contexts/PracticeSettingsContext'
 
 // The list of reports Sara should be running + how often, plus playful
 // copy so the checklist doesn't feel like a chore.
@@ -113,6 +114,7 @@ function freshMessage(key: string): string {
 }
 
 export function AdminReportsSchedule() {
+  const { settings } = useSettings()
   const [reviews, setReviews] = useState<Record<string, { reviewed_at: string; reviewed_by_name: string | null }>>({})
   const [loading, setLoading] = useState(true)
   const [marking, setMarking] = useState<string | null>(null)
@@ -153,8 +155,22 @@ export function AdminReportsSchedule() {
     return { def, last, ageDays, overdue, daysOverdue, neverReviewed, reviewedByName: rev?.reviewed_by_name ?? null }
   }
 
-  const monthly = MONTHLY.map(decorate)
-  const quarterly = QUARTERLY.map(decorate)
+  // Self-pay-only practices don't need the insurance-keyed bookkeeping
+  // items — AR insurance, payer mix, reimbursement by payer, denials
+  // by payer. Same multi-tenant seam as AdminFinancialReports. Sara
+  // 2026-11-15.
+  const showsInsurance = !!settings.accepts_insurance
+  const INSURANCE_ONLY_KEYS = new Set([
+    'monthly_ar_insurance',
+    'quarterly_payer_mix',
+    'quarterly_reimbursement_by_payer',
+    'quarterly_denials',
+  ])
+  const filterForPractice = (defs: ReportDef[]) =>
+    showsInsurance ? defs : defs.filter(d => !INSURANCE_ONLY_KEYS.has(d.key))
+
+  const monthly = filterForPractice(MONTHLY).map(decorate)
+  const quarterly = filterForPractice(QUARTERLY).map(decorate)
   const monthlyOverdueCount = monthly.filter(m => m.overdue || m.neverReviewed).length
   const quarterlyOverdueCount = quarterly.filter(m => m.overdue || m.neverReviewed).length
 
