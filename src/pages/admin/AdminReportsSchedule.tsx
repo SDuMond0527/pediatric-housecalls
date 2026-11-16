@@ -160,14 +160,18 @@ export function AdminReportsSchedule() {
   // by payer. Same multi-tenant seam as AdminFinancialReports. Sara
   // 2026-11-15.
   const showsInsurance = !!settings.accepts_insurance
+  const isPediatric    = settings.uses_pediatric_patients !== false
   const INSURANCE_ONLY_KEYS = new Set([
     'monthly_ar_insurance',
     'quarterly_payer_mix',
     'quarterly_reimbursement_by_payer',
     'quarterly_denials',
   ])
+  const rewriteNoun = (s: string) =>
+    isPediatric ? s : s.replace(/\bFamilies\b/g, 'Patients').replace(/\bfamilies\b/g, 'patients')
   const filterForPractice = (defs: ReportDef[]) =>
-    showsInsurance ? defs : defs.filter(d => !INSURANCE_ONLY_KEYS.has(d.key))
+    (showsInsurance ? defs : defs.filter(d => !INSURANCE_ONLY_KEYS.has(d.key)))
+      .map(d => ({ ...d, vibe: rewriteNoun(d.vibe) }))
 
   const monthly = filterForPractice(MONTHLY).map(decorate)
   const quarterly = filterForPractice(QUARTERLY).map(decorate)
