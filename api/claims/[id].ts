@@ -1207,7 +1207,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Update the claim row. era_received_at being set is what moves it
       // to Completed on the Submitted tab; payment_source distinguishes
-      // manually-posted from Stedi-ERA for reporting.
+      // manually-posted from Stedi-ERA for reporting. We also NULL the
+      // denial fields: this manual post IS the resolution, so any prior
+      // denial codes / 277 rejections from a now-superseded ERA stop
+      // keeping the claim in Rework (same precedent as force_status
+      // 'submitted'). Without this, posting against an old denial-ERA
+      // moves era_received_at forward past biller_edited_at, flips
+      // billerFixedAfterDenial off, and the claim re-enters Rework —
+      // Mackenzie Twigg 2026-11-16.
       const [updated] = await sql`
         UPDATE claims SET
           amount_billed_era          = ${billedForStatement},
@@ -1224,6 +1231,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           -- purple badge keeps pinging her about an ERA she already
           -- handled. Sara 2026-11-09.
           era_seen_at                = NOW(),
+          denial_codes               = NULL,
+          remark_codes               = NULL,
+          claim_rejection_at         = NULL,
+          claim_rejection_response   = NULL,
+          claim_rejection_reasons    = NULL,
           payment_source             = 'manual',
           payment_posted_at          = NOW(),
           payment_posted_by          = ${whoName},
