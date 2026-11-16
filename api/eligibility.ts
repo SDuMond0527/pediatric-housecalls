@@ -186,10 +186,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // requires it. Anthem (except Anthem of VA) routes to UPICO but
   // doesn't use the suffix, so skip the transform there.
   const depCode = String(child.insurance_dependent_code ?? '').replace(/\D/g, '').slice(0, 2)
+  // Respect the "no dependent code" opt-out on the chart. Lucas Wells
+  // 2026-11-16 — chart had insurance_dependent_code='00' AND
+  // insurance_no_dependent_code=true (true overrides). Without this
+  // guard we appended '00' to the 12-char base, BCBS returned
+  // 'Invalid/Missing Patient ID', every submit silently failed.
+  const skipDepCode = !!child.insurance_no_dependent_code
   const transmittedMemberId = (() => {
     const raw = String(child.insurance_member_id ?? '').trim()
     if (payerId !== 'UPICO') return raw
     if (/anthem/i.test(String(child.insurance_provider ?? ''))) return raw
+    if (skipDepCode) return raw
     if (!depCode) return raw
     return raw + depCode
   })()
@@ -248,7 +255,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     memberIdLength: transmittedMemberId.length,
     payerId,
     payerName,
-    dependentCodeUsed: depCode || null,
+    dependentCodeUsed: skipDepCode ? '(skipped — no-dep-code flag)' : (depCode || null),
     baseMemberId: String(child.insurance_member_id ?? ''),
     subscriberName: `${subscriberFirst} ${subscriberLast}`.trim(),
     subscriberDob: fmtDate8(child.insurance_subscriber_dob),

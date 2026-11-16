@@ -342,6 +342,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // When the shared InsuranceEditor saves, it always resends ALL
+      // insurance fields — a null on insurance_dependent_code means the
+      // biller intentionally cleared it (or ticked "No dep code"), NOT
+      // "leave it alone." The default `COALESCE(val || null, existing)`
+      // can't tell those apart, so an empty field silently preserved a
+      // stale "00" on Lucas Wells 2026-11-16 → BCBS silently rejected
+      // every eligibility check. Treat an explicit null / empty string
+      // on the body as a real clear, while a missing key is still a
+      // no-op (preserves the existing value for non-insurance PATCHes).
+      const depCodeInBody = Object.prototype.hasOwnProperty.call(b as any, 'insurance_dependent_code')
+      const depCodeRaw    = (b as any).insurance_dependent_code
+      const depCodeExplicitClear = depCodeInBody &&
+        (depCodeRaw === null || (typeof depCodeRaw === 'string' && depCodeRaw.trim() === ''))
+      const depCodeNewVal = typeof depCodeRaw === 'string' ? depCodeRaw.trim() : null
       const [row] = await sql`
         UPDATE children SET
           first_name           = COALESCE(${newFirst}, first_name),
@@ -355,7 +369,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           insurance_provider   = COALESCE(${b.insurance_provider   || null}, insurance_provider),
           insurance_member_id  = COALESCE(${b.insurance_member_id  || null}, insurance_member_id),
           insurance_group_number = COALESCE(${b.insurance_group_number || null}, insurance_group_number),
-          insurance_dependent_code = COALESCE(${b.insurance_dependent_code || null}, insurance_dependent_code),
+          insurance_dependent_code = CASE
+            WHEN ${depCodeExplicitClear}::boolean THEN NULL
+            ELSE COALESCE(${depCodeNewVal || null}, insurance_dependent_code)
+          END,
           insurance_no_dependent_code = COALESCE(${b.insurance_no_dependent_code ?? null}::boolean, insurance_no_dependent_code),
           insurance_card_front_url     = COALESCE(${b.insurance_card_front_url     || null}, insurance_card_front_url),
           insurance_card_back_url      = COALESCE(${b.insurance_card_back_url      || null}, insurance_card_back_url),
