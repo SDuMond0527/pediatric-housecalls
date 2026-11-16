@@ -2707,9 +2707,20 @@ export function AdminClaims() {
                             )}
                             {/* Manual "Post payment" — for payments that arrived
                                 outside the Stedi ERA pipeline (paper EOB, EFT
-                                without ERA). Only visible on Submitted claims
-                                that haven't received an ERA yet. Sara 2026-10-19. */}
-                            {tab === 'submitted' && !c.era_received_at && (
+                                without ERA). Visible on Submitted claims that
+                                either never got an ERA, OR had an old denial
+                                ERA that the biller already fixed + resubmitted
+                                against. Matches the billerFixedAfterDenial
+                                pattern in isInRework — Mackenzie Twigg 2026-11-16
+                                had era_received_at stamped from a bad-code
+                                denial, resubmitted with the right code, no new
+                                ERA (paid outside Stedi), couldn't post payment.
+                                Sara 2026-10-19 (original), 2026-11-16 (fix). */}
+                            {tab === 'submitted' && (
+                              !c.era_received_at ||
+                              (c.biller_edited_at &&
+                                new Date(c.biller_edited_at).getTime() > new Date(c.era_received_at).getTime())
+                            ) && (
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setPostPaymentClaimId(c.id) }}
