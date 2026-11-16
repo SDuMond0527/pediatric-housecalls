@@ -240,8 +240,10 @@ function parentConfirmationEmail(data: {
   provider: string, zone: string, ref: string,
   displayName: string | null,
   practiceName?: string,
+  isPediatric?: boolean,
 }) {
   const practiceName = data.practiceName || PRACTICE_NAME
+  const isPediatric = data.isPediatric !== false
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
   const isVirtual = ['Video telemedicine', 'Text visit'].includes(data.visitType)
   const isVideoVisit = data.visitType === 'Video telemedicine'
@@ -287,7 +289,7 @@ function parentConfirmationEmail(data: {
       <strong>Text visit:</strong> Your provider will send you a text message at your scheduled time via their secure messaging platform. That text message will come directly to your cell phone at the scheduled time.
     </div>` : isIVFluids ? `
     <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#085041;">
-      <strong>IV fluids request received:</strong> One of our physicians or nurse practitioners will be reaching out to you shortly to arrange for a brief video telemedicine screening to determine that IV fluids are medically safe for your child in this scenario, and to determine the kind and volume of fluids that the nurse will administer. Once that video consult is completed, your nurse will reach back out to you to confirm her arrival time at your home.
+      <strong>IV fluids request received:</strong> One of our physicians or nurse practitioners will be reaching out to you shortly to arrange for a brief video telemedicine screening to determine that IV fluids are medically safe for ${isPediatric ? 'your child' : 'you'} in this scenario, and to determine the kind and volume of fluids that the nurse will administer. Once that video consult is completed, your nurse will reach back out to you to confirm her arrival time at your home.
     </div>` : isCmaTele ? `
     <div style="background:#E6F1FB;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#0C447C;">
       <strong>CMA + telemedicine visit:</strong> Your CMA will arrive within 15 minutes of your scheduled time with diagnostic equipment (ear exam, strep, urine, flu/COVID testing). Once diagnostics are complete, a provider will join by video to review results and make treatment decisions.
@@ -370,10 +372,17 @@ function postVisitEmail(data: {
   instructions: string | null
   appointmentId?: string | null
   practiceName?: string
+  isPediatric?: boolean
 }) {
   const practiceName = data.practiceName || PRACTICE_NAME
+  const isPediatric = data.isPediatric !== false
   const greeting = data.displayName ? `Hi ${data.displayName.split(' ')[0]},` : 'Hi there,'
-  const childPhrase = data.childName ? `${data.childName}'s` : "your child's"
+  // For pediatric practices we talk about the child; for non-ped we
+  // address the patient themselves. `childName` is the patient's first
+  // name in both cases so it works either way when known.
+  const childPhrase = data.childName
+    ? `${data.childName}'s`
+    : (isPediatric ? "your child's" : 'your')
 
   return `<!DOCTYPE html>
 <html>
@@ -391,7 +400,7 @@ function postVisitEmail(data: {
   <!-- Body -->
   <tr><td style="padding:32px;">
     <p style="font-size:15px;margin:0 0 20px;line-height:1.65;">${greeting}<br><br>
-    Thank you so much for trusting ${practiceName} with ${childPhrase} care${data.dateFormatted ? ` on ${data.dateFormatted}` : ' today'}. It is truly our honor to be there for your family right in the comfort of your own home.</p>
+    Thank you so much for trusting ${practiceName} with ${childPhrase} care${data.dateFormatted ? ` on ${data.dateFormatted}` : ' today'}. It is truly our honor to be there for ${isPediatric ? 'your family' : 'you'}.</p>
 
     ${data.instructions ? `
     <!-- After-visit instructions -->
@@ -1076,6 +1085,25 @@ async function resolvePracticeName(sql: any, practiceId?: string | null): Promis
   } catch { return PRACTICE_NAME }
 }
 
+// Resolve name + practice-model (pediatric vs adult/individual) so
+// handlers can swap "your child" → "you", "the family" → "the patient"
+// for non-pediatric practices. uses_pediatric_patients defaults true,
+// so PHC + other peds practices keep their existing copy.
+// Sara 2026-11-16 — Dr. Cash's emails must never say "parent" or
+// child-centric phrasing.
+async function resolvePracticeContext(sql: any, practiceId?: string | null): Promise<{ name: string; isPediatric: boolean }> {
+  if (!practiceId) return { name: PRACTICE_NAME, isPediatric: true }
+  try {
+    const [row] = await sql`SELECT name, settings FROM practices WHERE id = ${practiceId}::uuid LIMIT 1`
+    const name = (row?.name as string | undefined) || PRACTICE_NAME
+    const s = (row?.settings ?? null) as Record<string, unknown> | null
+    const isPediatric = s && typeof s === 'object' && 'uses_pediatric_patients' in s
+      ? (s as any).uses_pediatric_patients !== false
+      : true
+    return { name, isPediatric }
+  } catch { return { name: PRACTICE_NAME, isPediatric: true } }
+}
+
 async function notifyAdmins(sql: any, smsBody: string, practiceId?: string | null) {
   // Multi-tenant safety: refuse to fan out to every practice's admins
   // if the caller forgot to scope. Pre-2026-11-16 this silently fell
@@ -1133,7 +1161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[notifications] entry found, state:', entry.state, 'zip:', entry.zip)
 
       const practiceId = (entry.practice_id as string | null) ?? null
-      const practiceName = await resolvePracticeName(sql, practiceId)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, practiceId)
       const stateLabel = entry.state === 'NC' ? 'North Carolina' : entry.state === 'SC' ? 'South Carolina' : entry.state === 'VA' ? 'Virginia' : entry.state || 'your state'
       const providerSmsBody = `${practiceName}: New waitlist entry. View: ${PORTAL_URL}/waitlist`
 
@@ -1190,7 +1218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </td></tr>
 <tr><td style="padding:32px;">
   <p style="font-size:15px;margin:0 0 16px;line-height:1.6;">${greeting}<br><br>
-  You've been added to the ${practiceName} waitlist. We'll notify you as soon as a provider in ${stateLabel} is available to see your child.</p>
+  You've been added to the ${practiceName} waitlist. We'll notify you as soon as a provider in ${stateLabel} is available to see ${isPediatric ? 'your child' : 'you'}.</p>
   <div style="background:#FAFAF8;border-radius:12px;border:1px solid #E8E8E4;padding:16px 20px;margin-bottom:24px;">
     ${entry.visit_type ? `<div style="margin-bottom:8px;"><span style="font-size:11px;color:#999;text-transform:uppercase;">Visit type</span><br><span style="font-size:14px;font-weight:500;">${entry.visit_type}</span></div>` : ''}
     ${entry.preferred_time_window ? `<div><span style="font-size:11px;color:#999;text-transform:uppercase;">Preferred time</span><br><span style="font-size:14px;font-weight:500;">${entry.preferred_time_window}</span></div>` : ''}
@@ -1214,7 +1242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!entry) throw new Error('Entry not found')
 
       const waitlistAcceptedPracticeId = (entry.practice_id as string | null) ?? null
-      const practiceName = await resolvePracticeName(sql, waitlistAcceptedPracticeId)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, waitlistAcceptedPracticeId)
       const [family] = await sql`SELECT email, display_name, phone FROM family_profiles WHERE id = ${entry.family_id}::uuid`
 
       const greeting = family?.display_name ? `Hi ${family.display_name.split(' ')[0]},` : 'Hi there,'
@@ -1251,7 +1279,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         practiceId: waitlistAcceptedPracticeId ?? undefined,
         familySubject: `Your appointment is confirmed — ${dateFormatted} at ${body.time}`,
         familyHtml: html,
-        familySms: `${practiceName}: ${body.providerName} has accepted your waitlist request and will see your child on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`,
+        familySms: `${practiceName}: ${body.providerName} has accepted your waitlist request and will see ${isPediatric ? 'your child' : 'you'} on ${dateFormatted} at ${body.time}. Log in for details: ${PORTAL_URL}/family/dashboard`,
         adminSms: `${practiceName}: Waitlist patient booked. View: ${PORTAL_URL}/admin/waitlist`,
       })
 
@@ -1367,7 +1395,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const time24 = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 
       const offerPracticeId: string | null = offer.practice_id ?? null
-      const practiceName = await resolvePracticeName(sql, offerPracticeId)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, offerPracticeId)
       const offerRef = `PUC-${offer.id.slice(0, 8).toUpperCase()}`
       const offerVisitType = offer.visit_type || 'In-home sick visit'
       const offerZone = offer.zone || ''
@@ -1420,7 +1448,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ${row('📍', 'Area', offer.zone || '')}
   </td></tr></table>
   <div style="background:#E1F5EE;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:#085041;">
-    Your provider will be in touch before the visit. Please make sure you're available at the visit address with your child ready.
+    Your provider will be in touch before the visit. Please make sure you're available at the visit address${isPediatric ? ' with your child ready' : ''}.
   </div>
   <a href="${PORTAL_URL}/family/dashboard" style="display:inline-block;background:#1A1A2E;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;">View my appointments</a>
   ${pamBookingContactBlock()}
@@ -1535,7 +1563,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!appt) return res.json({ ok: false, error: 'Appointment not found' })
 
       const bookedPracticeId = (appt.practice_id as string | null) ?? null
-      const practiceName = await resolvePracticeName(sql, bookedPracticeId)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, bookedPracticeId)
       const [child] = appt.child_id
         ? await sql`SELECT first_name, last_name, family_id FROM children WHERE id = ${appt.child_id}::uuid LIMIT 1`
         : [null]
@@ -1546,7 +1574,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? await sql`SELECT name, email, phone FROM providers WHERE id = ${appt.provider_id}::uuid LIMIT 1`
         : [null]
 
-      const childName = child ? `${child.first_name} ${child.last_name}`.trim() : 'your child'
+      const childName = child ? `${child.first_name} ${child.last_name}`.trim() : (isPediatric ? 'your child' : 'you')
       const providerName = provider?.name ?? 'Your provider'
       const dateFormatted = formatDate(appt.scheduled_date)
       const timeStr = (() => {
@@ -1620,7 +1648,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? await sql`SELECT id, name, email, phone FROM providers WHERE id = ${oldProviderId}::uuid LIMIT 1`
         : [null]
 
-      const childName = child ? `${child.first_name} ${child.last_name}`.trim() : 'your child'
+      const childName = child ? `${child.first_name} ${child.last_name}`.trim() : (isPediatric ? 'your child' : 'you')
       const newProviderName = newProvider?.name ?? 'Your provider'
       const dateFormatted = formatDate(appt.scheduled_date)
       const timeStr = (() => {
@@ -1655,7 +1683,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </table></td></tr></table></body></html>`
 
       const reschedPracticeId = (appt.practice_id ?? null) as string | null
-      const practiceName = await resolvePracticeName(sql, reschedPracticeId)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, reschedPracticeId)
 
       // 1. Family — escalate on hard fail.
       if (family?.email || family?.phone) {
@@ -1837,7 +1865,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [bc] = await sql`SELECT * FROM broadcasts WHERE id = ${body.broadcastId}::uuid`
       if (!bc) return res.json({ ok: true })
 
-      const practiceName = await resolvePracticeName(sql, bc.practice_id)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, bc.practice_id)
       const acceptedBy = body.acceptedByName || 'A provider'
       const patientName = `${bc.patient_first_name} ${bc.patient_last_name}`
       const pickupDesc = `the broadcast for ${patientName} (${bc.request_type})`
@@ -1870,7 +1898,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isVirtual) {
         const parentSms = `${practiceName}: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
-          <p>${acceptedBy} will evaluate your child by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
+          <p>${acceptedBy} will evaluate ${isPediatric ? 'your child' : 'you'} by video telemedicine visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
           <p>At that time, please log into the ${practiceName} virtual waiting room and the provider will begin your video visit from there:</p>
           <p><a href="${TELEMEDICINE_URL}" style="color:#7F77DD;font-weight:600;">${TELEMEDICINE_URL}</a></p>
           ${pamBookingContactBlock()}
@@ -1881,7 +1909,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const parentSms = `${practiceName}: Your appointment is confirmed. Log in to view details: ${PORTAL_URL}/family/login`
         const parentEmailHtml = `<div style="font-family:sans-serif;font-size:14px;color:#1A1A2E;line-height:1.6;">
           <p>${acceptedBy} will come to your home for a house call visit at <strong>${timeFormatted} ${whenStr}</strong>.</p>
-          <p>Please have your child ready at that time.</p>
+          <p>Please ${isPediatric ? 'have your child ready' : 'be ready'} at that time.</p>
           ${pamBookingContactBlock()}
         </div>`
         if (familyPhone) await sendSMS(familyPhone, parentSms).catch(e => console.error('Broadcast accepted family SMS failed:', e))
@@ -2013,7 +2041,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const dateFormatted = appt.scheduled_date ? formatDate(appt.scheduled_date) : ''
-      const practiceName = await resolvePracticeName(sql, appt.practice_id)
+      const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, appt.practice_id)
       await sendEmail(
         familyEmail,
         `Thank you for choosing ${practiceName} ⭐`,
@@ -2025,6 +2053,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           instructions: instructions || null,
           appointmentId,
           practiceName,
+          isPediatric,
         }),
         practiceName,
       ).catch(e => console.error('Post-visit email failed:', e))
@@ -2801,7 +2830,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const dateFormatted = formatDate(booking.preferred_date)
     const practiceId = (provider?.practice_id as string | undefined) ?? (booking.practice_id as string | undefined)
-    const practiceName = await resolvePracticeName(sql, practiceId ?? null)
+    const { name: practiceName, isPediatric } = await resolvePracticeContext(sql, practiceId ?? null)
 
     const notifSubject = `New appointment: ${booking.visit_type} — ${dateFormatted} at ${booking.preferred_time}`
     const notifHtml = providerNotificationEmail({
@@ -2867,6 +2896,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ref: booking.reference_code,
         displayName: family?.display_name,
         practiceName,
+        isPediatric,
       }),
       familySms: `${practiceName}: Your appointment is confirmed — ${booking.visit_type} on ${dateFormatted} at ${booking.preferred_time} with ${provider?.name || 'your provider'}. View details: ${PORTAL_URL}/family/dashboard`,
       providerSubject: notifSubject,
