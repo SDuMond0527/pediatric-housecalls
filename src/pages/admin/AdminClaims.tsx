@@ -2707,19 +2707,23 @@ export function AdminClaims() {
                             )}
                             {/* Manual "Post payment" — for payments that arrived
                                 outside the Stedi ERA pipeline (paper EOB, EFT
-                                without ERA). Visible on Submitted claims that
-                                either never got an ERA, OR had an old denial
-                                ERA that the biller already fixed + resubmitted
-                                against. Matches the billerFixedAfterDenial
-                                pattern in isInRework — Mackenzie Twigg 2026-11-16
-                                had era_received_at stamped from a bad-code
-                                denial, resubmitted with the right code, no new
-                                ERA (paid outside Stedi), couldn't post payment.
-                                Sara 2026-10-19 (original), 2026-11-16 (fix). */}
+                                without ERA). Visible on Submitted claims when:
+                                  - no ERA on file yet, OR
+                                  - biller recoded CPT/dx after the ERA (Mackenzie
+                                    Twigg 2026-11-16: bad-code denial, recode,
+                                    adjudicated outside Stedi), OR
+                                  - ERA on file shows $0 insurance payment, i.e.
+                                    it's a denial/zero remit with no real data
+                                    to protect (Sophie Slutzker 2026-11-16:
+                                    wrong member ID denied, corrected claim
+                                    resubmitted outside Stedi, actual payment
+                                    arrived separately).
+                                Sara 2026-10-19 → 2026-11-16 broadened. */}
                             {tab === 'submitted' && (
                               !c.era_received_at ||
                               (c.biller_edited_at &&
-                                new Date(c.biller_edited_at).getTime() > new Date(c.era_received_at).getTime())
+                                new Date(c.biller_edited_at).getTime() > new Date(c.era_received_at).getTime()) ||
+                              !parseFloat(String(c.insurance_payment_era ?? 0))
                             ) && (
                               <button
                                 type="button"
