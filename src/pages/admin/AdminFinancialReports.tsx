@@ -191,7 +191,9 @@ export function AdminFinancialReports() {
           <ArAgingSection
             title="AR aging — patient"
             icon={Users}
-            plainEnglish="Money that families still owe you after their insurance paid, sorted by how long you've been waiting. Once a balance hits 60+ days, the biller usually runs the card on file (per your practice policy)."
+            plainEnglish={showsInsurance
+              ? 'Money that families still owe you after their insurance paid, sorted by how long you’ve been waiting. The card on file is charged 14 days after the statement is sent if the balance is still unpaid (per your practice policy).'
+              : 'Money that patients still owe you, sorted by how long you’ve been waiting. The card on file is charged 14 days after the statement is sent if the balance is still unpaid (per your practice policy).'}
             rows={data.ar_patient}
             groupLabel="Patient"
             groupKey="patient_name"
@@ -205,9 +207,9 @@ export function AdminFinancialReports() {
 
           <CashCollectionsSection data={data} start={start} end={end} />
 
-          <ChargesVsCollectionsSection data={data} />
+          {showsInsurance && <ChargesVsCollectionsSection data={data} />}
 
-          <AdjustmentsSection data={data} start={start} end={end} />
+          {showsInsurance && <AdjustmentsSection data={data} start={start} end={end} />}
 
           <RefundsSection data={data} start={start} end={end} />
 
@@ -489,28 +491,44 @@ function ArAgingSection({
 // ─── Cash collections ─────────────────────────────────────────────────────
 
 function CashCollectionsSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const { settings } = useSettings()
+  const showsInsurance = !!settings.accepts_insurance
   const insurance = parseFloat(String(data.cash_totals.insurance_total ?? 0))
   const patient   = parseFloat(String(data.cash_totals.patient_total ?? 0))
-  const total     = insurance + patient
+  const total     = showsInsurance ? insurance + patient : patient
   return (
     <ReportShell
       title="Cash collections"
       icon={DollarSign}
-      plainEnglish="How much money actually landed in your bank account during this window — split into what insurance paid and what parents paid. This is the number a bookkeeper reconciles against your Square + bank deposits at month-end."
+      plainEnglish={showsInsurance
+        ? 'How much money actually landed in your bank account during this window — split into what insurance paid and what patients paid. This is the number a bookkeeper reconciles against your Square + bank deposits at month-end.'
+        : 'How much money actually landed in your bank account during this window. This is the number a bookkeeper reconciles against your Square + bank deposits at month-end.'}
       onExport={() => {
-        const csv = toCsv(data.cash_by_day, [
-          { key: 'day', label: 'Day' },
-          { key: 'insurance_amount', label: 'Insurance' },
-          { key: 'patient_amount',   label: 'Patient' },
-          { key: 'total',            label: 'Total' },
-        ], { title: 'Cash collections', periodStart: start, periodEnd: end })
+        const columns = showsInsurance
+          ? [
+              { key: 'day', label: 'Day' },
+              { key: 'insurance_amount', label: 'Insurance' },
+              { key: 'patient_amount',   label: 'Patient' },
+              { key: 'total',            label: 'Total' },
+            ]
+          : [
+              { key: 'day', label: 'Day' },
+              { key: 'patient_amount', label: 'Collected' },
+            ]
+        const csv = toCsv(data.cash_by_day, columns, { title: 'Cash collections', periodStart: start, periodEnd: end })
         downloadCsv(`cash-collections-${start}-to-${end}.csv`, csv)
       }}>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <MoneyCard label="Insurance (ERAs)"  value={fmtMoney(insurance)} color="#2D7BA6" />
-        <MoneyCard label="Patient (Square + biller-recorded)" value={fmtMoney(patient)} color="#1D9E75" />
-        <MoneyCard label="Total collected" value={fmtMoney(total)} color="#1A1A2E" bold />
-      </div>
+      {showsInsurance ? (
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <MoneyCard label="Insurance (ERAs)"  value={fmtMoney(insurance)} color="#2D7BA6" />
+          <MoneyCard label="Patient (Square + biller-recorded)" value={fmtMoney(patient)} color="#1D9E75" />
+          <MoneyCard label="Total collected" value={fmtMoney(total)} color="#1A1A2E" bold />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 mb-4">
+          <MoneyCard label="Total collected" value={fmtMoney(total)} color="#1A1A2E" bold />
+        </div>
+      )}
       {data.cash_by_day.length === 0 ? (
         <div className="text-[13px] text-[#1A1A2E]/60 py-4 text-center">No collections in this window.</div>
       ) : (
@@ -518,18 +536,18 @@ function CashCollectionsSection({ data, start, end }: { data: ReportsData; start
           <thead>
             <tr className="border-b border-[#E8E8E4] bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
               <th className="text-left px-3 py-2">Day</th>
-              <th className="text-right px-3 py-2">Insurance</th>
-              <th className="text-right px-3 py-2">Patient</th>
-              <th className="text-right px-3 py-2">Total</th>
+              {showsInsurance && <th className="text-right px-3 py-2">Insurance</th>}
+              {showsInsurance && <th className="text-right px-3 py-2">Patient</th>}
+              <th className="text-right px-3 py-2">{showsInsurance ? 'Total' : 'Collected'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F1EFE8]">
             {data.cash_by_day.map((r: any) => (
               <tr key={r.day} className="hover:bg-[#FAFAF8]">
                 <td className="px-3 py-2 text-[#1A1A2E]">{fmtDay(r.day)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.insurance_amount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.patient_amount)}</td>
-                <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtMoney(r.total)}</td>
+                {showsInsurance && <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.insurance_amount)}</td>}
+                {showsInsurance && <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(r.patient_amount)}</td>}
+                <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtMoney(showsInsurance ? r.total : r.patient_amount)}</td>
               </tr>
             ))}
           </tbody>
@@ -551,7 +569,7 @@ function ChargesVsCollectionsSection({ data }: { data: ReportsData }) {
     <ReportShell
       title="Charges vs. collections"
       icon={Percent}
-      plainEnglish="For every dollar you billed, how many cents came back? A healthy in-network pediatric practice typically lands between 60% and 85%. Below that means you're leaving money on the table (denials, missed charges, contract issues). Above 100% means you collected on older claims than what you billed this month.">
+      plainEnglish="For every dollar you billed, how many cents came back? A healthy in-network practice typically lands between 60% and 85%. Below that means you're leaving money on the table (denials, missed charges, contract issues). Above 100% means you collected on older claims than what you billed this month.">
       <div className="grid grid-cols-4 gap-3">
         <MoneyCard label="Charges submitted" value={fmtMoney(charges)} color="#1A1A2E" />
         <MoneyCard label="Insurance collected" value={fmtMoney(insCol)} color="#2D7BA6" />
@@ -1179,7 +1197,7 @@ function StatementPayTimeSection({ data: _data, start, end }: { data: ReportsDat
     <ReportShell
       title="Days from statement sent to paid"
       icon={Clock}
-      plainEnglish="Once Pam sends a patient statement, how long till the family pays it. Counts only statements that have been both sent AND paid (not voided) in the window. Statements still unpaid are tracked separately as a context number below — they're not pulling down the average."
+      plainEnglish="Once a patient statement goes out, how long till it's paid. Counts only statements that have been both sent AND paid (not voided) in the window. Statements still unpaid are tracked separately as a context number below — they're not pulling down the average."
       onExport={() => {
         if (!summary) return
         const lines: string[] = [
