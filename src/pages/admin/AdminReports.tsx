@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import { formatApiDate } from '../../lib/dateUtils'
 import { Trophy, ArrowLeft, Download } from 'lucide-react'
 import { getReports, getSiblingPromptSummary } from '../../lib/api'
-import { FlagGate } from '../../contexts/PracticeSettingsContext'
+import { FlagGate, useFlag } from '../../contexts/PracticeSettingsContext'
 import { computeProviderPay, PAIRED_ROLE_PAY, CPR_INSTRUCTOR_PAY, isCprClassVisitType } from '../../lib/payrollRules'
 
 interface ApptRow {
@@ -235,6 +235,7 @@ const DEFAULT_START = format(startOfMonth(today), 'yyyy-MM-dd')
 const DEFAULT_END   = format(endOfMonth(today),   'yyyy-MM-dd')
 
 export function AdminReports() {
+  const usesBroadcasts = useFlag('uses_broadcasts')
   const [startDate, setStartDate] = useState(DEFAULT_START)
   const [endDate,   setEndDate]   = useState(DEFAULT_END)
   const [appts, setAppts] = useState<ApptRow[]>([])
@@ -682,8 +683,11 @@ export function AdminReports() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <SummaryCard label="Total visits"       value={total}        color="#1A1A2E" bg="#F1EFE8" />
           <SummaryCard label="Upcoming / active"  value={upcoming}     color="#7F77DD" bg="#EEEDFE" />
-          <SummaryCard label="Waitlist & broadcast pickups" value={totalPickups} color="#EF9F27" bg="#FAEEDA"
-            sub={totalPickups > 0 ? `${broadcastTotal} broadcast · ${waitlistTotal} waitlist` : undefined} />
+          <SummaryCard
+            label={usesBroadcasts ? 'Waitlist & broadcast pickups' : 'Waitlist pickups'}
+            value={usesBroadcasts ? totalPickups : waitlistTotal}
+            color="#EF9F27" bg="#FAEEDA"
+            sub={usesBroadcasts && totalPickups > 0 ? `${broadcastTotal} broadcast · ${waitlistTotal} waitlist` : undefined} />
         </div>
 
         {/* Sibling prompt usage */}
@@ -1025,12 +1029,13 @@ export function AdminReports() {
         </FlagGate>
 
         {/* Monthly bonus leaderboard */}
+        <FlagGate flag="uses_bonus_leaderboard">
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
             <Trophy size={15} color="#EF9F27" />
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E]">Bonus leaderboard</h3>
           </div>
-          <p className="text-[12px] text-[#1A1A2E] mb-4">Waitlist & broadcast pickups — {rangeLabel}</p>
+          <p className="text-[12px] text-[#1A1A2E] mb-4">{usesBroadcasts ? 'Waitlist & broadcast pickups' : 'Waitlist pickups'} — {rangeLabel}</p>
 
           {pickupLeaders.length > 0 && (
             <div className="mb-4 p-4 rounded-xl border border-[#EF9F27]/30 bg-[#FFFBF5] flex items-center gap-3">
@@ -1053,7 +1058,10 @@ export function AdminReports() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#E8E8E4]">
-                    {['Provider', 'Broadcast pickups', 'Waitlist pickups', 'Total pickups', ''].map(h => (
+                    {(usesBroadcasts
+                      ? ['Provider', 'Broadcast pickups', 'Waitlist pickups', 'Total pickups', '']
+                      : ['Provider', 'Waitlist pickups', '']
+                    ).map(h => (
                       <th key={h} className="text-left text-[11px] font-medium text-[#1A1A2E] uppercase tracking-wider pb-2.5 pr-6 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1062,9 +1070,13 @@ export function AdminReports() {
                   {pickupsSorted.map(p => (
                     <tr key={p.id}>
                       <td className="py-3 pr-6 font-medium text-[#1A1A2E] whitespace-nowrap">{p.name}</td>
-                      <td className="py-3 pr-6 tabular-nums font-medium" style={{ color: '#378ADD' }}>{p.broadcasts}</td>
+                      {usesBroadcasts && (
+                        <td className="py-3 pr-6 tabular-nums font-medium" style={{ color: '#378ADD' }}>{p.broadcasts}</td>
+                      )}
                       <td className="py-3 pr-6 tabular-nums font-medium" style={{ color: '#7F77DD' }}>{p.waitlist}</td>
-                      <td className="py-3 pr-6 font-semibold text-[#1A1A2E] tabular-nums">{p.pickups}</td>
+                      {usesBroadcasts && (
+                        <td className="py-3 pr-6 font-semibold text-[#1A1A2E] tabular-nums">{p.pickups}</td>
+                      )}
                       <td className="py-3">
                         {pickupLeaderIds.has(p.id) && maxPickups > 0 && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAEEDA] text-[#633806]">
@@ -1079,6 +1091,7 @@ export function AdminReports() {
             </div>
           )}
         </div>
+        </FlagGate>
 
       </div>
     </div>

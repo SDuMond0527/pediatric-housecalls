@@ -46,6 +46,7 @@ const featureFlags = {
   uses_waitlist:               z.boolean().default(true),
   uses_broadcasts:             z.boolean().default(true),
   uses_payroll_module:         z.boolean().default(true),
+  uses_bonus_leaderboard:      z.boolean().default(true),
   uses_dosespot_eprescribing:  z.boolean().default(true),
   uses_lab_orders:             z.boolean().default(true),
   uses_radiology_orders:       z.boolean().default(true),
@@ -207,6 +208,7 @@ export const SETTINGS_GROUPS: Array<{
       { key: 'uses_waitlist',              label: 'Uses waitlist',               kind: 'flag' },
       { key: 'uses_broadcasts',            label: 'Uses shift broadcasts',       kind: 'flag' },
       { key: 'uses_payroll_module',        label: 'Uses payroll module',         kind: 'flag' },
+      { key: 'uses_bonus_leaderboard',     label: 'Uses bonus leaderboard on reports', kind: 'flag' },
       { key: 'uses_dosespot_eprescribing', label: 'Uses DoseSpot e-prescribing', kind: 'flag' },
       { key: 'uses_lab_orders',            label: 'Uses outside lab orders',     kind: 'flag' },
       { key: 'uses_radiology_orders',      label: 'Uses radiology orders',       kind: 'flag' },
@@ -286,6 +288,7 @@ export function skeletonCashPayOfficeSettings(): Partial<PracticeSettings> {
     uses_cosign_workflow:        false,
     uses_broadcasts:             false,
     uses_payroll_module:         false,
+    uses_bonus_leaderboard:      false,
     uses_zones:                  false,
     availability_overrides_only: false,
     // Everything else inherits the schema's PHC default.
