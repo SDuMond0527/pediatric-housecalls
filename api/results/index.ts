@@ -43,6 +43,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   catch { return res.status(401).json({ error: 'Unauthorized' }) }
 
   const sql = neon(process.env.DATABASE_URL!)
+  // Bootstrap diagnosis + plan columns idempotently. Mirrors the alter
+  // in api/results/[id].ts. Sara 2026-11-16.
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS diagnosis_id uuid` } catch {}
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS diagnosis_label text` } catch {}
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS plan text` } catch {}
   const [provider] = await sql`SELECT id, practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = provider.practice_id as string
@@ -66,12 +71,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         r.icd10_codes,
         r.status, r.signed_by_provider_id, r.signed_at::text AS signed_at, r.sign_note,
         r.acknowledged_at::text AS acknowledged_at, r.acknowledged_by_provider_id, r.ack_channel, r.ack_note,
+        r.diagnosis_id, r.diagnosis_label, r.plan,
         r.created_by_provider_id, r.created_at::text AS created_at, r.updated_at::text AS updated_at,
-        -- Patient display name for the inbox UI. COALESCE across both patient models.
+        -- Patient display name + phone for the inbox + callback queue UI.
+        -- COALESCE across both patient models (ped children + adult patient_profiles).
         COALESCE(
           (SELECT first_name || ' ' || last_name FROM patient_profiles WHERE id = r.patient_profile_id),
           (SELECT first_name || ' ' || last_name FROM children         WHERE id = r.child_id)
         ) AS patient_name,
+        COALESCE(
+          (SELECT phone FROM patient_profiles WHERE id = r.patient_profile_id),
+          (SELECT parent_phone FROM children  WHERE id = r.child_id)
+        ) AS patient_phone,
         -- Signing provider's name for display.
         (SELECT name FROM providers WHERE id = r.signed_by_provider_id) AS signed_by_name
       FROM results r

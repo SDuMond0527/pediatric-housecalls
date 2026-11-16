@@ -32,10 +32,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!id) return res.status(400).json({ error: 'id required' })
 
   const sql = neon(process.env.DATABASE_URL!)
-  const [provider] = await sql`SELECT id, practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  // Bootstrap diagnosis + plan columns idempotently. Keeps the review →
+  // callback → notified flow working on a fresh env. Sara 2026-11-16.
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS diagnosis_id uuid` } catch {}
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS diagnosis_label text` } catch {}
+  try { await sql`ALTER TABLE results ADD COLUMN IF NOT EXISTS plan text` } catch {}
+  const [provider] = await sql`SELECT id, name, practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = provider.practice_id as string
   const providerId = provider.id as string
+  const providerName = provider.name as string
 
   if (req.method === 'GET') {
     const [row] = await sql`
@@ -59,17 +65,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Lifecycle actions — sign + acknowledge. Each enforces that the
     // transition makes sense (can't acknowledge before signing).
     if (action === 'sign') {
+      // Sign now doubles as "send to Patient Callbacks": requires a
+      // diagnosis selection + a plan, both saved to the row. Pre-fix
+      // this was just the sign flow with an optional note. Sara 2026-11-16.
       const [current] = await sql`SELECT status FROM results WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
       if (!current) return res.status(404).json({ error: 'Not found' })
       if (current.status === 'acknowledged') {
         return res.status(409).json({ error: 'Already signed + acknowledged.' })
       }
+      const diagnosisIdRaw = (body.diagnosis_id ?? null) as string | null
+      const planRaw = typeof body.plan === 'string' ? body.plan.trim() : ''
+      if (!diagnosisIdRaw) return res.status(400).json({ error: 'diagnosis_id required' })
+      if (!planRaw)        return res.status(400).json({ error: 'plan required' })
+      // Snapshot the diagnosis label from the library at sign time so a
+      // future rename of the diagnosis doesn't rewrite history on the
+      // patient's chart.
+      const [dx] = await sql`
+        SELECT label FROM result_diagnoses
+        WHERE id = ${diagnosisIdRaw}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!dx) return res.status(400).json({ error: 'diagnosis_id not in this practice library' })
       const [row] = await sql`
         UPDATE results
         SET status                = 'signed',
             signed_by_provider_id = ${providerId}::uuid,
             signed_at             = COALESCE(signed_at, now()),
             sign_note             = ${body.sign_note ?? null},
+            diagnosis_id          = ${diagnosisIdRaw}::uuid,
+            diagnosis_label       = ${dx.label},
+            plan                  = ${planRaw},
             updated_at            = now()
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
@@ -97,12 +120,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // No action → generic field update. Only editable fields listed
     // here; status + sign/ack lifecycle goes through the actions above.
+    // diagnosis_id/plan are edit-after-save for the signing provider
+    // so Dr. Cash can tweak her plan text or switch the diagnosis
+    // after the fact without re-signing. Sara 2026-11-16.
     const EDITABLE = [
       'specimen_date', 'specimen_type', 'specimen_site',
       'source_lab', 'source_provider', 'report_text', 'report_pdf_url',
       'margins_status', 'breslow_depth_mm', 'clark_level',
       'test_name', 'result_value', 'result_unit', 'reference_range', 'abnormal_flag',
       'icd10_codes',
+      'diagnosis_id', 'plan',
     ]
     const updates: Record<string, any> = {}
     for (const k of EDITABLE) {
@@ -110,6 +137,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No editable fields in body' })
+    }
+    // Only the original signer can edit diagnosis_id or plan on an
+    // already-signed row. Keeps Pam / future assistants from mutating
+    // the clinician's assessment.
+    if (('diagnosis_id' in updates) || ('plan' in updates)) {
+      const [current] = await sql`
+        SELECT status, signed_by_provider_id FROM results
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`
+      if (!current) return res.status(404).json({ error: 'Not found' })
+      if (current.signed_by_provider_id && current.signed_by_provider_id !== providerId) {
+        return res.status(403).json({ error: 'Only the signing provider can edit the diagnosis or plan on this result.' })
+      }
+    }
+    // Resolve a new diagnosis_label if diagnosis_id changed.
+    let diagnosisLabelUpdate: string | null | undefined = undefined
+    if ('diagnosis_id' in updates) {
+      if (updates.diagnosis_id) {
+        const [dx] = await sql`
+          SELECT label FROM result_diagnoses
+          WHERE id = ${updates.diagnosis_id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+        if (!dx) return res.status(400).json({ error: 'diagnosis_id not in this practice library' })
+        diagnosisLabelUpdate = dx.label
+      } else {
+        diagnosisLabelUpdate = null
+      }
     }
     const [row] = await sql`
       UPDATE results
@@ -129,6 +181,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           reference_range   = COALESCE(${updates.reference_range ?? null}, reference_range),
           abnormal_flag     = COALESCE(${updates.abnormal_flag ?? null}, abnormal_flag),
           icd10_codes       = COALESCE(${updates.icd10_codes ?? null}::text[], icd10_codes),
+          diagnosis_id      = CASE WHEN ${'diagnosis_id' in updates}::boolean THEN ${updates.diagnosis_id ?? null}::uuid ELSE diagnosis_id END,
+          diagnosis_label   = CASE WHEN ${'diagnosis_id' in updates}::boolean THEN ${diagnosisLabelUpdate ?? null} ELSE diagnosis_label END,
+          plan              = CASE WHEN ${'plan' in updates}::boolean THEN ${updates.plan ?? null} ELSE plan END,
           updated_at        = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING *`

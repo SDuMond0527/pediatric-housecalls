@@ -47,6 +47,8 @@ import { AdminPendingWriteOffs } from './pages/admin/AdminPendingWriteOffs'
 import { AdminBillingAgent } from './pages/admin/AdminBillingAgent'
 import { AdminResultsInbox } from './pages/admin/AdminResultsInbox'
 import { AdminResultsUpload } from './pages/admin/AdminResultsUpload'
+import { AdminCallbacks } from './pages/admin/AdminCallbacks'
+import { AdminDiagnosisLibrary } from './pages/admin/AdminDiagnosisLibrary'
 import { AdminUnmatchedEras } from './pages/admin/AdminUnmatchedEras'
 import { AdminEligibilityFails } from './pages/admin/AdminEligibilityFails'
 import { AdminNcciPreview } from './pages/admin/AdminNcciPreview'
@@ -143,6 +145,8 @@ export default function App() {
                 <Route path="shifts"         element={<Shifts />} />
                 <Route path="results/:type/new" element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsUpload /></FlagGuardedRoute>} />
                 <Route path="results/:type"     element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsInbox /></FlagGuardedRoute>} />
+                <Route path="callbacks"         element={<FlagGuardedRoute flag="uses_results_module"><AdminCallbacks /></FlagGuardedRoute>} />
+                <Route path="diagnosis-library" element={<FlagGuardedRoute flag="uses_results_module"><AdminDiagnosisLibrary /></FlagGuardedRoute>} />
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<FlagGuardedRoute flag="uses_cpr_classes"><CprRequests /></FlagGuardedRoute>} />
                 <Route path="handbook"       element={<Handbook />} />

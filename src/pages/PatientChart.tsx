@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronDown, Phone, MapPin, Stethoscope, Pill, Shield, Pen
 import { ReferralModal } from '../components/ReferralModal'
 import { format, parseISO, differenceInYears } from 'date-fns'
 import { formatApiDate } from '../lib/dateUtils'
-import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, updateStickyNotes, type ChronicProblem, getResults, signResult, acknowledgeResult, type ResultRow } from '../lib/api'
+import { getEncounterNotes, getVitalsList, getChildrenByIds, getBookingRequests, getAppointments, apiFetch, providerCreateChild, archiveChildInsurance, getDoseSpotSSO, logAudit, getLabOrders, createLabOrder, emailLabOrder, getRadiologyOrders, createRadiologyOrder, emailRadiologyOrder, downloadRadiologyOrderPdf, getPatientCommunications, addPatientCommunication, deletePatientCommunication, type PatientCommunication, getDoseSpotNotifications, getPcps, addPcp, checkEligibility, archivePatient, unarchivePatient, deleteChild, updateAppointment, invokeNotifications, computeClears, getPatientBillingLog, downloadEncounterNoteHtml, deleteEncounterNote, searchPharmacies, getChronicProblems, addChronicProblem, resolveChronicProblem, providerUploadInsuranceCard, updateStickyNotes, type ChronicProblem, getResults, acknowledgeResult, type ResultRow } from '../lib/api'
 import { PatientReportsSection } from '../components/PatientReportsSection'
 import { PharmacyAutocomplete } from '../components/PharmacyAutocomplete'
 import { PatientBillingLog, type BillingLogEntry } from '../components/PatientBillingLog'
@@ -314,14 +314,12 @@ export function PatientChart() {
       setLabResultsLoaded(true)
     } catch { setLabResultsLoaded(true) }
   }
-  async function signChartResult(id: string, type: 'pathology' | 'lab') {
-    setResultsActionBusy(id)
-    try {
-      await signResult(id)
-      if (type === 'pathology') await loadPathologyResults()
-      else                      await loadLabResults()
-    } catch (e: any) { alert('Sign failed: ' + (e?.message ?? '')) }
-    finally { setResultsActionBusy(null) }
+  async function signChartResult(_id: string, _type: 'pathology' | 'lab') {
+    // Sign is no longer available from the chart Results tab — the
+    // signing flow needs the diagnosis picker + plan textarea, which
+    // lives on the Pathology/Labs inbox. Chart surfaces redirect
+    // "Review" clicks to the inbox instead. Sara 2026-11-16.
+    alert('Open the result from the Pathology or Labs inbox to review, pick a diagnosis, and enter a plan.')
   }
   async function ackChartResult(id: string, type: 'pathology' | 'lab', channel: string) {
     setResultsActionBusy(id)
@@ -3550,15 +3548,33 @@ function ResultsTab(props: {
                 {type === 'lab' && r.reference_range && (
                   <div className="text-[12px]"><span className="text-[#1A1A2E]/60">Reference:</span> <span className="font-mono">{r.reference_range}</span></div>
                 )}
+                {/* Diagnosis + plan audit — shows the clinician's assessment
+                    and the plan that went out to the callback queue.
+                    Sara 2026-11-16. */}
+                {(r.diagnosis_label || r.plan) && (
+                  <div className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                    {r.diagnosis_label && (
+                      <div>
+                        <div className="text-[10px] font-semibold text-[#1A1A2E]/60 uppercase tracking-wide">Diagnosis</div>
+                        <div className="text-[13px] text-[#1A1A2E]">{r.diagnosis_label}</div>
+                      </div>
+                    )}
+                    {r.plan && (
+                      <div>
+                        <div className="text-[10px] font-semibold text-[#1A1A2E]/60 uppercase tracking-wide">Plan</div>
+                        <div className="text-[13px] text-[#1A1A2E] whitespace-pre-wrap">{r.plan}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {r.signed_at && (
                   <div className="text-[11px] text-[#1A1A2E]/60">
-                    Signed {r.signed_at.slice(0, 10)}{r.signed_by_name ? ` by ${r.signed_by_name}` : ''}
-                    {r.sign_note ? ` — ${r.sign_note}` : ''}
+                    Reviewed {r.signed_at.slice(0, 10)}{r.signed_by_name ? ` by ${r.signed_by_name}` : ''}
                   </div>
                 )}
                 {r.acknowledged_at && (
                   <div className="text-[11px] text-[#1A1A2E]/60">
-                    Acknowledged to patient {r.acknowledged_at.slice(0, 10)}
+                    Patient notified {r.acknowledged_at.slice(0, 10)}
                     {r.ack_channel ? ` via ${r.ack_channel}` : ''}
                   </div>
                 )}
@@ -3566,18 +3582,18 @@ function ResultsTab(props: {
                   {r.status === 'pending_review' && (
                     <button onClick={() => onSign(r.id)} disabled={actionBusy === r.id}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8] disabled:opacity-50">
-                      Sign
+                      Review in inbox
                     </button>
                   )}
                   {r.status === 'signed' && (
                     <>
                       <button onClick={() => onAck(r.id, 'phone')} disabled={actionBusy === r.id}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">
-                        Ack by phone
+                        Mark notified by phone
                       </button>
                       <button onClick={() => onAck(r.id, 'email')} disabled={actionBusy === r.id}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">
-                        Ack by email
+                        Mark notified by email
                       </button>
                       <button onClick={() => onAck(r.id, 'portal')} disabled={actionBusy === r.id}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8E8E4] text-[12px] font-medium rounded-lg bg-white hover:bg-[#F1EFE8] disabled:opacity-50">

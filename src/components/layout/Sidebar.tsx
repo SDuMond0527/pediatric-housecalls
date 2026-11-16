@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen, FlaskConical, FileText } from 'lucide-react'
+import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen, FlaskConical, FileText, PhoneCall } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { PRACTICE_NAME } from '../../lib/practice'
@@ -17,8 +17,9 @@ const NAV: NavItem[] = [
   { to: '/today',        icon: CalendarDays,  label: "Today's schedule" },
   { to: '/week',         icon: LayoutGrid,    label: 'Week view' },
   { to: '/patients',     icon: Users,         label: 'Patients' },
-  { to: '/results/pathology', icon: FlaskConical, label: 'Pathology inbox', flag: 'uses_results_module' },
-  { to: '/results/labs',      icon: FileText,     label: 'Labs inbox',      flag: 'uses_results_module' },
+  { to: '/results/pathology',   icon: FlaskConical, label: 'Pathology inbox',    flag: 'uses_results_module' },
+  { to: '/results/labs',        icon: FileText,     label: 'Labs inbox',         flag: 'uses_results_module' },
+  { to: '/admin/callbacks',     icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
   { to: '/availability', icon: Clock,         label: 'Availability' },
   { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true, flag: 'uses_broadcasts' },
   { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist',                flag: 'uses_waitlist' },

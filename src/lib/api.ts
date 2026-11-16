@@ -2111,7 +2111,11 @@ export interface ResultRow {
   acknowledged_at: string | null
   ack_channel: string | null
   ack_note: string | null
+  diagnosis_id: string | null
+  diagnosis_label: string | null
+  plan: string | null
   patient_name: string | null
+  patient_phone: string | null
   signed_by_name: string | null
   created_at: string
   updated_at: string
@@ -2137,14 +2141,44 @@ export const createResult = (body: Partial<ResultRow> & { type: ResultType }) =>
   apiFetch<{ id: string }>('/api/results', { method: 'POST', body: JSON.stringify(body) })
 export const updateResult = (id: string, body: Partial<ResultRow>) =>
   apiFetch<ResultRow>(`/api/results/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
-export const signResult = (id: string, sign_note?: string) =>
+export const signResult = (id: string, body: { diagnosis_id: string; plan: string; sign_note?: string }) =>
   apiFetch<ResultRow>(`/api/results/${id}`, {
-    method: 'PATCH', body: JSON.stringify({ action: 'sign', sign_note }),
+    method: 'PATCH', body: JSON.stringify({ action: 'sign', ...body }),
   })
 export const acknowledgeResult = (id: string, body: { ack_channel?: string; ack_note?: string }) =>
   apiFetch<ResultRow>(`/api/results/${id}`, {
     method: 'PATCH', body: JSON.stringify({ action: 'acknowledge', ...body }),
   })
+
+// ── Result diagnoses (per-practice library for Pathology + Labs
+// dropdowns). Sara 2026-11-16 — Dr. Cash dermatology.
+export type ResultResourceType = 'pathology' | 'lab'
+export interface ResultDiagnosisRow {
+  id: string
+  resource_type: ResultResourceType
+  label: string
+  short_code: string | null
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+export const getResultDiagnoses = (opts: { resource_type?: ResultResourceType; include_archived?: boolean } = {}) => {
+  const q = new URLSearchParams()
+  if (opts.resource_type)   q.set('resource_type', opts.resource_type)
+  if (opts.include_archived) q.set('include_archived', '1')
+  return apiFetch<ResultDiagnosisRow[]>(`/api/result-diagnoses?${q.toString()}`)
+}
+export const createResultDiagnosis = (body: { resource_type: ResultResourceType; label: string; short_code?: string; sort_order?: number }) =>
+  apiFetch<ResultDiagnosisRow>('/api/result-diagnoses', {
+    method: 'POST', body: JSON.stringify(body),
+  })
+export const updateResultDiagnosis = (id: string, body: Partial<Pick<ResultDiagnosisRow, 'label' | 'short_code' | 'sort_order' | 'is_active'>>) =>
+  apiFetch<ResultDiagnosisRow>(`/api/result-diagnoses/${id}`, {
+    method: 'PATCH', body: JSON.stringify(body),
+  })
+export const archiveResultDiagnosis = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/result-diagnoses/${id}`, { method: 'DELETE' })
 
 // ── Labs ──────────────────────────────────────────────────────
 export const getLabOrders = (childId: string) =>
