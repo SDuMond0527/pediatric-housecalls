@@ -1043,6 +1043,19 @@ async function notifyBookingParties(
 
 // ── Admin helpers ─────────────────────────────────────────────────────────────
 
+// Resolve the human-readable practice name for notification bodies.
+// Falls back to the env default if no row (shouldn't happen but keeps
+// us from emailing a literal "null" to families). Sara 2026-11-16 —
+// Dr. Cash booked a test appt that went out labeled "Pediatric
+// Housecalls" because PRACTICE_NAME was build-time-hardcoded.
+async function resolvePracticeName(sql: any, practiceId?: string | null): Promise<string> {
+  if (!practiceId) return PRACTICE_NAME
+  try {
+    const [row] = await sql`SELECT name FROM practices WHERE id = ${practiceId}::uuid LIMIT 1`
+    return (row?.name as string | undefined) || PRACTICE_NAME
+  } catch { return PRACTICE_NAME }
+}
+
 async function notifyAdmins(sql: any, smsBody: string, practiceId?: string) {
   const admins = practiceId
     ? await sql`SELECT id, phone, email FROM providers WHERE is_admin = true AND practice_id = ${practiceId}::uuid`
@@ -1690,8 +1703,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { visitType, parentEmail, providerId, providerName, date, time } = body
 
       const [assignedProvider] = providerId
-        ? await sql`SELECT name, email, phone FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
+        ? await sql`SELECT name, email, phone, practice_id FROM providers WHERE id = ${providerId}::uuid LIMIT 1`
         : [null]
+
+      // Resolve the practice from the provider's row — Dr. Cash's test
+      // booking 2026-11-16 was emailing PHC admins and labeled
+      // "Pediatric Housecalls" because practice_id was never passed.
+      const addedPracticeId = (assignedProvider?.practice_id as string | null | undefined) ?? body.practiceId ?? null
+      const practiceName = await resolvePracticeName(sql, addedPracticeId)
 
       const dateFormatted = date ? formatDate(date) : ''
       const timeStr = (() => {
@@ -1706,13 +1725,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendEmail(assignedProvider.email, `New appointment added — ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}`, html).catch(e => console.error('Appt added provider email failed:', e))
       }
       if (assignedProvider?.phone) {
-        await sendSMS(assignedProvider.phone, `${PRACTICE_NAME}: New appointment added to your schedule — ${visitType}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Appt added provider SMS failed:', e))
+        await sendSMS(assignedProvider.phone, `${practiceName}: New appointment added to your schedule — ${visitType}, ${dateFormatted}${timeStr ? ` at ${timeStr}` : ''}. View: ${PORTAL_URL}/today`).catch(e => console.error('Appt added provider SMS failed:', e))
       }
 
-      await notifyAdmins(sql, `${PRACTICE_NAME}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, undefined)
+      await notifyAdmins(sql, `${practiceName}: Appointment added for ${providerName ?? 'provider'}. View: ${PORTAL_URL}/admin/schedule`, addedPracticeId ?? undefined)
 
       if (isIvFluidsAny(visitType) && parentEmail) {
-        await sendEmail(parentEmail, `Your IV fluids request has been received — ${PRACTICE_NAME}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids parent email failed:', e))
+        await sendEmail(parentEmail, `Your IV fluids request has been received — ${practiceName}`, ivFluidsEmailHtml()).catch(e => console.error('IV fluids parent email failed:', e))
       }
 
       return res.json({ ok: true })
