@@ -145,8 +145,6 @@ export default function App() {
                 <Route path="shifts"         element={<Shifts />} />
                 <Route path="results/:type/new" element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsUpload /></FlagGuardedRoute>} />
                 <Route path="results/:type"     element={<FlagGuardedRoute flag="uses_results_module"><AdminResultsInbox /></FlagGuardedRoute>} />
-                <Route path="callbacks"         element={<FlagGuardedRoute flag="uses_results_module"><AdminCallbacks /></FlagGuardedRoute>} />
-                <Route path="diagnosis-library" element={<FlagGuardedRoute flag="uses_results_module"><AdminDiagnosisLibrary /></FlagGuardedRoute>} />
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<FlagGuardedRoute flag="uses_cpr_classes"><CprRequests /></FlagGuardedRoute>} />
                 <Route path="handbook"       element={<Handbook />} />
@@ -176,6 +174,8 @@ export default function App() {
                 <Route path="audit-log"    element={<AdminAuditLog />} />
                 <Route path="school-notes" element={<AdminSchoolNotes />} />
                 <Route path="statements" element={<FlagGuardedRoute flag="uses_self_pay_statements" redirectTo="/admin/analytics"><AdminStatements /></FlagGuardedRoute>} />
+                <Route path="callbacks"         element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminCallbacks /></FlagGuardedRoute>} />
+                <Route path="diagnosis-library" element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminDiagnosisLibrary /></FlagGuardedRoute>} />
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminReferrals /></FlagGuardedRoute>} />
                 <Route path="agencies"   element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminAgencies /></FlagGuardedRoute>} />
