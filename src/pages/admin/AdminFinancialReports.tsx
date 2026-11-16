@@ -684,11 +684,15 @@ function AdjustmentsSection({ data, start, end }: { data: ReportsData; start: st
 // ─── Refunds ──────────────────────────────────────────────────────────────
 
 function RefundsSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
+  const { settings } = useSettings()
+  const showsInsurance = !!settings.accepts_insurance
   return (
     <ReportShell
       title="Refunds / overpayments"
       icon={RotateCcw}
-      plainEnglish="Statements where the parent paid more than what was owed. Usually happens when insurance ends up covering more than expected after the family already paid. These families are due a refund."
+      plainEnglish={showsInsurance
+        ? 'Statements where the patient paid more than what was owed. Usually happens when insurance ends up covering more than expected after the family already paid. These patients are due a refund.'
+        : 'Statements where the patient paid more than what was owed. These patients are due a refund.'}
       onExport={() => {
         const csv = toCsv(data.refunds, [
           { key: 'patient_first_name', label: 'First name' },
