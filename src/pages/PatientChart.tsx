@@ -952,11 +952,13 @@ export function PatientChart() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
                 <CalendarPlus size={13} /> Book appointment
               </button>
-              <button
-                onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '', allergies: '', current_medications: '', medical_history: '', vaccination_status: '' }) }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
-                <UserPlus size={13} /> Add sibling
-              </button>
+              {settings.uses_pediatric_patients !== false && (
+                <button
+                  onClick={() => { setSiblingOpen(true); setSiblingError(null); setSiblingDone(false); setSibling({ first_name: '', last_name: '', date_of_birth: '', gender: '', allergies: '', current_medications: '', medical_history: '', vaccination_status: '' }) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">
+                  <UserPlus size={13} /> Add sibling
+                </button>
+              )}
               <button
                 onClick={() => setReferralOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E8E8E4] text-[#1A1A2E] text-[12px] font-medium rounded-lg hover:bg-[#FAFAF8] transition-colors">

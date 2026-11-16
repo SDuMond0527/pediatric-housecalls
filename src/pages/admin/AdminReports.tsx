@@ -236,6 +236,7 @@ const DEFAULT_END   = format(endOfMonth(today),   'yyyy-MM-dd')
 
 export function AdminReports() {
   const usesBroadcasts = useFlag('uses_broadcasts')
+  const isPediatric = useFlag('uses_pediatric_patients') !== false
   const [startDate, setStartDate] = useState(DEFAULT_START)
   const [endDate,   setEndDate]   = useState(DEFAULT_END)
   const [appts, setAppts] = useState<ApptRow[]>([])
@@ -690,8 +691,10 @@ export function AdminReports() {
             sub={usesBroadcasts && totalPickups > 0 ? `${broadcastTotal} broadcast · ${waitlistTotal} waitlist` : undefined} />
         </div>
 
-        {/* Sibling prompt usage */}
-        {siblingPrompt && siblingPrompt.offered > 0 && (
+        {/* Sibling prompt usage — pediatric-only (the family-side prompt
+            is phrased as "anyone else at home feeling sick?" which only
+            makes sense for ped practices). */}
+        {isPediatric && siblingPrompt && siblingPrompt.offered > 0 && (
           <div className="bg-white border border-[#E8E8E4] rounded-xl p-5 shadow-sm">
             <h3 className="font-display text-[15px] font-medium text-[#1A1A2E] mb-1">Sibling add-on prompt</h3>
             <p className="text-[12px] text-[#1A1A2E] mb-4">{rangeLabel} · how often the booking confirmation screen's "anyone else at home feeling sick?" prompt was offered and taken.</p>
