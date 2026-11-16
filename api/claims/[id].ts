@@ -1175,16 +1175,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [claim] = await sql`
         SELECT id, status, practice_id, child_id, appointment_id, service_date,
                cpt_codes, patient_first_name, patient_last_name, patient_dob,
-               total_charge, era_received_at
+               total_charge, era_received_at, biller_edited_at,
+               insurance_payment_era
         FROM claims
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!claim) return res.status(404).json({ error: 'Claim not found' })
       if (claim.status === 'written_off') {
         return res.status(400).json({ error: 'This claim is written off. Posting a payment would resurrect a closed AR item — reopen it first.' })
       }
-      if (claim.era_received_at) {
-        // Not a 400 — just surface it so Andrea doesn't accidentally
-        // double-post on top of a Stedi ERA that already landed.
+      // Guard against double-posting on top of a REAL paid ERA. Allow
+      // through when the on-file ERA is stale (biller recoded after) or
+      // when it had no real payment (denial / zero remit). Mirrors the
+      // client-side visibility rule in AdminClaims.tsx. Sara 2026-11-16
+      // — Sophie Slutzker's wrong-member-ID denial + outside-Stedi repay.
+      const onFileEraPayment = parseFloat(String(claim.insurance_payment_era ?? 0)) || 0
+      const billerRecodedAfterEra = !!claim.biller_edited_at && !!claim.era_received_at &&
+        new Date(claim.biller_edited_at as any).getTime() > new Date(claim.era_received_at as any).getTime()
+      const staleEra = billerRecodedAfterEra || onFileEraPayment <= 0
+      if (claim.era_received_at && !staleEra) {
         return res.status(409).json({ error: 'A payment has already been posted to this claim (Stedi ERA received ' + new Date(claim.era_received_at).toLocaleDateString() + '). If this is a correction, reach out and we will handle it separately.' })
       }
 
