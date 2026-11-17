@@ -195,8 +195,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Set a statement timeout for this one call via the Neon HTTP driver
   // isn't supported, so we instead rely on Vercel's function timeout.
+  //
+  // Neon's HTTP driver reserves the tagged-template form `sql\`...\`` for
+  // parameterized queries. For a raw string built elsewhere (our case —
+  // the string came from Claude), we have to use `sql.query(text)` instead.
   try {
-    const rows = await sql(modelSql as any)
+    const result = await (sql as any).query(modelSql)
+    const rows: Array<Record<string, unknown>> = Array.isArray(result)
+      ? result
+      : (Array.isArray(result?.rows) ? result.rows : [])
     const columns = rows.length > 0 ? Object.keys(rows[0] as any) : []
     return res.status(200).json({
       sql: modelSql,
