@@ -17,6 +17,7 @@ import { EncounterNoteModal } from '../components/EncounterNoteModal'
 import { RnIvOrderModal, type RnIvOrderContext } from '../components/RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from '../components/CmaOrderModal'
 import { useAuth } from '../contexts/AuthContext'
+import { useSettings } from '../contexts/PracticeSettingsContext'
 import { Badge } from '../components/ui/Badge'
 import { dailyAffirmation } from '../lib/affirmations'
 import { Button } from '../components/ui/Button'
@@ -90,8 +91,14 @@ interface ScheduleBlock {
 
 export function Today() {
   const { provider } = useAuth()
+  const { settings } = useSettings()
   const { zipToZone } = usePracticeZones()
   const { visitTypes, byType } = usePracticeVisitTypes()
+  // Dr. Cash (non-insurance, office-based) doesn't want the Insurance
+  // section rendered at all — everyone is self-pay by definition — and
+  // zones don't apply when visits aren't in-home. Sara 2026-11-16.
+  const showInsuranceSection = settings.accepts_insurance !== false
+  const showZone = settings.visits_are_in_home !== false
   const [appts, setAppts] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -1378,7 +1385,7 @@ export function Today() {
                                 <F label="Preferred pharmacy" value={pharmacy} />
                               </div>
                             )}
-                            {(insurance || memberId || groupNum || subscriber || subscriberDob || subscriberSex || cardFront || cardBack) && (
+                            {showInsuranceSection && (insurance || memberId || groupNum || subscriber || subscriberDob || subscriberSex || cardFront || cardBack) && (
                               <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-2">Insurance</div>
                                 <F label="Insurance" value={insurance} />
@@ -1406,7 +1413,7 @@ export function Today() {
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         {[
                           { label: 'Visit type', value: displayVisitType(appt) },
-                          { label: 'Zone',       value: appt.zone },
+                          ...(showZone ? [{ label: 'Zone', value: appt.zone }] : []),
                           ...((() => { const z = (appt.notes || '').split('|').find(p => p.trim().startsWith('ZIP:'))?.replace(/^ZIP:/, '').trim(); return z ? [{ label: 'Zip', value: z }] : [] })()),
                         ].map(d => (
                           <div key={d.label} className="bg-[#7F77DD]/6 rounded-lg p-2.5">

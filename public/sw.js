@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-16-callbacks-route-fix
+// Service worker — deliberate passthrough. Version: 2026-11-16-today-insurance-zone-gates
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
