@@ -76,9 +76,9 @@ export function AdminFeeSchedule() {
     try {
       await updateFeeScheduleRow(code, {
         description: draft.description.trim(),
-        category: draft.category.trim() || null as any,
+        category: draft.category.trim() || 'Other',
         charge_amount: amount,
-        place_of_service: draft.place_of_service.trim() || null as any,
+        place_of_service: draft.place_of_service.trim() || undefined,
       })
       setEditingCode(null)
       await load()

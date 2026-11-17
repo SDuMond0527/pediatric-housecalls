@@ -893,7 +893,7 @@ export const saveVitals = (body: Record<string, unknown>) =>
 export interface FeeScheduleRow {
   code: string
   description: string
-  category: string | null
+  category: string
   charge_amount: number
   place_of_service: string | null
   ndc_code?: string | null

@@ -1015,7 +1015,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         childId ? getChildrenByIds([childId]).catch(() => []) : Promise.resolve([]),
       ])
       setCustomTemplates(templates)
-      setFeeSchedule(schedule)
+      setFeeSchedule(schedule as unknown as typeof feeSchedule)
       const childRecord = Array.isArray(childData) && childData.length ? childData[0] : null
       let resolvedChildId = childId
       logAudit('view_encounter_note', 'appointment', appointment.id)

@@ -108,6 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   `
   return res.json(rows.map(r => ({
     ...r,
+    category: (r.category as string | null) ?? 'Other',
     charge_amount: parseFloat(r.charge_amount as string),
     ndc_unit_count: r.ndc_unit_count != null ? parseFloat(r.ndc_unit_count as string) : null,
   })))
