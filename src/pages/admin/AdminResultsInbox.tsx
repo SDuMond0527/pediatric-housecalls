@@ -13,12 +13,12 @@ import {
 // /results/labs. Sara 2026-11-15 for Direct Dermatology; 2026-11-16
 // added diagnosis library + plan field + patient-callback handoff.
 
-type StatusFilter = 'all' | 'pending_review' | 'signed' | 'acknowledged'
+type StatusFilter = 'all' | 'pending_review' | 'signed'
 
 const STATUS_LABEL: Record<ResultStatus, string> = {
   pending_review: 'Needs review',
   signed:         'Awaiting patient callback',
-  acknowledged:   'Patient notified',
+  acknowledged:   'Patient notified', // kept for row-level pill rendering; no filter tab
 }
 
 const STATUS_TONE: Record<ResultStatus, string> = {
@@ -72,6 +72,10 @@ export function AdminResultsInbox() {
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase()
     return rows.filter(r => {
+      // Inbox is for actionable rows only. Once a result is acknowledged
+      // the record lives on the patient chart's Pathology/Labs tab —
+      // no reason to carry it here. Sara 2026-11-17.
+      if (r.status === 'acknowledged') return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
       if (!s) return true
       return [r.patient_name, r.specimen_type, r.specimen_site, r.source_lab, r.test_name, r.diagnosis_label, r.plan]
@@ -81,8 +85,15 @@ export function AdminResultsInbox() {
   }, [rows, statusFilter, search])
 
   const counts = useMemo(() => {
-    const out: Record<StatusFilter, number> = { all: rows.length, pending_review: 0, signed: 0, acknowledged: 0 }
-    for (const r of rows) out[r.status as StatusFilter] = (out[r.status as StatusFilter] ?? 0) + 1
+    // Exclude acknowledged rows from every counter — same reason as the
+    // filter above (acknowledged lives on the chart).
+    const actionable = rows.filter(r => r.status !== 'acknowledged')
+    const out: Record<StatusFilter, number> = { all: actionable.length, pending_review: 0, signed: 0 }
+    for (const r of actionable) {
+      if (r.status === 'pending_review' || r.status === 'signed') {
+        out[r.status] = (out[r.status] ?? 0) + 1
+      }
+    }
     return out
   }, [rows])
 
@@ -160,7 +171,7 @@ export function AdminResultsInbox() {
       <div className="p-6 max-w-5xl space-y-4">
         {/* Status tab strip */}
         <div className="flex items-center gap-1 border-b border-[#E8E8E4]">
-          {(['pending_review', 'signed', 'acknowledged', 'all'] as const).map(s => (
+          {(['pending_review', 'signed', 'all'] as const).map(s => (
             <button key={s}
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-2 text-[12px] font-medium border-b-2 transition-colors ${

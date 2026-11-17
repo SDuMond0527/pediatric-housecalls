@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-17-pathology-badge
+// Service worker — deliberate passthrough. Version: 2026-11-17-inbox-no-acknowledged-tab
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
