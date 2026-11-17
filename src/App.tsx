@@ -50,6 +50,7 @@ import { AdminResultsUpload } from './pages/admin/AdminResultsUpload'
 import { AdminCallbacks } from './pages/admin/AdminCallbacks'
 import { AdminDiagnosisLibrary } from './pages/admin/AdminDiagnosisLibrary'
 import { AdminFeeSchedule } from './pages/admin/AdminFeeSchedule'
+import { AdminAskReports } from './pages/admin/AdminAskReports'
 import { AdminUnmatchedEras } from './pages/admin/AdminUnmatchedEras'
 import { AdminEligibilityFails } from './pages/admin/AdminEligibilityFails'
 import { AdminNcciPreview } from './pages/admin/AdminNcciPreview'
@@ -178,6 +179,7 @@ export default function App() {
                 <Route path="callbacks"         element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminCallbacks /></FlagGuardedRoute>} />
                 <Route path="diagnosis-library" element={<FlagGuardedRoute flag="uses_results_module" redirectTo="/admin/analytics"><AdminDiagnosisLibrary /></FlagGuardedRoute>} />
                 <Route path="fee-schedule"      element={<AdminFeeSchedule />} />
+                <Route path="ask-reports"       element={<AdminAskReports />} />
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminReferrals /></FlagGuardedRoute>} />
                 <Route path="agencies"   element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminAgencies /></FlagGuardedRoute>} />

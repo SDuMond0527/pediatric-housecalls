@@ -909,6 +909,18 @@ export const updateFeeScheduleRow = (code: string, body: Partial<Pick<FeeSchedul
 export const archiveFeeScheduleRow = (code: string) =>
   apiFetch<{ ok: true }>(`/api/fee-schedule/${encodeURIComponent(code)}`, { method: 'DELETE' })
 
+// ── Natural-language ad-hoc reports (Claude-generated SQL) ───
+export interface ReportResult {
+  sql: string
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+  row_count: number
+}
+export const runReportQuery = (question: string) =>
+  apiFetch<ReportResult>('/api/admin/report-query', {
+    method: 'POST', body: JSON.stringify({ question }),
+  })
+
 // ── Note photo upload ─────────────────────────────────────────
 export async function uploadNotePhoto(file: File): Promise<string> {
   const { fetchAuthSession } = await import('aws-amplify/auth')

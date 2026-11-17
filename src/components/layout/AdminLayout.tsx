@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon, PhoneCall, FlaskConical } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon, PhoneCall, FlaskConical, Sparkles } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
@@ -40,6 +40,7 @@ const NAV: NavItem[] = [
   { to: '/admin/callbacks',          icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
   { to: '/admin/diagnosis-library',  icon: FlaskConical, label: 'Diagnosis library',  flag: 'uses_results_module' },
   { to: '/admin/fee-schedule',       icon: DollarSign,   label: 'Fee schedule' },
+  { to: '/admin/ask-reports',        icon: Sparkles,     label: 'Ask reports' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },
