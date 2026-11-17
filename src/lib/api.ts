@@ -2199,6 +2199,8 @@ export interface ResultDiagnosisRow {
   short_code: string | null
   sort_order: number
   is_active: boolean
+  maps_to_chronic_problem?: boolean
+  default_icd10_code?: string | null
   created_at: string
   updated_at: string
 }
@@ -2208,11 +2210,11 @@ export const getResultDiagnoses = (opts: { resource_type?: ResultResourceType; i
   if (opts.include_archived) q.set('include_archived', '1')
   return apiFetch<ResultDiagnosisRow[]>(`/api/result-diagnoses?${q.toString()}`)
 }
-export const createResultDiagnosis = (body: { resource_type: ResultResourceType; label: string; short_code?: string; sort_order?: number }) =>
+export const createResultDiagnosis = (body: { resource_type: ResultResourceType; label: string; short_code?: string; sort_order?: number; maps_to_chronic_problem?: boolean; default_icd10_code?: string }) =>
   apiFetch<ResultDiagnosisRow>('/api/result-diagnoses', {
     method: 'POST', body: JSON.stringify(body),
   })
-export const updateResultDiagnosis = (id: string, body: Partial<Pick<ResultDiagnosisRow, 'label' | 'short_code' | 'sort_order' | 'is_active'>>) =>
+export const updateResultDiagnosis = (id: string, body: Partial<Pick<ResultDiagnosisRow, 'label' | 'short_code' | 'sort_order' | 'is_active' | 'maps_to_chronic_problem' | 'default_icd10_code'>>) =>
   apiFetch<ResultDiagnosisRow>(`/api/result-diagnoses/${id}`, {
     method: 'PATCH', body: JSON.stringify(body),
   })

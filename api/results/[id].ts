@@ -79,9 +79,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!planRaw)        return res.status(400).json({ error: 'plan required' })
       // Snapshot the diagnosis label from the library at sign time so a
       // future rename of the diagnosis doesn't rewrite history on the
-      // patient's chart.
+      // patient's chart. Also pull maps_to_chronic_problem + default
+      // ICD-10 so we can auto-create a chronic_problems row downstream.
+      try { await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS maps_to_chronic_problem boolean NOT NULL DEFAULT false` } catch {}
+      try { await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS default_icd10_code text` } catch {}
       const [dx] = await sql`
-        SELECT label FROM result_diagnoses
+        SELECT label, maps_to_chronic_problem, default_icd10_code
+        FROM result_diagnoses
         WHERE id = ${diagnosisIdRaw}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!dx) return res.status(400).json({ error: 'diagnosis_id not in this practice library' })
       const [row] = await sql`
@@ -96,6 +100,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             updated_at            = now()
         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
         RETURNING *`
+      // Auto-add to chronic_problems when the diagnosis is flagged as
+      // such. Dedup against existing unresolved rows with the same
+      // label for the same patient. Only runs for children-side
+      // patients today; patient_profiles support requires a schema
+      // change to chronic_problems (child_id is NOT NULL). Sara 2026-11-17.
+      try {
+        if (dx.maps_to_chronic_problem && (row as any).child_id) {
+          const patientChildId = (row as any).child_id as string
+          const icd10 = (dx.default_icd10_code as string | null) ?? null
+          const [existing] = await sql`
+            SELECT id FROM chronic_problems
+            WHERE practice_id = ${practiceId}::uuid
+              AND child_id = ${patientChildId}::uuid
+              AND label = ${dx.label}
+              AND resolved_at IS NULL
+            LIMIT 1`
+          if (!existing) {
+            await sql`
+              INSERT INTO chronic_problems
+                (practice_id, child_id, label, icd10_code, source_kind,
+                 source_encounter_note_id, added_by, added_by_name, added_at)
+              VALUES
+                (${practiceId}::uuid, ${patientChildId}::uuid, ${dx.label},
+                 ${icd10}, 'provider_dx', NULL,
+                 ${providerId}::uuid, ${providerName}, now())`
+          }
+        }
+      } catch (e: any) {
+        console.error('[result sign] chronic_problem auto-add failed (non-fatal):', e?.message)
+      }
       return res.status(200).json(row)
     }
 

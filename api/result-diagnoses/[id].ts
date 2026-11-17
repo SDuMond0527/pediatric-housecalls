@@ -39,6 +39,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const shortCode  = typeof body.short_code === 'string' ? (body.short_code.trim() || null) : undefined
     const sortOrder  = body.sort_order != null ? Number(body.sort_order) : undefined
     const isActive   = typeof body.is_active  === 'boolean' ? body.is_active : undefined
+    const mapsToChronic = typeof body.maps_to_chronic_problem === 'boolean' ? body.maps_to_chronic_problem : undefined
+    const defaultIcd10  = typeof body.default_icd10_code === 'string' ? (body.default_icd10_code.trim() || null) : undefined
+
+    // Bootstrap new columns idempotently in case the admin hits this
+    // endpoint before the index GET runs.
+    try { await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS maps_to_chronic_problem boolean NOT NULL DEFAULT false` } catch {}
+    try { await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS default_icd10_code text` } catch {}
 
     const [row] = await sql`
       UPDATE result_diagnoses SET
@@ -46,9 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         short_code = CASE WHEN ${shortCode === undefined}::boolean THEN short_code ELSE ${shortCode} END,
         sort_order = COALESCE(${sortOrder ?? null}, sort_order),
         is_active  = COALESCE(${isActive ?? null}::boolean, is_active),
+        maps_to_chronic_problem = COALESCE(${mapsToChronic ?? null}::boolean, maps_to_chronic_problem),
+        default_icd10_code = CASE WHEN ${defaultIcd10 === undefined}::boolean THEN default_icd10_code ELSE ${defaultIcd10} END,
         updated_at = now()
       WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
       RETURNING id, resource_type, label, short_code, sort_order, is_active,
+                maps_to_chronic_problem, default_icd10_code,
                 created_at::text AS created_at, updated_at::text AS updated_at`
     if (!row) return res.status(404).json({ error: 'Not found' })
     return res.status(200).json(row)

@@ -18,9 +18,11 @@ export function AdminDiagnosisLibrary() {
   const [newLabel, setNewLabel] = useState('')
   const [newShort, setNewShort] = useState('')
   const [newSort, setNewSort] = useState('100')
+  const [newMapsChronic, setNewMapsChronic] = useState(false)
+  const [newIcd10, setNewIcd10] = useState('')
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<{ label: string; short_code: string; sort_order: string }>({ label: '', short_code: '', sort_order: '100' })
+  const [draft, setDraft] = useState<{ label: string; short_code: string; sort_order: string; maps_to_chronic_problem: boolean; default_icd10_code: string }>({ label: '', short_code: '', sort_order: '100', maps_to_chronic_problem: false, default_icd10_code: '' })
   const [busy, setBusy] = useState<string | null>(null)
 
   async function load() {
@@ -46,8 +48,10 @@ export function AdminDiagnosisLibrary() {
         label: newLabel.trim(),
         short_code: newShort.trim() || undefined,
         sort_order: Number(newSort) || 100,
+        maps_to_chronic_problem: newMapsChronic,
+        default_icd10_code: newIcd10.trim() || undefined,
       })
-      setNewLabel(''); setNewShort(''); setNewSort('100')
+      setNewLabel(''); setNewShort(''); setNewSort('100'); setNewMapsChronic(false); setNewIcd10('')
       await load()
     } catch (e: any) { alert('Add failed: ' + (e?.message ?? '')) }
     finally { setAdding(false) }
@@ -55,7 +59,13 @@ export function AdminDiagnosisLibrary() {
 
   function startEdit(r: ResultDiagnosisRow) {
     setEditingId(r.id)
-    setDraft({ label: r.label, short_code: r.short_code ?? '', sort_order: String(r.sort_order) })
+    setDraft({
+      label: r.label,
+      short_code: r.short_code ?? '',
+      sort_order: String(r.sort_order),
+      maps_to_chronic_problem: !!r.maps_to_chronic_problem,
+      default_icd10_code: r.default_icd10_code ?? '',
+    })
   }
   async function saveEdit(id: string) {
     if (!draft.label.trim()) { alert('Label required.'); return }
@@ -65,6 +75,8 @@ export function AdminDiagnosisLibrary() {
         label: draft.label.trim(),
         short_code: draft.short_code.trim() || null as any,
         sort_order: Number(draft.sort_order) || 100,
+        maps_to_chronic_problem: draft.maps_to_chronic_problem,
+        default_icd10_code: draft.default_icd10_code.trim() || null as any,
       })
       setEditingId(null)
       await load()
@@ -134,7 +146,7 @@ export function AdminDiagnosisLibrary() {
         {/* Add form */}
         <div className="bg-white border border-[#E8E8E4] rounded-xl p-3">
           <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide mb-2">Add new</div>
-          <div className="grid grid-cols-[1fr_120px_80px_auto] gap-2 items-end">
+          <div className="grid grid-cols-[1fr_110px_80px_80px_110px_auto] gap-2 items-end">
             <div>
               <label className="block text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide mb-1">Label</label>
               <input type="text" value={newLabel}
@@ -155,6 +167,21 @@ export function AdminDiagnosisLibrary() {
                 onChange={e => setNewSort(e.target.value)}
                 className="w-full px-2.5 py-1.5 text-[12px] font-mono border border-[#E8E8E4] rounded-lg bg-white outline-none focus:border-[#7F77DD]" />
             </div>
+            <div>
+              <label className="block text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide mb-1" title="If checked, signing a result with this diagnosis will auto-add it to the patient's chronic problems list.">Chronic?</label>
+              <label className="flex items-center h-8 justify-center cursor-pointer">
+                <input type="checkbox" checked={newMapsChronic}
+                  onChange={e => setNewMapsChronic(e.target.checked)}
+                  className="accent-[#7F77DD] w-4 h-4" />
+              </label>
+            </div>
+            <div>
+              <label className="block text-[10px] text-[#1A1A2E]/60 uppercase tracking-wide mb-1">Default ICD-10</label>
+              <input type="text" value={newIcd10}
+                onChange={e => setNewIcd10(e.target.value.toUpperCase())}
+                placeholder="C44.21"
+                className="w-full px-2.5 py-1.5 text-[12px] font-mono border border-[#E8E8E4] rounded-lg bg-white outline-none focus:border-[#7F77DD]" />
+            </div>
             <button onClick={() => void add()} disabled={adding}
               className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8] disabled:opacity-50">
               <Plus size={12} /> Add
@@ -168,14 +195,16 @@ export function AdminDiagnosisLibrary() {
             <thead className="bg-[#FAFAF8] text-[11px] text-[#1A1A2E] uppercase tracking-wide">
               <tr>
                 <th className="text-left px-3 py-2">Label</th>
-                <th className="text-left px-3 py-2 w-32">Short code</th>
-                <th className="text-right px-3 py-2 w-20">Sort</th>
-                <th className="text-right px-3 py-2 w-48">Actions</th>
+                <th className="text-left px-3 py-2 w-28">Short code</th>
+                <th className="text-right px-3 py-2 w-16">Sort</th>
+                <th className="text-center px-3 py-2 w-20" title="Adds to patient chronic problems when signed">Chronic?</th>
+                <th className="text-left px-3 py-2 w-28">Default ICD-10</th>
+                <th className="text-right px-3 py-2 w-40">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1EFE8]">
               {sorted.length === 0 && !loading && (
-                <tr><td colSpan={4} className="px-3 py-8 text-center text-[#1A1A2E]/60">No entries yet. Add your first one above.</td></tr>
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-[#1A1A2E]/60">No entries yet. Add your first one above.</td></tr>
               )}
               {sorted.map(r => (
                 <tr key={r.id} className={r.is_active ? '' : 'bg-[#FEF8E7] text-[#1A1A2E]/60'}>
@@ -196,6 +225,17 @@ export function AdminDiagnosisLibrary() {
                           onChange={e => setDraft(d => ({ ...d, sort_order: e.target.value }))}
                           className="w-full px-2 py-1 text-[12px] font-mono border border-[#E8E8E4] rounded bg-white outline-none focus:border-[#7F77DD]" />
                       </td>
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" checked={draft.maps_to_chronic_problem}
+                          onChange={e => setDraft(d => ({ ...d, maps_to_chronic_problem: e.target.checked }))}
+                          className="accent-[#7F77DD] w-4 h-4" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={draft.default_icd10_code}
+                          onChange={e => setDraft(d => ({ ...d, default_icd10_code: e.target.value.toUpperCase() }))}
+                          placeholder="C44.21"
+                          className="w-full px-2 py-1 text-[12px] font-mono border border-[#E8E8E4] rounded bg-white outline-none focus:border-[#7F77DD]" />
+                      </td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <button onClick={() => saveEdit(r.id)} disabled={busy === r.id}
@@ -214,6 +254,12 @@ export function AdminDiagnosisLibrary() {
                       <td className="px-3 py-2 text-[#1A1A2E]">{r.label}</td>
                       <td className="px-3 py-2 font-mono text-[11px]">{r.short_code ?? '—'}</td>
                       <td className="px-3 py-2 font-mono text-right">{r.sort_order}</td>
+                      <td className="px-3 py-2 text-center">
+                        {r.maps_to_chronic_problem
+                          ? <span className="text-[#1D9E75] font-semibold">✓</span>
+                          : <span className="text-[#1A1A2E]/30">—</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px]">{r.default_icd10_code ?? '—'}</td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <button onClick={() => startEdit(r)} disabled={busy === r.id}

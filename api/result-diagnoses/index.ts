@@ -43,6 +43,12 @@ async function bootstrap(sql: any) {
       )`
     await sql`CREATE INDEX IF NOT EXISTS idx_result_diagnoses_practice
               ON result_diagnoses(practice_id, resource_type, is_active, sort_order)`
+    // Flag that drives auto-insert into chronic_problems when a result
+    // is signed with this diagnosis. Default false — provider opts in
+    // per diagnosis so the problem list doesn't fill up with benign
+    // noise. Sara 2026-11-17.
+    await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS maps_to_chronic_problem boolean NOT NULL DEFAULT false`
+    await sql`ALTER TABLE result_diagnoses ADD COLUMN IF NOT EXISTS default_icd10_code text`
   } catch {}
 }
 
@@ -63,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const includeArchived = String(req.query.include_archived ?? '') === '1'
     const rows = await sql`
       SELECT id, resource_type, label, short_code, sort_order, is_active,
+             maps_to_chronic_problem, default_icd10_code,
              created_at::text AS created_at, updated_at::text AS updated_at
       FROM result_diagnoses
       WHERE practice_id = ${practiceId}::uuid
@@ -82,10 +89,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!label) return res.status(400).json({ error: 'label required' })
     const shortCode = String(body.short_code ?? '').trim() || null
     const sortOrder = Number(body.sort_order ?? 100) || 100
+    const mapsToChronic = body.maps_to_chronic_problem === true
+    const defaultIcd10 = String(body.default_icd10_code ?? '').trim() || null
     const [row] = await sql`
-      INSERT INTO result_diagnoses (practice_id, resource_type, label, short_code, sort_order)
-      VALUES (${practiceId}::uuid, ${resourceType}, ${label}, ${shortCode}, ${sortOrder})
+      INSERT INTO result_diagnoses (practice_id, resource_type, label, short_code, sort_order,
+                                    maps_to_chronic_problem, default_icd10_code)
+      VALUES (${practiceId}::uuid, ${resourceType}, ${label}, ${shortCode}, ${sortOrder},
+              ${mapsToChronic}, ${defaultIcd10})
       RETURNING id, resource_type, label, short_code, sort_order, is_active,
+                maps_to_chronic_problem, default_icd10_code,
                 created_at::text AS created_at, updated_at::text AS updated_at`
     return res.status(201).json(row)
   }
