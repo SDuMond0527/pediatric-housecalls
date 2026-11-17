@@ -890,8 +890,24 @@ export const saveVitals = (body: Record<string, unknown>) =>
   apiFetch<any>('/api/vitals', { method: 'POST', body: JSON.stringify(body) })
 
 // ── Fee schedule ──────────────────────────────────────────────
-export const getFeeSchedule = () =>
-  apiFetch<any[]>('/api/fee-schedule')
+export interface FeeScheduleRow {
+  code: string
+  description: string
+  category: string | null
+  charge_amount: number
+  place_of_service: string | null
+  ndc_code?: string | null
+  ndc_unit_count?: number | null
+  is_active?: boolean
+}
+export const getFeeSchedule = (opts: { include_archived?: boolean } = {}) =>
+  apiFetch<FeeScheduleRow[]>(`/api/fee-schedule${opts.include_archived ? '?include_archived=1' : ''}`)
+export const createFeeScheduleRow = (body: { code: string; description: string; category?: string; charge_amount: number; place_of_service?: string }) =>
+  apiFetch<{ ok: true; code: string }>('/api/fee-schedule', { method: 'POST', body: JSON.stringify(body) })
+export const updateFeeScheduleRow = (code: string, body: Partial<Pick<FeeScheduleRow, 'description' | 'category' | 'charge_amount' | 'place_of_service' | 'is_active'>>) =>
+  apiFetch<FeeScheduleRow>(`/api/fee-schedule/${encodeURIComponent(code)}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const archiveFeeScheduleRow = (code: string) =>
+  apiFetch<{ ok: true }>(`/api/fee-schedule/${encodeURIComponent(code)}`, { method: 'DELETE' })
 
 // ── Note photo upload ─────────────────────────────────────────
 export async function uploadNotePhoto(file: File): Promise<string> {

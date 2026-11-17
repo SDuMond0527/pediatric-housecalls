@@ -39,6 +39,7 @@ const NAV: NavItem[] = [
   { to: '/admin/statements',  icon: FileText,      label: 'Statements',     flag: 'uses_self_pay_statements' },
   { to: '/admin/callbacks',          icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
   { to: '/admin/diagnosis-library',  icon: FlaskConical, label: 'Diagnosis library',  flag: 'uses_results_module' },
+  { to: '/admin/fee-schedule',       icon: DollarSign,   label: 'Fee schedule' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },

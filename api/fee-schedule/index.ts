@@ -21,15 +21,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
+  const sql = neon(process.env.DATABASE_URL!)
+
+  const providerRows = await sql`SELECT practice_id, is_admin FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
+  const practiceId = providerRows[0].practice_id as string
+  const isAdmin = !!providerRows[0].is_admin
+
+  // POST — admins can add new rows to their practice's fee schedule.
+  // Sara 2026-11-16, built so Dr. Cash can self-manage her derm
+  // procedure prices without SQL.
+  if (req.method === 'POST') {
+    if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
+    const body = (req.body ?? {}) as Record<string, any>
+    const code = String(body.code ?? '').trim()
+    const description = String(body.description ?? '').trim()
+    const category = String(body.category ?? '').trim() || 'Other'
+    const chargeAmount = Number(body.charge_amount ?? 0)
+    const placeOfService = String(body.place_of_service ?? '').trim() || null
+    if (!code) return res.status(400).json({ error: 'code required' })
+    if (!description) return res.status(400).json({ error: 'description required' })
+    if (!Number.isFinite(chargeAmount) || chargeAmount < 0) {
+      return res.status(400).json({ error: 'charge_amount must be a non-negative number' })
+    }
+    try {
+      await sql`
+        INSERT INTO fee_schedule (practice_id, code, description, category, charge_amount, place_of_service, is_active)
+        VALUES (${practiceId}::uuid, ${code}, ${description}, ${category}, ${chargeAmount}, ${placeOfService}, true)
+        ON CONFLICT (practice_id, code) DO UPDATE SET
+          description      = EXCLUDED.description,
+          category         = EXCLUDED.category,
+          charge_amount    = EXCLUDED.charge_amount,
+          place_of_service = EXCLUDED.place_of_service,
+          is_active        = true`
+      return res.status(201).json({ ok: true, code })
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Insert failed: ' + (e?.message ?? String(e)) })
+    }
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-
-  const sql = neon(process.env.DATABASE_URL!)
-
-  const providerRows = await sql`SELECT practice_id FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
-  if (!providerRows.length) return res.status(403).json({ error: 'Provider not found' })
-  const practiceId = providerRows[0].practice_id as string
 
   // One-time in-place code swap: rapid COVID/flu test moved from 87428 to
   // 87812 (idempotent — no-op once done, no-op if 87812 already exists).
@@ -65,10 +98,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`UPDATE fee_schedule SET ndc_unit_count = 3   WHERE code = 'J7613' AND ndc_unit_count IS NULL`
   } catch (e) { console.error('[fee-schedule] ndc seed err:', e) }
 
+  const includeArchived = String(req.query.include_archived ?? '') === '1'
   const rows = await sql`
-    SELECT code, description, category, charge_amount, place_of_service, ndc_code, ndc_unit_count
+    SELECT code, description, category, charge_amount, place_of_service, ndc_code, ndc_unit_count, is_active
     FROM fee_schedule
-    WHERE is_active = true AND practice_id = ${practiceId}::uuid
+    WHERE practice_id = ${practiceId}::uuid
+      AND (${includeArchived}::boolean OR is_active = true)
     ORDER BY category, code
   `
   return res.json(rows.map(r => ({
