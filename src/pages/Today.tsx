@@ -1129,7 +1129,7 @@ export function Today() {
                     <div className="text-[13px] font-medium text-[#555] w-16 flex-shrink-0">{to12h(appt.scheduled_time)}</div>
                     <div className="flex-1 min-w-0">
                       <div className={`font-display text-[15px] font-medium ${isExpanded ? 'text-[#3C3489]' : 'text-[#1A1A2E]'}`}>{displayVisitType(appt)}</div>
-                      <div className="text-[12px] text-[#555] mt-0.5">{appt.zone}{appt.duration_minutes && appt.duration_minutes > 60 ? ` · ${appt.duration_minutes} min` : ''}</div>
+                      <div className="text-[12px] text-[#555] mt-0.5">{showZone ? appt.zone : ''}{showZone && appt.duration_minutes && appt.duration_minutes > 60 ? ' · ' : ''}{appt.duration_minutes && appt.duration_minutes > 60 ? `${appt.duration_minutes} min` : ''}</div>
                     </div>
                     <Badge color={vt?.badge_color} textColor={vt?.badge_text_color}>{displayVisitType(appt) !== appt.visit_type ? displayVisitType(appt) : (vt?.badge_label || appt.visit_type)}</Badge>
                     {(appt as any).previously_seen_by_phc === false && <Badge variant="amber">New patient</Badge>}
