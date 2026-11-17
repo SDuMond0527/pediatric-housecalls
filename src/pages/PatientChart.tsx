@@ -158,7 +158,15 @@ export function PatientChart() {
   const navigate = useNavigate()
 
   const { provider: currentProvider } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing' | 'communications' | 'pathology_results' | 'lab_results'>('overview')
+  // Default-open tab honors ?tab=<key> in the URL so encounter notes
+  // and other pages can deep-link straight to e.g. the Labs tab.
+  // Sara 2026-11-16.
+  const initialTab = (() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    const valid = ['overview', 'appointments', 'encounters', 'prescribe', 'labs', 'radiology', 'growth', 'vaccines', 'medical_history', 'billing', 'communications', 'pathology_results', 'lab_results'] as const
+    return (valid as readonly string[]).includes(t ?? '') ? (t as any) : 'overview'
+  })()
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'encounters' | 'prescribe' | 'labs' | 'radiology' | 'growth' | 'vaccines' | 'medical_history' | 'billing' | 'communications' | 'pathology_results' | 'lab_results'>(initialTab)
   // Billing tab: log-book of every claim + statement for this child.
   // Loaded lazily on first tab visit to avoid a round-trip on every
   // chart open — same pattern as `labsLoaded` below.

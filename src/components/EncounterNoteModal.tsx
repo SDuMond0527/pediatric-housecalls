@@ -8,7 +8,7 @@ import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
 import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, downloadEncounterNoteHtml, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
-import { FlagGate } from '../contexts/PracticeSettingsContext'
+import { FlagGate, useSettings } from '../contexts/PracticeSettingsContext'
 import type { Appointment } from '../types'
 
 const NOTE_TYPES = [
@@ -501,6 +501,16 @@ const emptyVitals = (): VitalsForm => ({
 })
 
 export function EncounterNoteModal({ appointment, childId, providerId, onClose }: Props) {
+  const { settings } = useSettings()
+  // Practice-model gates for the header button strip. Hide school note
+  // for non-pediatric practices (they don't write school excuses), and
+  // the two in-home order buttons for practices that don't offer those
+  // services. Sara 2026-11-16 — Dr. Cash's derm practice.
+  const showSchoolNote = settings.uses_pediatric_patients !== false
+  const showIvFluids   = settings.uses_iv_fluids === true
+  const showCmaOrder   = settings.uses_hybrid_tele_visits === true
+  const showLabOrders  = settings.uses_lab_orders === true
+  const showPocLabs    = settings.uses_pediatric_patients !== false
   const [noteId, setNoteId] = useState<string | null>(null)
   const [isSigned, setIsSigned] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1497,33 +1507,50 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
               <FlaskConical size={13} />
               {dsLaunching ? 'Opening…' : 'Prescribe'}
             </button>
-            <button
-              onClick={() => setSchoolNoteOpen(true)}
-              disabled={!linkedChildId}
-              title={!linkedChildId ? 'Link a patient to generate a school note' : 'Generate a school absence note and email it to the parent'}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <FileText size={13} />
-              School note
-            </button>
-            <button
-              onClick={openRnIvOrder}
-              disabled={rnIvOpening || !linkedChildId}
-              title={!linkedChildId ? 'Link a patient to order IV fluids' : 'Send an in-home RN to run IV fluids'}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Droplet size={13} />
-              {rnIvOpening ? 'Loading…' : 'Order IV fluids'}
-            </button>
-            <button
-              onClick={openCmaOrder}
-              disabled={cmaOpening || !linkedChildId}
-              title={!linkedChildId ? 'Link a patient to order an in-home CMA visit' : 'Send an in-home CMA to collect labs / do diagnostics'}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <TestTube size={13} />
-              {cmaOpening ? 'Loading…' : 'Order CMA visit'}
-            </button>
+            {showLabOrders && (
+              <button
+                onClick={() => linkedChildId && window.open(`/chart/${linkedChildId}?tab=labs`, '_blank', 'noopener,noreferrer')}
+                disabled={!linkedChildId}
+                title={!linkedChildId ? 'Link a patient to order labs' : 'Open the Labs tab on the chart to place an outside-lab order'}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <TestTube size={13} />
+                Order labs
+              </button>
+            )}
+            {showSchoolNote && (
+              <button
+                onClick={() => setSchoolNoteOpen(true)}
+                disabled={!linkedChildId}
+                title={!linkedChildId ? 'Link a patient to generate a school note' : 'Generate a school absence note and email it to the parent'}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileText size={13} />
+                School note
+              </button>
+            )}
+            {showIvFluids && (
+              <button
+                onClick={openRnIvOrder}
+                disabled={rnIvOpening || !linkedChildId}
+                title={!linkedChildId ? 'Link a patient to order IV fluids' : 'Send an in-home RN to run IV fluids'}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Droplet size={13} />
+                {rnIvOpening ? 'Loading…' : 'Order IV fluids'}
+              </button>
+            )}
+            {showCmaOrder && (
+              <button
+                onClick={openCmaOrder}
+                disabled={cmaOpening || !linkedChildId}
+                title={!linkedChildId ? 'Link a patient to order an in-home CMA visit' : 'Send an in-home CMA to collect labs / do diagnostics'}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EEEDFE] text-[#3C3489] text-[12px] font-medium rounded-lg hover:bg-[#7F77DD] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <TestTube size={13} />
+                {cmaOpening ? 'Loading…' : 'Order CMA visit'}
+              </button>
+            )}
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F1EFE8] text-[#1A1A2E] ml-1">
               <X size={16} />
             </button>
@@ -2459,8 +2486,11 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
 
             {/* Labs — point-of-care tests. Provider checks the tests they
                 ran; result fields appear below each checked test. Hidden
-                on vaccine + RN IV fluids notes (same rule as SOAP). */}
-            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
+                on vaccine + RN IV fluids notes (same rule as SOAP).
+                Also hidden for non-pediatric practices — the test menu
+                is all pediatric infection screens (strep, flu, RSV)
+                that don't apply to derm. Sara 2026-11-16. */}
+            {noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && showPocLabs && (
             <section>
               <div className={sectionHeader}>Labs</div>
               <p className="text-[11px] text-[#1A1A2E] mb-2">Point-of-care tests. Check any that were run and enter the result.</p>
