@@ -921,6 +921,17 @@ export const runReportQuery = (question: string) =>
     method: 'POST', body: JSON.stringify({ question }),
   })
 
+// Sidebar badge counts for the Results module. One call drives three
+// nav items (Pathology inbox, Labs inbox, Patient callbacks).
+export interface ResultsCounts {
+  pathology_pending: number
+  pathology_signed: number
+  labs_pending: number
+  labs_signed: number
+}
+export const getResultsCounts = () =>
+  apiFetch<ResultsCounts>('/api/results/counts')
+
 // ── Note photo upload ─────────────────────────────────────────
 export async function uploadNotePhoto(file: File): Promise<string> {
   const { fetchAuthSession } = await import('aws-amplify/auth')

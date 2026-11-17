@@ -1,15 +1,18 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen, FlaskConical, FileText, PhoneCall } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { PRACTICE_NAME } from '../../lib/practice'
+import { getResultsCounts, type ResultsCounts } from '../../lib/api'
 import type { PracticeSettings } from '../../lib/practiceSettings'
 
 type NavItem = {
   to: string
   icon: typeof CalendarDays
   label: string
-  badge?: boolean
+  badge?: boolean                                           // broadcasts — amber pill, uses broadcastCount
+  resultsBadge?: (c: ResultsCounts) => number                // results module — red pill, uses counts endpoint
   flag?: keyof PracticeSettings  // when set, nav item hides if flag is off
 }
 
@@ -17,9 +20,9 @@ const NAV: NavItem[] = [
   { to: '/today',        icon: CalendarDays,  label: "Today's schedule" },
   { to: '/week',         icon: LayoutGrid,    label: 'Week view' },
   { to: '/patients',     icon: Users,         label: 'Patients' },
-  { to: '/results/pathology',   icon: FlaskConical, label: 'Pathology inbox',    flag: 'uses_results_module' },
-  { to: '/results/labs',        icon: FileText,     label: 'Labs inbox',         flag: 'uses_results_module' },
-  { to: '/admin/callbacks',     icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
+  { to: '/results/pathology',   icon: FlaskConical, label: 'Pathology inbox',    flag: 'uses_results_module', resultsBadge: c => c.pathology_pending },
+  { to: '/results/labs',        icon: FileText,     label: 'Labs inbox',         flag: 'uses_results_module', resultsBadge: c => c.labs_pending },
+  { to: '/admin/callbacks',     icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module', resultsBadge: c => c.pathology_signed + c.labs_signed },
   { to: '/availability', icon: Clock,         label: 'Availability' },
   { to: '/broadcasts',   icon: Radio,         label: 'Broadcasts', badge: true, flag: 'uses_broadcasts' },
   { to: '/waitlist',     icon: ListOrdered,   label: 'Waitlist',                flag: 'uses_waitlist' },
@@ -33,6 +36,24 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
   const { provider, signOut } = useAuth()
   const { settings } = useSettings()
   const navigate = useNavigate()
+  const [resultsCounts, setResultsCounts] = useState<ResultsCounts>({
+    pathology_pending: 0, pathology_signed: 0, labs_pending: 0, labs_signed: 0,
+  })
+  // Poll results counts every 60s so new path/lab reports show the red
+  // pill without needing a refresh. Only polls when the Results module
+  // is on for this practice. Sara 2026-11-17.
+  useEffect(() => {
+    if (!settings.uses_results_module) return
+    let cancelled = false
+    const fetchCounts = () => {
+      getResultsCounts()
+        .then(c => { if (!cancelled) setResultsCounts(c) })
+        .catch(() => {})
+    }
+    fetchCounts()
+    const id = window.setInterval(fetchCounts, 60_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [settings.uses_results_module])
   if (!provider) return null
 
   const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
@@ -56,21 +77,29 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5">
-        {visibleNav.map(({ to, icon: Icon, label, badge }) => (
-          <NavLink key={to} to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
-              ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
-            }>
-            <Icon size={16} className="flex-shrink-0 opacity-70" />
-            {label}
-            {badge && broadcastCount > 0 && (
-              <span className="ml-auto bg-[#EF9F27] text-[#633806] text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
-                {broadcastCount}
-              </span>
-            )}
-          </NavLink>
-        ))}
+        {visibleNav.map(({ to, icon: Icon, label, badge, resultsBadge }) => {
+          const resultsBadgeCount = resultsBadge ? resultsBadge(resultsCounts) : 0
+          return (
+            <NavLink key={to} to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
+                ${isActive ? 'bg-[#7F77DD]/15 text-white border-l-[#7F77DD]' : 'text-white/55 hover:bg-white/5 hover:text-white/85'}`
+              }>
+              <Icon size={16} className="flex-shrink-0 opacity-70" />
+              {label}
+              {badge && broadcastCount > 0 && (
+                <span className="ml-auto bg-[#EF9F27] text-[#633806] text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                  {broadcastCount}
+                </span>
+              )}
+              {resultsBadgeCount > 0 && (
+                <span className="ml-auto bg-[#DC2626] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                  {resultsBadgeCount}
+                </span>
+              )}
+            </NavLink>
+          )
+        })}
       </nav>
 
       <div className="px-5 py-4 border-t border-white/8">
