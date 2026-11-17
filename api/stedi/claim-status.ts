@@ -224,10 +224,15 @@ async function post276(claim: ClaimForStatus, sub: SubscriberRow | null): Promis
   const payload: any = {
     controlNumber: Date.now().toString().slice(-9),
     tradingPartnerServiceId: claim.payer_id,
-    provider: {
+    // X12 276 wants a providers ARRAY (unlike 270 eligibility which uses
+    // a singular `provider` object). Stedi validation rejects the
+    // singular form with `missing field `providers` at line 1 column N`.
+    // Sara 2026-11-17 caught via live Check-status click.
+    providers: [{
       organizationName: process.env.PRACTICE_NAME || 'Pediatric House Calls PLLC',
       npi: process.env.PRACTICE_NPI || '1093250904',
-    },
+      providerType: 'BillingProvider',
+    }],
     subscriber: {
       ...(memberId ? { memberId } : {}),
       ...(subscriberFirst ? { firstName: subscriberFirst } : {}),
