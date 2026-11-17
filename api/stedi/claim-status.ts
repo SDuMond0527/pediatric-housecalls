@@ -59,7 +59,14 @@ type StatusEntry = {
 
 function fmtDate8(d: unknown): string {
   if (!d) return ''
-  const s = String(d).slice(0, 10)
+  // Neon date columns come back as JS Date objects — String(dateObj) is
+  // "Fri Oct 09 2026 00:00:00 GMT-0400", which slice(0,10) mangles into
+  // "Fri Oct 09" and Stedi rejects with its YYYYMMDD regex. Always
+  // route Date → toISOString first. See memory
+  // feedback_neon_date_columns_toisostring.md.
+  const s = d instanceof Date
+    ? d.toISOString().slice(0, 10)
+    : String(d).slice(0, 10)
   return s.replace(/-/g, '')
 }
 
@@ -188,7 +195,8 @@ async function loadSubscriber(sql: NeonQueryFunction<false, false>, childId: str
   if (!childId) return null
   const [row] = await sql`
     SELECT insurance_member_id, insurance_subscriber_name,
-           insurance_subscriber_dob, insurance_dependent_code, insurance_no_dependent_code
+           insurance_subscriber_dob::text AS insurance_subscriber_dob,
+           insurance_dependent_code, insurance_no_dependent_code
     FROM children WHERE id = ${childId}::uuid LIMIT 1`
   if (!row) return null
   const { first, last } = parseSubName(String((row as any).insurance_subscriber_name ?? ''))
