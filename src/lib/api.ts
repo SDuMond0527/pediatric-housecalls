@@ -1776,6 +1776,27 @@ export const fixResubmitClaim = (id: string, body: { note?: string } = {}) =>
 export const forceClaimStatus = (id: string, target: 'ready_for_biller' | 'submitted' | 'rework') =>
   apiFetch<any>(`/api/claims/${id}`, { method: 'PUT', body: JSON.stringify({ action: 'force_status', target_status: target }) })
 
+// Run an X12 276 claim-status inquiry at Stedi for one claim and
+// bucket the response (pending / era_pending / not_on_file /
+// rejected_intake / unknown). Side effects on the server:
+//   - not_on_file      → inserts a payer_never_received review-queue item
+//   - rejected_intake  → sets claim_rejection_* (routes to Rework tab)
+// Admin only. Sara 2026-11-17.
+export type PayerStatusBucket = 'pending' | 'era_pending' | 'not_on_file' | 'rejected_intake' | 'unknown'
+export type CheckClaimStatusResponse = {
+  ok: true
+  bucket: PayerStatusBucket
+  category_code: string | null
+  status_code: string | null
+  message: string | null
+  side_effect: 'none' | 'queued_payer_never_received' | 'moved_to_rework'
+}
+export const checkClaimStatus = (claimId: string) =>
+  apiFetch<CheckClaimStatusResponse>('/api/stedi/claim-status', {
+    method: 'POST',
+    body: JSON.stringify({ claim_id: claimId }),
+  })
+
 // Re-pull every insurance field (payer, member_id, dep_code, group, subscriber
 // name/DOB/gender) from the patient's chart and overwrite the claim snapshot.
 // For when the family corrects their insurance after a claim was already

@@ -223,6 +223,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // endpoint hasn't been hit yet. Sara 2026-10-06.
       try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS resubmission_log jsonb DEFAULT '[]'::jsonb` } catch {}
 
+      // Payer claim-status inquiry (X12 276/277) columns. The Submitted
+      // tab reads payer_status_bucket + payer_status_message +
+      // payer_status_checked_at to render the status pill on each
+      // claim card, so the columns must exist before any pill renders.
+      // Sara 2026-11-17.
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_bucket     text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_code       text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_category   text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_message    text` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_checked_at timestamptz` } catch {}
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS payer_status_raw        jsonb` } catch {}
+
       // Attachments table (bootstrap on every read path per the
       // "bootstrap on every read path" rule — the claims list
       // response doesn't query this table, but the attachments

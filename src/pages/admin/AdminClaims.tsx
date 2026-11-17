@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { FileText, AlertCircle, AlertOctagon, CheckCircle, XCircle, Clock, Send, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Receipt, Pencil, Trash2, Plus, Zap, Search, X, Download, Check, Paperclip, DollarSign } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
-import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, refreshClaimInsuranceFromChart, type WriteOffReason, type ClaimActivityEntry } from '../../lib/api'
+import { getClaims, generateClaim, submitClaim, testClaim, updateClaim, deleteClaim, getFeeSchedule, markClaimReadyForBiller, unmarkClaimReadyForBiller, testStediEraSync, backfillStediCas, backfillStediCasForce, refetchKnownEras, inspectUnmatchedEras, attach277X12, download277X12, getClaimActivity, addClaimActivity, resolveRework, resolveReworkWithStatement, getProviders, sendBillerQuestion, providerUpdateChild, writeOffClaim, downloadEncounterNoteHtml, downloadClaim1500Pdf, downloadClaimEraPdf, reopenClaim, fixResubmitClaim, uploadClaimAttachment, deleteClaimAttachment, getClaimAttachments, sweepStuck277s, forceClaimStatus, refreshClaimInsuranceFromChart, checkClaimStatus, type WriteOffReason, type ClaimActivityEntry, type PayerStatusBucket } from '../../lib/api'
 import { PostPaymentModal } from '../../components/PostPaymentModal'
 import { detectErraOutcome } from '../../lib/carcCodes'
 import { scrubClaim, getFilingBadge, type ScrubResult } from '../../lib/claimScrubber'
@@ -104,6 +104,18 @@ function fmtDate(d: any) {
 function fmtMoney(n: any) {
   const v = parseFloat(n ?? 0)
   return isNaN(v) ? '—' : `$${v.toFixed(2)}`
+}
+
+// Visual treatment for the Submitted-tab payer-status pill. Each bucket
+// maps to a label and tailwind class pair. "not_on_file" leads with the
+// plain-English "Payer never received" per Sara's labeling 2026-11-17 —
+// the technical X12 term is preserved in the tooltip.
+const PAYER_STATUS_PILL: Record<PayerStatusBucket, { label: string; cls: string; tooltip: string }> = {
+  pending:         { label: 'Payer: in process',          cls: 'bg-[#EEF1F8] text-[#31447A]',  tooltip: 'Payer confirms they have the claim and it\'s in adjudication. No action.' },
+  era_pending:     { label: 'Payer: finalized',           cls: 'bg-[#E1F5EE] text-[#085041]',  tooltip: 'Payer finalized adjudication. ERA is on its way.' },
+  not_on_file:     { label: 'Payer: never received',      cls: 'bg-[#FEF3C7] text-[#78350F]',  tooltip: 'Not on file (payer never received). An item is queued in the billing agent to approve resubmit.' },
+  rejected_intake: { label: 'Payer: rejected at intake',  cls: 'bg-[#FEE2E2] text-[#7F1D1D]',  tooltip: 'Payer rejected pre-adjudication. Claim moved to Rework.' },
+  unknown:         { label: 'Payer: no status returned',  cls: 'bg-[#F3F4F6] text-[#555]',     tooltip: 'Payer response didn\'t include a parseable status. See raw response.' },
 }
 
 export function AdminClaims() {
@@ -396,6 +408,34 @@ export function AdminClaims() {
       setFixResubmitError(e?.message ?? 'Failed to start resubmit')
     } finally {
       setFixResubmitSubmitting(false)
+    }
+  }
+
+  // Per-claim status-check (X12 276 inquiry). One Check status button
+  // on each Submitted claim card runs a live inquiry at the payer and
+  // bucket-classifies the response (pending / era_pending / not_on_file
+  // / rejected_intake). `statusCheckLoading` is keyed by claim id so
+  // one inquiry doesn't disable every button at once. Sara 2026-11-17.
+  const [statusCheckLoading, setStatusCheckLoading] = useState<Record<string, boolean>>({})
+  const [statusCheckError,   setStatusCheckError]   = useState<Record<string, string>>({})
+
+  async function runStatusCheck(claimId: string) {
+    setStatusCheckLoading(s => ({ ...s, [claimId]: true }))
+    setStatusCheckError(s => { const n = { ...s }; delete n[claimId]; return n })
+    try {
+      const resp = await checkClaimStatus(claimId)
+      // Reload the claim row so the pill reflects the new bucket. The
+      // list GET already brings payer_status_* so a reload is enough.
+      await load()
+      if (resp.side_effect === 'moved_to_rework') {
+        alert(`Payer "${resp.message ?? 'rejected at intake'}" — the claim has moved to the Rework tab.`)
+      } else if (resp.side_effect === 'queued_payer_never_received') {
+        alert(`Payer reports they never received this claim. Approve resubmit in the Billing agent to re-queue it for the biller.`)
+      }
+    } catch (e: any) {
+      setStatusCheckError(s => ({ ...s, [claimId]: e?.message ?? 'Status check failed' }))
+    } finally {
+      setStatusCheckLoading(s => { const n = { ...s }; delete n[claimId]; return n })
     }
   }
 
@@ -2690,6 +2730,38 @@ export function AdminClaims() {
                             {c.era_received_at && c.era_seen_at && (
                               <span className="ml-2 inline-flex items-center gap-0.5 bg-[#E1F5EE] text-[#085041] px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
                                 <Zap size={9} /> ERA received
+                              </span>
+                            )}
+                            {/* Payer status pill (X12 276 inquiry). Visible on
+                                Submitted + Rework tabs when a status check has
+                                run. The pill text is clamped; full status
+                                message goes in the title tooltip. Sara 2026-11-17. */}
+                            {tab === 'submitted' && c.payer_status_bucket && PAYER_STATUS_PILL[c.payer_status_bucket as PayerStatusBucket] && (
+                              <span
+                                className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${PAYER_STATUS_PILL[c.payer_status_bucket as PayerStatusBucket].cls}`}
+                                title={`${PAYER_STATUS_PILL[c.payer_status_bucket as PayerStatusBucket].tooltip}${c.payer_status_message ? `\n\nPayer said: "${c.payer_status_message}"` : ''}${c.payer_status_checked_at ? `\nChecked ${fmtDate(c.payer_status_checked_at)}` : ''}`}
+                              >
+                                {PAYER_STATUS_PILL[c.payer_status_bucket as PayerStatusBucket].label}
+                              </span>
+                            )}
+                            {/* Check status button — fires a 276 inquiry at
+                                the payer. Only visible on Submitted claims
+                                that haven't yet received an ERA. Sara 2026-11-17. */}
+                            {tab === 'submitted' && !c.era_received_at && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); void runStatusCheck(c.id) }}
+                                disabled={!!statusCheckLoading[c.id]}
+                                className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE] disabled:opacity-50 whitespace-nowrap"
+                                title="Ask the payer (via Stedi 276 inquiry) where this claim is right now."
+                              >
+                                <RefreshCw size={10} className={statusCheckLoading[c.id] ? 'animate-spin' : ''} />
+                                {statusCheckLoading[c.id] ? 'Checking…' : 'Check status'}
+                              </button>
+                            )}
+                            {statusCheckError[c.id] && (
+                              <span className="ml-2 text-[10px] text-[#7F1D1D]" title={statusCheckError[c.id]}>
+                                (status check failed)
                               </span>
                             )}
                             {/* Edit a previously-posted MANUAL payment — only

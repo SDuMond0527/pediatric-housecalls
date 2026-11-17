@@ -1,11 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { runClaimStatusCheck, bootstrapPayerStatusColumns, type ClaimForStatus } from '../stedi/claim-status.js'
 
 // Daily watcher — surfaces claims that have been "submitted" for 10+
-// days without an ERA back, so Sara can call the payer. Per Sara's
-// decision 2026-11-09: Option A — queue them + notify Sara only, no
-// outbound Stedi 276 inquiry for now. See memory
-// project_billing_agent_stage1_decisions.md.
+// days without an ERA back, so Sara can call the payer. Originally
+// per Sara's decision 2026-11-09 this was Option A (queue + notify
+// only, no outbound Stedi 276 inquiry). Sara 2026-11-17 upgraded:
+// for claims aged > 30 days with no ERA + no recent status check, the
+// cron now runs an X12 276 inquiry at the payer and bucket-classifies
+// the response — which auto-routes "not on file" → billing-agent and
+// "rejected at intake" → Rework tab. See runClaimStatusCheck() in
+// api/stedi/claim-status.ts for the bucket + dispatch logic.
 //
 // The cron is idempotent: if an open stale_claim row already exists
 // for the same claim, it's updated (priority may shift as days-waiting
@@ -178,6 +183,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // --- X12 276 claim-status inquiries for aged claims ---------------
+  // Second pass: claims submitted > 30 days ago, no ERA, no recent
+  // (< 7 day old) status check, and the payer isn't self-pay. Rate-
+  // limited to 30 calls per cron run so one bad day doesn't burn a
+  // huge Stedi bill. Dispatch logic (not_on_file → billing agent,
+  // rejected_intake → Rework) lives inside runClaimStatusCheck.
+  await bootstrapPayerStatusColumns(sql)
+
+  const STATUS_CHECK_MAX_PER_RUN = 30
+  let status_inquiries_attempted = 0
+  let status_inquiries_classified_not_on_file = 0
+  let status_inquiries_classified_rejected_intake = 0
+  let status_inquiries_classified_pending_or_era = 0
+  let status_inquiries_failed = 0
+
+  if (process.env.STEDI_API_KEY) {
+    try {
+      const inquiryCandidates = await sql`
+        SELECT cl.id, cl.practice_id, cl.stedi_claim_id, cl.payer_control_number,
+               cl.payer_id, cl.payer_name,
+               cl.service_date::text AS service_date, cl.total_charge,
+               cl.patient_first_name, cl.patient_last_name,
+               cl.patient_dob::text AS patient_dob,
+               cl.child_id
+        FROM claims cl
+        WHERE cl.status = 'submitted'
+          AND cl.era_received_at IS NULL
+          AND cl.submitted_at IS NOT NULL
+          AND cl.submitted_at < NOW() - INTERVAL '30 days'
+          AND cl.payer_id IS NOT NULL
+          AND cl.payer_id <> 'PP'
+          AND (cl.payer_status_checked_at IS NULL
+               OR cl.payer_status_checked_at < NOW() - INTERVAL '7 days')
+        ORDER BY cl.submitted_at ASC
+        LIMIT ${STATUS_CHECK_MAX_PER_RUN}`
+
+      for (const c of inquiryCandidates as any[]) {
+        try {
+          const result = await runClaimStatusCheck(sql, c as ClaimForStatus, { triggeredBy: 'stale-claims-cron' })
+          status_inquiries_attempted++
+          if (result.bucket === 'not_on_file') status_inquiries_classified_not_on_file++
+          else if (result.bucket === 'rejected_intake') status_inquiries_classified_rejected_intake++
+          else status_inquiries_classified_pending_or_era++
+        } catch (e: any) {
+          status_inquiries_failed++
+          console.error('[stale-claims] 276 inquiry failed for claim', c.id, ':', e?.message)
+        }
+      }
+    } catch (e: any) {
+      console.error('[stale-claims] status-inquiry pass failed:', e?.message)
+    }
+  }
+
   return res.status(200).json({
     ran_at: new Date().toISOString(),
     auto_closed: closed.length,
@@ -185,5 +243,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     inserted,
     updated,
     skipped,
+    status_inquiries_attempted,
+    status_inquiries_classified_not_on_file,
+    status_inquiries_classified_rejected_intake,
+    status_inquiries_classified_pending_or_era,
+    status_inquiries_failed,
   })
 }

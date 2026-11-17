@@ -31,6 +31,7 @@ const ITEM_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   denial_fix:           { label: 'Denial fix',           cls: 'bg-[#FFE4E6] text-[#9F1239]' },
   appeal_draft:         { label: 'Appeal draft',         cls: 'bg-[#EEEDFE] text-[#3C3489]' },
   eligibility_blocked:  { label: 'Eligibility failed',   cls: 'bg-[#FEE2E2] text-[#7F1D1D]' },
+  payer_never_received: { label: 'Payer never received', cls: 'bg-[#FEF3C7] text-[#78350F]' },
 }
 
 // Buttons are contextual per item type. Stage 1 items (stale_claim,
@@ -62,6 +63,12 @@ const ACTION_LABELS: Record<string, {
     dismiss: 'Dismiss',
     notePrompt: 'What did you do about it? (e.g. "called family — insurance is now active, retrying" or "switched to self-pay")',
     noteRequired: true,
+  },
+  payer_never_received: {
+    primary: 'Approve resubmit',
+    dismiss: 'Dismiss',
+    notePrompt: 'Optional note:',
+    noteRequired: false,
   },
   new_claim: {
     primary: 'Approve + submit',
