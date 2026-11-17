@@ -23,6 +23,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { to: '/admin/analytics',  icon: BarChart2,     label: 'Analytics' },
   { to: '/admin/reports',    icon: FileBarChart,  label: 'Reports' },
+  { to: '/admin/ask-reports',icon: Sparkles,      label: 'Ask reports' },
   { to: '/admin/financial-reports', icon: DollarSign, label: 'Financial' },
   { to: '/admin/reports-schedule',  icon: FileBarChart, label: "Bookkeeping to-do's" },
   { to: '/admin/schedule',   icon: CalendarDays,  label: 'Schedule' },
@@ -40,7 +41,6 @@ const NAV: NavItem[] = [
   { to: '/admin/callbacks',          icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
   { to: '/admin/diagnosis-library',  icon: FlaskConical, label: 'Diagnosis library',  flag: 'uses_results_module' },
   { to: '/admin/fee-schedule',       icon: DollarSign,   label: 'Fee schedule' },
-  { to: '/admin/ask-reports',        icon: Sparkles,     label: 'Ask reports' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },
