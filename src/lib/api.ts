@@ -932,6 +932,32 @@ export interface ResultsCounts {
 export const getResultsCounts = () =>
   apiFetch<ResultsCounts>('/api/results/counts')
 
+// ── HL7 dry-run (for LabCorp integration go-live validation) ───
+export interface Hl7DryRunResponse {
+  parsed: any
+  match: any
+  proposed_results: Array<{
+    type: 'lab'
+    specimen_date: string | null
+    test_code: string | null
+    test_name: string | null
+    source_lab: string | null
+    source_provider: string | null
+    observations: Array<{
+      name: string
+      value: string | null
+      units: string | null
+      reference_range: string | null
+      abnormal_flag: string | null
+      notes: string[]
+    }>
+  }>
+}
+export const hl7DryRun = (message: string) =>
+  apiFetch<Hl7DryRunResponse>('/api/admin/hl7-dry-run', {
+    method: 'POST', body: JSON.stringify({ message }),
+  })
+
 // ── Note photo upload ─────────────────────────────────────────
 export async function uploadNotePhoto(file: File): Promise<string> {
   const { fetchAuthSession } = await import('aws-amplify/auth')
