@@ -972,11 +972,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── ADDITIVE denial-code capture ─────────────────────────────
       // Fully wrapped — never blocks the webhook. Worst case
       // denial_codes stays null on this claim.
+      //
+      // Also NULL the column when the new ERA has no denial codes.
+      // Prior behavior only wrote on non-empty, so a clean payment
+      // following a prior denial left the stale codes behind and the
+      // CARC proposer kept re-queuing the claim for "denial fix"
+      // weeks after it was paid. Carson Yates 2026-11-17.
       try {
         await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS denial_codes jsonb`
         const codes = extractDenialCodes(cp.scoped)
         if (codes.length > 0) {
           await sql`UPDATE claims SET denial_codes = ${JSON.stringify(codes)}::jsonb WHERE id = ${claim.id}::uuid`
+        } else {
+          await sql`UPDATE claims SET denial_codes = NULL WHERE id = ${claim.id}::uuid AND denial_codes IS NOT NULL`
         }
       } catch (denialErr: any) {
         console.error('[webhooks/stedi-transaction] denial-code capture failed (non-fatal):', denialErr?.message)
@@ -1080,6 +1088,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const denialCodes = pc.cas.map(c => ({ group_code: c.group, reason_code: c.reason, amount: c.amount }))
               if (denialCodes.length > 0) {
                 await sql`UPDATE claims SET denial_codes = ${JSON.stringify(denialCodes)}::jsonb WHERE id = ${claimId}::uuid`
+              } else {
+                // Clear stale denial codes when a clean payment ERA
+                // supersedes a prior denial. Carson Yates 2026-11-17.
+                await sql`UPDATE claims SET denial_codes = NULL WHERE id = ${claimId}::uuid AND denial_codes IS NOT NULL`
               }
               // Persist remark (RARC) codes so the UI can tell the biller
               // exactly what documentation Aetna / BCBS want back. Column
@@ -1087,6 +1099,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS remark_codes jsonb` } catch {}
               if (pc.remarks && pc.remarks.length > 0) {
                 await sql`UPDATE claims SET remark_codes = ${JSON.stringify(pc.remarks)}::jsonb WHERE id = ${claimId}::uuid`
+              } else {
+                // Clear stale remark codes on a clean payment, same reason.
+                await sql`UPDATE claims SET remark_codes = NULL WHERE id = ${claimId}::uuid AND remark_codes IS NOT NULL`
               }
               // Save Stedi's remittance transaction ID so /api/claims/[id]/era-pdf
               // can call /electronic-remittance-advice/{id}/pdf without a second lookup.
