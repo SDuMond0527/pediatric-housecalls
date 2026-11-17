@@ -1190,12 +1190,12 @@ export function Today() {
                                 <Video size={13} /> Start video visit
                               </Button>
                             )}
-                            {appt.status !== 'cancelled' && (
+                            {appt.status !== 'cancelled' && !!settings.uses_iv_fluids && (
                               <Button variant="secondary" size="sm" onClick={() => openRnIvOrder(appt)} disabled={rnIvOpening}>
                                 <Droplet size={13} /> Order IV fluids
                               </Button>
                             )}
-                            {appt.status !== 'cancelled' && (
+                            {appt.status !== 'cancelled' && !!settings.uses_hybrid_tele_visits && (
                               <Button variant="secondary" size="sm" onClick={() => openCmaOrder(appt)} disabled={cmaOpening}>
                                 <TestTube size={13} /> Order CMA visit
                               </Button>
