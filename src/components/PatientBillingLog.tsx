@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { ChevronDown, Receipt, ExternalLink, DollarSign, Pencil } from 'lucide-react'
+import { ChevronDown, Receipt, ExternalLink, DollarSign, Pencil, FileDown } from 'lucide-react'
+import { downloadSuperbillPdf } from '../lib/api'
 
 /** One row in the billing log — a claim plus its linked statement (if any). */
 export type BillingLogEntry = {
@@ -154,6 +155,26 @@ export function PatientBillingLog({
         <LogRow key={e.claim_id} entry={e} onOpenClaim={onOpenClaim} />
       ))}
     </div>
+  )
+}
+
+function SuperbillDownload({ claimId }: { claimId: string }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async e => {
+        e.stopPropagation()
+        setBusy(true)
+        try { await downloadSuperbillPdf(claimId) }
+        catch (err: any) { alert(err?.message ?? 'Superbill download failed') }
+        finally { setBusy(false) }
+      }}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#7F77DD] text-[#7F77DD] text-[12px] font-medium rounded-lg hover:bg-[#EEEDFE] transition-colors disabled:opacity-50"
+      title="Download the superbill PDF — itemized receipt the parent can use for HSA/FSA reimbursement, out-of-network insurer submission, or tax records.">
+      <FileDown size={12} /> {busy ? 'Preparing…' : 'Superbill'}
+    </button>
   )
 }
 
@@ -407,7 +428,7 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
           )}
 
           {/* Actions — open full statement modal for edit/send/record-payment */}
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 flex-wrap">
             {e.statement_square_payment_url && e.statement_status === 'sent' && (
               <a
                 href={e.statement_square_payment_url}
@@ -417,6 +438,7 @@ function LogRow({ entry: e, onOpenClaim }: { entry: BillingLogEntry; onOpenClaim
                 <ExternalLink size={12} /> Open Square link
               </a>
             )}
+            <SuperbillDownload claimId={e.claim_id} />
             <button
               onClick={() => onOpenClaim(e)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6C64C8] transition-colors">

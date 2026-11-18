@@ -51,6 +51,15 @@ const featureFlags = {
   uses_lab_orders:             z.boolean().default(true),
   uses_radiology_orders:       z.boolean().default(true),
 
+  // Superbills — a PDF itemized receipt per visit that parents can
+  // submit to their own insurer for out-of-network reimbursement,
+  // to an HSA/FSA for reimbursement, or keep for tax records.
+  // Default true because PHC families already ask Sara for them and
+  // dropping insurance makes this universal. When ON, the parent
+  // portal shows a "Download superbill" button on every completed
+  // visit card, and the staff billing tab shows the same. Sara 2026-11-18.
+  generates_superbills:        z.boolean().default(true),
+
   // Family-facing
   uses_patient_portal:         z.boolean().default(true),
   uses_family_signup:          z.boolean().default(true),
@@ -212,6 +221,7 @@ export const SETTINGS_GROUPS: Array<{
       { key: 'uses_dosespot_eprescribing', label: 'Uses DoseSpot e-prescribing', kind: 'flag' },
       { key: 'uses_lab_orders',            label: 'Uses outside lab orders',     kind: 'flag' },
       { key: 'uses_radiology_orders',      label: 'Uses radiology orders',       kind: 'flag' },
+      { key: 'generates_superbills',       label: 'Generates superbills (PDF per visit)', kind: 'flag' },
     ],
   },
   {

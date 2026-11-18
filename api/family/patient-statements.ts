@@ -37,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rows = await sql`
       SELECT
         ps.id,
+        ps.claim_id,
         ps.status,
         ps.visit_type,
         ps.provider_name,

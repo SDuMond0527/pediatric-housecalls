@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   uses_dosespot_eprescribing:  true,
   uses_lab_orders:             true,
   uses_radiology_orders:       true,
+  generates_superbills:        true,
   uses_patient_portal:         true,
   uses_family_signup:          true,
   uses_booking_requests:       true,

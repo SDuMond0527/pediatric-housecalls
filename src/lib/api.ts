@@ -1624,6 +1624,11 @@ export const downloadClaim1500Pdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/1500-pdf`, `1500-claim-${id.slice(0, 8)}.pdf`)
 export const downloadClaimEraPdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/era-pdf`, `ERA-claim-${id.slice(0, 8)}.pdf`)
+// Superbill — itemized PDF receipt for one visit. Works from both
+// staff auth (provider token) and parent portal (family token); the
+// endpoint resolves which one and authorizes accordingly. Sara 2026-11-18.
+export const downloadSuperbillPdf = (id: string) =>
+  openClaimPdf(`/api/claims/${id}/superbill-pdf`, `superbill-${id.slice(0, 8)}.pdf`)
 
 // 277 X12 is text (not a PDF) so we use a lighter path than openClaimPdf.
 // Fetch as text, blob it, trigger the download AND open in a new tab so

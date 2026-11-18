@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { CheckCircle2, Send, ExternalLink, Receipt, ChevronDown } from 'lucide-react'
+import { CheckCircle2, Send, ExternalLink, Receipt, ChevronDown, FileDown } from 'lucide-react'
 import { ChartNumberPill } from './ChartNumberPill'
+import { downloadSuperbillPdf } from '../lib/api'
 
 export type BillingStatement = {
   id: string
+  claim_id?: string | null
   status: string
   visit_type: string | null
   provider_name: string | null
@@ -247,7 +249,27 @@ function StatementCard({ stmt, showPatientName, showPayButton }: { stmt: Billing
             </div>
           </div>
 
-          {showPayButton && isUnpaid && stmt.square_payment_url && (
+          {/* Superbill download — one per visit. Available on every
+              statement regardless of status so parents can retrieve
+              documentation whenever they need it (HSA/FSA, taxes,
+              out-of-network reimbursement). Requires claim_id on the
+              statement — statements without a claim_id are legacy or
+              statement-only rows and can't produce a superbill. */}
+          {stmt.claim_id && (
+            <div className="flex justify-end items-center gap-2">
+              {showPayButton && isUnpaid && stmt.square_payment_url && (
+                <a
+                  href={stmt.square_payment_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178860] transition-colors">
+                  <ExternalLink size={13} /> Pay this statement now
+                </a>
+              )}
+              <SuperbillButton claimId={stmt.claim_id} />
+            </div>
+          )}
+          {!stmt.claim_id && showPayButton && isUnpaid && stmt.square_payment_url && (
             <div className="flex justify-end">
               <a
                 href={stmt.square_payment_url}
@@ -261,5 +283,28 @@ function StatementCard({ stmt, showPatientName, showPayButton }: { stmt: Billing
         </div>
       )}
     </div>
+  )
+}
+
+function SuperbillButton({ claimId }: { claimId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  return (
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true); setErr(null)
+          try { await downloadSuperbillPdf(claimId) }
+          catch (e: any) { setErr(e?.message ?? 'Download failed') }
+          finally { setBusy(false) }
+        }}
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-[#7F77DD] text-[#7F77DD] text-[13px] font-medium rounded-lg hover:bg-[#EEEDFE] transition-colors disabled:opacity-50"
+        title="Download an itemized PDF receipt for this visit. Use it to submit to your insurer, HSA/FSA, or keep for taxes.">
+        <FileDown size={13} /> {busy ? 'Preparing…' : 'Download superbill'}
+      </button>
+      {err && <span className="text-[11px] text-[#991B1B] ml-2" title={err}>Download failed</span>}
+    </>
   )
 }
