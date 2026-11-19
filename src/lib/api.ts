@@ -1743,6 +1743,12 @@ export const createSupplyRequest = (body: { items: Array<{ supply_id: string; qu
 export const supplyRequestAction = (id: string, body: { action: 'mark_ordered' | 'mark_shipped' | 'mark_received' | 'cancel'; reason?: string }) =>
   apiFetch<SupplyRequest>(`/api/supply-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
+// One-shot seed for the 23 Google-Form items into the current user's
+// practice catalog. Super-admin only. Idempotent (updates existing rows
+// matched by name). Sara 2026-11-19.
+export const seedSuppliesCatalog = () =>
+  apiFetch<{ ok: true; inserted: number; updated: number; total: number }>('/api/admin/seed-supplies-catalog', { method: 'POST', body: '{}' })
+
 // 277 X12 is text (not a PDF) so we use a lighter path than openClaimPdf.
 // Fetch as text, blob it, trigger the download AND open in a new tab so
 // the biller can eyeball it inline if she wants.

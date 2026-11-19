@@ -3,9 +3,10 @@ import { Package, Plus, Loader2, CheckCircle2, X, Pencil, Trash2, RefreshCw, Tru
 import { format } from 'date-fns'
 import {
   getSupplies, createSupply, updateSupply, archiveSupply,
-  getSupplyRequests, supplyRequestAction,
+  getSupplyRequests, supplyRequestAction, seedSuppliesCatalog,
   type Supply, type SupplyRequest,
 } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 // Admin page for managing the supplies catalog + processing provider
 // requests. Two tabs:
@@ -158,10 +159,13 @@ function QueueTab() {
 }
 
 function CatalogTab() {
+  const { provider } = useAuth()
+  const isSuperAdmin = !!(provider as any)?.is_super_admin
   const [rows, setRows] = useState<Supply[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [editing, setEditing] = useState<Supply | 'new' | null>(null)
+  const [seeding, setSeeding] = useState(false)
 
   async function load() {
     setLoading(true); setErr(null)
@@ -170,6 +174,17 @@ function CatalogTab() {
     finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [])
+
+  async function doSeed() {
+    if (!confirm('Seed the catalog with the 23 items from the PHC Google Supply Order Form? Safe to click more than once — existing items update rather than duplicate.')) return
+    setSeeding(true); setErr(null)
+    try {
+      const r = await seedSuppliesCatalog()
+      alert(`Seeded: ${r.inserted} new, ${r.updated} updated.`)
+      await load()
+    } catch (e: any) { setErr(e?.message ?? 'Seed failed') }
+    finally { setSeeding(false) }
+  }
 
   async function doArchive(id: string) {
     if (!confirm('Archive this supply? It stays on historical requests but can no longer be ordered.')) return
@@ -186,10 +201,18 @@ function CatalogTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-[13px] text-[#555]">{loading ? 'Loading…' : `${rows.filter(r => r.is_active).length} active, ${rows.filter(r => !r.is_active).length} archived`}</div>
-        <button onClick={() => setEditing('new')}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium text-white bg-[#7F77DD] rounded-lg hover:bg-[#6B64C8]">
-          <Plus size={13} /> Add supply
-        </button>
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && rows.length === 0 && !loading && (
+            <button onClick={doSeed} disabled={seeding}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium text-[#7F77DD] border border-[#7F77DD] rounded-lg hover:bg-[#EEEDFE] disabled:opacity-50">
+              {seeding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={13} />} Seed from Google Form
+            </button>
+          )}
+          <button onClick={() => setEditing('new')}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium text-white bg-[#7F77DD] rounded-lg hover:bg-[#6B64C8]">
+            <Plus size={13} /> Add supply
+          </button>
+        </div>
       </div>
       {err && <div className="text-[12px] text-[#991B1B]">{err}</div>}
 
