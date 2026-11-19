@@ -1630,6 +1630,54 @@ export const downloadClaimEraPdf = (id: string) =>
 export const downloadSuperbillPdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/superbill-pdf`, `superbill-${id.slice(0, 8)}.pdf`)
 
+// Provider onboarding — super-admin invites a new provider via a
+// Cognito account + Resend email + provider_invites row. Phase 1 of
+// automated onboarding. Sara 2026-11-19.
+export type InviteProviderBody = {
+  email: string
+  first_name: string
+  last_name: string
+  role: 'MD' | 'NP' | 'PNP' | 'PA' | 'CMA' | 'RN' | 'MA'
+  supervising_md_id?: string | null
+  zones?: string[]
+  visit_types?: string[]
+  welcome_note?: string | null
+}
+export const inviteProvider = (body: InviteProviderBody) =>
+  apiFetch<{ ok: true; invite_id: string; onboarding_url: string; email_sent: boolean; email_error: string | null }>(
+    '/api/admin/invite-provider',
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+
+// Onboarding wizard endpoints — token-scoped, no provider JWT required.
+export type InviteResolveResponse =
+  | { state: 'valid'; invite: any; practice: { tax_id: string | null; group_npi: string | null; states: string[] } }
+  | { state: 'consumed' | 'expired' | 'missing'; error: string }
+export const resolveInvite = (token: string) =>
+  fetch(`/api/onboarding/provider?token=${encodeURIComponent(token)}`)
+    .then(async r => {
+      const body = await r.json().catch(() => ({ state: 'missing', error: `HTTP ${r.status}` }))
+      if (!r.ok) return body as InviteResolveResponse
+      return body as InviteResolveResponse
+    })
+export const npiLookup = (npi: string) =>
+  fetch(`/api/onboarding/npi-lookup?npi=${encodeURIComponent(npi)}`)
+    .then(async r => {
+      const body = await r.json().catch(() => ({ error: `HTTP ${r.status}` }))
+      if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`)
+      return body
+    })
+export const finalizeOnboarding = (body: any) =>
+  fetch('/api/onboarding/provider', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(async r => {
+    const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }))
+    if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`)
+    return data as { ok: true; provider_id: string; next: string }
+  })
+
 // 277 X12 is text (not a PDF) so we use a lighter path than openClaimPdf.
 // Fetch as text, blob it, trigger the download AND open in a new tab so
 // the biller can eyeball it inline if she wants.

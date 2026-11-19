@@ -64,6 +64,7 @@ import { FamilyDashboard } from './pages/family/FamilyDashboard'
 import { BookVisit } from './pages/family/BookVisit'
 import { FamilyProfile } from './pages/family/FamilyProfile'
 import { FamilyForgotPassword } from './pages/family/FamilyForgotPassword'
+import { OnboardingProvider } from './pages/OnboardingProvider'
 import { FamilyResetPassword } from './pages/family/FamilyResetPassword'
 import { FamilyVisitHistory } from './pages/family/FamilyVisitHistory'
 import { FamilySchoolExcuseRequest } from './pages/family/FamilySchoolExcuseRequest'
@@ -95,6 +96,10 @@ export default function App() {
         {/* Password reset pages — no auth context needed */}
         <Route path="/family/forgot-password" element={<FamilyForgotPassword />} />
         <Route path="/family/reset-password"  element={<FamilyResetPassword />} />
+
+        {/* Provider onboarding wizard — token-scoped, no auth required.
+            Invited providers land here from a Resend email. Sara 2026-11-19. */}
+        <Route path="/onboarding/provider" element={<OnboardingProvider />} />
 
         {/* Public referral form — targeted by QR codes distributed to urgent cares. */}
         <Route path="/referral/iv-fluids" element={<ReferralIvFluids />} />

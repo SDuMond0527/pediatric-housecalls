@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck } from 'lucide-react'
+import { Phone, Mail, AlertCircle, MapPin, ChevronDown, ChevronUp, CheckCircle2, KeyRound, Copy, Check, UserX, UserCheck, UserPlus } from 'lucide-react'
 import { getProviders, updateProvider, apiFetch, getPracticeZones, uploadProviderPhoto } from '../../lib/api'
+import { InviteProviderModal } from '../../components/InviteProviderModal'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { Badge } from '../../components/ui/Badge'
@@ -155,6 +156,7 @@ export function AdminProviders() {
 
   const [bulkResetting, setBulkResetting] = useState(false)
   const [bulkResults, setBulkResults] = useState<Array<{ name: string; email: string; temporaryPassword: string; error?: string }> | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   async function bulkResetPasswords() {
     if (!confirm('Reset passwords for all providers to #Phc2026! ? Skips Kiaira Bryson, Cecilia Akana-Paaluhi, and Dr. Sara DuMond. This cannot be undone.')) return
@@ -183,13 +185,30 @@ export function AdminProviders() {
   return (
     <div>
       <div className="bg-white border-b border-[#E8E8E4] px-6 py-4 sticky top-0 z-10">
-        <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Providers</div>
-        {usesConvenienceFees && (
-          <div className="text-[12px] text-[#1A1A2E] mt-0.5">
-            Set home addresses so convenience fees calculate correctly for the first appointment of the day.
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="font-display text-[18px] font-medium text-[#1A1A2E]">Providers</div>
+            {usesConvenienceFees && (
+              <div className="text-[12px] text-[#1A1A2E] mt-0.5">
+                Set home addresses so convenience fees calculate correctly for the first appointment of the day.
+              </div>
+            )}
           </div>
-        )}
+          {isSuperAdmin && (
+            <button
+              onClick={() => setInviteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8] whitespace-nowrap">
+              <UserPlus size={13} /> Invite provider
+            </button>
+          )}
+        </div>
       </div>
+
+      <InviteProviderModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onSuccess={() => { getProviders().then(d => setProviders(d as any)).catch(() => {}) }}
+      />
 
       <div className="p-6 space-y-6 max-w-3xl">
         {/* Bulk password reset — super-admin (platform owner) only. */}
