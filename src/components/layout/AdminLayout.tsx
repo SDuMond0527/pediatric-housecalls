@@ -1,12 +1,12 @@
 import { Outlet, useNavigate, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon, PhoneCall, FlaskConical, Sparkles } from 'lucide-react'
+import { CalendarDays, Radio, Users, Settings, LogOut, Clock, BarChart2, FileBarChart, Receipt, Building2, Stethoscope, CalendarClock, Menu, X, ShieldCheck, FileText, BookOpen, DollarSign, Ban, Library, GraduationCap, CreditCard, Megaphone, Inbox, Gem, Sliders, Bot, Link as LinkIcon, PhoneCall, FlaskConical, Sparkles, Package } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import type { PracticeSettings } from '../../lib/practiceSettings'
 import { DemoBanner } from '../DemoBanner'
 import { DEMO_MODE, PRACTICE_NAME } from '../../lib/practice'
-import { getEraCount, getPendingWriteOffCount, getEligibilityFailCount } from '../../lib/api'
+import { getEraCount, getPendingWriteOffCount, getEligibilityFailCount, getResultsCounts } from '../../lib/api'
 import { dailyAffirmation } from '../../lib/affirmations'
 import { GlobalPatientSearch } from '../GlobalPatientSearch'
 import { ProviderReplyBell } from '../ProviderReplyBell'
@@ -17,6 +17,7 @@ type NavItem = {
   label: string
   eraBadge?: boolean
   eligibilityFailBadge?: boolean
+  supplyBadge?: boolean
   flag?: keyof PracticeSettings
 }
 
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   { to: '/admin/callbacks',          icon: PhoneCall,    label: 'Patient callbacks',  flag: 'uses_results_module' },
   { to: '/admin/diagnosis-library',  icon: FlaskConical, label: 'Diagnosis library',  flag: 'uses_results_module' },
   { to: '/admin/fee-schedule',       icon: DollarSign,   label: 'Fee schedule' },
+  { to: '/admin/supply-orders',      icon: Package,      label: 'Supply orders', supplyBadge: true, flag: 'uses_supply_orders' },
   { to: '/admin/patients',   icon: Stethoscope,   label: 'Patients' },
   { to: '/admin/providers',     icon: Users,         label: 'Providers' },
   { to: '/admin/availability',  icon: CalendarClock, label: 'Availability' },
@@ -53,7 +55,7 @@ const NAV: NavItem[] = [
   { to: '/admin/audit-log',     icon: ShieldCheck,   label: 'Audit Log', flag: 'accepts_insurance' },
 ]
 
-function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; onNav?: () => void }) {
+function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eligibilityFailCount, supplyPendingCount, onNav }: { provider: any; signOut: () => void; eraCount: number; pendingWriteOffCount: number; eligibilityFailCount: number; supplyPendingCount: number; onNav?: () => void }) {
   const navigate = useNavigate()
   const { settings } = useSettings()
   const soloPractice = (provider?.practice_provider_count ?? 2) <= 1
@@ -89,7 +91,7 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eli
       </div>
 
       <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">
-        {visibleNav.map(({ to, icon: Icon, label, eraBadge, eligibilityFailBadge }) => (
+        {visibleNav.map(({ to, icon: Icon, label, eraBadge, eligibilityFailBadge, supplyBadge }) => (
           <NavLink key={to} to={to} onClick={onNav}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium transition-all border-l-3 border-transparent
@@ -105,6 +107,11 @@ function SidebarContent({ provider, signOut, eraCount, pendingWriteOffCount, eli
             {eligibilityFailBadge && eligibilityFailCount > 0 && (
               <span className="ml-auto bg-[#DC2626] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
                 {eligibilityFailCount}
+              </span>
+            )}
+            {supplyBadge && supplyPendingCount > 0 && (
+              <span className="ml-auto bg-[#DC2626] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                {supplyPendingCount}
               </span>
             )}
           </NavLink>
@@ -215,6 +222,7 @@ export function AdminLayout() {
   const [eraCount, setEraCount] = useState(0)
   const [pendingWriteOffCount, setPendingWriteOffCount] = useState(0)
   const [eligibilityFailCount, setEligibilityFailCount] = useState(0)
+  const [supplyPendingCount, setSupplyPendingCount] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -226,6 +234,7 @@ export function AdminLayout() {
       getEraCount().then(d => setEraCount(d?.count ?? 0)).catch(() => {})
       getPendingWriteOffCount().then(d => setPendingWriteOffCount(d?.count ?? 0)).catch(() => {})
       getEligibilityFailCount().then(d => setEligibilityFailCount(d?.count ?? 0)).catch(() => {})
+      getResultsCounts().then(d => setSupplyPendingCount(d?.supply_requests_pending ?? 0)).catch(() => {})
     }
     refresh()
     const interval = setInterval(refresh, 60000)
@@ -250,7 +259,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Desktop sidebar */}
       <div className="hidden md:fixed md:left-0 md:top-0 md:block md:z-40">
-        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount}/>
+        <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount} supplyPendingCount={supplyPendingCount}/>
       </div>
 
       {/* Mobile overlay sidebar */}
@@ -258,7 +267,7 @@ export function AdminLayout() {
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
           <div className="relative">
-            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount} onNav={() => setSidebarOpen(false)} />
+            <SidebarContent provider={provider} signOut={signOut} eraCount={eraCount} pendingWriteOffCount={pendingWriteOffCount} eligibilityFailCount={eligibilityFailCount} supplyPendingCount={supplyPendingCount} onNav={() => setSidebarOpen(false)} />
           </div>
         </div>
       )}
