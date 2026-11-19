@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { FamilyAuthProvider } from './contexts/FamilyAuthContext'
-import { PracticeSettingsProvider, FlagGuardedRoute } from './contexts/PracticeSettingsContext'
+import { PracticeSettingsProvider, FlagGuardedRoute, useSettings } from './contexts/PracticeSettingsContext'
 import { AppLayout } from './components/layout/AppLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { FamilyLayout } from './components/layout/FamilyLayout'
@@ -91,6 +91,19 @@ function RootRedirect() {
   return <Navigate to="/today" replace />
 }
 
+// Order-supplies gate — allows super-admins to view the page even when
+// the practice-wide providers_can_order_supplies flag is off, so Sara
+// can dog-food it before flipping the switch for the whole practice.
+// Non-super-admins hit the usual flag gate. Sara 2026-11-19.
+function OrderSuppliesGate({ children }: { children: React.ReactNode }) {
+  const { provider } = useAuth()
+  const { settings, loading } = useSettings()
+  if (loading) return <>{children}</>
+  const isSuperAdmin = !!(provider as any)?.is_super_admin
+  if (!settings.providers_can_order_supplies && !isSuperAdmin) return <Navigate to="/today" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -160,12 +173,13 @@ export default function App() {
                 <Route path="handbook"       element={<Handbook />} />
                 {/* Provider-side Order supplies — gated by BOTH flags
                     (uses_supply_orders is the system switch;
-                    providers_can_order_supplies gates the provider UI
-                    specifically so Pam can seed the catalog before any
-                    provider sees it). Nested FlagGuardedRoutes = AND. */}
+                    providers_can_order_supplies gates the provider UI).
+                    Super-admins bypass the second gate so Sara can test
+                    on her own provider view before flipping it on for
+                    the whole practice. Sara 2026-11-19. */}
                 <Route path="order-supplies" element={
                   <FlagGuardedRoute flag="uses_supply_orders">
-                    <FlagGuardedRoute flag="providers_can_order_supplies"><OrderSupplies /></FlagGuardedRoute>
+                    <OrderSuppliesGate><OrderSupplies /></OrderSuppliesGate>
                   </FlagGuardedRoute>
                 } />
                 <Route path="claim-question/:claimId" element={<ClaimQuestion />} />

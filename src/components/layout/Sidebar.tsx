@@ -15,6 +15,7 @@ type NavItem = {
   resultsBadge?: (c: ResultsCounts) => number                // results module — red pill, uses counts endpoint
   flag?: keyof PracticeSettings  // when set, nav item hides if flag is off
   extraFlag?: keyof PracticeSettings  // AND condition with flag
+  superAdminBypassExtraFlag?: boolean  // super-admin sees the item even when extraFlag is off (staging escape hatch)
   adminOnly?: boolean            // only show when provider is admin / super_admin
 }
 
@@ -33,8 +34,10 @@ const NAV: NavItem[] = [
   { to: '/handbook',     icon: BookOpen,      label: 'All things PHC',          flag: 'uses_handbook' },
   // Provider-facing "Order supplies" — gated by BOTH uses_supply_orders
   // and providers_can_order_supplies so Pam can seed the catalog before
-  // any provider sees it. Sara 2026-11-19.
-  { to: '/order-supplies',     icon: Package, label: 'Order supplies',           flag: 'uses_supply_orders', extraFlag: 'providers_can_order_supplies' },
+  // any provider sees it. Super-admin bypasses the second flag so Sara
+  // can test it on her own provider view before flipping the practice
+  // switch. Sara 2026-11-19.
+  { to: '/order-supplies',     icon: Package, label: 'Order supplies',           flag: 'uses_supply_orders', extraFlag: 'providers_can_order_supplies', superAdminBypassExtraFlag: true },
   // Admin-facing "Supply orders" queue + catalog editor. Visible only
   // to admins when uses_supply_orders is on. Red badge drives from
   // pending supply_requests count.
@@ -69,9 +72,13 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
   if (!provider) return null
 
   const isAdmin = !!((provider as any)?.is_admin || (provider as any)?.is_super_admin)
+  const isSuperAdmin = !!(provider as any)?.is_super_admin
   const visibleNav = NAV.filter(item => {
     if (item.flag && !settings[item.flag]) return false
-    if (item.extraFlag && !settings[item.extraFlag]) return false
+    if (item.extraFlag && !settings[item.extraFlag]) {
+      // Super-admins can opt to see the item anyway for staging / dog-fooding.
+      if (!(item.superAdminBypassExtraFlag && isSuperAdmin)) return false
+    }
     if (item.adminOnly && !isAdmin) return false
     return true
   })
