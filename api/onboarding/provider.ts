@@ -187,13 +187,18 @@ async function handleRequest(req: VercelRequest, res: VercelResponse) {
         WHERE id = ${existing.id}::uuid`
       providerId = existing.id
     } else {
+      // Explicit gen_random_uuid() — the prod providers.id column is
+      // NOT NULL with no DEFAULT, so the implicit id assignment that
+      // worked in the preview branch's test fixture didn't translate
+      // to prod. Sara's first-successful-schema-check retry caught it.
       const [row] = await sql`
         INSERT INTO providers (
-          practice_id, cognito_sub, name, first_name, last_name, email,
+          id, practice_id, cognito_sub, name, first_name, last_name, email,
           role, npi, taxonomy_code, dea_number, states, state_licenses,
           zones, initials, avatar_color, avatar_text_color, bio, phone,
           supervising_md_id, dosespot_clinician_id, is_active, is_admin, is_super_admin
         ) VALUES (
+          gen_random_uuid(),
           ${inv.practice_id}::uuid, ${cognitoSub},
           ${inv.first_name + ' ' + inv.last_name}, ${inv.first_name}, ${inv.last_name},
           ${inv.email}, ${inv.role}, ${npi}, ${taxonomyCode}, ${deaNumber},
