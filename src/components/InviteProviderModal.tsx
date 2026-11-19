@@ -50,7 +50,13 @@ export function InviteProviderModal({ open, onClose, onSuccess }: Props) {
     setError(null); setSuccess(null); setCopied(false)
     Promise.all([
       getProviders().then(ps => setAvailableMds(ps.filter((p: any) => p.role === 'MD').map((p: any) => ({ id: p.id, name: p.name })))).catch(() => {}),
-      getPracticeZones().then(zs => setAvailableZones(zs.map((z: any) => z.name ?? z))).catch(() => {}),
+      getPracticeZones()
+        .then(zs => setAvailableZones(
+          (Array.isArray(zs) ? zs : [])
+            .map((z: any) => z?.zone_name ?? z?.name ?? null)
+            .filter((v: unknown): v is string => typeof v === 'string' && !!v)
+        ))
+        .catch(() => {}),
     ])
   }, [open])
 
