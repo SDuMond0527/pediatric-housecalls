@@ -128,6 +128,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cognitoSub = await ensureCognitoSubForInvite(inv)
     if (!cognitoSub) return res.status(500).json({ error: 'Could not locate the login account. Ask your admin to resend the invite.' })
 
+    // Bootstrap columns the wizard writes to but the providers table
+    // doesn't yet have. The existing table is minimal — only name +
+    // cognito_sub + role + states[] + zones[] were there pre-onboarding.
+    // See memory feedback_verify_db_columns_before_sql.md. Sara 2026-11-19.
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS first_name text` } catch {}
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS last_name text` } catch {}
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS dea_number text` } catch {}
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS state_licenses jsonb` } catch {}
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS bio text` } catch {}
+    try { await sql`ALTER TABLE providers ADD COLUMN IF NOT EXISTS supervising_md_id uuid` } catch {}
+
+    // `states` and `zones` are text[] (Postgres ARRAY), not jsonb — pass
+    // the JS array directly; Neon's serverless driver converts to
+    // array literal. `state_licenses` IS jsonb.
+    const statesArr: string[] = statesLicensed
+    const zonesArr: string[]  = Array.isArray(inv.zones) ? inv.zones.map(String) : []
+    const stateLicensesJson = stateLicenses ? JSON.stringify(stateLicenses) : null
+
     // If a providers row already exists for this cognito_sub, finalize
     // is idempotent — just link to it. Otherwise insert.
     const [existing] = await sql`SELECT id FROM providers WHERE cognito_sub = ${cognitoSub} LIMIT 1`
@@ -143,9 +161,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           npi           = ${npi},
           taxonomy_code = ${taxonomyCode},
           dea_number    = ${deaNumber},
-          states        = ${JSON.stringify(statesLicensed)}::jsonb,
-          state_licenses = ${stateLicenses ? JSON.stringify(stateLicenses) : null}::jsonb,
-          zones         = ${JSON.stringify(inv.zones ?? [])}::jsonb,
+          states        = ${statesArr},
+          state_licenses = ${stateLicensesJson}::jsonb,
+          zones         = ${zonesArr},
           initials      = ${initials},
           avatar_color  = ${avatarColor},
           avatar_text_color = ${avatarTextColor},
@@ -167,9 +185,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${inv.practice_id}::uuid, ${cognitoSub},
           ${inv.first_name + ' ' + inv.last_name}, ${inv.first_name}, ${inv.last_name},
           ${inv.email}, ${inv.role}, ${npi}, ${taxonomyCode}, ${deaNumber},
-          ${JSON.stringify(statesLicensed)}::jsonb,
-          ${stateLicenses ? JSON.stringify(stateLicenses) : null}::jsonb,
-          ${JSON.stringify(inv.zones ?? [])}::jsonb,
+          ${statesArr},
+          ${stateLicensesJson}::jsonb,
+          ${zonesArr},
           ${initials}, ${avatarColor}, ${avatarTextColor}, ${bio}, ${phone},
           ${inv.supervising_md_id}::uuid, ${dosespotClinicianId},
           true, false, false
