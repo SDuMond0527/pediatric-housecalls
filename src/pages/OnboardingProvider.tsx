@@ -49,6 +49,7 @@ export function OnboardingProvider() {
   const [avatarIdx, setAvatarIdx] = useState(0)
   const [bio, setBio] = useState('')
   const [phone, setPhone] = useState('')
+  const [homeAddress, setHomeAddress] = useState('')
   const [dosespotId, setDosespotId] = useState('')
 
   // Step 3 state
@@ -103,7 +104,8 @@ export function OnboardingProvider() {
         avatar_color: AVATAR_COLORS[avatarIdx].bg,
         avatar_text_color: AVATAR_COLORS[avatarIdx].fg,
         bio: bio.trim() || null,
-        phone: phone.trim() || null,
+        phone: phone.trim(),
+        home_address: homeAddress.trim(),
         dosespot_clinician_id: dosespotId.trim() || null,
       })
       setStep('done')
@@ -221,11 +223,19 @@ export function OnboardingProvider() {
               <input value={initials} onChange={e => setInitials(e.target.value.toUpperCase().slice(0, 3))}
                 className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg bg-white outline-none focus:border-[#7F77DD]" />
             </Field>
-            <Field label="Phone (optional)">
+            <Field label="Phone">
               <input value={phone} onChange={e => setPhone(e.target.value)}
+                placeholder="(919) 555-0123"
                 className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg bg-white outline-none focus:border-[#7F77DD]" />
             </Field>
           </div>
+
+          <Field label="Home address">
+            <textarea value={homeAddress} onChange={e => setHomeAddress(e.target.value)}
+              rows={2}
+              placeholder="Street, City, State, ZIP — used by convenience-fee calculations for in-home visits."
+              className="w-full px-3 py-2 text-[13px] border border-[#E8E8E4] rounded-lg bg-white outline-none focus:border-[#7F77DD] resize-y" />
+          </Field>
 
           <Field label="Avatar color">
             <div className="flex gap-2 flex-wrap">
@@ -255,7 +265,7 @@ export function OnboardingProvider() {
           <StepButtons
             onBack={() => setStep(1)}
             onNext={() => setStep(3)}
-            nextDisabled={!initials || statesLicensed.length === 0}
+            nextDisabled={!initials || statesLicensed.length === 0 || !phone.trim() || !homeAddress.trim()}
           />
         </div>
       )}
@@ -274,6 +284,8 @@ export function OnboardingProvider() {
             <ReviewLine label="DEA" value={dea || '—'} />
             <ReviewLine label="States licensed" value={statesLicensed.join(', ') || '—'} />
             <ReviewLine label="Zones" value={(invite.zones ?? []).join(', ') || 'None assigned'} />
+            <ReviewLine label="Phone" value={phone} />
+            <ReviewLine label="Home address" value={homeAddress} />
             <ReviewLine label="DoseSpot ID" value={dosespotId || 'Not set — admin can add later'} />
           </div>
 

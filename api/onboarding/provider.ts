@@ -131,10 +131,16 @@ async function handleRequest(req: VercelRequest, res: VercelResponse) {
     const avatarColor     = String(body.avatar_color ?? '#EEEDFE').trim()
     const avatarTextColor = String(body.avatar_text_color ?? '#3C3489').trim()
     const bio             = String(body.bio ?? '').trim() || null
-    const phone           = String(body.phone ?? '').trim() || null
+    const phone           = String(body.phone ?? '').trim()
+    const homeAddress     = String(body.home_address ?? '').trim()
     const dosespotClinicianId = String(body.dosespot_clinician_id ?? '').trim() || null
 
     if (!npi || !/^\d{10}$/.test(npi)) return res.status(400).json({ error: 'Valid 10-digit NPI required' })
+    // Phone + home_address are required — enforce server-side even if
+    // the client gate was bypassed. See memory
+    // feedback_phone_required_everywhere.md. Sara 2026-11-19.
+    if (!phone) return res.status(400).json({ error: 'Phone number is required' })
+    if (!homeAddress) return res.status(400).json({ error: 'Home address is required' })
 
     // Grab the Cognito sub the invite endpoint pre-provisioned.
     const cognitoSub = await ensureCognitoSubForInvite(inv)
@@ -181,6 +187,7 @@ async function handleRequest(req: VercelRequest, res: VercelResponse) {
           avatar_text_color = ${avatarTextColor},
           bio           = ${bio},
           phone         = ${phone},
+          home_address  = ${homeAddress},
           supervising_md_id = ${inv.supervising_md_id}::uuid,
           dosespot_clinician_id = ${dosespotClinicianId},
           is_active     = true
@@ -195,7 +202,7 @@ async function handleRequest(req: VercelRequest, res: VercelResponse) {
         INSERT INTO providers (
           id, practice_id, cognito_sub, name, first_name, last_name, email,
           role, npi, taxonomy_code, dea_number, states, state_licenses,
-          zones, initials, avatar_color, avatar_text_color, bio, phone,
+          zones, initials, avatar_color, avatar_text_color, bio, phone, home_address,
           supervising_md_id, dosespot_clinician_id, is_active, is_admin, is_super_admin
         ) VALUES (
           gen_random_uuid(),
@@ -205,7 +212,7 @@ async function handleRequest(req: VercelRequest, res: VercelResponse) {
           ${statesArr},
           ${stateLicensesJson}::jsonb,
           ${zonesArr},
-          ${initials}, ${avatarColor}, ${avatarTextColor}, ${bio}, ${phone},
+          ${initials}, ${avatarColor}, ${avatarTextColor}, ${bio}, ${phone}, ${homeAddress},
           ${inv.supervising_md_id}::uuid, ${dosespotClinicianId},
           true, false, false
         )
