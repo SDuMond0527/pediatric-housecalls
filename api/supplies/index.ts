@@ -40,6 +40,14 @@ export async function bootstrapSupplyTables(sql: NeonQueryFunction<false, false>
       created_at           timestamptz NOT NULL DEFAULT NOW(),
       updated_at           timestamptz NOT NULL DEFAULT NOW()
     )`
+  // Phase 2 usage-predictor signals. CPT codes are already a column;
+  // sendout tags are the second signal for supplies that don't map to
+  // a billable code (Luxor FedEx bags, labels, swab bundles). Added
+  // 2026-11-19 after Sara noted PCR send-outs don't go through
+  // GoRoam's lab-orders table — nothing to decrement off, so we need
+  // a one-click tag at sign-time. See EncounterNoteModal's "Lab
+  // send-outs" section.
+  try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tag text` } catch {}
   await sql`CREATE INDEX IF NOT EXISTS supplies_catalog_practice_idx ON supplies_catalog(practice_id, is_active, sort_order)`
 
   await sql`
@@ -103,14 +111,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!name) return res.status(400).json({ error: 'name required' })
     const [row] = await sql`
       INSERT INTO supplies_catalog
-        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order)
+        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order, associated_sendout_tag)
       VALUES
         (${provider.practice_id}::uuid, ${name},
          ${b.unit_label ?? null}, ${b.description ?? null},
          ${Number(b.default_quantity ?? 1)},
          ${b.associated_cpt_code ?? null},
          ${b.units_per_box != null ? Number(b.units_per_box) : null},
-         ${Number(b.sort_order ?? 100)})
+         ${Number(b.sort_order ?? 100)},
+         ${b.associated_sendout_tag ?? null})
       RETURNING *`
     return res.status(201).json(row)
   }

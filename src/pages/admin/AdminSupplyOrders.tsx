@@ -219,6 +219,7 @@ function CatalogTab() {
       {editing && (
         <SupplyEditor
           initial={editing === 'new' ? null : editing}
+          existingTags={Array.from(new Set(rows.map(r => (r.associated_sendout_tag ?? '').trim()).filter(Boolean))).sort()}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await load() }}
         />
@@ -232,6 +233,7 @@ function CatalogTab() {
               <th className="text-left px-3 py-2">Unit</th>
               <th className="text-left px-3 py-2">Default qty</th>
               <th className="text-left px-3 py-2">CPT</th>
+              <th className="text-left px-3 py-2">Send-out tag</th>
               <th className="text-left px-3 py-2">Units/box</th>
               <th className="text-right px-3 py-2">Actions</th>
             </tr>
@@ -246,6 +248,7 @@ function CatalogTab() {
                 <td className="px-3 py-2 text-[#555]">{s.unit_label ?? '—'}</td>
                 <td className="px-3 py-2 text-[#555]">{s.default_quantity}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-[#3C3489]">{s.associated_cpt_code ?? '—'}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-[#633806]">{s.associated_sendout_tag ?? '—'}</td>
                 <td className="px-3 py-2 text-[#555]">{s.units_per_box ?? '—'}</td>
                 <td className="px-3 py-2 text-right">
                   <div className="inline-flex items-center gap-1">
@@ -258,7 +261,7 @@ function CatalogTab() {
               </tr>
             ))}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-10 text-center text-[#555]">Catalog is empty. Click "Add supply" to seed the first item.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-10 text-center text-[#555]">Catalog is empty. Click "Add supply" to seed the first item.</td></tr>
             )}
           </tbody>
         </table>
@@ -267,13 +270,14 @@ function CatalogTab() {
   )
 }
 
-function SupplyEditor(props: { initial: Supply | null; onClose: () => void; onSaved: () => void }) {
+function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; onClose: () => void; onSaved: () => void }) {
   const isNew = !props.initial
   const [name, setName] = useState(props.initial?.name ?? '')
   const [unitLabel, setUnitLabel] = useState(props.initial?.unit_label ?? '')
   const [description, setDescription] = useState(props.initial?.description ?? '')
   const [defaultQty, setDefaultQty] = useState(String(props.initial?.default_quantity ?? 1))
   const [cpt, setCpt] = useState(props.initial?.associated_cpt_code ?? '')
+  const [sendoutTag, setSendoutTag] = useState(props.initial?.associated_sendout_tag ?? '')
   const [unitsPerBox, setUnitsPerBox] = useState(props.initial?.units_per_box != null ? String(props.initial.units_per_box) : '')
   const [sortOrder, setSortOrder] = useState(String(props.initial?.sort_order ?? 100))
   const [busy, setBusy] = useState(false)
@@ -289,6 +293,7 @@ function SupplyEditor(props: { initial: Supply | null; onClose: () => void; onSa
       description: description.trim() || null,
       default_quantity: Math.max(1, Number(defaultQty) | 0),
       associated_cpt_code: cpt.trim() || null,
+      associated_sendout_tag: sendoutTag.trim().replace(/\s+/g, '_').toLowerCase() || null,
       units_per_box: unitsPerBox.trim() ? (Number(unitsPerBox) | 0) : null,
       sort_order: Number(sortOrder) | 0,
     }
@@ -319,9 +324,23 @@ function SupplyEditor(props: { initial: Supply | null; onClose: () => void; onSa
         <Field label="CPT (Phase 2)"><input value={cpt} onChange={e => setCpt(e.target.value)} placeholder="e.g. 87880" className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" /></Field>
         <Field label="Units per box"><input value={unitsPerBox} onChange={e => setUnitsPerBox(e.target.value.replace(/\D/g,''))} placeholder="e.g. 25" className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" /></Field>
       </div>
-      <Field label="Sort order (lower = earlier)">
-        <input value={sortOrder} onChange={e => setSortOrder(e.target.value.replace(/\D/g,''))} className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Send-out tag (Phase 2)">
+          <input
+            value={sendoutTag}
+            onChange={e => setSendoutTag(e.target.value)}
+            list="sendout-tag-options"
+            placeholder="e.g. luxor_sendout"
+            className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
+          <datalist id="sendout-tag-options">
+            {props.existingTags.map(t => <option key={t} value={t} />)}
+          </datalist>
+          <div className="text-[11px] text-[#555] mt-1">For supplies that aren't tied to a CPT. Each tag appears as a checkbox on the encounter note at sign-time.</div>
+        </Field>
+        <Field label="Sort order (lower = earlier)">
+          <input value={sortOrder} onChange={e => setSortOrder(e.target.value.replace(/\D/g,''))} className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
+        </Field>
+      </div>
       {err && <div className="text-[12px] text-[#991B1B]">{err}</div>}
       <div className="flex justify-end gap-2">
         <button onClick={props.onClose} className="px-3 py-1.5 text-[13px] text-[#555] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8]">Cancel</button>

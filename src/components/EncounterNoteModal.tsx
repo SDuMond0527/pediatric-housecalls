@@ -6,7 +6,7 @@ import { RnIvOrderModal, type RnIvOrderContext } from './RnIvOrderModal'
 import { CmaOrderModal, type CmaOrderContext } from './CmaOrderModal'
 import { formatApiDate } from '../lib/dateUtils'
 import { Button } from './ui/Button'
-import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, downloadEncounterNoteHtml, type ChronicProblem } from '../lib/api'
+import { getEncounterNote, createEncounterNote, updateEncounterNote, getVitals, saveVitals, searchChildren, getFeeSchedule, uploadNotePhoto, uploadNoteFile, getChildrenByIds, getNoteTemplates, createNoteTemplate, updateNoteTemplate, deleteNoteTemplate, getDoseSpotSSO, logAudit, draftEncounterNote, coSignEncounterNote, undoCoSignEncounterNote, getChronicProblems, addChronicProblem, resolveChronicProblem, providerGenerateSchoolNote, downloadEncounterNoteHtml, getSupplies, type ChronicProblem } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { FlagGate, useSettings } from '../contexts/PracticeSettingsContext'
 import type { Appointment } from '../types'
@@ -831,7 +831,26 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   // Note fields
   const [vaccineEntries, setVaccineEntries] = useState<VaccineEntry[]>([emptyVaccine()])
   const [labs, setLabs] = useState<LabsState>(emptyLabs())
+  // Lab send-outs — tag strings checked at sign-time to signal which
+  // Luxor-type supplies were consumed. Tags are sourced from
+  // supplies_catalog.associated_sendout_tag. Sara 2026-11-19.
+  const [labSendouts, setLabSendouts] = useState<string[]>([])
+  const [sendoutTagOptions, setSendoutTagOptions] = useState<string[]>([])
   const [ivFluidsRN, setIVFluidsRN] = useState<IVFluidsRNForm>(emptyIVFluidsRN())
+
+  // Fetch distinct send-out tags from the practice catalog on mount.
+  // Each distinct tag becomes one checkbox. If the catalog has no
+  // tagged supplies, the section auto-hides below.
+  useEffect(() => {
+    getSupplies().then((rows: any[]) => {
+      const tags = new Set<string>()
+      for (const r of rows) {
+        const t = (r?.associated_sendout_tag ?? '').trim()
+        if (t) tags.add(t)
+      }
+      setSendoutTagOptions(Array.from(tags).sort())
+    }).catch(() => {})
+  }, [])
 
   const [chiefComplaint, setChiefComplaint] = useState('')
   const [subjective, setSubjective] = useState('')
@@ -1046,6 +1065,7 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
           setVaccineEntries(note.vaccine_administrations)
         if (note.iv_administration) setIVFluidsRN(note.iv_administration)
         if (note.labs && typeof note.labs === 'object') setLabs({ ...emptyLabs(), ...note.labs })
+        if (Array.isArray(note.lab_sendouts)) setLabSendouts(note.lab_sendouts.filter((x: unknown): x is string => typeof x === 'string'))
         if (note.note_type && NOTE_TYPES.includes(note.note_type)) setNoteType(note.note_type as NoteType)
         if (note.child_id && !childId) {
           resolvedChildId = note.child_id
@@ -1236,6 +1256,10 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
       // Send null on vaccine + RN IV fluids notes where the section is
       // hidden entirely so the server doesn't persist stale state.
       labs: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : labs,
+      // Lab send-outs — array of tag strings (see supplies_catalog.
+      // associated_sendout_tag). Signals which Luxor-type supplies
+      // were consumed on this visit. Sara 2026-11-19.
+      lab_sendouts: (noteType === 'In-home vaccine administration' || noteType === 'RN IV fluids') ? null : labSendouts,
       diagnoses,
       cpt_codes: cptCodes,
       photos,
@@ -2608,6 +2632,35 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
                 </div>
               </div>
             </section>
+            )}
+
+            {/* Lab send-outs — tag any supplies consumed on this visit so
+                the supply-orders predictor can decrement them. Section
+                auto-hides when the practice catalog has no tagged
+                supplies. Hidden on vaccine + RN IV visits for the same
+                reason the Labs POC section is hidden. Sara 2026-11-19. */}
+            {sendoutTagOptions.length > 0 && noteType !== 'In-home vaccine administration' && noteType !== 'RN IV fluids' && (
+              <section>
+                <div className={sectionHeader}>Lab send-outs</div>
+                <p className="text-[11px] text-[#1A1A2E] mb-2">Check anything you shipped out today so we can track consumables (FedEx bags, labels, swab bundles).</p>
+                <div className="bg-white border border-[#E8E8E4] rounded-xl divide-y divide-[#F1EFE8]">
+                  {sendoutTagOptions.map(tag => (
+                    <label key={tag} className="flex items-center gap-2 px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={labSendouts.includes(tag)}
+                        disabled={readOnly}
+                        onChange={e => {
+                          setLabSendouts(prev => e.target.checked
+                            ? Array.from(new Set([...prev, tag]))
+                            : prev.filter(t => t !== tag))
+                        }}
+                      />
+                      <span className="text-[13px] text-[#1A1A2E]">{tag.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
             )}
 
             {/* Assessment / Diagnoses */}

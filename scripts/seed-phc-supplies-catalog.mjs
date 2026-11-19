@@ -39,9 +39,9 @@ const CATALOG = [
   { name: 'Castille soap towelettes',           unit_label: 'box',                           default_quantity: 1, sort_order: 170 },
   { name: 'Rapid strep tests',                  unit_label: 'box of 25',                     default_quantity: 1, associated_cpt_code: '87880', units_per_box: 25, sort_order: 180 },
   { name: 'Rapid COVID/RSV/Flu A/B tests',      unit_label: 'box of 4',                      default_quantity: 1, associated_cpt_code: '87811', units_per_box: 4,  sort_order: 190 },
-  { name: 'Luxor Lab supplies — FedEx bags',    unit_label: 'bundle',                        default_quantity: 1, description: 'Specify color variant in notes.', sort_order: 200 },
-  { name: 'Luxor Lab supplies — swabs/tubes/biohazard bundle', unit_label: 'bundle',         default_quantity: 1, sort_order: 210 },
-  { name: 'Luxor Lab supplies — FedEx labels', unit_label: 'bundle',                         default_quantity: 1, sort_order: 220 },
+  { name: 'Luxor Lab supplies — FedEx bags',    unit_label: 'bundle',                        default_quantity: 1, description: 'Specify color variant in notes.', sort_order: 200, associated_sendout_tag: 'luxor_sendout' },
+  { name: 'Luxor Lab supplies — swabs/tubes/biohazard bundle', unit_label: 'bundle',         default_quantity: 1, sort_order: 210, associated_sendout_tag: 'luxor_sendout' },
+  { name: 'Luxor Lab supplies — FedEx labels', unit_label: 'bundle',                         default_quantity: 1, sort_order: 220, associated_sendout_tag: 'luxor_sendout' },
   { name: 'Nebulizer tubing',                   unit_label: 'tubes',                         default_quantity: 5, associated_cpt_code: '94640', sort_order: 230 },
 ]
 
@@ -63,6 +63,7 @@ async function bootstrap() {
       created_at           timestamptz NOT NULL DEFAULT NOW(),
       updated_at           timestamptz NOT NULL DEFAULT NOW()
     )`
+  try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tag text` } catch {}
 }
 
 let inserted = 0, updated = 0
@@ -79,6 +80,7 @@ for (const it of CATALOG) {
         description         = ${it.description ?? null},
         default_quantity    = ${it.default_quantity ?? 1},
         associated_cpt_code = ${it.associated_cpt_code ?? null},
+        associated_sendout_tag = ${it.associated_sendout_tag ?? null},
         units_per_box       = ${it.units_per_box ?? null},
         sort_order          = ${it.sort_order ?? 100},
         is_active           = true,
@@ -88,10 +90,11 @@ for (const it of CATALOG) {
   } else {
     await sql`
       INSERT INTO supplies_catalog
-        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order)
+        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, associated_sendout_tag, units_per_box, sort_order)
       VALUES
         (${PHC_PRACTICE_ID}::uuid, ${it.name}, ${it.unit_label ?? null}, ${it.description ?? null},
-         ${it.default_quantity ?? 1}, ${it.associated_cpt_code ?? null}, ${it.units_per_box ?? null}, ${it.sort_order ?? 100})`
+         ${it.default_quantity ?? 1}, ${it.associated_cpt_code ?? null}, ${it.associated_sendout_tag ?? null},
+         ${it.units_per_box ?? null}, ${it.sort_order ?? 100})`
     inserted++
   }
 }

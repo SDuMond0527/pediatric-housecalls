@@ -16,7 +16,7 @@ const toYmd = (d: any): string => {
 // comment in api/appointments/[id].ts explaining why.
 const ENCOUNTER_NOTES_CLEARABLE = new Set<string>([
   'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-  'vaccine_administrations', 'iv_administration', 'labs',
+  'vaccine_administrations', 'iv_administration', 'labs', 'lab_sendouts',
 ])
 async function applyEncounterNoteClears(
   sql: any,
@@ -37,6 +37,7 @@ async function applyEncounterNoteClears(
       case 'vaccine_administrations':  await sql`UPDATE encounter_notes SET vaccine_administrations  = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
       case 'iv_administration':        await sql`UPDATE encounter_notes SET iv_administration        = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
       case 'labs':                     await sql`UPDATE encounter_notes SET labs                     = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+      case 'lab_sendouts':             await sql`UPDATE encounter_notes SET lab_sendouts             = NULL WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
     }
   }
 }
@@ -935,13 +936,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [existing] = await sql`SELECT is_signed FROM encounter_notes WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
       if (!existing) return res.status(404).json({ error: 'Note not found' })
 
-      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, files, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot, labs } = req.body
+      const { note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, files, is_signed, child_id, vaccine_administrations, iv_administration, medical_history_snapshot, labs, lab_sendouts } = req.body
 
       // Idempotent bootstrap — every PUT after this deploy ensures the
       // labs column exists so a save can never silently drop the field.
       try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS labs jsonb` } catch {}
       // Files attachment column added 2026-10-07. Companion to photos.
       try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS files jsonb DEFAULT '[]'::jsonb` } catch {}
+      // lab_sendouts — Phase 2 usage signal for Luxor-type supplies that
+      // don't go through the lab_orders table. Sara 2026-11-19.
+      try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS lab_sendouts jsonb` } catch {}
 
       const unlocking = is_signed === false
       if (existing.is_signed && !unlocking) return res.status(403).json({ error: 'Cannot edit a signed note' })
@@ -1013,6 +1017,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             vaccine_administrations = COALESCE(${vaccine_administrations != null ? JSON.stringify(vaccine_administrations) : null}::jsonb, vaccine_administrations),
             iv_administration = COALESCE(${iv_administration != null ? JSON.stringify(iv_administration) : null}::jsonb, iv_administration),
             labs              = COALESCE(${labs != null ? JSON.stringify(labs) : null}::jsonb, labs),
+            lab_sendouts      = COALESCE(${lab_sendouts != null ? JSON.stringify(Array.isArray(lab_sendouts) ? lab_sendouts.filter((x: unknown) => typeof x === 'string') : []) : null}::jsonb, lab_sendouts),
             medical_history_snapshot = COALESCE(${medical_history_snapshot ?? null}, medical_history_snapshot),
             child_id        = COALESCE(${child_id ?? null}::uuid, child_id),
             is_signed       = ${signing},

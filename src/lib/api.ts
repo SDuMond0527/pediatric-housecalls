@@ -1689,6 +1689,7 @@ export type Supply = {
   description: string | null
   default_quantity: number
   associated_cpt_code: string | null
+  associated_sendout_tag: string | null
   units_per_box: number | null
   sort_order: number
   is_active: boolean

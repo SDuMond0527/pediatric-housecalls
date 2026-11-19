@@ -78,18 +78,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs } = req.body
+    const { appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs, lab_sendouts } = req.body
     if (!appointment_id) return res.status(400).json({ error: 'appointment_id required' })
 
     // Idempotent bootstrap so we can add labs without a migration step.
     try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS labs jsonb` } catch {}
+    // lab_sendouts — array of tag strings matched against
+    // supplies_catalog.associated_sendout_tag. Each tag checked at
+    // sign-time will decrement the matching supplies in the Phase 2
+    // predictor. Sara 2026-11-19.
+    try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS lab_sendouts jsonb` } catch {}
 
     const diagnosesVal = diagnoses ?? []
     const cptCodesVal  = cpt_codes  ?? []
     const photosVal    = photos     ?? []
+    const labSendoutsVal = Array.isArray(lab_sendouts) ? lab_sendouts.filter((x: unknown) => typeof x === 'string') : null
 
     const [row] = await sql`
-      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs)
+      INSERT INTO encounter_notes (practice_id, appointment_id, child_id, provider_id, note_type, chief_complaint, subjective, objective, assessment, plan, diagnoses, cpt_codes, photos, vaccine_administrations, iv_administration, labs, lab_sendouts)
       VALUES (
         ${practiceId}::uuid,
         ${appointment_id}::uuid,
@@ -106,7 +112,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${JSON.stringify(photosVal)}::jsonb,
         ${vaccine_administrations ? JSON.stringify(vaccine_administrations) : null}::jsonb,
         ${iv_administration ? JSON.stringify(iv_administration) : null}::jsonb,
-        ${labs ? JSON.stringify(labs) : null}::jsonb
+        ${labs ? JSON.stringify(labs) : null}::jsonb,
+        ${labSendoutsVal ? JSON.stringify(labSendoutsVal) : null}::jsonb
       )
       RETURNING *`
     if (child_id) {
