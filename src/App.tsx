@@ -52,6 +52,8 @@ import { AdminDiagnosisLibrary } from './pages/admin/AdminDiagnosisLibrary'
 import { AdminFeeSchedule } from './pages/admin/AdminFeeSchedule'
 import { AdminAskReports } from './pages/admin/AdminAskReports'
 import { AdminHl7DryRun } from './pages/admin/AdminHl7DryRun'
+import { AdminSupplyOrders } from './pages/admin/AdminSupplyOrders'
+import { OrderSupplies } from './pages/OrderSupplies'
 import { AdminUnmatchedEras } from './pages/admin/AdminUnmatchedEras'
 import { AdminEligibilityFails } from './pages/admin/AdminEligibilityFails'
 import { AdminNcciPreview } from './pages/admin/AdminNcciPreview'
@@ -156,6 +158,16 @@ export default function App() {
                 <Route path="settings"       element={<Settings />} />
                 <Route path="cpr-requests"   element={<FlagGuardedRoute flag="uses_cpr_classes"><CprRequests /></FlagGuardedRoute>} />
                 <Route path="handbook"       element={<Handbook />} />
+                {/* Provider-side Order supplies — gated by BOTH flags
+                    (uses_supply_orders is the system switch;
+                    providers_can_order_supplies gates the provider UI
+                    specifically so Pam can seed the catalog before any
+                    provider sees it). Nested FlagGuardedRoutes = AND. */}
+                <Route path="order-supplies" element={
+                  <FlagGuardedRoute flag="uses_supply_orders">
+                    <FlagGuardedRoute flag="providers_can_order_supplies"><OrderSupplies /></FlagGuardedRoute>
+                  </FlagGuardedRoute>
+                } />
                 <Route path="claim-question/:claimId" element={<ClaimQuestion />} />
               </Route>
               <Route path="/admin" element={<AdminLayout />}>
@@ -187,6 +199,9 @@ export default function App() {
                 <Route path="fee-schedule"      element={<AdminFeeSchedule />} />
                 <Route path="ask-reports"       element={<AdminAskReports />} />
                 <Route path="hl7-dry-run"       element={<AdminHl7DryRun />} />
+                {/* Admin-side Supply orders — queue + catalog editor.
+                    Pam uses this to seed the catalog and process requests. */}
+                <Route path="supply-orders"     element={<FlagGuardedRoute flag="uses_supply_orders" redirectTo="/admin/analytics"><AdminSupplyOrders /></FlagGuardedRoute>} />
                 <Route path="marketing"  element={<AdminMarketing />} />
                 <Route path="referrals"  element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminReferrals /></FlagGuardedRoute>} />
                 <Route path="agencies"   element={<FlagGuardedRoute flag="uses_booking_requests" redirectTo="/admin/analytics"><AdminAgencies /></FlagGuardedRoute>} />

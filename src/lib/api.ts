@@ -921,13 +921,15 @@ export const runReportQuery = (question: string) =>
     method: 'POST', body: JSON.stringify({ question }),
   })
 
-// Sidebar badge counts for the Results module. One call drives three
-// nav items (Pathology inbox, Labs inbox, Patient callbacks).
+// Sidebar badge counts for the Results module + supply-requests queue.
+// One call drives: Pathology inbox, Labs inbox, Patient callbacks,
+// Supply orders (admin-only). Sara 2026-11-17 + 2026-11-19.
 export interface ResultsCounts {
   pathology_pending: number
   pathology_signed: number
   labs_pending: number
   labs_signed: number
+  supply_requests_pending: number
 }
 export const getResultsCounts = () =>
   apiFetch<ResultsCounts>('/api/results/counts')
@@ -1677,6 +1679,69 @@ export const finalizeOnboarding = (body: any) =>
     if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`)
     return data as { ok: true; provider_id: string; next: string }
   })
+
+// Supplies — catalog + request/queue. Sara 2026-11-19.
+export type Supply = {
+  id: string
+  practice_id: string
+  name: string
+  unit_label: string | null
+  description: string | null
+  default_quantity: number
+  associated_cpt_code: string | null
+  units_per_box: number | null
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+export type SupplyRequestItem = {
+  id: string
+  request_id: string
+  supply_id: string
+  supply_name: string
+  unit_label: string | null
+  quantity: number
+  notes: string | null
+}
+export type SupplyRequest = {
+  id: string
+  practice_id: string
+  provider_id: string
+  provider_name: string
+  shipping_address: string | null
+  notes: string | null
+  status: 'requested' | 'ordered' | 'shipped' | 'received' | 'cancelled'
+  requested_at: string
+  ordered_at: string | null
+  ordered_by_name: string | null
+  shipped_at: string | null
+  shipped_by_name: string | null
+  received_at: string | null
+  cancelled_at: string | null
+  cancelled_by_name: string | null
+  cancelled_reason: string | null
+  items: SupplyRequestItem[]
+}
+export const getSupplies = (includeArchived = false) =>
+  apiFetch<Supply[]>(`/api/supplies${includeArchived ? '?include_archived=true' : ''}`)
+export const createSupply = (body: Partial<Supply>) =>
+  apiFetch<Supply>('/api/supplies', { method: 'POST', body: JSON.stringify(body) })
+export const updateSupply = (id: string, body: Partial<Supply>) =>
+  apiFetch<Supply>(`/api/supplies/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const archiveSupply = (id: string) =>
+  apiFetch<{ ok: true }>(`/api/supplies/${id}`, { method: 'DELETE' })
+export const getSupplyRequests = (params?: { scope?: 'mine' | 'all'; status?: string }) => {
+  const q = new URLSearchParams()
+  if (params?.scope)  q.set('scope',  params.scope)
+  if (params?.status) q.set('status', params.status)
+  const qs = q.toString()
+  return apiFetch<SupplyRequest[]>(`/api/supply-requests${qs ? `?${qs}` : ''}`)
+}
+export const createSupplyRequest = (body: { items: Array<{ supply_id: string; quantity: number; notes?: string }>; shipping_address?: string; notes?: string }) =>
+  apiFetch<SupplyRequest>('/api/supply-requests', { method: 'POST', body: JSON.stringify(body) })
+export const supplyRequestAction = (id: string, body: { action: 'mark_ordered' | 'mark_shipped' | 'mark_received' | 'cancel'; reason?: string }) =>
+  apiFetch<SupplyRequest>(`/api/supply-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
 // 277 X12 is text (not a PDF) so we use a lighter path than openClaimPdf.
 // Fetch as text, blob it, trigger the download AND open in a new tab so

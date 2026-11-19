@@ -60,6 +60,15 @@ const featureFlags = {
   // visit card, and the staff billing tab shows the same. Sara 2026-11-18.
   generates_superbills:        z.boolean().default(true),
 
+  // Supplies ordering — replaces the monthly Google Form workflow.
+  // Two flags on purpose: uses_supply_orders turns on the whole
+  // system (backend + admin UI for Pam), providers_can_order_supplies
+  // gates the provider-facing "Order supplies" nav + page. Default is
+  // whole-system ON, provider UI OFF — so Pam can seed the catalog and
+  // play with the surface before any provider sees it. Sara 2026-11-19.
+  uses_supply_orders:          z.boolean().default(true),
+  providers_can_order_supplies: z.boolean().default(false),
+
   // Family-facing
   uses_patient_portal:         z.boolean().default(true),
   uses_family_signup:          z.boolean().default(true),
@@ -222,6 +231,8 @@ export const SETTINGS_GROUPS: Array<{
       { key: 'uses_lab_orders',            label: 'Uses outside lab orders',     kind: 'flag' },
       { key: 'uses_radiology_orders',      label: 'Uses radiology orders',       kind: 'flag' },
       { key: 'generates_superbills',       label: 'Generates superbills (PDF per visit)', kind: 'flag' },
+      { key: 'uses_supply_orders',         label: 'Uses supply ordering (replaces Google Form)', kind: 'flag' },
+      { key: 'providers_can_order_supplies', label: '— Providers can see Order Supplies tab', kind: 'flag' },
     ],
   },
   {

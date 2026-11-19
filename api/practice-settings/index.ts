@@ -44,6 +44,8 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   uses_lab_orders:             true,
   uses_radiology_orders:       true,
   generates_superbills:        true,
+  uses_supply_orders:          true,
+  providers_can_order_supplies: false,
   uses_patient_portal:         true,
   uses_family_signup:          true,
   uses_booking_requests:       true,

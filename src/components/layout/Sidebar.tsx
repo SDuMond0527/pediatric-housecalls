@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen, FlaskConical, FileText, PhoneCall } from 'lucide-react'
+import { CalendarDays, LayoutGrid, Clock, Radio, Settings, LogOut, ListOrdered, BarChart2, Users, CalendarClock, HeartPulse, BookOpen, FlaskConical, FileText, PhoneCall, Package } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { PRACTICE_NAME } from '../../lib/practice'
@@ -14,6 +14,8 @@ type NavItem = {
   badge?: boolean                                           // broadcasts — amber pill, uses broadcastCount
   resultsBadge?: (c: ResultsCounts) => number                // results module — red pill, uses counts endpoint
   flag?: keyof PracticeSettings  // when set, nav item hides if flag is off
+  extraFlag?: keyof PracticeSettings  // AND condition with flag
+  adminOnly?: boolean            // only show when provider is admin / super_admin
 }
 
 const NAV: NavItem[] = [
@@ -29,6 +31,14 @@ const NAV: NavItem[] = [
   { to: '/cpr-requests', icon: HeartPulse,    label: 'CPR requests',            flag: 'uses_cpr_classes' },
   { to: '/shifts',       icon: CalendarClock, label: 'On-call shifts',          flag: 'uses_oncall_shifts' },
   { to: '/handbook',     icon: BookOpen,      label: 'All things PHC',          flag: 'uses_handbook' },
+  // Provider-facing "Order supplies" — gated by BOTH uses_supply_orders
+  // and providers_can_order_supplies so Pam can seed the catalog before
+  // any provider sees it. Sara 2026-11-19.
+  { to: '/order-supplies',     icon: Package, label: 'Order supplies',           flag: 'uses_supply_orders', extraFlag: 'providers_can_order_supplies' },
+  // Admin-facing "Supply orders" queue + catalog editor. Visible only
+  // to admins when uses_supply_orders is on. Red badge drives from
+  // pending supply_requests count.
+  { to: '/admin/supply-orders', icon: Package, label: 'Supply orders',          flag: 'uses_supply_orders', adminOnly: true, resultsBadge: c => c.supply_requests_pending },
   { to: '/settings',     icon: Settings,      label: 'Settings' },
 ]
 
@@ -38,12 +48,14 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
   const navigate = useNavigate()
   const [resultsCounts, setResultsCounts] = useState<ResultsCounts>({
     pathology_pending: 0, pathology_signed: 0, labs_pending: 0, labs_signed: 0,
+    supply_requests_pending: 0,
   })
-  // Poll results counts every 60s so new path/lab reports show the red
-  // pill without needing a refresh. Only polls when the Results module
-  // is on for this practice. Sara 2026-11-17.
+  // Poll counts every 60s so new path/lab reports + supply requests
+  // show the red pill without needing a refresh. Polls when either
+  // the Results module OR supply orders are on. Sara 2026-11-17 + 2026-11-19.
   useEffect(() => {
-    if (!settings.uses_results_module) return
+    const anyCountDriver = settings.uses_results_module || settings.uses_supply_orders
+    if (!anyCountDriver) return
     let cancelled = false
     const fetchCounts = () => {
       getResultsCounts()
@@ -53,10 +65,16 @@ export function Sidebar({ broadcastCount }: { broadcastCount: number }) {
     fetchCounts()
     const id = window.setInterval(fetchCounts, 60_000)
     return () => { cancelled = true; window.clearInterval(id) }
-  }, [settings.uses_results_module])
+  }, [settings.uses_results_module, settings.uses_supply_orders])
   if (!provider) return null
 
-  const visibleNav = NAV.filter(item => !item.flag || settings[item.flag])
+  const isAdmin = !!((provider as any)?.is_admin || (provider as any)?.is_super_admin)
+  const visibleNav = NAV.filter(item => {
+    if (item.flag && !settings[item.flag]) return false
+    if (item.extraFlag && !settings[item.extraFlag]) return false
+    if (item.adminOnly && !isAdmin) return false
+    return true
+  })
 
   return (
     <aside className="w-[220px] h-screen bg-[#1A1A2E] flex flex-col fixed left-0 top-0 z-40">

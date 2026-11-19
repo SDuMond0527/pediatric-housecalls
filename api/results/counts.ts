@@ -33,6 +33,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!provider) return res.status(403).json({ error: 'Provider not found' })
   const practiceId = provider.practice_id as string
 
+  // Grab results counts + supply-requests pending in one round trip.
+  // Each query wrapped so one table's absence doesn't hide the other.
+  const payload = {
+    pathology_pending: 0, pathology_signed: 0,
+    labs_pending: 0, labs_signed: 0,
+    supply_requests_pending: 0,
+  }
   try {
     const [row] = await sql`
       SELECT
@@ -42,18 +49,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         COUNT(*) FILTER (WHERE type = 'lab'       AND status = 'signed')::int        AS labs_signed
       FROM results
       WHERE practice_id = ${practiceId}::uuid`
-    return res.status(200).json({
-      pathology_pending: row?.pathology_pending ?? 0,
-      pathology_signed:  row?.pathology_signed  ?? 0,
-      labs_pending:      row?.labs_pending      ?? 0,
-      labs_signed:       row?.labs_signed       ?? 0,
-    })
-  } catch (e: any) {
-    // results table may not exist in a fresh env — return zeros so the
-    // sidebar doesn't error out in the empty-state case.
-    return res.status(200).json({
-      pathology_pending: 0, pathology_signed: 0,
-      labs_pending: 0, labs_signed: 0,
-    })
-  }
+    payload.pathology_pending = row?.pathology_pending ?? 0
+    payload.pathology_signed  = row?.pathology_signed  ?? 0
+    payload.labs_pending      = row?.labs_pending      ?? 0
+    payload.labs_signed       = row?.labs_signed       ?? 0
+  } catch {}
+  try {
+    const [row] = await sql`
+      SELECT COUNT(*)::int AS pending
+      FROM supply_requests
+      WHERE practice_id = ${practiceId}::uuid
+        AND status NOT IN ('received','cancelled')`
+    payload.supply_requests_pending = row?.pending ?? 0
+  } catch {}
+  return res.status(200).json(payload)
 }
