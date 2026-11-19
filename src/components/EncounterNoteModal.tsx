@@ -839,14 +839,24 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [ivFluidsRN, setIVFluidsRN] = useState<IVFluidsRNForm>(emptyIVFluidsRN())
 
   // Fetch distinct send-out tags from the practice catalog on mount.
-  // Each distinct tag becomes one checkbox. If the catalog has no
-  // tagged supplies, the section auto-hides below.
+  // Each distinct tag becomes one checkbox. Reads the array column
+  // associated_sendout_tags (plural) and falls back to the legacy
+  // scalar associated_sendout_tag for any rows that haven't been
+  // migrated yet. Section auto-hides if no tags found.
   useEffect(() => {
     getSupplies().then((rows: any[]) => {
       const tags = new Set<string>()
       for (const r of rows) {
-        const t = (r?.associated_sendout_tag ?? '').trim()
-        if (t) tags.add(t)
+        const arr = Array.isArray(r?.associated_sendout_tags) ? r.associated_sendout_tags : null
+        if (arr && arr.length > 0) {
+          for (const t of arr) {
+            const s = String(t ?? '').trim()
+            if (s) tags.add(s)
+          }
+        } else {
+          const t = String(r?.associated_sendout_tag ?? '').trim()
+          if (t) tags.add(t)
+        }
       }
       setSendoutTagOptions(Array.from(tags).sort())
     }).catch(() => {})

@@ -19,7 +19,7 @@ async function verifyProviderToken(authHeader: string | undefined): Promise<stri
   return payload.sub as string
 }
 
-const ALLOWED = new Set(['name','unit_label','description','default_quantity','associated_cpt_code','units_per_box','sort_order','is_active','associated_sendout_tag'])
+const ALLOWED = new Set(['name','unit_label','description','default_quantity','associated_cpt_code','units_per_box','sort_order','is_active','associated_sendout_tag','associated_sendout_tags'])
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   let sub: string

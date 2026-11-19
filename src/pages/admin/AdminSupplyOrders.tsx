@@ -223,7 +223,13 @@ function CatalogTab() {
       {editing && (
         <SupplyEditor
           initial={editing === 'new' ? null : editing}
-          existingTags={Array.from(new Set(rows.map(r => (r.associated_sendout_tag ?? '').trim()).filter(Boolean))).sort()}
+          existingTags={Array.from(new Set(
+            rows.flatMap(r => {
+              const arr = Array.isArray(r.associated_sendout_tags) ? r.associated_sendout_tags : []
+              const legacy = (r.associated_sendout_tag ?? '').trim()
+              return [...arr, legacy].map(x => String(x ?? '').trim()).filter(Boolean)
+            })
+          )).sort()}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await load() }}
         />
@@ -237,7 +243,7 @@ function CatalogTab() {
               <th className="text-left px-3 py-2">Unit</th>
               <th className="text-left px-3 py-2">Default qty</th>
               <th className="text-left px-3 py-2">CPT</th>
-              <th className="text-left px-3 py-2">Send-out tag</th>
+              <th className="text-left px-3 py-2">Send-out tags</th>
               <th className="text-left px-3 py-2">Units/box</th>
               <th className="text-right px-3 py-2">Actions</th>
             </tr>
@@ -252,7 +258,15 @@ function CatalogTab() {
                 <td className="px-3 py-2 text-[#555]">{s.unit_label ?? '—'}</td>
                 <td className="px-3 py-2 text-[#555]">{s.default_quantity}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-[#3C3489]">{s.associated_cpt_code ?? '—'}</td>
-                <td className="px-3 py-2 font-mono text-[11px] text-[#633806]">{s.associated_sendout_tag ?? '—'}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-[#633806]">
+                  {(() => {
+                    const arr = Array.isArray(s.associated_sendout_tags) ? s.associated_sendout_tags : []
+                    const tags = arr.length > 0 ? arr : (s.associated_sendout_tag ? [s.associated_sendout_tag] : [])
+                    return tags.length === 0 ? '—' : tags.map(t => (
+                      <span key={t} className="inline-block px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#78350F] mr-1">{t}</span>
+                    ))
+                  })()}
+                </td>
                 <td className="px-3 py-2 text-[#555]">{s.units_per_box ?? '—'}</td>
                 <td className="px-3 py-2 text-right">
                   <div className="inline-flex items-center gap-1">
@@ -274,6 +288,10 @@ function CatalogTab() {
   )
 }
 
+function normalizeTag(raw: string): string {
+  return raw.trim().replace(/\s+/g, '_').toLowerCase()
+}
+
 function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; onClose: () => void; onSaved: () => void }) {
   const isNew = !props.initial
   const [name, setName] = useState(props.initial?.name ?? '')
@@ -281,15 +299,33 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
   const [description, setDescription] = useState(props.initial?.description ?? '')
   const [defaultQty, setDefaultQty] = useState(String(props.initial?.default_quantity ?? 1))
   const [cpt, setCpt] = useState(props.initial?.associated_cpt_code ?? '')
-  const [sendoutTag, setSendoutTag] = useState(props.initial?.associated_sendout_tag ?? '')
+  // Multi-tag chips. Hydrate from array first; fall back to the legacy
+  // scalar for any rows that haven't been migrated yet.
+  const initialTags = (Array.isArray(props.initial?.associated_sendout_tags) && props.initial!.associated_sendout_tags!.length > 0)
+    ? props.initial!.associated_sendout_tags!
+    : (props.initial?.associated_sendout_tag ? [props.initial.associated_sendout_tag] : [])
+  const [sendoutTags, setSendoutTags] = useState<string[]>(initialTags)
+  const [tagDraft, setTagDraft] = useState('')
   const [unitsPerBox, setUnitsPerBox] = useState(props.initial?.units_per_box != null ? String(props.initial.units_per_box) : '')
   const [sortOrder, setSortOrder] = useState(String(props.initial?.sort_order ?? 100))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  function commitDraftTag() {
+    const t = normalizeTag(tagDraft)
+    if (!t) return
+    if (sendoutTags.includes(t)) { setTagDraft(''); return }
+    setSendoutTags(prev => [...prev, t])
+    setTagDraft('')
+  }
+
   async function save() {
     setErr(null)
     if (!name.trim()) { setErr('Name required'); return }
+    // Commit any uncommitted draft tag before save so the user doesn't
+    // lose a half-typed tag.
+    const draft = normalizeTag(tagDraft)
+    const tagsToSave = draft && !sendoutTags.includes(draft) ? [...sendoutTags, draft] : sendoutTags
     setBusy(true)
     const payload: Partial<Supply> = {
       name: name.trim(),
@@ -297,7 +333,10 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
       description: description.trim() || null,
       default_quantity: Math.max(1, Number(defaultQty) | 0),
       associated_cpt_code: cpt.trim() || null,
-      associated_sendout_tag: sendoutTag.trim().replace(/\s+/g, '_').toLowerCase() || null,
+      associated_sendout_tags: tagsToSave.length > 0 ? tagsToSave : null,
+      // Keep the legacy scalar in sync with the FIRST tag so older code
+      // paths that still read it don't go blank.
+      associated_sendout_tag: tagsToSave.length > 0 ? tagsToSave[0] : null,
       units_per_box: unitsPerBox.trim() ? (Number(unitsPerBox) | 0) : null,
       sort_order: Number(sortOrder) | 0,
     }
@@ -328,23 +367,40 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
         <Field label="CPT (Phase 2)"><input value={cpt} onChange={e => setCpt(e.target.value)} placeholder="e.g. 87880" className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" /></Field>
         <Field label="Units per box"><input value={unitsPerBox} onChange={e => setUnitsPerBox(e.target.value.replace(/\D/g,''))} placeholder="e.g. 25" className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" /></Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Send-out tag (Phase 2)">
+      <Field label="Send-out tags (Phase 2)">
+        <div className="flex flex-wrap items-center gap-1.5 w-full px-2 py-1.5 border border-[#E8E8E4] rounded-lg bg-white">
+          {sendoutTags.map(t => (
+            <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#78350F] text-[11px] font-mono">
+              {t}
+              <button type="button" onClick={() => setSendoutTags(prev => prev.filter(x => x !== t))}
+                className="text-[#78350F]/60 hover:text-[#78350F]" aria-label="Remove tag">
+                <X size={10} />
+              </button>
+            </span>
+          ))}
           <input
-            value={sendoutTag}
-            onChange={e => setSendoutTag(e.target.value)}
+            value={tagDraft}
+            onChange={e => setTagDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitDraftTag() }
+              else if (e.key === 'Backspace' && !tagDraft && sendoutTags.length > 0) {
+                e.preventDefault()
+                setSendoutTags(prev => prev.slice(0, -1))
+              }
+            }}
+            onBlur={commitDraftTag}
             list="sendout-tag-options"
-            placeholder="e.g. luxor_sendout"
-            className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
+            placeholder={sendoutTags.length === 0 ? 'e.g. luxor_swab_sendout' : 'Add another…'}
+            className="flex-1 min-w-[140px] text-[13px] font-mono outline-none bg-transparent" />
           <datalist id="sendout-tag-options">
             {props.existingTags.map(t => <option key={t} value={t} />)}
           </datalist>
-          <div className="text-[11px] text-[#555] mt-1">For supplies that aren't tied to a CPT. Each tag appears as a checkbox on the encounter note at sign-time.</div>
-        </Field>
-        <Field label="Sort order (lower = earlier)">
-          <input value={sortOrder} onChange={e => setSortOrder(e.target.value.replace(/\D/g,''))} className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
-        </Field>
-      </div>
+        </div>
+        <div className="text-[11px] text-[#555] mt-1">For supplies that aren't tied to a CPT. One checkbox per distinct tag appears on the encounter note at sign-time. Tag multiple if the same supply applies to more than one send-out type (e.g. FedEx bag used for both swab AND urine).</div>
+      </Field>
+      <Field label="Sort order (lower = earlier)">
+        <input value={sortOrder} onChange={e => setSortOrder(e.target.value.replace(/\D/g,''))} className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />
+      </Field>
       {err && <div className="text-[12px] text-[#991B1B]">{err}</div>}
       <div className="flex justify-end gap-2">
         <button onClick={props.onClose} className="px-3 py-1.5 text-[13px] text-[#555] border border-[#E8E8E4] rounded-lg hover:bg-[#F1EFE8]">Cancel</button>

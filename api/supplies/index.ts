@@ -48,6 +48,18 @@ export async function bootstrapSupplyTables(sql: NeonQueryFunction<false, false>
   // a one-click tag at sign-time. See EncounterNoteModal's "Lab
   // send-outs" section.
   try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tag text` } catch {}
+  // 2026-11-19 (same day): switched to array column so one supply row
+  // can match multiple send-out tags (e.g. FedEx bag used for BOTH
+  // swab and urine send-outs). Migration backfills the array from the
+  // old scalar column once per table — idempotent because UPDATE's
+  // WHERE clause excludes rows that already have an array set.
+  try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tags text[]` } catch {}
+  try {
+    await sql`UPDATE supplies_catalog
+              SET associated_sendout_tags = ARRAY[associated_sendout_tag]
+              WHERE associated_sendout_tag IS NOT NULL
+                AND (associated_sendout_tags IS NULL OR cardinality(associated_sendout_tags) = 0)`
+  } catch {}
   await sql`CREATE INDEX IF NOT EXISTS supplies_catalog_practice_idx ON supplies_catalog(practice_id, is_active, sort_order)`
 
   await sql`
@@ -109,9 +121,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const b = req.body ?? {}
     const name = String(b.name ?? '').trim()
     if (!name) return res.status(400).json({ error: 'name required' })
+    // Normalize incoming tags: prefer the array, fall back to single tag.
+    const tagsArr: string[] | null = Array.isArray(b.associated_sendout_tags)
+      ? b.associated_sendout_tags.map((t: unknown) => String(t ?? '').trim()).filter((t: string) => !!t)
+      : (b.associated_sendout_tag ? [String(b.associated_sendout_tag).trim()] : null)
     const [row] = await sql`
       INSERT INTO supplies_catalog
-        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order, associated_sendout_tag)
+        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order, associated_sendout_tag, associated_sendout_tags)
       VALUES
         (${provider.practice_id}::uuid, ${name},
          ${b.unit_label ?? null}, ${b.description ?? null},
@@ -119,7 +135,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          ${b.associated_cpt_code ?? null},
          ${b.units_per_box != null ? Number(b.units_per_box) : null},
          ${Number(b.sort_order ?? 100)},
-         ${b.associated_sendout_tag ?? null})
+         ${(tagsArr && tagsArr.length > 0) ? tagsArr[0] : null},
+         ${tagsArr && tagsArr.length > 0 ? tagsArr : null})
       RETURNING *`
     return res.status(201).json(row)
   }
