@@ -202,10 +202,14 @@ function CatalogTab() {
       <div className="flex items-center justify-between">
         <div className="text-[13px] text-[#555]">{loading ? 'Loading…' : `${rows.filter(r => r.is_active).length} active, ${rows.filter(r => !r.is_active).length} archived`}</div>
         <div className="flex items-center gap-2">
-          {isSuperAdmin && rows.length === 0 && !loading && (
+          {isSuperAdmin && !loading && (
             <button onClick={doSeed} disabled={seeding}
+              title={rows.length === 0
+                ? 'Populate the catalog with the 23 items from the PHC Google Supply Order Form.'
+                : 'Re-run the Google Form seed to pick up any new fields (CPT codes, send-out tags, unit labels). Idempotent — updates existing rows rather than duplicating.'}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium text-[#7F77DD] border border-[#7F77DD] rounded-lg hover:bg-[#EEEDFE] disabled:opacity-50">
-              {seeding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={13} />} Seed from Google Form
+              {seeding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={13} />}
+              {rows.length === 0 ? 'Seed from Google Form' : 'Re-seed from Google Form'}
             </button>
           )}
           <button onClick={() => setEditing('new')}
