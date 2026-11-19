@@ -262,9 +262,19 @@ function CatalogTab() {
                   {(() => {
                     const arr = Array.isArray(s.associated_sendout_tags) ? s.associated_sendout_tags : []
                     const tags = arr.length > 0 ? arr : (s.associated_sendout_tag ? [s.associated_sendout_tag] : [])
-                    return tags.length === 0 ? '—' : tags.map(t => (
-                      <span key={t} className="inline-block px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#78350F] mr-1">{t}</span>
-                    ))
+                    const days = Array.isArray(s.applicable_days_of_week) ? s.applicable_days_of_week : []
+                    return (
+                      <>
+                        {tags.length === 0 ? '—' : tags.map(t => (
+                          <span key={t} className="inline-block px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#78350F] mr-1">{t}</span>
+                        ))}
+                        {days.length > 0 && (
+                          <span className="inline-block px-1.5 py-0.5 rounded-full bg-[#EEEDFE] text-[#3C3489] mr-1">
+                            {days.join('/')}
+                          </span>
+                        )}
+                      </>
+                    )
                   })()}
                 </td>
                 <td className="px-3 py-2 text-[#555]">{s.units_per_box ?? '—'}</td>
@@ -306,6 +316,8 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
     : (props.initial?.associated_sendout_tag ? [props.initial.associated_sendout_tag] : [])
   const [sendoutTags, setSendoutTags] = useState<string[]>(initialTags)
   const [tagDraft, setTagDraft] = useState('')
+  const initialDays = Array.isArray(props.initial?.applicable_days_of_week) ? props.initial!.applicable_days_of_week! : []
+  const [daysOfWeek, setDaysOfWeek] = useState<string[]>(initialDays)
   const [unitsPerBox, setUnitsPerBox] = useState(props.initial?.units_per_box != null ? String(props.initial.units_per_box) : '')
   const [sortOrder, setSortOrder] = useState(String(props.initial?.sort_order ?? 100))
   const [busy, setBusy] = useState(false)
@@ -337,6 +349,7 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
       // Keep the legacy scalar in sync with the FIRST tag so older code
       // paths that still read it don't go blank.
       associated_sendout_tag: tagsToSave.length > 0 ? tagsToSave[0] : null,
+      applicable_days_of_week: daysOfWeek.length > 0 ? daysOfWeek : null,
       units_per_box: unitsPerBox.trim() ? (Number(unitsPerBox) | 0) : null,
       sort_order: Number(sortOrder) | 0,
     }
@@ -397,6 +410,31 @@ function SupplyEditor(props: { initial: Supply | null; existingTags: string[]; o
           </datalist>
         </div>
         <div className="text-[11px] text-[#555] mt-1">For supplies that aren't tied to a CPT. One checkbox per distinct tag appears on the encounter note at sign-time. Tag multiple if the same supply applies to more than one send-out type (e.g. FedEx bag used for both swab AND urine).</div>
+      </Field>
+      <Field label="Days of week (Phase 2 — leave blank = all days)">
+        <div className="flex flex-wrap gap-1.5">
+          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => {
+            const on = daysOfWeek.includes(d)
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDaysOfWeek(prev => on ? prev.filter(x => x !== d) : [...prev, d])}
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${on
+                  ? 'bg-[#EEEDFE] border-[#7F77DD] text-[#3C3489]'
+                  : 'bg-white border-[#E8E8E4] text-[#555] hover:bg-[#F1EFE8]'}`}>
+                {d}
+              </button>
+            )
+          })}
+          {daysOfWeek.length > 0 && (
+            <button type="button" onClick={() => setDaysOfWeek([])}
+              className="text-[11px] text-[#7F77DD] hover:underline ml-1">
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="text-[11px] text-[#555] mt-1">For supplies consumed only on certain days (e.g. Luxor white labels Mon-Wed, blue labels Thu-Sat). Phase 2 predictor matches the encounter's DOS day-of-week to the supply.</div>
       </Field>
       <Field label="Sort order (lower = earlier)">
         <input value={sortOrder} onChange={e => setSortOrder(e.target.value.replace(/\D/g,''))} className="w-full px-3 py-2 text-[13px] font-mono border border-[#E8E8E4] rounded-lg" />

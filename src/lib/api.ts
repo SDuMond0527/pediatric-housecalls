@@ -1693,6 +1693,11 @@ export type Supply = {
   // Kept in the type for backward compat during the migration window.
   associated_sendout_tag: string | null
   associated_sendout_tags: string[] | null
+  // Day-of-week restriction (used for e.g. Luxor white vs blue labels
+  // that Pam buys by weekday). Null = applies every day. Phase 2
+  // predictor matches the encounter's DOS day-of-week against this
+  // field. Sara 2026-11-19.
+  applicable_days_of_week: string[] | null
   units_per_box: number | null
   sort_order: number
   is_active: boolean

@@ -60,6 +60,13 @@ export async function bootstrapSupplyTables(sql: NeonQueryFunction<false, false>
               WHERE associated_sendout_tag IS NOT NULL
                 AND (associated_sendout_tags IS NULL OR cardinality(associated_sendout_tags) = 0)`
   } catch {}
+  // 2026-11-19: applicable_days_of_week — Luxor uses white labels
+  // Mon-Wed and blue labels Thu-Sat. Phase 2 predictor matches the
+  // supply to the encounter's DOS day-of-week; provider doesn't pick
+  // manually. Null/empty = applies every day (default behavior for
+  // supplies with no day-of-week restriction).
+  //   Values: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+  try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS applicable_days_of_week text[]` } catch {}
   await sql`CREATE INDEX IF NOT EXISTS supplies_catalog_practice_idx ON supplies_catalog(practice_id, is_active, sort_order)`
 
   await sql`
@@ -125,9 +132,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tagsArr: string[] | null = Array.isArray(b.associated_sendout_tags)
       ? b.associated_sendout_tags.map((t: unknown) => String(t ?? '').trim()).filter((t: string) => !!t)
       : (b.associated_sendout_tag ? [String(b.associated_sendout_tag).trim()] : null)
+    const dowArr: string[] | null = Array.isArray(b.applicable_days_of_week)
+      ? b.applicable_days_of_week.map((d: unknown) => String(d ?? '').trim()).filter((d: string) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].includes(d))
+      : null
     const [row] = await sql`
       INSERT INTO supplies_catalog
-        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order, associated_sendout_tag, associated_sendout_tags)
+        (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, units_per_box, sort_order, associated_sendout_tag, associated_sendout_tags, applicable_days_of_week)
       VALUES
         (${provider.practice_id}::uuid, ${name},
          ${b.unit_label ?? null}, ${b.description ?? null},
@@ -136,7 +146,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          ${b.units_per_box != null ? Number(b.units_per_box) : null},
          ${Number(b.sort_order ?? 100)},
          ${(tagsArr && tagsArr.length > 0) ? tagsArr[0] : null},
-         ${tagsArr && tagsArr.length > 0 ? tagsArr : null})
+         ${tagsArr && tagsArr.length > 0 ? tagsArr : null},
+         ${dowArr && dowArr.length > 0 ? dowArr : null})
       RETURNING *`
     return res.status(201).json(row)
   }

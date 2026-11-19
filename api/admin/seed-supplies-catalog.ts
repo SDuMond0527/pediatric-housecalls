@@ -47,7 +47,8 @@ const CATALOG = [
   { name: 'Rapid COVID/RSV/Flu A/B tests',      unit_label: 'box of 4',                      default_quantity: 1, associated_cpt_code: '87811', units_per_box: 4,  sort_order: 190 },
   { name: 'Luxor Lab supplies — FedEx bags',    unit_label: 'bundle',                        default_quantity: 1, description: 'Specify color variant in notes.', sort_order: 200, associated_sendout_tags: ['luxor_swab_sendout', 'luxor_urine_sendout'] },
   { name: 'Luxor Lab supplies — swabs/tubes/biohazard bundle', unit_label: 'bundle',         default_quantity: 1, sort_order: 210, associated_sendout_tags: ['luxor_swab_sendout'] },
-  { name: 'Luxor Lab supplies — FedEx labels', unit_label: 'bundle',                         default_quantity: 1, sort_order: 220, associated_sendout_tags: ['luxor_swab_sendout', 'luxor_urine_sendout'] },
+  { name: 'Luxor Lab supplies — White labels (Mon-Wed)', unit_label: 'bundle',               default_quantity: 1, sort_order: 220, associated_sendout_tags: ['luxor_swab_sendout', 'luxor_urine_sendout'], applicable_days_of_week: ['Mon','Tue','Wed'] },
+  { name: 'Luxor Lab supplies — Blue labels (Thu-Sat)',  unit_label: 'bundle',               default_quantity: 1, sort_order: 222, associated_sendout_tags: ['luxor_swab_sendout', 'luxor_urine_sendout'], applicable_days_of_week: ['Thu','Fri','Sat'] },
   { name: 'Nebulizer tubing',                   unit_label: 'tubes',                         default_quantity: 5, associated_cpt_code: '94640', sort_order: 230 },
 ]
 
@@ -82,6 +83,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )`
   try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tag text` } catch {}
   try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS associated_sendout_tags text[]` } catch {}
+  try { await sql`ALTER TABLE supplies_catalog ADD COLUMN IF NOT EXISTS applicable_days_of_week text[]` } catch {}
+
+  // Archive any legacy rows that have been split into finer-grained
+  // replacements. Idempotent — only archives rows that are currently
+  // active and match a deprecated name. Sara 2026-11-19.
+  const DEPRECATED_NAMES = [
+    'Luxor Lab supplies — FedEx labels', // → split into White/Blue
+  ]
+  try {
+    await sql`
+      UPDATE supplies_catalog SET is_active = false, updated_at = NOW()
+      WHERE practice_id = ${provider.practice_id}::uuid
+        AND name = ANY(${DEPRECATED_NAMES})
+        AND is_active = true`
+  } catch {}
 
   let inserted = 0, updated = 0
   for (const it of CATALOG) {
@@ -95,6 +111,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? (it as any).associated_sendout_tags
       : ((it as any).associated_sendout_tag ? [(it as any).associated_sendout_tag] : null)
     const legacyTag = tagsArr && tagsArr.length > 0 ? tagsArr[0] : null
+    const dowArr: string[] | null = Array.isArray((it as any).applicable_days_of_week) && (it as any).applicable_days_of_week.length > 0
+      ? (it as any).applicable_days_of_week
+      : null
     if (existing) {
       await sql`
         UPDATE supplies_catalog SET
@@ -104,6 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           associated_cpt_code = ${(it as any).associated_cpt_code ?? null},
           associated_sendout_tag = ${legacyTag},
           associated_sendout_tags = ${tagsArr},
+          applicable_days_of_week = ${dowArr},
           units_per_box       = ${(it as any).units_per_box ?? null},
           sort_order          = ${it.sort_order ?? 100},
           is_active           = true,
@@ -113,10 +133,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       await sql`
         INSERT INTO supplies_catalog
-          (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, associated_sendout_tag, associated_sendout_tags, units_per_box, sort_order)
+          (practice_id, name, unit_label, description, default_quantity, associated_cpt_code, associated_sendout_tag, associated_sendout_tags, applicable_days_of_week, units_per_box, sort_order)
         VALUES
           (${provider.practice_id}::uuid, ${it.name}, ${it.unit_label ?? null}, ${(it as any).description ?? null},
-           ${it.default_quantity ?? 1}, ${(it as any).associated_cpt_code ?? null}, ${legacyTag}, ${tagsArr},
+           ${it.default_quantity ?? 1}, ${(it as any).associated_cpt_code ?? null}, ${legacyTag}, ${tagsArr}, ${dowArr},
            ${(it as any).units_per_box ?? null}, ${it.sort_order ?? 100})`
       inserted++
     }

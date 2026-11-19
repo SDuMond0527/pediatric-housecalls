@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-19-tags-array
+// Service worker — deliberate passthrough. Version: 2026-11-19-days-of-week
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
