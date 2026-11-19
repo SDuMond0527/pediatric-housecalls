@@ -58,6 +58,18 @@ async function ensureCognitoSubForInvite(invite: any): Promise<string | null> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    return await handleRequest(req, res)
+  } catch (e: any) {
+    console.error('[onboarding/provider] uncaught:', e?.stack ?? e?.message ?? e)
+    return res.status(500).json({
+      error: e?.message ?? 'Internal server error',
+      stack: process.env.NODE_ENV === 'production' ? undefined : e?.stack,
+    })
+  }
+}
+
+async function handleRequest(req: VercelRequest, res: VercelResponse) {
   const sql = neon(process.env.DATABASE_URL!)
 
   if (req.method === 'GET') {
