@@ -115,7 +115,14 @@ export function validateCptsForVisitType(
   // default is 99349, but a provider typed over it with 99214
   // (office E/M). Office codes are not reimbursed at the same rate
   // on a home visit, so the mis-code is a direct revenue hit.
-  if (vt === 'In-home sick visit') {
+  //
+  // IMPORTANT: this check only applies when the note has at least
+  // ONE insurance-billable CPT. Self-pay notes (every CPT is
+  // Non-Covered Services — "Selfpay", "SelfStre", etc.) have no
+  // insurance adjudication to protect, so the Emma Peters guard is
+  // not relevant. Sara 2026-11-20 — Dr. Niu caught this on a
+  // self-pay sick visit that couldn't be signed.
+  if (vt === 'In-home sick visit' && billable.length > 0) {
     const hasHomeVisitEm = billable.some(c => HOME_VISIT_EM_CODES.has(String(c?.code ?? '')))
     if (!hasHomeVisitEm) {
       const present = billable.map(c => c?.code).filter(Boolean).join(', ') || 'none'
