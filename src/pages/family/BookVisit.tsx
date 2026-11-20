@@ -400,7 +400,10 @@ export function BookVisit() {
   const [showIvSwitchModal, setShowIvSwitchModal] = useState(false)
   const [wasSwitchedFromIv, setWasSwitchedFromIv] = useState(false)
   const [originalIvSymptoms, setOriginalIvSymptoms] = useState('')
-  const [waitlistTime, setWaitlistTime] = useState('Any time')
+  // Preferred time window — required so Sara + providers can see a
+  // conscious choice, not a defaulted "Any time" that may or may not
+  // reflect the family's real availability. Sara 2026-11-20.
+  const [waitlistTime, setWaitlistTime] = useState('')
   const [waitlistNotes, setWaitlistNotes] = useState('')
   const [waitlistComplaint, setWaitlistComplaint] = useState('')
   const [waitlistChildId, setWaitlistChildId] = useState('')
@@ -1277,6 +1280,10 @@ export function BookVisit() {
 
   async function submitWaitlist() {
     if (!family) return
+    if (!waitlistTime) {
+      alert('Please choose a preferred time window so we know when to look for an opening.')
+      return
+    }
     setWaitlistSubmitting(true)
 
     // Waitlist is offered AFTER the parent has already gone through step 1
@@ -3534,10 +3541,13 @@ export function BookVisit() {
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                        Preferred time window <span className="text-[#ff3b30]">*</span>
+                      </label>
                       <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
-                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                        <option value="Any time">Any time</option>
+                        className={`w-full px-3 py-2.5 border rounded-lg text-[14px] font-sans bg-white ${waitlistTime ? 'border-[#E8E8E4]' : 'border-[#ff3b30]'}`}>
+                        <option value="" disabled>Choose one…</option>
+                        <option>Any time</option>
                         <option>Morning (before noon)</option>
                         <option>Afternoon (noon–5pm)</option>
                         <option>After 5pm</option>
@@ -3653,10 +3663,13 @@ export function BookVisit() {
 
                     <div className="text-[10px] font-semibold text-[#1A1A2E] uppercase tracking-widest pt-2">Scheduling</div>
                     <div>
-                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">Preferred time window</label>
+                      <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                        Preferred time window <span className="text-[#ff3b30]">*</span>
+                      </label>
                       <select value={waitlistTime} onChange={e => setWaitlistTime(e.target.value)}
-                        className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white">
-                        <option value="Any time">Any time</option>
+                        className={`w-full px-3 py-2.5 border rounded-lg text-[14px] font-sans bg-white ${waitlistTime ? 'border-[#E8E8E4]' : 'border-[#ff3b30]'}`}>
+                        <option value="" disabled>Choose one…</option>
+                        <option>Any time</option>
                         <option>Morning (before noon)</option>
                         <option>Afternoon (noon–5pm)</option>
                         <option>After 5pm</option>
