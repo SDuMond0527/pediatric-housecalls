@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-19-days-of-week
+// Service worker — deliberate passthrough. Version: 2026-11-20-eligibility-tpa-override
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

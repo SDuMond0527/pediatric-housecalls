@@ -234,7 +234,7 @@ export function PatientChart() {
   const [addingNewPcp, setAddingNewPcp] = useState(false)
   const [newPcpName, setNewPcpName] = useState('')
   const [newPcpFax, setNewPcpFax] = useState('')
-  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_no_dependent_code: false, insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '', insurance_card_front_url: '', insurance_card_back_url: '' })
+  const [insEdit, setInsEdit] = useState({ self_pay: false, insurance_provider: '', insurance_member_id: '', insurance_group_number: '', insurance_dependent_code: '', insurance_no_dependent_code: false, insurance_subscriber_name: '', insurance_subscriber_dob: '', insurance_subscriber_gender: '', insurance_subscriber_relationship: '', insurance_card_front_url: '', insurance_card_back_url: '', insurance_eligibility_payer_name: '', insurance_eligibility_payer_id: '' })
   const [eligResult, setEligResult] = useState<any>(null)
   const [eligLoading, setEligLoading] = useState(false)
   const [eligError, setEligError] = useState('')
@@ -743,6 +743,8 @@ export function PatientChart() {
         insurance_subscriber_relationship: child?.insurance_subscriber_relationship || '',
         insurance_card_front_url: child?.insurance_card_front_url || '',
         insurance_card_back_url: child?.insurance_card_back_url || '',
+        insurance_eligibility_payer_name: child?.insurance_eligibility_payer_name || '',
+        insurance_eligibility_payer_id:   child?.insurance_eligibility_payer_id   || '',
       })
     }
     setEditingSection(section)
@@ -777,6 +779,10 @@ export function PatientChart() {
           insurance_subscriber_relationship: isSelf ? null : (insEdit.insurance_subscriber_relationship || null),
           insurance_card_front_url:          isSelf ? null : (insEdit.insurance_card_front_url || null),
           insurance_card_back_url:           isSelf ? null : (insEdit.insurance_card_back_url || null),
+          // Eligibility payer override (TPA-administered plans). Self-pay
+          // clears it; otherwise persist whatever the admin typed.
+          insurance_eligibility_payer_name:  isSelf ? null : (insEdit.insurance_eligibility_payer_name?.trim() || null),
+          insurance_eligibility_payer_id:    isSelf ? null : (insEdit.insurance_eligibility_payer_id?.trim()   || null),
         }
       }
       // Compute _clear: any field that went from non-empty on the current
@@ -786,7 +792,7 @@ export function PatientChart() {
       const CLEARABLE_BY_SECTION: Record<string, string[]> = {
         contact:   ['parent_phone', 'parent_email', 'parent_address', 'parent_city', 'parent_state', 'parent_zip'],
         medical:   ['allergies', 'current_medications', 'medical_history', 'preferred_pharmacy', 'dosespot_pharmacy_id', 'pcp', 'pcp_id', 'vaccination_status'],
-        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship', 'insurance_card_front_url', 'insurance_card_back_url'],
+        insurance: ['insurance_provider', 'insurance_member_id', 'insurance_group_number', 'insurance_dependent_code', 'insurance_subscriber_name', 'insurance_subscriber_dob', 'insurance_subscriber_gender', 'insurance_subscriber_relationship', 'insurance_card_front_url', 'insurance_card_back_url', 'insurance_eligibility_payer_name', 'insurance_eligibility_payer_id'],
       }
       const clears = computeClears(child ?? {}, body, CLEARABLE_BY_SECTION[section] || [])
       const payload = clears.length ? { ...body, _clear: clears } : body
@@ -1484,6 +1490,42 @@ export function PatientChart() {
                         onChange={patch => setInsEdit(p => ({ ...p, ...patch }))}
                         uploadCard={childId ? (file, side) => providerUploadInsuranceCard(childId, file, side) : undefined}
                       />
+                      {/* Eligibility payer override (TPA-administered plans).
+                          Collapsed by default; toggle open when the card
+                          shows a different eligibility contact than the
+                          claims filer (MedCost + IMS, etc.). Sara 2026-11-20. */}
+                      {!insEdit.self_pay && (
+                        <details className="rounded-lg border border-[#E8E8E4] bg-[#FAFAF8] p-3" open={!!insEdit.insurance_eligibility_payer_id}>
+                          <summary className="cursor-pointer text-[12px] font-medium text-[#1A1A2E]">
+                            Different payer handles eligibility? (TPA / self-funded plan)
+                          </summary>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                            <label className="block">
+                              <span className="block text-[11px] font-medium text-[#555] uppercase tracking-wider mb-1">Eligibility payer name</span>
+                              <input
+                                type="text"
+                                value={insEdit.insurance_eligibility_payer_name}
+                                onChange={e => setInsEdit(p => ({ ...p, insurance_eligibility_payer_name: e.target.value }))}
+                                placeholder="e.g. Interactive Medical Systems"
+                                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD]"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="block text-[11px] font-medium text-[#555] uppercase tracking-wider mb-1">Eligibility payer ID (EDI)</span>
+                              <input
+                                type="text"
+                                value={insEdit.insurance_eligibility_payer_id}
+                                onChange={e => setInsEdit(p => ({ ...p, insurance_eligibility_payer_id: e.target.value.trim() }))}
+                                placeholder="e.g. 87765"
+                                className="w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] bg-white outline-none focus:border-[#7F77DD] font-mono"
+                              />
+                            </label>
+                          </div>
+                          <div className="text-[11px] text-[#555] mt-2 leading-relaxed">
+                            Look at the back of the insurance card — self-funded plans often list a different payer/TPA for "benefits" or "eligibility" than the one that receives claims. Enter that payer here. Claims still go to the main Insurance plan above.
+                          </div>
+                        </details>
+                      )}
                       {editError &&<div className="text-[12px] text-[#991B1B] bg-[#FDEDED] px-3 py-2 rounded-lg">{editError}</div>}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => saveEdit('insurance')} disabled={editSaving}
@@ -1514,6 +1556,14 @@ export function PatientChart() {
                             <Field label="Subscriber" value={child?.insurance_subscriber_name || child?.family_display_name} />
                             <Field label="Subscriber DOB" value={child?.insurance_subscriber_dob ? formatDob(String(child.insurance_subscriber_dob).split('T')[0]) : null} />
                             <Field label="Subscriber sex" value={child?.insurance_subscriber_gender === 'M' ? 'Male' : child?.insurance_subscriber_gender === 'F' ? 'Female' : child?.insurance_subscriber_gender} />
+                            {(child?.insurance_eligibility_payer_id || child?.insurance_eligibility_payer_name) && (
+                              <Field
+                                label="Eligibility routed to"
+                                value={
+                                  (child?.insurance_eligibility_payer_name || '') +
+                                  (child?.insurance_eligibility_payer_id ? ` (EDI ${child.insurance_eligibility_payer_id})` : '')
+                                } />
+                            )}
                           </div>
                           {(child?.insurance_card_front_url || child?.insurance_card_back_url) && (
                             <div>

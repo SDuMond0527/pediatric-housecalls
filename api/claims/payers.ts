@@ -39,8 +39,33 @@ const CANONICAL_BY_PAYER_ID: Record<string, string> = {
   '98798': 'Bright Health',
   '56162': 'Medcost',
   '41124': 'Meritain',
+  // Interactive Medical Systems — TPA for several self-funded plans
+  // (NCDS Healthcare Plan etc.). Used ONLY for eligibility 270 lookups
+  // where the claims filer (MedCost) doesn't carry the member database.
+  // Claims still route to the claims-side payer per the member's card.
+  // See children.insurance_eligibility_payer_id override. Sara 2026-11-20.
+  '87765': 'Interactive Medical Systems',
   'PP':    'Self Pay',
 }
+
+// Provider-appeal window in days, counted from era_received_at. These
+// are the industry-standard provider filing limits; if Sara's actual
+// contract allows longer or requires shorter, override here. Self Pay
+// is N/A (no payer to appeal). Unknown payers default to 90 days
+// (conservative) so the biller gets warned sooner rather than later.
+const APPEAL_WINDOW_DAYS: Record<string, number> = {
+  'UPICO': 180,
+  'VABLS': 180,
+  '87726': 180,
+  '62308': 180,
+  '60054': 180,
+  '39026': 180,
+  '98798': 180,
+  '56162': 180,
+  '41124': 180,
+  'PP':    0,   // self-pay: no appeal path
+}
+const DEFAULT_APPEAL_WINDOW_DAYS = 90
 
 /**
  * Canonical display name for a claim's payer, keyed by its payer_id.

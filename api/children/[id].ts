@@ -111,6 +111,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // can never fail with "column does not exist" on a fresh deploy.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_dependent_code text` } catch {}
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_no_dependent_code boolean DEFAULT false` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_eligibility_payer_id text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_eligibility_payer_name text` } catch {}
   // Provider-only sticky-note field. Free text, never surfaced to the
   // family portal. Audit-logged on every edit. Sara 2026-11-11.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS provider_sticky_notes text` } catch {}
@@ -391,6 +393,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           insurance_subscriber_dob     = COALESCE(${b.insurance_subscriber_dob     || null}::date, insurance_subscriber_dob),
           insurance_subscriber_gender  = COALESCE(${b.insurance_subscriber_gender  || null}, insurance_subscriber_gender),
           insurance_subscriber_relationship = COALESCE(${b.insurance_subscriber_relationship || null}, insurance_subscriber_relationship),
+          -- Eligibility payer override (TPA-administered self-funded plans).
+          -- Null = eligibility routes to the main insurance_provider. Sara
+          -- 2026-11-20 (Ella Gidaly / MedCost → IMS). Clears flow through
+          -- the _clear machinery below.
+          insurance_eligibility_payer_id   = COALESCE(${b.insurance_eligibility_payer_id   || null}, insurance_eligibility_payer_id),
+          insurance_eligibility_payer_name = COALESCE(${b.insurance_eligibility_payer_name || null}, insurance_eligibility_payer_name),
           allergies            = COALESCE(${b.allergies            || null}, allergies),
           current_medications  = COALESCE(${b.current_medications  || null}, current_medications),
           medical_history      = COALESCE(${b.medical_history      || null}, medical_history),
@@ -435,6 +443,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'insurance_subscriber_name', 'insurance_subscriber_dob',
         'insurance_subscriber_gender', 'insurance_subscriber_relationship',
         'insurance_card_front_url', 'insurance_card_back_url',
+        'insurance_eligibility_payer_id', 'insurance_eligibility_payer_name',
         // Contact fields — not typically cleared but allowed for editors.
         'parent_phone', 'parent_email',
         'parent_address', 'parent_city', 'parent_state', 'parent_zip',
@@ -473,6 +482,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             case 'parent_city':                         await sql`UPDATE children SET parent_city = NULL                         WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'parent_state':                        await sql`UPDATE children SET parent_state = NULL                        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
             case 'parent_zip':                          await sql`UPDATE children SET parent_zip = NULL                          WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_eligibility_payer_id':      await sql`UPDATE children SET insurance_eligibility_payer_id = NULL      WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
+            case 'insurance_eligibility_payer_name':    await sql`UPDATE children SET insurance_eligibility_payer_name = NULL    WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid`; break
           }
         }
         // Re-fetch after nulls so the response reflects the cleared state.

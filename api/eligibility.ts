@@ -109,6 +109,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // to warn on stale eligibility (> 30 days). Column added to children,
   // not claims, so one check covers every claim for that patient.
   try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS last_eligibility_check_at timestamptz` } catch {}
+  // Eligibility-payer override for TPA-administered self-funded plans.
+  // When set, the 270 lookup goes to the TPA (e.g. Interactive Medical
+  // Systems) rather than the claims-side payer (e.g. MedCost) because
+  // the claims filer doesn't carry the eligibility database. Claims
+  // still route to the regular insurance_provider. Sara 2026-11-20
+  // (Ella Gidaly / NCDS Healthcare Plan).
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_eligibility_payer_id text` } catch {}
+  try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS insurance_eligibility_payer_name text` } catch {}
   const { appointment_id, child_id } = req.body ?? {}
   if (!appointment_id && !child_id) return res.status(400).json({ error: 'appointment_id or child_id required' })
 
@@ -147,9 +155,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!child) return res.status(404).json({ error: 'No patient record found.' })
   if (!child.insurance_member_id) return res.status(422).json({ error: 'No insurance information on file for this patient.' })
 
-  const payerName = child.insurance_provider ?? null
-  const payerId   = resolvePayer(payerName)
-  if (!payerId) return res.status(422).json({ error: `Insurance provider "${payerName}" not recognized. Verify payer name on the patient record.` })
+  // Prefer the eligibility-payer override when present. This is how
+  // TPA-administered plans work: the claims go to one payer (e.g.
+  // MedCost 56162), but the eligibility 270 must go to the TPA that
+  // holds the member database (e.g. Interactive Medical Systems 87765).
+  // Without the override, the 270 bounces with "Invalid/Missing
+  // Subscriber" because the claims filer simply doesn't know this
+  // member. Sara 2026-11-20.
+  const elOverrideId   = String(child.insurance_eligibility_payer_id ?? '').trim()
+  const elOverrideName = String(child.insurance_eligibility_payer_name ?? '').trim()
+  const claimsPayerName = child.insurance_provider ?? null
+  const payerName = elOverrideName || claimsPayerName
+  const payerId   = elOverrideId || resolvePayer(claimsPayerName)
+  if (!payerId) return res.status(422).json({ error: `Insurance provider "${claimsPayerName}" not recognized. Verify payer name on the patient record.` })
 
   const fmtDate8 = (d: any) => {
     if (!d) return ''
@@ -255,6 +273,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     memberIdLength: transmittedMemberId.length,
     payerId,
     payerName,
+    eligibilityOverride: elOverrideId ? `routed to ${elOverrideName || payerName} (${elOverrideId}) instead of claims payer "${claimsPayerName}"` : null,
     dependentCodeUsed: skipDepCode ? '(skipped — no-dep-code flag)' : (depCode || null),
     baseMemberId: String(child.insurance_member_id ?? ''),
     subscriberName: `${subscriberFirst} ${subscriberLast}`.trim(),
