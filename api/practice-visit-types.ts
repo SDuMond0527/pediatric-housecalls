@@ -56,6 +56,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // An earlier version of this endpoint tried to rename them based on the
   // shorter badge_labels, but that matched nothing and confused everyone.
 
+  // Self-heal: if the practice has uses_ear_piercing on but no
+  // "In-home ear piercing" row (because a prior settings-save side
+  // effect silently failed), create it on the next GET + flip Becca
+  // Jones + Megan Heilemann's availability on. All idempotent. Sara
+  // 2026-11-22 — settings toggle was flipping the flag but the row
+  // wasn't getting created, which hid the per-provider toggle.
+  try {
+    const [p] = await sql`SELECT settings FROM practices WHERE id = ${practiceId}::uuid LIMIT 1`
+    const settings = (p?.settings ?? {}) as Record<string, unknown>
+    if (settings.uses_ear_piercing === true) {
+      const EAR_PIERCING = 'In-home ear piercing'
+      const [existing] = await sql`
+        SELECT id, is_active FROM practice_visit_types
+        WHERE practice_id = ${practiceId}::uuid AND visit_type = ${EAR_PIERCING}
+        LIMIT 1`
+      if (!existing) {
+        await sql`
+          INSERT INTO practice_visit_types
+            (practice_id, visit_type, base_price, badge_label, badge_color, badge_text_color,
+             duration_minutes, lead_minutes, has_convenience_fee, per_child_extra_minutes,
+             is_in_home, is_cpr, is_active, sort_order)
+          VALUES
+            (${practiceId}::uuid, ${EAR_PIERCING}, 100, 'Piercing', '#F1EFE8', '#1A1A2E',
+             60, 60, true, 0, true, false, true, 50)`
+      } else if (existing.is_active === false) {
+        await sql`
+          UPDATE practice_visit_types SET is_active = true, base_price = 100
+          WHERE id = ${existing.id}::uuid`
+      }
+      // Upsert fee-schedule rows + Becca/Megan availability on the same
+      // self-heal pass so the whole feature lights up together.
+      for (const [code, desc, amt] of [
+        ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+        ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+      ] as const) {
+        const [feeExisting] = await sql`
+          SELECT code FROM fee_schedule WHERE practice_id = ${practiceId}::uuid AND code = ${code} LIMIT 1`
+        if (!feeExisting) {
+          await sql`
+            INSERT INTO fee_schedule (practice_id, code, description, charge_amount, category)
+            VALUES (${practiceId}::uuid, ${code}, ${desc}, ${amt}, 'Non-Covered Services')`
+        }
+      }
+      const providers = await sql`
+        SELECT id FROM providers
+        WHERE practice_id = ${practiceId}::uuid
+          AND name IN ('Becca Jones','Megan Heilemann')
+          AND is_active = true` as any[]
+      for (const pr of providers) {
+        const [av] = await sql`
+          SELECT id FROM visit_type_availability
+          WHERE provider_id = ${pr.id}::uuid AND visit_type = ${EAR_PIERCING}
+          LIMIT 1`
+        if (!av) {
+          await sql`
+            INSERT INTO visit_type_availability (provider_id, visit_type, is_active, start_time, end_time)
+            VALUES (${pr.id}::uuid, ${EAR_PIERCING}, true, '08:00', '17:00')`
+        }
+      }
+    }
+  } catch (e: any) {
+    console.error('[practice-visit-types] ear-piercing self-heal failed:', e?.message)
+  }
+
   const rows = await sql`
     SELECT * FROM practice_visit_types
     WHERE practice_id = ${practiceId}::uuid AND is_active = true

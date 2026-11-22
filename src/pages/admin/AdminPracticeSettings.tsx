@@ -20,7 +20,6 @@ import {
   getPractices,
   getAdminPracticeSettings,
   patchAdminPracticeSettings,
-  activateEarPiercing,
 } from '../../lib/api'
 
 type Practice = { id: string; name: string; slug: string }
@@ -43,15 +42,6 @@ export function AdminPracticeSettings() {
   const [saving, setSaving] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-
-  async function runEarActivate() {
-    try {
-      const r: any = await activateEarPiercing()
-      alert(`Ear piercing activated.\n\nVisit type: ${r?.visit_type?.action ?? 'unknown'}\nProviders enabled: ${(r?.providers ?? []).map((p: any) => p.name).join(', ') || 'none'}\nFees: ${(r?.fees ?? []).map((f: any) => f.code + ' ($' + f.charge_amount + ')').join(', ') || 'none'}`)
-    } catch (e: any) {
-      alert(`Failed: ${e?.message ?? 'unknown error'}`)
-    }
-  }
 
   // Load practices on mount
   useEffect(() => {
@@ -197,12 +187,6 @@ export function AdminPracticeSettings() {
                 Save
               </button>
             </div>
-          </div>
-
-          <div className="mb-4">
-            <button onClick={runEarActivate} className="text-[12px] text-[#7F77DD] hover:underline">
-              Activate ear piercing in this practice
-            </button>
           </div>
 
           {/* Groups */}
