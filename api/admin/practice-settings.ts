@@ -200,9 +200,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // the visit type + the two providers' availability so parents can
     // book it immediately. Scope: PHC-named providers only (Becca +
     // Megan). Sara 2026-11-22.
-    const earToggle = changes.find(c => c.field === 'uses_ear_piercing')
+    // Fire the ear-piercing activation whenever uses_ear_piercing is ON
+    // after this save — not only when it transitions false→true. That
+    // way if the toggle was already on and Sara re-saves settings, the
+    // upserts re-run and self-heal any missing visit-type / fee /
+    // availability rows. All DB ops are idempotent. Sara 2026-11-22.
     const activationSummary: Record<string, unknown> = {}
-    if (earToggle && earToggle.newValue === true) {
+    if (merged.uses_ear_piercing === true) {
       const EAR_PIERCING = 'In-home ear piercing'
 
       // 1. Column + table bootstraps so first-run on a fresh practice
