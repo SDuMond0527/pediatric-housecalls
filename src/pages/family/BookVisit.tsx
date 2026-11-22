@@ -1411,13 +1411,18 @@ export function BookVisit() {
   // (Evelyn Elmore 28269, 2026-10-06). Now returns [] instead, which
   // trips the no-availability fallback and offers in-person sick visit
   // via mdSickFallbackResult below.
+  // Ear piercing is offered by Becca Jones + Megan Heilemann only.
+  // Narrow the zone providers list by name. Sara 2026-11-22.
+  const EAR_PIERCING_PROVIDERS = new Set(['Becca Jones', 'Megan Heilemann'])
   const zoneProviders = isIvFluids
     ? ivZoneProviders
     : isCmaVisit
       ? cmaProvidersForZone
-      : isCpr && regularZoneProviders.length === 0
-        ? [CPR_MELISSA_FALLBACK]
-        : regularZoneProviders
+      : isEarPiercing
+        ? regularZoneProviders.filter(p => EAR_PIERCING_PROVIDERS.has(p.name))
+        : isCpr && regularZoneProviders.length === 0
+          ? [CPR_MELISSA_FALLBACK]
+          : regularZoneProviders
   const noAvailableSlots = booking.date
     ? getAvailableSlots(byType[booking.visitType]?.lead_minutes ?? 60, booking.date).length === 0
     : false
@@ -3234,9 +3239,9 @@ export function BookVisit() {
           {isEarPiercing && studOptions.length > 0 && (
             <div className="mt-6 pt-5 border-t border-[#E8E8E4]">
               <div className="mb-3">
-                <div className="font-display text-[16px] font-semibold text-[#1A1A2E]">Want an extra pair of studs?</div>
+                <div className="font-display text-[16px] font-semibold text-[#1A1A2E]">Want to upgrade your studs?</div>
                 <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
-                  Your appointment already includes one set of medical-grade titanium starter studs ($100). Pick a second pair here if you'd like — $100 per pair.
+                  Your appointment already includes medical-grade titanium starter studs. If you'd like to upgrade to a premium pair, pick one below for an additional $60.
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -3245,8 +3250,8 @@ export function BookVisit() {
                   onClick={() => setSelectedStudOptionId(null)}
                   className={`relative border-2 rounded-xl p-3 text-left transition-colors ${selectedStudOptionId === null ? 'border-[#7F77DD] bg-[#EEEDFE]' : 'border-[#E8E8E4] hover:border-[#AFA9EC]'}`}
                 >
-                  <div className="aspect-square bg-[#FAFAF8] rounded-lg flex items-center justify-center mb-2 text-[11px] text-[#1A1A2E]/50">No extras</div>
-                  <div className="text-[12px] font-medium text-[#1A1A2E]">No extra pair</div>
+                  <div className="aspect-square bg-[#FAFAF8] rounded-lg flex items-center justify-center mb-2 text-[11px] text-[#1A1A2E]/50">Keep starter studs</div>
+                  <div className="text-[12px] font-medium text-[#1A1A2E]">No upgrade</div>
                   <div className="text-[11px] text-[#1A1A2E]/60">—</div>
                 </button>
                 {studOptions.map(s => (
