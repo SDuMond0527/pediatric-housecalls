@@ -20,7 +20,6 @@ import {
   getPractices,
   getAdminPracticeSettings,
   patchAdminPracticeSettings,
-  activateEarPiercing,
 } from '../../lib/api'
 
 type Practice = { id: string; name: string; slug: string }
@@ -43,19 +42,6 @@ export function AdminPracticeSettings() {
   const [saving, setSaving] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-
-  // Ear piercing one-shot activator
-  const [earActivating, setEarActivating] = useState(false)
-  const [earResult, setEarResult] = useState<string | null>(null)
-  async function runActivateEarPiercing() {
-    setEarActivating(true); setEarResult(null)
-    try {
-      const r = await activateEarPiercing()
-      setEarResult(JSON.stringify(r, null, 2))
-    } catch (e: any) {
-      setEarResult(`ERROR: ${e?.message ?? 'Failed'}`)
-    } finally { setEarActivating(false) }
-  }
 
   // Load practices on mount
   useEffect(() => {
@@ -202,38 +188,6 @@ export function AdminPracticeSettings() {
               </button>
             </div>
           </div>
-
-          {/* One-shot activators — super-admin direct actions that
-              aren't settings toggles but belong on this page because
-              they're per-practice feature-wide ops. Sara 2026-11-22. */}
-          <section className="mb-6 bg-[#FFFDF5] border border-[#EAD79B] rounded-lg overflow-hidden">
-            <div className="px-4 py-2.5 bg-[#FBF2D4] border-b border-[#EAD79B]">
-              <h2 className="text-[13px] font-semibold text-[#1A1A2E]">Feature activators</h2>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="text-[13px] font-medium text-[#1A1A2E]">Activate ear piercing</div>
-                  <div className="text-[12px] text-[#555] mt-0.5 leading-relaxed">
-                    Creates or re-syncs the "In-home ear piercing" visit type ($100, 60 min, has CV fee), fee-schedule rows EarPierce ($100) and EarStudsX (Upgrade to titanium piercing studs, $60), visit availability for Becca Jones + Megan Heilemann, and flips <code className="font-mono text-[11px]">uses_ear_piercing</code> ON. Safe to click more than once.
-                  </div>
-                </div>
-                <button
-                  onClick={runActivateEarPiercing}
-                  disabled={earActivating}
-                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7F77DD] text-white text-[12px] font-medium rounded-lg hover:bg-[#6B64C8] disabled:opacity-50"
-                >
-                  {earActivating ? <Loader2 size={12} className="animate-spin" /> : null}
-                  {earActivating ? 'Activating…' : 'Activate now'}
-                </button>
-              </div>
-              {earResult && (
-                <pre className="bg-white border border-[#E8E8E4] rounded p-3 text-[11px] font-mono whitespace-pre-wrap overflow-x-auto max-h-[300px] overflow-y-auto">
-                  {earResult}
-                </pre>
-              )}
-            </div>
-          </section>
 
           {/* Groups */}
           {SETTINGS_GROUPS.map(group => (
