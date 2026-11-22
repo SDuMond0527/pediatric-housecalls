@@ -204,52 +204,110 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const activationSummary: Record<string, unknown> = {}
     if (earToggle && earToggle.newValue === true) {
       const EAR_PIERCING = 'In-home ear piercing'
+
+      // 1. Column + table bootstraps so first-run on a fresh practice
+      // doesn't blow up on missing schema. Sara 2026-11-22.
+      try { await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS addons jsonb` } catch {}
       try {
-        const vtRes = await sql`
-          UPDATE practice_visit_types
-          SET is_active = true, base_price = 100, updated_at = NOW()
-          WHERE practice_id = ${practice_id}::uuid
-            AND visit_type = ${EAR_PIERCING}
-          RETURNING id`
-        activationSummary.visit_type_activated = vtRes.length
+        await sql`
+          CREATE TABLE IF NOT EXISTS stud_options (
+            id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            practice_id     uuid NOT NULL,
+            name            text NOT NULL,
+            photo_url       text NOT NULL,
+            price           numeric(10,2) NOT NULL DEFAULT 100.00,
+            is_active       boolean NOT NULL DEFAULT true,
+            sort_order      int NOT NULL DEFAULT 0,
+            created_at      timestamptz NOT NULL DEFAULT NOW(),
+            updated_at      timestamptz NOT NULL DEFAULT NOW()
+          )`
+        await sql`CREATE INDEX IF NOT EXISTS stud_options_practice_idx ON stud_options(practice_id)`
+      } catch {}
+
+      // 2. Visit type — upsert so the row exists AND is_active=true
+      // regardless of whether setup-ear-piercing ever ran.
+      try {
+        const [existingVt] = await sql`
+          SELECT id FROM practice_visit_types
+          WHERE practice_id = ${practice_id}::uuid AND visit_type = ${EAR_PIERCING}
+          LIMIT 1`
+        if (existingVt) {
+          await sql`
+            UPDATE practice_visit_types SET
+              base_price = 100, duration_minutes = 60, lead_minutes = 60,
+              has_convenience_fee = true, is_in_home = true, is_cpr = false,
+              is_active = true, badge_label = 'Piercing', updated_at = NOW()
+            WHERE id = ${existingVt.id}::uuid`
+          activationSummary.visit_type = 'updated'
+        } else {
+          await sql`
+            INSERT INTO practice_visit_types
+              (practice_id, visit_type, base_price, badge_label, badge_color, badge_text_color,
+               duration_minutes, lead_minutes, has_convenience_fee, per_child_extra_minutes,
+               is_in_home, is_cpr, is_active, sort_order)
+            VALUES
+              (${practice_id}::uuid, ${EAR_PIERCING}, 100, 'Piercing', '#F1EFE8', '#1A1A2E',
+               60, 60, true, 0, true, false, true, 50)`
+          activationSummary.visit_type = 'created'
+        }
       } catch (e: any) {
         activationSummary.visit_type_error = e?.message ?? 'unknown'
       }
-      // Normalize the fee-schedule rows every time ear piercing is turned
-      // on. If the codes exist (setup-ear-piercing was run), update
-      // description + price so renames + price changes land cleanly
-      // without needing to re-run the scaffold endpoint. Codes that
-      // don't exist are skipped — the scaffold endpoint creates them
-      // as a separate one-time setup step.
+
+      // 3. Fee schedule — upsert so rows exist with the correct name + price.
       const FEE_UPSERTS: Array<[string, string, number]> = [
         ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
         ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
       ]
-      const feeResults: Array<{ code: string; updated: boolean; charge_amount: number | null }> = []
+      const feeResults: Array<{ code: string; action: 'created' | 'updated' | 'error'; charge_amount: number | null }> = []
       for (const [code, desc, amt] of FEE_UPSERTS) {
         try {
-          const rows = await sql`
-            UPDATE fee_schedule SET description = ${desc}, charge_amount = ${amt}
-            WHERE practice_id = ${practice_id}::uuid AND code = ${code}
-            RETURNING code, charge_amount`
-          const row = (rows as any[])[0]
-          feeResults.push({ code, updated: !!row, charge_amount: row?.charge_amount ?? null })
+          const [existing] = await sql`
+            SELECT code FROM fee_schedule WHERE practice_id = ${practice_id}::uuid AND code = ${code} LIMIT 1`
+          if (existing) {
+            const [u] = await sql`
+              UPDATE fee_schedule SET description = ${desc}, charge_amount = ${amt}, category = 'Non-Covered Services'
+              WHERE practice_id = ${practice_id}::uuid AND code = ${code}
+              RETURNING charge_amount`
+            feeResults.push({ code, action: 'updated', charge_amount: u?.charge_amount ?? null })
+          } else {
+            const [c] = await sql`
+              INSERT INTO fee_schedule (practice_id, code, description, charge_amount, category)
+              VALUES (${practice_id}::uuid, ${code}, ${desc}, ${amt}, 'Non-Covered Services')
+              RETURNING charge_amount`
+            feeResults.push({ code, action: 'created', charge_amount: c?.charge_amount ?? null })
+          }
         } catch {
-          feeResults.push({ code, updated: false, charge_amount: null })
+          feeResults.push({ code, action: 'error', charge_amount: null })
         }
       }
-      activationSummary.fees_normalized = feeResults
+      activationSummary.fees = feeResults
+
+      // 4. Provider availability — upsert for Becca + Megan.
       try {
-        const availRes = await sql`
-          UPDATE visit_type_availability vta
-          SET is_active = true
-          FROM providers p
-          WHERE vta.provider_id = p.id
-            AND p.practice_id = ${practice_id}::uuid
-            AND p.name IN ('Becca Jones','Megan Heilemann')
-            AND vta.visit_type = ${EAR_PIERCING}
-          RETURNING p.name`
-        activationSummary.providers_activated = (availRes as any[]).map(r => r.name)
+        const providers = await sql`
+          SELECT id, name FROM providers
+          WHERE practice_id = ${practice_id}::uuid
+            AND name IN ('Becca Jones','Megan Heilemann')
+            AND is_active = true` as any[]
+        const providerResults: Array<{ name: string; action: 'created' | 'updated' }> = []
+        for (const p of providers) {
+          const [existingAvail] = await sql`
+            SELECT id FROM visit_type_availability
+            WHERE provider_id = ${p.id}::uuid AND visit_type = ${EAR_PIERCING} LIMIT 1`
+          if (existingAvail) {
+            await sql`
+              UPDATE visit_type_availability SET is_active = true, start_time = '08:00', end_time = '17:00'
+              WHERE id = ${existingAvail.id}::uuid`
+            providerResults.push({ name: p.name, action: 'updated' })
+          } else {
+            await sql`
+              INSERT INTO visit_type_availability (provider_id, visit_type, is_active, start_time, end_time)
+              VALUES (${p.id}::uuid, ${EAR_PIERCING}, true, '08:00', '17:00')`
+            providerResults.push({ name: p.name, action: 'created' })
+          }
+        }
+        activationSummary.providers = providerResults
       } catch (e: any) {
         activationSummary.availability_error = e?.message ?? 'unknown'
       }
