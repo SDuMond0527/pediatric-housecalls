@@ -41,6 +41,7 @@ import { getProvidersByZone, getProvidersByState, getStudOptionsPublic, logSibli
 import { usePracticeVisitTypes } from '../../hooks/usePracticeVisitTypes'
 import { isCmaTelePair, isIvFluidsPair, CMA_TELE_ALIASES } from '../../lib/dualVisitTypes'
 import { CompleteChildProfileGate } from '../../components/CompleteChildProfileGate'
+import { INSURANCE_PROVIDERS } from '../../components/InsuranceEditor'
 import { isChildComplete } from '../../lib/childCompleteness'
 import { format } from 'date-fns'
 import { PRACTICE_NAME, VENMO_HANDLE } from '../../lib/practice'
@@ -3919,7 +3920,34 @@ function ChildIntakeFormSection({ intake, visitType, onChange, onConsentChange, 
 
             {!intake.selfPay && (
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <Input label="Insurance provider" placeholder="BCBS NC, Aetna..." required value={intake.insuranceProvider} onChange={e => onChange('insuranceProvider', e.target.value)} />
+                <div>
+                  <label className="text-[11px] font-medium text-[#555] uppercase tracking-wider block mb-1">
+                    Insurance provider <span className="text-[#ff3b30]">*</span>
+                  </label>
+                  <select
+                    value={INSURANCE_PROVIDERS.includes(intake.insuranceProvider as any) ? intake.insuranceProvider : (intake.insuranceProvider ? '__other__' : '')}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (v === '__other__') { onChange('insuranceProvider', '') }
+                      else { onChange('insuranceProvider', v) }
+                    }}
+                    required
+                    className="w-full px-3 py-2.5 border border-[#E8E8E4] rounded-lg text-[14px] font-sans bg-white focus:border-[#7F77DD] outline-none"
+                  >
+                    <option value="">— Choose insurance —</option>
+                    {INSURANCE_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+                    <option value="__other__">Other (type below)</option>
+                  </select>
+                  {(intake.insuranceProvider && !INSURANCE_PROVIDERS.includes(intake.insuranceProvider as any)) && (
+                    <input
+                      type="text"
+                      placeholder="Type the insurance company name"
+                      value={intake.insuranceProvider}
+                      onChange={e => onChange('insuranceProvider', e.target.value)}
+                      className="mt-2 w-full px-3 py-2 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
+                    />
+                  )}
+                </div>
                 <Input label="Member ID" placeholder="ABC123456789" required value={intake.insuranceMemberId} onChange={e => onChange('insuranceMemberId', e.target.value)} />
                 <Input label="Group number" placeholder="GRP001" required value={intake.insuranceGroupNumber} onChange={e => onChange('insuranceGroupNumber', e.target.value)} />
                 <Input label="Subscriber name" placeholder="Jennifer Smith" required value={intake.insuranceSubscriberName} onChange={e => onChange('insuranceSubscriberName', e.target.value)} />

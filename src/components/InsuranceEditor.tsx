@@ -75,6 +75,7 @@ export function looksLikeBcbsNc(providerValue?: string | null): boolean {
 // Sara 2026-10-07.
 export const INSURANCE_PROVIDERS = [
   'BCBS of NC',
+  'Anthem BCBS',
   'Anthem BCBS of Virginia',
   'United Healthcare',
   'UMR',
@@ -99,7 +100,12 @@ function matchCanonicalProvider(raw: string): string {
   const v = String(raw || '').toLowerCase().trim()
   if (!v) return ''
   if (/anthem/.test(v) && /\b(va|virginia)\b/.test(v)) return 'Anthem BCBS of Virginia'
-  if (/anthem/.test(v))                                return 'BCBS of NC'
+  // Anthem (non-VA) must stay distinct from BCBS of NC. Claims still
+  // route to UPICO via BlueCard, but eligibility 270s go to Anthem's
+  // own payer ID 00601. If we rewrite Anthem → "BCBS of NC" at save
+  // time (the previous behavior), the eligibility router can't tell
+  // them apart and every Anthem 270 fails. Sara 2026-11-22.
+  if (/anthem/.test(v))                                return 'Anthem BCBS'
   if (/\bbcbs\b|blue\s*cross|blue\s*shield/.test(v))   return 'BCBS of NC'
   if (/\bumr\b/.test(v))                               return 'UMR'
   if (/united\s*health|\buhc\b/.test(v))               return 'United Healthcare'
