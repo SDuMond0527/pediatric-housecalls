@@ -87,6 +87,11 @@ export const VISIT_TYPE_INFO = {
     duration: '60–90 min',
     note: 'Requires provider screening call first. Minimum weight 55 lbs.',
   },
+  'In-home ear piercing': {
+    color: '#1A1A2E', bg: '#F1EFE8', icon: '💎',
+    duration: '60 min',
+    note: 'Includes medical-grade titanium starter studs. Upgrade to premium titanium studs available as a $60 add-on. Offered by Becca Jones and Megan Heilemann.',
+  },
   'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)': {
     color: '#C0392B', bg: '#FDEDEC', icon: '❤️',
     duration: '3 hours · up to 6 people · $80/person',

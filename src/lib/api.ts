@@ -1632,6 +1632,12 @@ export const downloadClaimEraPdf = (id: string) =>
 export const downloadSuperbillPdf = (id: string) =>
   openClaimPdf(`/api/claims/${id}/superbill-pdf`, `superbill-${id.slice(0, 8)}.pdf`)
 
+// One-shot activator: creates (or re-syncs) the full ear-piercing
+// setup in the caller's practice and returns a per-step report.
+// Super-admin only. Sara 2026-11-22.
+export const activateEarPiercing = () =>
+  apiFetch<any>('/api/admin/activate-ear-piercing', { method: 'POST', body: '{}' })
+
 // Provider onboarding — super-admin invites a new provider via a
 // Cognito account + Resend email + provider_invites row. Phase 1 of
 // automated onboarding. Sara 2026-11-19.

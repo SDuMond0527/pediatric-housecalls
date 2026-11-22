@@ -2059,6 +2059,7 @@ export function BookVisit() {
               'CMA + telemedicine',
               'Text visit',
               'In-home IV fluids',
+              'In-home ear piercing',
               'In-home CPR class (Heartsaver Child and Infant First Aid, CPR, AED, choking, injury/environmental emergencies, opioid-associated emergencies (including how to use Narcan) with optional modules in adult CPR/AED)',
               'In-home CPR class (BLS - Adult CPR/AED use, first aid basics, medical/injury/environmental emergencies, choking, opioid-associated emergencies (including how to use Narcan), recognizing mental health crisis signs in the workplace, with optional modules for child & infant CPR/AED)',
             ] as const)
