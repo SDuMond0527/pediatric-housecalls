@@ -60,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const feeRows: any[] = []
   for (const [code, desc, amt] of [
     ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
-    ['EarStudsX', 'Additional set of titanium studs', 100.00],
+    ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
   ] as const) {
     const [existing] = await sql`
       SELECT code FROM fee_schedule WHERE practice_id = ${pid}::uuid AND code = ${code} LIMIT 1`

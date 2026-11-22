@@ -192,7 +192,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
            ${JSON.stringify(change.newValue ?? null)}::jsonb)`),
     ])
 
-    return res.json({ ok: true, changed: changes.length, settings: merged })
+    // ── Ear-piercing activation side effect ───────────────────────────
+    // Infrastructure (practice_visit_types + visit_type_availability
+    // rows for Becca Jones + Megan Heilemann) was scaffolded with
+    // is_active=false by /api/admin/setup-ear-piercing. Flipping the
+    // uses_ear_piercing setting from off → on in one click activates
+    // the visit type + the two providers' availability so parents can
+    // book it immediately. Scope: PHC-named providers only (Becca +
+    // Megan). Sara 2026-11-22.
+    const earToggle = changes.find(c => c.field === 'uses_ear_piercing')
+    const activationSummary: Record<string, unknown> = {}
+    if (earToggle && earToggle.newValue === true) {
+      const EAR_PIERCING = 'In-home ear piercing'
+      try {
+        const vtRes = await sql`
+          UPDATE practice_visit_types
+          SET is_active = true, base_price = 100, updated_at = NOW()
+          WHERE practice_id = ${practice_id}::uuid
+            AND visit_type = ${EAR_PIERCING}
+          RETURNING id`
+        activationSummary.visit_type_activated = vtRes.length
+      } catch (e: any) {
+        activationSummary.visit_type_error = e?.message ?? 'unknown'
+      }
+      // Normalize the fee-schedule rows every time ear piercing is turned
+      // on. If the codes exist (setup-ear-piercing was run), update
+      // description + price so renames + price changes land cleanly
+      // without needing to re-run the scaffold endpoint. Codes that
+      // don't exist are skipped — the scaffold endpoint creates them
+      // as a separate one-time setup step.
+      const FEE_UPSERTS: Array<[string, string, number]> = [
+        ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+        ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+      ]
+      const feeResults: Array<{ code: string; updated: boolean; charge_amount: number | null }> = []
+      for (const [code, desc, amt] of FEE_UPSERTS) {
+        try {
+          const rows = await sql`
+            UPDATE fee_schedule SET description = ${desc}, charge_amount = ${amt}
+            WHERE practice_id = ${practice_id}::uuid AND code = ${code}
+            RETURNING code, charge_amount`
+          const row = (rows as any[])[0]
+          feeResults.push({ code, updated: !!row, charge_amount: row?.charge_amount ?? null })
+        } catch {
+          feeResults.push({ code, updated: false, charge_amount: null })
+        }
+      }
+      activationSummary.fees_normalized = feeResults
+      try {
+        const availRes = await sql`
+          UPDATE visit_type_availability vta
+          SET is_active = true
+          FROM providers p
+          WHERE vta.provider_id = p.id
+            AND p.practice_id = ${practice_id}::uuid
+            AND p.name IN ('Becca Jones','Megan Heilemann')
+            AND vta.visit_type = ${EAR_PIERCING}
+          RETURNING p.name`
+        activationSummary.providers_activated = (availRes as any[]).map(r => r.name)
+      } catch (e: any) {
+        activationSummary.availability_error = e?.message ?? 'unknown'
+      }
+    }
+
+    return res.json({ ok: true, changed: changes.length, settings: merged, ...(Object.keys(activationSummary).length ? { ear_piercing: activationSummary } : {}) })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
