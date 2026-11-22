@@ -170,27 +170,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (changes.length === 0) {
-      return res.json({ ok: true, changed: 0, settings: current })
+    // If there are no field diffs, SKIP the settings UPDATE + audit
+    // writes — but DO fall through to the feature-activation side
+    // effects below. The side effects are idempotent and self-heal
+    // missing visit_type / fee / availability rows for any practice
+    // whose flag is currently on, so a bare Save with no changes still
+    // runs them. Sara 2026-11-22.
+    if (changes.length > 0) {
+      await sql.transaction([
+        sql`
+          UPDATE practices SET settings = ${JSON.stringify(merged)}::jsonb
+          WHERE id = ${practice_id}::uuid`,
+        ...changes.map(change => sql`
+          INSERT INTO practice_settings_audit
+            (practice_id, changed_by_provider_id, changed_by_name, field_path, old_value, new_value)
+          VALUES
+            (${practice_id}::uuid, ${caller.id}::uuid, ${caller.name},
+             ${change.field},
+             ${JSON.stringify(change.oldValue ?? null)}::jsonb,
+             ${JSON.stringify(change.newValue ?? null)}::jsonb)`),
+      ])
     }
-
-    // Write the merged blob + one audit row per changed field, in one
-    // transaction. Neon HTTP driver autocommits per sql call, so without
-    // transaction() a mid-batch failure could leave settings updated
-    // without audit rows.
-    await sql.transaction([
-      sql`
-        UPDATE practices SET settings = ${JSON.stringify(merged)}::jsonb
-        WHERE id = ${practice_id}::uuid`,
-      ...changes.map(change => sql`
-        INSERT INTO practice_settings_audit
-          (practice_id, changed_by_provider_id, changed_by_name, field_path, old_value, new_value)
-        VALUES
-          (${practice_id}::uuid, ${caller.id}::uuid, ${caller.name},
-           ${change.field},
-           ${JSON.stringify(change.oldValue ?? null)}::jsonb,
-           ${JSON.stringify(change.newValue ?? null)}::jsonb)`),
-    ])
 
     // ── Ear-piercing activation side effect ───────────────────────────
     // Infrastructure (practice_visit_types + visit_type_availability
