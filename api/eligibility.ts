@@ -31,12 +31,18 @@ const PAYER_IDS: Record<string, string> = {
 function resolvePayer(name: string | null): string | null {
   if (!name) return null
   const normalized = name.toLowerCase().trim()
-  // Anthem routing per Sara 2026-10-05: see api/claims/index.ts for the
-  // canonical rule. Virginia Anthem → VABLS; every other Anthem → UPICO.
-  // Keep this in sync when the mapping changes.
+  // Anthem routing diverges between eligibility and claims:
+  //   - Virginia Anthem → VABLS (same for both)
+  //   - Every other Anthem:
+  //       claims (BlueCard):        UPICO (BCBS NC — see api/claims/index.ts)
+  //       eligibility:              00601 (Anthem's own home-plan network)
+  // Sara 2026-11-22 after a day of failed Anthem 270s against UPICO:
+  // BCBS NC isn't the eligibility database for Anthem members, it's
+  // just the BlueCard claims receiver. Anthem's eligibility endpoint
+  // is 00601 at Stedi. Claims side is unchanged.
   if (/anthem/.test(normalized)) {
     if (/\b(va|virginia)\b/.test(normalized)) return 'VABLS'
-    return 'UPICO'
+    return '00601'
   }
   return PAYER_IDS[normalized] ?? null
 }

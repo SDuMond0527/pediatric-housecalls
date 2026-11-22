@@ -45,6 +45,10 @@ const CANONICAL_BY_PAYER_ID: Record<string, string> = {
   // Claims still route to the claims-side payer per the member's card.
   // See children.insurance_eligibility_payer_id override. Sara 2026-11-20.
   '87765': 'Interactive Medical Systems',
+  // Anthem's eligibility-side payer ID. Claims for Anthem patients
+  // still route to UPICO via BlueCard, but the 270 inquiry goes
+  // directly to Anthem (00601) at Stedi. Sara 2026-11-22.
+  '00601': 'Anthem',
   'PP':    'Self Pay',
 }
 
