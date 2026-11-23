@@ -86,6 +86,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const b = req.body ?? {}
+
+    // Action branch — if the body carries an "action" field, we treat
+    // this as a status-change call and route to the handler below
+    // instead of creating a new request. This is a workaround for a
+    // Vercel edge quirk where PATCH to /api/supply-requests/[id] kept
+    // returning 405 regardless of handler code. Keeps everything on
+    // the one URL that reliably accepts POST. Sara 2026-11-23.
+    if (typeof b.action === 'string' && b.action) {
+      const id = String(b.id ?? '').trim()
+      if (!id) return res.status(400).json({ error: 'id required' })
+      const [request] = await sql`
+        SELECT * FROM supply_requests
+        WHERE id = ${id}::uuid AND practice_id = ${provider.practice_id}::uuid
+        LIMIT 1`
+      if (!request) return res.status(404).json({ error: 'Request not found' })
+      const actor = { id: provider.id, name: provider.name }
+
+      if (b.action === 'mark_ordered') {
+        if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
+        if (request.status !== 'requested') return res.status(400).json({ error: `Can't mark ordered from status ${request.status}` })
+        const [row] = await sql`
+          UPDATE supply_requests
+          SET status = 'ordered', ordered_at = NOW(), ordered_by_name = ${actor.name ?? 'Admin'}
+          WHERE id = ${id}::uuid RETURNING *`
+        return res.status(200).json(row)
+      }
+      if (b.action === 'mark_shipped') {
+        if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
+        if (!['ordered','requested'].includes(request.status)) return res.status(400).json({ error: `Can't mark shipped from status ${request.status}` })
+        const [row] = await sql`
+          UPDATE supply_requests
+          SET status = 'shipped', shipped_at = NOW(), shipped_by_name = ${actor.name ?? 'Admin'}
+          WHERE id = ${id}::uuid RETURNING *`
+        return res.status(200).json(row)
+      }
+      if (b.action === 'mark_received') {
+        if (!isAdmin && String(actor.id) !== String(request.provider_id)) return res.status(403).json({ error: 'Not your request' })
+        if (!['shipped','ordered'].includes(request.status)) return res.status(400).json({ error: `Can't mark received from status ${request.status}` })
+        const [row] = await sql`
+          UPDATE supply_requests
+          SET status = 'received', received_at = NOW()
+          WHERE id = ${id}::uuid RETURNING *`
+        return res.status(200).json(row)
+      }
+      if (b.action === 'cancel') {
+        const reason = typeof b.reason === 'string' ? b.reason.trim() || null : null
+        const isOwner = String(actor.id) === String(request.provider_id)
+        if (!isAdmin && !isOwner) return res.status(403).json({ error: 'Not your request' })
+        if (!isAdmin && request.status !== 'requested') return res.status(400).json({ error: `Can only cancel a request that hasn't been ordered yet` })
+        if (['received','cancelled'].includes(request.status)) return res.status(400).json({ error: `Already ${request.status}` })
+        const [row] = await sql`
+          UPDATE supply_requests
+          SET status = 'cancelled', cancelled_at = NOW(),
+              cancelled_by_name = ${actor.name ?? 'Unknown'}, cancelled_reason = ${reason}
+          WHERE id = ${id}::uuid RETURNING *`
+        return res.status(200).json(row)
+      }
+      return res.status(400).json({ error: `Unknown action: ${b.action}` })
+    }
+
     const items = Array.isArray(b.items) ? b.items : []
     if (items.length === 0) return res.status(400).json({ error: 'At least one supply required' })
 
