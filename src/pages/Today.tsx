@@ -1360,6 +1360,41 @@ export function Today() {
                                 <F label="Address" value={address} />
                               </div>
                             )}
+                            {Array.isArray((appt as any).sibling_children) && (appt as any).sibling_children.length > 0 && (
+                              <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-lg p-3 space-y-3">
+                                <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider">
+                                  Siblings seen at this visit ({(appt as any).sibling_children.length})
+                                </div>
+                                {(appt as any).sibling_children.map((sib: any) => {
+                                  const sibName = [sib.first_name, sib.last_name].filter(Boolean).join(' ').trim() || sib.display_label || 'Sibling'
+                                  const sibDob = sib.date_of_birth ? new Date(sib.date_of_birth).toLocaleDateString() : null
+                                  return (
+                                    <div key={sib.id} className="bg-white border border-[#E8E8E4] rounded-lg p-3 space-y-1.5">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="inline-flex items-center gap-2 flex-wrap">
+                                          <strong className="text-[13px]">{sibName}</strong>
+                                          <ChartNumberPill value={sib.chart_number} size="xs" />
+                                        </span>
+                                        <a href={`/admin/chart/${sib.id}`} target="_blank" rel="noreferrer"
+                                           onClick={e => e.stopPropagation()}
+                                           title="Open this sibling's full chart in a new tab"
+                                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-[#7F77DD] bg-white text-[#7F77DD] hover:bg-[#EEEDFE]">
+                                          <FileText size={10} /> Open chart
+                                        </a>
+                                      </div>
+                                      <F label="Date of birth" value={sibDob || ''} />
+                                      <F label="Sex" value={sib.gender || ''} />
+                                      <F label="Allergies" value={sib.allergies || ''} />
+                                      <F label="Medications" value={sib.current_medications || ''} />
+                                      <F label="Medical history / PMH" value={sib.medical_history || ''} />
+                                      <F label="Vaccination status" value={sib.vaccination_status || ''} />
+                                      <F label="PCP" value={sib.pcp || ''} />
+                                      <F label="Preferred pharmacy" value={sib.preferred_pharmacy || ''} />
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
                             {rnOrder && (
                               <div className="bg-[#F5F4FE] border border-[#AFA9EC] rounded-lg p-3">
                                 <div className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mb-1">RN orders</div>

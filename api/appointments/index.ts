@@ -16,6 +16,11 @@ interface CreateAppointmentInput {
   notes?: string | null
   duration_minutes?: number | null
   child_id?: string | null
+  // Additional kids on a sibling-group booking. The primary child_id
+  // stays the first child (keeps billing/chart linkage simple), these
+  // are the extra kids the parent selected on the same booking. Sara
+  // 2026-11-23: both siblings must appear on the schedule card.
+  sibling_child_ids?: string[] | null
   state?: string | null
   second_provider_id?: string | null
   // Provider/admin double-book override. When true, skips the
@@ -34,7 +39,17 @@ async function createAppointmentCore(
   practiceId: string,
   input: CreateAppointmentInput,
 ): Promise<CreateAppointmentResult> {
-  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = input
+  const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, sibling_child_ids, state: bodyState, second_provider_id, allow_overlap } = input
+  // Normalize sibling_child_ids to a clean, dedup'd array that excludes
+  // the primary child_id (defensive — the caller should already have
+  // done this, but keeps bad payloads from writing a kid into both
+  // slots). Null/empty becomes null so the Postgres NULL semantics
+  // apply and the column stays sparse.
+  const sibIds: string[] | null = (() => {
+    const raw = Array.isArray(sibling_child_ids) ? sibling_child_ids : []
+    const cleaned = Array.from(new Set(raw.filter((x): x is string => typeof x === 'string' && !!x && x !== child_id)))
+    return cleaned.length ? cleaned : null
+  })()
   const endTime = blockEndTime(scheduled_time, visit_type, duration_minutes)
 
   // Rapid-click dedup: if the exact same booking landed in the last 60
@@ -104,8 +119,8 @@ async function createAppointmentCore(
       }
     }
     const [primaryRow] = await sql`
-      INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+      INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, sibling_child_ids)
+      VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid, ${sibIds}::uuid[])
       RETURNING *`
     await sql`
       INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
@@ -191,8 +206,8 @@ async function createAppointmentCore(
       const secondaryNotes = (notes ?? '') + `|PARTNER:${primaryName} (${primaryRole})`
       const primaryUpdNotes = ((primaryRow as any).notes ?? '') + `|PARTNER:${mdName} (${partnerRoleLabel})`
       ;[secondaryRow] = await sql`
-        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${secondaryVisitType}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${secondaryDur}, ${child_id ?? null}::uuid)
+        INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, sibling_child_ids)
+        VALUES (${practiceId}::uuid, ${mdProviderId}::uuid, ${secondaryVisitType}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, 'upcoming', ${secondaryNotes}, ${secondaryDur}, ${child_id ?? null}::uuid, ${sibIds}::uuid[])
         RETURNING *`
       await sql`UPDATE appointments SET notes = ${primaryUpdNotes} WHERE id = ${(primaryRow as any).id}::uuid`
       await sql`
@@ -202,8 +217,8 @@ async function createAppointmentCore(
     return { primary: primaryRow, secondary: secondaryRow }
   }
   const [row] = await sql`
-    INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id)
-    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid)
+    INSERT INTO appointments (practice_id, provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, sibling_child_ids)
+    VALUES (${practiceId}::uuid, ${provider_id}::uuid, ${visit_type}, ${zone ?? null}, ${scheduled_time}, ${scheduled_date}::date, ${status ?? 'upcoming'}, ${notes ?? null}, ${duration_minutes ?? null}, ${child_id ?? null}::uuid, ${sibIds}::uuid[])
     RETURNING *`
   await sql`
     INSERT INTO schedule_blocks (practice_id, provider_id, start_date, end_date, all_day, start_time, end_time, reason)
@@ -387,6 +402,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // since the column was added (Sentry 07f6c0904cf54b7a97e7df2227d34904,
     // Sara 2026-09-21 — Today.tsx was HTTP 500-ing all day for this).
     try { await sql`ALTER TABLE children ADD COLUMN IF NOT EXISTS previously_seen_by_phc boolean` } catch {}
+    // Multi-child booking: extra kids share one appointment row. Column
+    // is read by the sibling-enrichment pass below AND written by POST
+    // right in this file. Bootstrap here (same pattern as previously_
+    // seen_by_phc) so any read path works on a prod that hasn't POSTed
+    // yet. Sara 2026-11-23.
+    try { await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS sibling_child_ids uuid[]` } catch {}
     // Same one-time backfill as /api/children POST — any existing child
     // with a signed encounter note is a returning patient. Runs against
     // NULL rows only, so idempotent (no-op after first run). Placing it
@@ -424,6 +445,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       rows = await sql`SELECT a.id, a.status, a.visit_type, a.scheduled_date, a.provider_id, a.notes, c.previously_seen_by_phc FROM appointments a LEFT JOIN children c ON c.id = a.child_id WHERE a.practice_id = ${practiceId}::uuid`
     }
+    // Sibling enrichment — for any row carrying sibling_child_ids, fetch
+    // those children in a single batch and attach as `sibling_children`.
+    // The UI iterates this on the schedule card so every selected sibling
+    // shows their own chart pill, open-chart shortcut, and clinical/
+    // intake quick-view (see Today.tsx + AdminSchedule.tsx Patient block).
+    // Skipped for the default-practice-dump branch because that SELECT
+    // intentionally drops most columns (including sibling_child_ids) for
+    // size. Sara 2026-11-23.
+    try {
+      const allSibIds = Array.from(new Set(
+        (rows as any[]).flatMap(r => Array.isArray(r?.sibling_child_ids) ? r.sibling_child_ids : [])
+          .filter((x): x is string => typeof x === 'string' && !!x)
+      ))
+      if (allSibIds.length) {
+        // Per-child fields only — phone/email/address live on
+        // family_profiles and are the same for every sibling in the
+        // family, so the primary card's Patient block already surfaces
+        // them. Column names copied verbatim from api/children/index.ts
+        // INSERT so we don't invent columns that don't exist:
+        // current_medications (not medications), gender (not sex).
+        const sibRows = await sql`
+          SELECT id, first_name, last_name, display_label, date_of_birth, gender, chart_number,
+                 allergies, current_medications, medical_history,
+                 preferred_pharmacy, pcp, vaccination_status,
+                 insurance_provider, insurance_member_id, insurance_group_number,
+                 previously_seen_by_phc
+          FROM children WHERE id = ANY(${allSibIds}::uuid[])`
+        const byId = new Map<string, any>()
+        for (const r of sibRows as any[]) byId.set(String(r.id), r)
+        for (const r of rows as any[]) {
+          if (Array.isArray(r?.sibling_child_ids) && r.sibling_child_ids.length) {
+            r.sibling_children = r.sibling_child_ids
+              .map((id: string) => byId.get(String(id)))
+              .filter(Boolean)
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('[appointments] sibling enrichment failed:', e?.message)
+    }
     return res.json(rows)
   }
 
@@ -434,8 +495,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // level overlap check (with allow_overlap for override) becomes
     // the sole guard. Idempotent — no-op after the first run.
     try { await sql`DROP INDEX IF EXISTS unique_provider_date_time` } catch (e) { console.error('[appointments] drop index err:', e) }
+    try { await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS sibling_child_ids uuid[]` } catch {}
 
-    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, state: bodyState, second_provider_id, allow_overlap } = req.body
+    const { provider_id, visit_type, zone, scheduled_time, scheduled_date, status, notes, duration_minutes, child_id, sibling_child_ids, state: bodyState, second_provider_id, allow_overlap } = req.body
 
     // Server-side availability guard for family-originated bookings.
     // Providers/admins may schedule outside normal hours intentionally.
@@ -453,7 +515,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = await createAppointmentCore(sql, practiceId, {
       provider_id, visit_type, zone, scheduled_time, scheduled_date,
-      status, notes, duration_minutes, child_id,
+      status, notes, duration_minutes, child_id, sibling_child_ids,
       state: bodyState, second_provider_id,
       allow_overlap: provAllowOverlap,
     })

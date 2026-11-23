@@ -1766,6 +1766,10 @@ export function BookVisit() {
           notes: noteParts.join('|'),
           duration_minutes: (byType[booking.visitType]?.duration_minutes ?? 60) + ((byType[booking.visitType]?.per_child_extra_minutes ?? 0) * Math.max(0, booking.selectedChildIds.length - 1)),
           child_id: booking.selectedChildIds[0] || null,
+          // Extra kids on a sibling-group booking. Primary child_id stays
+          // the first — this list is only the additional siblings so the
+          // schedule card can render each of them. Sara 2026-11-23.
+          sibling_child_ids: booking.selectedChildIds.length > 1 ? booking.selectedChildIds.slice(1) : null,
           ...((isCmaVisit || isIvFluids) ? { state: booking.state } : {}),
         })
       } catch (e: any) {

@@ -34,6 +34,30 @@ export interface Appointment {
   after_visit_instructions: string | null
   duration_minutes: number | null
   child_id: string | null
+  // Extra kids on a sibling-group booking — ids of children seen at
+  // the same visit alongside the primary child_id. UI reads
+  // sibling_children (hydrated server-side) to render each sibling's
+  // Patient block on the schedule card.
+  sibling_child_ids?: string[] | null
+  sibling_children?: Array<{
+    id: string
+    first_name: string | null
+    last_name: string | null
+    display_label: string | null
+    date_of_birth: string | null
+    gender: string | null
+    chart_number: string | null
+    allergies: string | null
+    current_medications: string | null
+    medical_history: string | null
+    preferred_pharmacy: string | null
+    pcp: string | null
+    vaccination_status: string | null
+    insurance_provider: string | null
+    insurance_member_id: string | null
+    insurance_group_number: string | null
+    previously_seen_by_phc: boolean | null
+  }>
   created_at: string
 }
 
