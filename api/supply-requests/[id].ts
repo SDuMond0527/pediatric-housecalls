@@ -70,7 +70,13 @@ async function emailProviderShipped(opts: {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' })
+  // Accept PATCH (semantic) and POST (edge-safe fallback). Vercel's
+  // edge occasionally 405s PATCH before it reaches the function;
+  // POST avoids that. Sara 2026-11-23 — her Cancel button threw
+  // "HTTP 405" trying to cancel a supply request.
+  if (req.method !== 'PATCH' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
 
   let sub: string
   try { sub = await verifyProviderToken(req.headers.authorization) }

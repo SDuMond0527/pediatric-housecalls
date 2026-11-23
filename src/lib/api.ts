@@ -1756,7 +1756,7 @@ export const getSupplyRequests = (params?: { scope?: 'mine' | 'all'; status?: st
 export const createSupplyRequest = (body: { items: Array<{ supply_id: string; quantity: number; notes?: string }>; shipping_address?: string; notes?: string }) =>
   apiFetch<SupplyRequest>('/api/supply-requests', { method: 'POST', body: JSON.stringify(body) })
 export const supplyRequestAction = (id: string, body: { action: 'mark_ordered' | 'mark_shipped' | 'mark_received' | 'cancel'; reason?: string }) =>
-  apiFetch<SupplyRequest>(`/api/supply-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  apiFetch<SupplyRequest>(`/api/supply-requests/${id}`, { method: 'POST', body: JSON.stringify(body) })
 
 // One-shot seed for the 23 Google-Form items into the current user's
 // practice catalog. Super-admin only. Idempotent (updates existing rows
