@@ -36,6 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by uuid REFERENCES providers(id)` } catch {}
     try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_by_name text` } catch {}
     try { await sql`ALTER TABLE encounter_notes ADD COLUMN IF NOT EXISTS co_signed_at timestamptz` } catch {}
+    // Multi-sibling bookings share one appointment, but each kid gets
+    // their own note + claim (Sara 2026-11-23). Drop the legacy UNIQUE
+    // on appointment_id and replace with a partial unique on
+    // (appointment_id, child_id) — same safety net against duplicate
+    // double-click inserts, but allows multiple notes per appointment
+    // as long as they're for different kids. Idempotent: constraint name
+    // is the Postgres default from the original CREATE TABLE.
+    try { await sql`ALTER TABLE encounter_notes DROP CONSTRAINT IF EXISTS encounter_notes_appointment_id_key` } catch {}
+    try { await sql`CREATE UNIQUE INDEX IF NOT EXISTS encounter_notes_appt_child_uniq ON encounter_notes (appointment_id, child_id) WHERE child_id IS NOT NULL` } catch {}
 
     if (appointment_id) {
       // Include child.medical_history so the modal can auto-populate
@@ -45,16 +54,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // provider_role is what gates the "Co-sign as supervising physician"
       // button in EncounterNoteModal — the modal loads notes through this
       // branch, not through /api/encounter-notes/[id].
-      const rows = await sql`
-        SELECT en.*,
-               ch.medical_history AS child_medical_history,
-               p.role AS provider_role,
-               p.name AS provider_name
-        FROM encounter_notes en
-        LEFT JOIN children ch ON ch.id = en.child_id
-        LEFT JOIN providers p ON p.id = en.provider_id
-        WHERE en.appointment_id = ${appointment_id}::uuid AND en.practice_id = ${practiceId}::uuid
-        LIMIT 1`
+      //
+      // Multi-child bookings: filter by child_id so the modal gets the
+      // correct sibling's note. Without child_id we fall back to the
+      // primary (en.child_id = a.child_id) — keeps legacy callers that
+      // never passed child_id working as before.
+      const rows = child_id
+        ? await sql`
+            SELECT en.*,
+                   ch.medical_history AS child_medical_history,
+                   p.role AS provider_role,
+                   p.name AS provider_name
+            FROM encounter_notes en
+            LEFT JOIN children ch ON ch.id = en.child_id
+            LEFT JOIN providers p ON p.id = en.provider_id
+            WHERE en.appointment_id = ${appointment_id}::uuid
+              AND en.child_id = ${child_id}::uuid
+              AND en.practice_id = ${practiceId}::uuid
+            LIMIT 1`
+        : await sql`
+            SELECT en.*,
+                   ch.medical_history AS child_medical_history,
+                   p.role AS provider_role,
+                   p.name AS provider_name
+            FROM encounter_notes en
+            JOIN appointments a ON a.id = en.appointment_id
+            LEFT JOIN children ch ON ch.id = en.child_id
+            LEFT JOIN providers p ON p.id = en.provider_id
+            WHERE en.appointment_id = ${appointment_id}::uuid
+              AND en.practice_id = ${practiceId}::uuid
+              AND (en.child_id = a.child_id OR en.child_id IS NULL OR a.child_id IS NULL)
+            ORDER BY (en.child_id = a.child_id) DESC NULLS LAST
+            LIMIT 1`
       return res.json(rows[0] ?? null)
     }
 
@@ -117,7 +148,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       RETURNING *`
     if (child_id) {
-      await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid`
+      // Back-fill the appointment's primary child_id only when it's
+      // unset — otherwise a sibling's note would stomp the primary kid
+      // and the schedule card + claim gen would re-anchor to the wrong
+      // patient. Primary is locked at booking; siblings never promote.
+      await sql`UPDATE appointments SET child_id = ${child_id}::uuid WHERE id = ${appointment_id}::uuid AND practice_id = ${practiceId}::uuid AND child_id IS NULL`
     }
 
     // RN IV fluids note pending signature → ping Dr. Sara DuMond (matches

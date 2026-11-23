@@ -588,6 +588,12 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   const [linkedChildId, setLinkedChildId] = useState<string | null>(childId)
   const [linkedChildName, setLinkedChildName] = useState<string | null>(null)
   const [linkedChildDob, setLinkedChildDob] = useState<string | null>(null)
+  // Sibling-group bookings: appointment.sibling_children carries the
+  // extra kids. We fetch all of them (primary + siblings) once at mount
+  // so the tab bar above the note can switch between whose chart /
+  // vitals / note is being worked on. Each kid gets their own note row
+  // and their own claim — see Sara 2026-11-23 build note.
+  const [allKids, setAllKids] = useState<Array<{ id: string; name: string }>>([])
   const [rnIvOpen, setRnIvOpen] = useState(false)
   const [rnIvCtx, setRnIvCtx] = useState<RnIvOrderContext | null>(null)
   const [rnIvOpening, setRnIvOpening] = useState(false)
@@ -1033,20 +1039,43 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
   useEffect(() => {
     async function load() {
       setLoading(true)
+      // Reset note-scoped state before loading — critical when the
+      // active child changes (sibling tab switch). Without this, form
+      // fields from the previous child's note leak into the new one.
+      setNoteId(null)
+      setIsSigned(false)
+      setChiefComplaint('')
+      setSubjective('')
+      setObjective('')
+      setAssessment('')
+      setPlan('')
+      setDiagnoses([])
+      setCptCodes([])
+      setPhotos([])
+      setFiles([])
+      setVaccineEntries([])
+      setLabSendouts([])
+      setLabs(emptyLabs())
+      setVitals(emptyVitals())
+      setMedicalHistory('')
+      setProviderRole(null)
+      setCoSignedAt(null)
+      setCoSignedByName(null)
+
       const [note, vitalsData, schedule, templates, childData] = await Promise.all([
-        getEncounterNote({ appointment_id: appointment.id }).catch(() => null),
-        getVitals({ appointment_id: appointment.id }).catch(() => null),
+        getEncounterNote({ appointment_id: appointment.id, ...(linkedChildId ? { child_id: linkedChildId } : {}) }).catch(() => null),
+        getVitals({ appointment_id: appointment.id, ...(linkedChildId ? { child_id: linkedChildId } : {}) }).catch(() => null),
         getFeeSchedule().catch(() => []),
         getNoteTemplates().catch(() => []),
         // Fetch child so we can pre-fill Medical History when the note
         // doesn't yet exist (fresh visit). For existing notes, the
         // GET already returns child_medical_history via JOIN.
-        childId ? getChildrenByIds([childId]).catch(() => []) : Promise.resolve([]),
+        linkedChildId ? getChildrenByIds([linkedChildId]).catch(() => []) : Promise.resolve([]),
       ])
       setCustomTemplates(templates)
       setFeeSchedule(schedule as unknown as typeof feeSchedule)
       const childRecord = Array.isArray(childData) && childData.length ? childData[0] : null
-      let resolvedChildId = childId
+      let resolvedChildId = linkedChildId
       logAudit('view_encounter_note', 'appointment', appointment.id)
       if (note) {
         setNoteId(note.id)
@@ -1189,16 +1218,62 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
         const children = await getChildrenByIds([resolvedChildId]).catch(() => [])
         const child = children?.[0]
         if (child) {
-          if (!linkedChildName && (child.first_name || child.last_name)) {
+          // Always refresh name + dob to the active child — previously
+          // this was guarded on `!linkedChildName` which left the
+          // previous sibling's name sticking after a tab switch.
+          if (child.first_name || child.last_name) {
             setLinkedChildName([child.first_name, child.last_name].filter(Boolean).join(' '))
+          } else {
+            setLinkedChildName(null)
           }
           if (child.date_of_birth) setLinkedChildDob(child.date_of_birth)
+          else setLinkedChildDob(null)
         }
       }
       setLoading(false)
     }
     load()
-  }, [appointment.id])
+  }, [appointment.id, linkedChildId])
+
+  // Build the tab list of all kids seen at this visit — primary +
+  // siblings — once at mount. Driven by the sibling_children array the
+  // server attached to the appointment. Separate effect from the note
+  // load so tab switching doesn't re-fetch the tab list.
+  useEffect(() => {
+    const ids: string[] = []
+    if (childId) ids.push(childId)
+    const sibs: any[] = Array.isArray((appointment as any).sibling_children)
+      ? (appointment as any).sibling_children : []
+    for (const s of sibs) { if (s?.id) ids.push(String(s.id)) }
+    if (ids.length <= 1) {
+      // Solo appointment — no tab bar needed. Still populate so the
+      // header can show the active kid's name consistently.
+      if (!ids.length) { setAllKids([]); return }
+    }
+    getChildrenByIds(ids).then((rows: any[]) => {
+      const byId = new Map<string, any>()
+      for (const r of rows) byId.set(String(r.id), r)
+      setAllKids(ids.map(id => {
+        const r = byId.get(id)
+        const name = r
+          ? ([r.first_name, r.last_name].filter(Boolean).join(' ') || r.display_label || 'Patient')
+          : 'Patient'
+        return { id, name }
+      }))
+    }).catch(() => { /* tabs stay empty — modal still works single-kid */ })
+  }, [appointment.id, childId])
+
+  async function switchChild(newId: string) {
+    if (newId === linkedChildId) return
+    // Persist the current kid's work before swapping. Skipped on signed
+    // notes (no edits) and when nothing has been entered yet.
+    const hasWork = !!noteId || !!chiefComplaint || !!subjective || !!objective
+      || !!assessment || !!plan || diagnoses.length > 0 || cptCodes.length > 0
+    if (!isSigned && hasWork) {
+      try { await saveDraft() } catch { /* if save failed, still switch; user keeps the edited form reloaded on tab re-click */ }
+    }
+    setLinkedChildId(newId)
+  }
 
   function onIcdQueryChange(q: string) {
     setIcdQuery(q)
@@ -1590,6 +1665,31 @@ export function EncounterNoteModal({ appointment, childId, providerId, onClose }
             </button>
           </div>
         </div>
+
+        {/* Sibling tabs — only when the parent booked more than one kid
+            at this visit. Each tab's kid gets their own note + claim.
+            Switching autosaves the current draft before swapping. */}
+        {allKids.length > 1 && (
+          <div className="flex items-center gap-1.5 px-6 py-2 bg-white border-b border-[#E8E8E4] flex-shrink-0 overflow-x-auto">
+            <span className="text-[10px] font-semibold text-[#7F77DD] uppercase tracking-wider mr-1 flex-shrink-0">Signing for</span>
+            {allKids.map(kid => {
+              const isActive = linkedChildId === kid.id
+              return (
+                <button
+                  key={kid.id}
+                  onClick={() => switchChild(kid.id)}
+                  disabled={saving || signing || isActive}
+                  className={`px-3 py-1 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors
+                    ${isActive
+                      ? 'bg-[#7F77DD] text-white cursor-default'
+                      : 'bg-[#F1EFE8] text-[#555] hover:bg-[#E8E4D8]'}`}
+                  title={isActive ? 'Currently working on this child\'s note' : `Switch to ${kid.name}'s note — autosaves current draft first`}>
+                  {kid.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Body */}
         {loading ? (
