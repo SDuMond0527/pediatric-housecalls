@@ -1637,8 +1637,8 @@ export function AdminClaims() {
       )}
 
       {/* Tabs + Ready-for-biller filter */}
-      <div className="flex items-center justify-between border-b border-[#E8E8E4] mb-6">
-        <div className="flex">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#E8E8E4] mb-6">
+        <div className="flex overflow-x-auto">
           <button className={tabCls('ready')} onClick={() => setTab('ready')}>
             Ready for biller {readyClaimsTab.length > 0 && <span className="ml-1 inline-flex items-center px-1.5 rounded-full text-[10px] font-bold bg-[#E1F5EE] text-[#085041]">{readyClaimsTab.length}</span>}
           </button>
@@ -1951,7 +1951,7 @@ export function AdminClaims() {
                         {editPatient[c.id] ? (
                           <div className="space-y-3">
                             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Patient info</div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                 <label className="text-[11px] text-[#555] block mb-1">First name</label>
                                 <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
@@ -2008,7 +2008,7 @@ export function AdminClaims() {
                                 </div>
                               </div>
                             <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider pt-1">Insurance</div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                 <label className="text-[11px] text-[#555] block mb-1">Member ID</label>
                                 <input className="w-full px-2.5 py-1.5 border border-[#E8E8E4] rounded-lg text-[13px] outline-none focus:border-[#7F77DD]"
@@ -2063,7 +2063,7 @@ export function AdminClaims() {
                           </div>
                         ) : (
                           <div>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
                               <div><span className="text-[#1A1A2E]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
                               <div><span className="text-[#1A1A2E]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
                               <div><span className="text-[#1A1A2E]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
@@ -2192,8 +2192,11 @@ export function AdminClaims() {
                           )}
                         </div>
 
-                        {/* Diagnoses + CPT */}
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* Diagnoses + CPT — stacks vertically on mobile so
+                            the Procedures & Fees column isn't crammed into
+                            a hair-thin right half of the screen. Sara
+                            2026-11-24. */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
                               <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">Diagnoses</div>
@@ -2477,9 +2480,11 @@ export function AdminClaims() {
                           </div>
                         )}
 
-                        {/* Submit / Regenerate buttons */}
-                        <div className="flex justify-between items-center pt-1">
-                          <div className="flex gap-2">
+                        {/* Submit / Regenerate buttons — stacks on mobile so
+                            the Submit-to-insurance CTA below isn't pushed
+                            off-screen. Sara 2026-11-24. */}
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 pt-1">
+                          <div className="flex flex-wrap gap-2">
                             {(!c.cpt_codes?.length || parseFloat(c.total_charge ?? 0) === 0) && c.encounter_note_id && (
                               <Button variant="secondary" size="sm"
                                 loading={regenerating === c.id}
@@ -2500,7 +2505,7 @@ export function AdminClaims() {
                               <Trash2 size={12} className="mr-1.5 text-[#DC2626]" /> Delete
                             </Button>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Button
                               variant={readyForBiller ? 'secondary' : 'teal'}
                               size="sm"
@@ -2976,7 +2981,7 @@ export function AdminClaims() {
                           <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">What was submitted</div>
 
                           {/* Patient + subscriber grid */}
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
                             <div><span className="text-[#1A1A2E]">Patient: </span><span className="text-[#1A1A2E] font-medium">{[c.patient_first_name, c.patient_last_name].filter(Boolean).join(' ') || '—'}</span></div>
                             <div><span className="text-[#1A1A2E]">DOB: </span><span className="text-[#1A1A2E]">{fmtDate(c.patient_dob)}</span></div>
                             <div><span className="text-[#1A1A2E]">Subscriber: </span><span className="text-[#1A1A2E] font-medium">{c.subscriber_name || '—'}</span></div>
@@ -2998,8 +3003,8 @@ export function AdminClaims() {
                             )}
                           </div>
 
-                          {/* Diagnoses + Procedures side by side */}
-                          <div className="grid grid-cols-2 gap-6">
+                          {/* Diagnoses + Procedures side by side (stacks on mobile) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                               <div className="text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider mb-1.5">Diagnoses</div>
                               {(c.diagnoses ?? []).length === 0 ? (
@@ -3058,7 +3063,7 @@ export function AdminClaims() {
                             <div className="text-[11px] font-semibold text-[#085041] uppercase tracking-wider mb-3 flex items-center gap-1.5">
                               <Zap size={11} /> ERA Payment Received · {fmtDate(c.era_received_at)}
                             </div>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                               {c.amount_billed_era != null && (
                                 <div className="flex justify-between text-[12px]">
                                   <span className="text-[#444]">Billed amount</span>
