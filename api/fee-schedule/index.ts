@@ -94,16 +94,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Idempotent one-shot: add CPT 98015 (synchronous audio-only E/M, 40+
-  // minutes) to Pediatric House Calls at $290. Sara requested 2026-11-24.
+  // minutes) to Pediatric Housecalls at $290. Sara requested 2026-11-24.
   // Scoped to PHC by name so it doesn't pollute other practices' fee
   // schedules (Dr. Cash's derm, Crestview). NOT EXISTS guard = idempotent
-  // after first run.
+  // after first run. Name match strips all whitespace so both
+  // "Pediatric Housecalls" and "Pediatric House Calls" catch it.
   try {
     await sql`
       INSERT INTO fee_schedule (practice_id, code, description, category, charge_amount, is_active)
       SELECT p.id, '98015', 'Synchronous audio-only 40+ minutes', 'Procedure', 290.00, true
       FROM practices p
-      WHERE p.name ILIKE 'pediatric house calls%'
+      WHERE regexp_replace(lower(p.name), '[[:space:]]+', '', 'g') LIKE '%pediatrichousecalls%'
         AND NOT EXISTS (
           SELECT 1 FROM fee_schedule fs
           WHERE fs.practice_id = p.id AND fs.code = '98015'
