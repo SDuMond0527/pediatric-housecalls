@@ -91,11 +91,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (e: any) { summary.visit_type_error = e?.message }
 
-  // 3. Fee schedule — upsert both codes.
+  // 3. Fee schedule — upsert both codes. Two-tier pricing (Sara
+  // 2026-11-24): regular $100, upgraded-studs $160. One line per
+  // tier so the self-pay statement shows a single total.
   const feeResults: Array<{ code: string; action: string; charge_amount?: any; error?: string }> = []
   for (const [code, desc, amt] of [
-    ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
-    ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+    ['EarPierce',    'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+    ['EarPierceUpg', 'In-home ear piercing with upgraded studs',                              160.00],
   ] as const) {
     try {
       const [existing] = await sql`

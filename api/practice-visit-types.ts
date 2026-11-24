@@ -87,9 +87,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       // Upsert fee-schedule rows + Becca/Megan availability on the same
       // self-heal pass so the whole feature lights up together.
+      // Two-tier pricing (Sara 2026-11-24): EarPierce $100 for regular,
+      // EarPierceUpg $160 for upgraded-studs piercings. One line per tier
+      // keeps the self-pay statement clean.
       for (const [code, desc, amt] of [
-        ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
-        ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+        ['EarPierce',    'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+        ['EarPierceUpg', 'In-home ear piercing with upgraded studs',                              160.00],
       ] as const) {
         const [feeExisting] = await sql`
           SELECT code FROM fee_schedule WHERE practice_id = ${practiceId}::uuid AND code = ${code} LIMIT 1`

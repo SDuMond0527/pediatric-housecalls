@@ -8,7 +8,7 @@ const EAR_PIERCING  = 'In-home ear piercing'
  * POST /api/admin/setup-ear-piercing
  * Service-token-gated. Idempotent setup for the ear-piercing visit type:
  *   - practice_visit_types row ($100, 60 min, has CV fee, in-home)
- *   - fee_schedule rows EarPierce ($100) and EarStudsX ($100)
+ *   - fee_schedule rows EarPierce ($100 regular) and EarPierceUpg ($160 upgraded studs)
  *   - visit_type_availability rows for Becca Jones + Megan Heilemann only
  *   - appointments.addons jsonb bootstrap
  *   - stud_options table bootstrap
@@ -57,10 +57,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. Fee schedule rows — same check-then-upsert pattern.
+  // Two-tier pricing (Sara 2026-11-24): EarPierce $100 regular,
+  // EarPierceUpg $160 upgraded studs.
   const feeRows: any[] = []
   for (const [code, desc, amt] of [
-    ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
-    ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+    ['EarPierce',    'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+    ['EarPierceUpg', 'In-home ear piercing with upgraded studs',                              160.00],
   ] as const) {
     const [existing] = await sql`
       SELECT code FROM fee_schedule WHERE practice_id = ${pid}::uuid AND code = ${code} LIMIT 1`

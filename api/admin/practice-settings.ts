@@ -259,9 +259,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // 3. Fee schedule — upsert so rows exist with the correct name + price.
+      // Two tiers now (Sara 2026-11-24): a flat $100 regular piercing and a
+      // single $160 "upgraded studs" code that rolls the studs cost into the
+      // procedure fee. Previously this was EarPierce ($100) + EarStudsX
+      // ($60) as separate line items; biller asked for one line per tier
+      // so the self-pay statement has a single total.
       const FEE_UPSERTS: Array<[string, string, number]> = [
-        ['EarPierce', 'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
-        ['EarStudsX', 'Upgrade to titanium piercing studs', 60.00],
+        ['EarPierce',    'In-home ear piercing (includes medical-grade titanium starter studs)', 100.00],
+        ['EarPierceUpg', 'In-home ear piercing with upgraded studs',                              160.00],
       ]
       const feeResults: Array<{ code: string; action: 'created' | 'updated' | 'error'; charge_amount: number | null }> = []
       for (const [code, desc, amt] of FEE_UPSERTS) {
