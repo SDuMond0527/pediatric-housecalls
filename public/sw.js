@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-24-fee-archive-via-post-action
+// Service worker — deliberate passthrough. Version: 2026-11-24-admin-claims-mobile-pass
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache
