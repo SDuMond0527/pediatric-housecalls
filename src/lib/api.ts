@@ -907,7 +907,7 @@ export const createFeeScheduleRow = (body: { code: string; description: string; 
 export const updateFeeScheduleRow = (code: string, body: Partial<Pick<FeeScheduleRow, 'description' | 'category' | 'charge_amount' | 'place_of_service' | 'is_active'>>) =>
   apiFetch<FeeScheduleRow>(`/api/fee-schedule/${encodeURIComponent(code)}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const archiveFeeScheduleRow = (code: string) =>
-  apiFetch<{ ok: true }>(`/api/fee-schedule/${encodeURIComponent(code)}`, { method: 'DELETE' })
+  apiFetch<{ ok: true; code: string }>('/api/fee-schedule', { method: 'POST', body: JSON.stringify({ action: 'archive', code }) })
 
 // ── Natural-language ad-hoc reports (Claude-generated SQL) ───
 export interface ReportResult {

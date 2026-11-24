@@ -34,6 +34,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     if (!isAdmin) return res.status(403).json({ error: 'Admin only' })
     const body = (req.body ?? {}) as Record<string, any>
+
+    // Archive branch — same workaround pattern as supply-requests cancel
+    // (2026-11-23). Vercel's edge keeps 405ing DELETE /api/fee-schedule/
+    // [code] despite the handler accepting it. POST-with-action here on
+    // the collection endpoint reliably lands. Sara 2026-11-24.
+    if (body.action === 'archive') {
+      const code = String(body.code ?? '').trim()
+      if (!code) return res.status(400).json({ error: 'code required' })
+      const [row] = await sql`
+        UPDATE fee_schedule SET is_active = false
+        WHERE practice_id = ${practiceId}::uuid AND code = ${code}
+        RETURNING code`
+      if (!row) return res.status(404).json({ error: 'Fee code not found in your practice' })
+      return res.status(200).json({ ok: true, code: row.code })
+    }
+
     const code = String(body.code ?? '').trim()
     const description = String(body.description ?? '').trim()
     const category = String(body.category ?? '').trim() || 'Other'
