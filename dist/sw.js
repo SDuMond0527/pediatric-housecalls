@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-23-per-sibling-note-and-claim
+// Service worker — deliberate passthrough. Version: 2026-11-24-claim-cpt-edit-action
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

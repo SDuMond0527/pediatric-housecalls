@@ -834,7 +834,15 @@ export function AdminClaims() {
     setSaving(claimId + '_cpt')
     setSaveError(null)
     try {
-      await updateClaim(claimId, { cpt_codes: codes })
+      // Dedicated action path — the generic update was no-op'ing the
+      // write in some cases and leaving Sara staring at her old codes.
+      // edit_cpt does a surgical UPDATE of just cpt_codes + total_charge
+      // + biller_edited_at and throws 404 if the row isn't found instead
+      // of silently returning 200. Sara 2026-11-24.
+      const updated = await updateClaim(claimId, { action: 'edit_cpt', cpt_codes: codes })
+      if (!updated || !updated.id) {
+        throw new Error('The server responded but did not return the updated claim. Refresh the page and try again — if it keeps failing, text Anna.')
+      }
       setEditCpt(prev => { const n = { ...prev }; delete n[claimId]; return n })
       await load()
     } catch (e: any) {

@@ -1928,6 +1928,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(updated)
     }
 
+    // Dedicated CPT-edit action — surgical write of just cpt_codes +
+    // total_charge + biller_edited_at. Bypasses the big COALESCE update
+    // below so there's no way for an unrelated gate to silently no-op
+    // the write, and surfaces an explicit error when the row isn't
+    // found. Added 2026-11-24 after the Sheedy Save-button-does-nothing
+    // bug — the general path was returning 200 with no visible effect.
+    if (action === 'edit_cpt') {
+      const codes = Array.isArray(fields?.cpt_codes) ? fields.cpt_codes : null
+      if (codes == null) return res.status(400).json({ error: 'cpt_codes array required' })
+      try { await sql`ALTER TABLE claims ADD COLUMN IF NOT EXISTS biller_edited_at timestamptz` } catch {}
+      const total = codes.reduce((s: number, c: any) => {
+        const charge = parseFloat(c?.charge_amount ?? 0) || 0
+        const units  = parseInt(c?.units ?? 0, 10) || 1
+        return s + charge * units
+      }, 0)
+      const [editActor] = await sql`SELECT id, name FROM providers WHERE cognito_sub = ${sub} LIMIT 1`
+      const [preHist] = await sql`SELECT id, practice_id, cpt_codes, diagnoses, payer_id, payer_name, status, denial_codes, claim_rejection_reasons FROM claims WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid LIMIT 1`
+      if (!preHist) return res.status(404).json({ error: 'Claim not found or not in your practice' })
+      const [updated] = await sql`
+        UPDATE claims SET
+          cpt_codes          = ${JSON.stringify(codes)}::jsonb,
+          total_charge       = ${total},
+          biller_edited_at   = now(),
+          updated_at         = now(),
+          submission_error   = CASE WHEN status = 'error' THEN NULL ELSE submission_error END,
+          stedi_response     = CASE WHEN status = 'error' THEN NULL ELSE stedi_response END,
+          status             = CASE WHEN status = 'error' THEN 'pending_review' ELSE status END
+        WHERE id = ${id}::uuid AND practice_id = ${practiceId}::uuid
+        RETURNING *`
+      if (!updated) return res.status(404).json({ error: 'Claim not found or not in your practice (update returned no rows)' })
+      try {
+        await logClaimCodeHistory(sql, preHist as any,
+          { cpt_codes: updated.cpt_codes, diagnoses: updated.diagnoses },
+          { id: editActor?.id ?? null, name: editActor?.name ?? null },
+          'biller_edit')
+      } catch (histErr: any) {
+        console.error('[claims edit_cpt] history log failed (non-fatal):', histErr?.message)
+      }
+      return res.status(200).json(updated)
+    }
+
     // Subscriber name must include first + last if being written.
     // Empty is fine, single-word is not — Blue Cross rejects (code 33).
     if (fields?.subscriber_name && String(fields.subscriber_name).trim()) {
