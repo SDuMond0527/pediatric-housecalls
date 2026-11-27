@@ -263,12 +263,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND era_received_at::date BETWEEN ${startStr}::date AND ${endStr}::date
         ) AS contractual_adjustments,
         (
+          -- Top-line statement write-off total EXCLUDES 'billing_error'
+          -- voids. Those are duplicate statements the system created in
+          -- error — never real revenue the practice earned and lost.
+          -- Per-reason breakdown below still shows them for
+          -- transparency. Sara 2026-11-27.
           SELECT COALESCE(SUM(COALESCE(total_amount_due, 0)), 0)::numeric(12,2)
           FROM patient_statements
           WHERE practice_id = ${practiceId}::uuid
             AND status = 'void'
             AND voided_at IS NOT NULL
             AND voided_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+            AND COALESCE(NULLIF(TRIM(void_reason), ''), '') <> 'billing_error'
         ) AS write_offs,
         (
           SELECT COUNT(*)::int
@@ -277,6 +283,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND status = 'void'
             AND voided_at IS NOT NULL
             AND voided_at::date BETWEEN ${startStr}::date AND ${endStr}::date
+            AND COALESCE(NULLIF(TRIM(void_reason), ''), '') <> 'billing_error'
         ) AS write_off_count
     `
 

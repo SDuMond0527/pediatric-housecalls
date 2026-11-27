@@ -1,4 +1,4 @@
-// Service worker — deliberate passthrough. Version: 2026-11-27-dedup-manual-paths-patched
+// Service worker — deliberate passthrough. Version: 2026-11-27-exclude-billing-error-from-writeoff-topline
 //
 // Prior versions of this file cached fetched responses in a fixed cache named
 // 'phc-v1' and served them as fallback on network failure. Because the cache

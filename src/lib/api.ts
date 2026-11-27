@@ -1455,6 +1455,21 @@ export const getPatientStatement = (claimId: string, statementId?: string) =>
 export const getAllPatientStatements = (status?: string) =>
   apiFetch<any[]>(`/api/patient-statements/all${status ? `?status=${encodeURIComponent(status)}` : ''}`)
 
+// Per-row detail for the Statement write-offs card on Financial Reports.
+// Default excludes billing_error voids (matches the top-line total).
+export const getWriteoffDetail = (start: string, end: string, includeBillingError = false) =>
+  apiFetch<{ rows: Array<{
+    id: string
+    patient_first_name: string | null
+    patient_last_name: string | null
+    date_of_service: string | null
+    total_amount_due: string | number | null
+    void_reason: string | null
+    void_note: string | null
+    voided_at: string | null
+    voided_by_name: string | null
+  }> }>(`/api/admin/writeoff-detail?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${includeBillingError ? '&include=billing_error' : ''}`)
+
 // Scan prod for every claim with multiple active patient_statements.
 // Returns the list if duplicates exist; installs the DB-level dedup
 // lock automatically if clean. Sara 2026-11-27 — Eliza Starrs case.

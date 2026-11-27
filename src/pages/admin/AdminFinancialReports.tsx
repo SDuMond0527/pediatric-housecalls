@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, subMonths } from 'date-fns'
 import { RefreshCw, Download, DollarSign, Users, TrendingUp, Percent, RotateCcw, PieChart, HandCoins, XCircle, Clock } from 'lucide-react'
-import { getFinancialReports, getArDrill, apiFetch, type ArBucket } from '../../lib/api'
+import { getFinancialReports, getArDrill, getWriteoffDetail, apiFetch, type ArBucket } from '../../lib/api'
 import { useSettings } from '../../contexts/PracticeSettingsContext'
 import { ChartNumberPill } from '../../components/ChartNumberPill'
 import { ArDrillModal } from './ArDrillModal'
@@ -592,6 +592,32 @@ const REASON_LABEL: Record<string, string> = {
 }
 
 function AdjustmentsSection({ data, start, end }: { data: ReportsData; start: string; end: string }) {
+  // Click-through detail for the Statement write-offs card. Shows per-
+  // row list (patient, DOS, amount, reason, note, voided-by). Toggle
+  // includes duplicate-statement voids ("Billing error") off by default
+  // to match the top-line total; biller can flip them on. Sara
+  // 2026-11-27.
+  const [writeoffDetailOpen, setWriteoffDetailOpen] = useState(false)
+  const [writeoffDetailRows, setWriteoffDetailRows] = useState<any[]>([])
+  const [writeoffDetailLoading, setWriteoffDetailLoading] = useState(false)
+  const [writeoffDetailErr, setWriteoffDetailErr] = useState<string | null>(null)
+  const [writeoffIncludeBillingError, setWriteoffIncludeBillingError] = useState(false)
+  async function loadWriteoffDetail(includeBE: boolean) {
+    setWriteoffDetailLoading(true); setWriteoffDetailErr(null)
+    try {
+      const r = await getWriteoffDetail(start, end, includeBE)
+      setWriteoffDetailRows(r.rows ?? [])
+    } catch (e: any) {
+      setWriteoffDetailErr(e?.message ?? String(e))
+    } finally {
+      setWriteoffDetailLoading(false)
+    }
+  }
+  function openWriteoffDetail() {
+    setWriteoffIncludeBillingError(false)
+    setWriteoffDetailOpen(true)
+    loadWriteoffDetail(false)
+  }
   const adj = parseFloat(String(data.adjustments.contractual_adjustments ?? 0))
   const woffStatement = parseFloat(String(data.adjustments.write_offs ?? 0))
   const claimWoffTotal = (data.write_offs_claim_by_reason ?? []).reduce((s, r: any) => s + parseFloat(String(r.amount ?? 0)), 0)
@@ -616,7 +642,7 @@ function AdjustmentsSection({ data, start, end }: { data: ReportsData; start: st
       }}>
       <div className="grid grid-cols-3 gap-3 mb-4">
         <MoneyCard label="Contractual adjustments (normal payer discounts)" value={fmtMoney(adj)} color="#B45309" />
-        <MoneyCard label={`Statement write-offs (${data.adjustments.write_off_count})`} value={fmtMoney(woffStatement)} color="#991B1B" />
+        <MoneyCard label={`Statement write-offs (${data.adjustments.write_off_count})`} value={fmtMoney(woffStatement)} color="#991B1B" onClick={openWriteoffDetail} />
         <MoneyCard label="Claim write-offs" value={fmtMoney(claimWoffTotal)} color="#991B1B" />
       </div>
 
@@ -676,6 +702,87 @@ function AdjustmentsSection({ data, start, end }: { data: ReportsData; start: st
             </tbody>
           </table>
         </>
+      )}
+      {writeoffDetailOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setWriteoffDetailOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8E4] bg-white flex-shrink-0">
+              <div>
+                <div className="font-display text-[16px] font-medium text-[#1A1A2E]">Statement write-offs — detail</div>
+                <div className="text-[12px] text-[#1A1A2E]/70 mt-0.5">
+                  {start} → {end} · {writeoffDetailRows.length} row{writeoffDetailRows.length === 1 ? '' : 's'}
+                  {!writeoffIncludeBillingError && ' · duplicate-statement voids hidden'}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-[12px] text-[#555] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={writeoffIncludeBillingError}
+                    onChange={e => {
+                      setWriteoffIncludeBillingError(e.target.checked)
+                      loadWriteoffDetail(e.target.checked)
+                    }} />
+                  Include duplicate-statement voids
+                </label>
+                <button
+                  onClick={() => setWriteoffDetailOpen(false)}
+                  className="px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8]">
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {writeoffDetailLoading && <div className="p-6 text-[13px] text-[#555]">Loading…</div>}
+              {writeoffDetailErr && !writeoffDetailLoading && (
+                <div className="m-6 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">
+                  <strong>Failed to load:</strong> {writeoffDetailErr}
+                </div>
+              )}
+              {!writeoffDetailLoading && !writeoffDetailErr && writeoffDetailRows.length === 0 && (
+                <div className="p-6 text-[13px] text-[#555] text-center">
+                  No write-offs in this window{!writeoffIncludeBillingError && ' (duplicate-statement voids are hidden — toggle on to see them)'}.
+                </div>
+              )}
+              {!writeoffDetailLoading && !writeoffDetailErr && writeoffDetailRows.length > 0 && (
+                <table className="w-full text-[13px]">
+                  <thead className="bg-[#FAFAF8] text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wide">
+                    <tr className="border-b border-[#E8E8E4]">
+                      <th className="text-left px-4 py-3">Patient</th>
+                      <th className="text-left px-4 py-3">DOS</th>
+                      <th className="text-right px-4 py-3">Amount</th>
+                      <th className="text-left px-4 py-3">Reason</th>
+                      <th className="text-left px-4 py-3">Note</th>
+                      <th className="text-left px-4 py-3">Voided by</th>
+                      <th className="text-left px-4 py-3">Voided on</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1EFE8]">
+                    {writeoffDetailRows.map((r: any) => {
+                      const name = [r.patient_first_name, r.patient_last_name].filter(Boolean).join(' ') || '—'
+                      const amt = parseFloat(String(r.total_amount_due ?? 0)) || 0
+                      const reason = r.void_reason ?? 'other'
+                      const reasonLabel = REASON_LABEL[reason] ?? reason
+                      const voidedOn = r.voided_at ? new Date(r.voided_at).toLocaleString() : '—'
+                      const dos = r.date_of_service ? String(r.date_of_service).slice(0, 10) : '—'
+                      return (
+                        <tr key={r.id} className="hover:bg-[#FAFAF8]">
+                          <td className="px-4 py-2.5 text-[#1A1A2E] font-medium">{name}</td>
+                          <td className="px-4 py-2.5 text-[#555] tabular-nums">{dos}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-[#991B1B] tabular-nums">{fmtMoney(amt)}</td>
+                          <td className="px-4 py-2.5 text-[#1A1A2E]">{reasonLabel}</td>
+                          <td className="px-4 py-2.5 text-[#555] text-[12px]">{r.void_note || '—'}</td>
+                          <td className="px-4 py-2.5 text-[#555] text-[12px]">{r.voided_by_name || '—'}</td>
+                          <td className="px-4 py-2.5 text-[#555] text-[12px] tabular-nums">{voidedOn}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </ReportShell>
   )
@@ -1388,10 +1495,19 @@ function ReportShell({
   )
 }
 
-function MoneyCard({ label, value, color, bold }: { label: string; value: string; color: string; bold?: boolean }) {
+function MoneyCard({ label, value, color, bold, onClick }: { label: string; value: string; color: string; bold?: boolean; onClick?: () => void }) {
+  const clickable = !!onClick
   return (
-    <div className="bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl p-3">
-      <div className="text-[10px] font-semibold text-[#1A1A2E]/60 uppercase tracking-wide mb-1">{label}</div>
+    <div
+      className={`bg-[#FAFAF8] border border-[#E8E8E4] rounded-xl p-3 ${clickable ? 'cursor-pointer hover:bg-[#F1EFE8] hover:border-[#D4D1C3] transition-colors' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e => { if (e.key === 'Enter' || e.key === ' ') onClick?.() }) : undefined}>
+      <div className="text-[10px] font-semibold text-[#1A1A2E]/60 uppercase tracking-wide mb-1 flex items-center gap-1">
+        {label}
+        {clickable && <span className="text-[9px] opacity-50">▸</span>}
+      </div>
       <div className={`font-display text-[20px] tabular-nums ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color }}>{value}</div>
     </div>
   )
