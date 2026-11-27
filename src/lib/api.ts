@@ -1455,6 +1455,28 @@ export const getPatientStatement = (claimId: string, statementId?: string) =>
 export const getAllPatientStatements = (status?: string) =>
   apiFetch<any[]>(`/api/patient-statements/all${status ? `?status=${encodeURIComponent(status)}` : ''}`)
 
+// Scan prod for every claim with multiple active patient_statements.
+// Returns the list if duplicates exist; installs the DB-level dedup
+// lock automatically if clean. Sara 2026-11-27 — Eliza Starrs case.
+export const statementDedupCheck = () =>
+  apiFetch<{
+    ok: boolean
+    lock_installed: boolean
+    duplicates_found: number
+    duplicates?: Array<{
+      claim_id: string
+      statement_count: number
+      statement_ids: string[]
+      statuses: string[]
+      service_dates: string[]
+      amounts: string[]
+      patient_name: string | null
+    }>
+    message: string
+    lock_created_this_call?: boolean
+    already_installed?: boolean
+  }>('/api/admin/statement-dedup-check')
+
 export const getPatientStatementsForChild = (childId: string) =>
   apiFetch<any[]>(`/api/patient-statements/for-child?child_id=${encodeURIComponent(childId)}`)
 

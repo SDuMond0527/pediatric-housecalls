@@ -44,6 +44,7 @@ import { AdminPcps } from './pages/admin/AdminPcps'
 import { AdminViewAsParent } from './pages/admin/AdminViewAsParent'
 import { AdminFinancialReports } from './pages/admin/AdminFinancialReports'
 import { AdminPendingWriteOffs } from './pages/admin/AdminPendingWriteOffs'
+import { AdminStatementDedupCheck } from './pages/admin/AdminStatementDedupCheck'
 import { AdminBillingAgent } from './pages/admin/AdminBillingAgent'
 import { AdminResultsInbox } from './pages/admin/AdminResultsInbox'
 import { AdminResultsUpload } from './pages/admin/AdminResultsUpload'
@@ -225,6 +226,7 @@ export default function App() {
                 <Route path="view-as-parent/:familyId" element={<AdminViewAsParent />} />
                 <Route path="financial-reports" element={<AdminFinancialReports />} />
                 <Route path="pending-write-offs" element={<AdminPendingWriteOffs />} />
+                <Route path="statement-dedup-check" element={<AdminStatementDedupCheck />} />
                 <Route path="reports-schedule" element={<AdminReportsSchedule />} />
                 <Route path="handbook"           element={<Handbook />} />
                 <Route path="specialists"        element={<AdminSpecialists />} />
