@@ -422,6 +422,14 @@ export function BookVisit() {
   const [waitlistInsuranceGroupNum, setWaitlistInsuranceGroupNum] = useState('')
   const [waitlistInsuranceSubscriber, setWaitlistInsuranceSubscriber] = useState('')
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
+  // Any failure inside submitWaitlist now surfaces here instead of
+  // vanishing. Prior code chained .catch(() => null) on the actual
+  // waitlist POST and had no try/catch around the preceding profile /
+  // child updates, so a 400 "phone required" or any server 5xx just
+  // left the modal open with no explanation. Sara 2026-11-25 — a mom
+  // trying to join the waitlist for 28075 was seeing an "error code"
+  // with no way for us to see what it was.
+  const [waitlistError, setWaitlistError] = useState<string | null>(null)
   const [secureTextProviders, setSecureTextProviders] = useState<{name: string; role: string; secure_text_number: string}[]>([])
   const [studOptions, setStudOptions] = useState<Array<{ id: string; name: string; photo_url: string; price: number | string }>>([])
   const [selectedStudOptionId, setSelectedStudOptionId] = useState<string | null>(null)
@@ -1286,6 +1294,19 @@ export function BookVisit() {
       return
     }
     setWaitlistSubmitting(true)
+    setWaitlistError(null)
+    try {
+      await submitWaitlistInner()
+    } catch (e: any) {
+      const msg = e?.message ?? String(e ?? 'Unknown error — please text us at 704-560-4169.')
+      console.error('[submitWaitlist] failed:', e)
+      setWaitlistError(msg)
+      setWaitlistSubmitting(false)
+    }
+  }
+
+  async function submitWaitlistInner() {
+    if (!family) return
 
     // Waitlist is offered AFTER the parent has already gone through step 1
     // (visit type + kids), step 2 (full intake), and step 3 (chose date/
@@ -1371,20 +1392,20 @@ export function BookVisit() {
     if (primaryIntake?.chiefComplaint) noteParts.push(`Complaint: ${primaryIntake.chiefComplaint}`)
     if (booking.date) noteParts.push(`Requested date: ${booking.date}`)
 
+    // Any failure here (400 phone required, 500, etc.) propagates to
+    // submitWaitlist's try/catch so the parent sees the real error in
+    // the modal instead of the modal silently doing nothing. Sara
+    // 2026-11-25 — we had no visibility into why a 28075 mom was
+    // seeing an "error code."
     const waitlistEntry = await familyCreateWaitlistEntry({
       family_id: family.id,
       visit_type: booking.visitType || null,
       zip: booking.zip,
       state: booking.state || null,
-      // Persist the parent's dropdown selection from the "Join the
-      // waitlist" modal (waitlistTime — set by the "Preferred time
-      // window" <select> at line ~2470). This field was hardcoded
-      // null before, so admin waitlist cards showed no preference
-      // even when the parent chose one. Sara DuMond 2026-09-13.
       preferred_time_window: waitlistTime || null,
       notes: noteParts.join(' | '),
       status: 'waiting',
-    }).catch(() => null)
+    })
 
     if (waitlistEntry?.id) {
       familyInvokeNotifications({ type: 'waitlist', waitlistEntryId: waitlistEntry.id }).catch(() => {})
@@ -2866,6 +2887,11 @@ export function BookVisit() {
                 className="w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
               </button>
+              {waitlistError && (
+                <div className="mt-2 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">
+                  {waitlistError}
+                </div>
+              )}
               {!(booking.phone || (family as any)?.phone) && (
                 <p className="text-[12px] text-[#633806] leading-relaxed">
                   You need a mobile phone number on your family profile before you can join the waitlist. <Link to="/family/dashboard" className="underline font-medium">Add one on your dashboard</Link> and come back.
@@ -3146,10 +3172,21 @@ export function BookVisit() {
                         We'll reach out as soon as a spot opens up on your preferred date.
                       </p>
                     </div>
-                    <button onClick={submitWaitlist} disabled={waitlistSubmitting}
+                    <button onClick={submitWaitlist} disabled={waitlistSubmitting || !(booking.phone || (family as any)?.phone)}
+                      title={!(booking.phone || (family as any)?.phone) ? 'Add a phone number to your profile before joining the waitlist' : undefined}
                       className="mt-auto w-full py-2.5 bg-[#EF9F27] text-white rounded-xl text-[13px] font-semibold hover:bg-[#BA7517] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       {waitlistSubmitting ? 'Adding you to the waitlist…' : 'Join the waitlist'}
                     </button>
+                    {waitlistError && (
+                      <div className="mt-2 p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">
+                        {waitlistError}
+                      </div>
+                    )}
+                    {!(booking.phone || (family as any)?.phone) && (
+                      <p className="mt-2 text-[12px] text-[#633806] leading-relaxed">
+                        You need a mobile phone number on your family profile before you can join the waitlist. <Link to="/family/dashboard" className="underline font-medium">Add one on your dashboard</Link> and come back.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -3704,6 +3741,11 @@ export function BookVisit() {
                     Join waitlist
                   </Button>
                 </div>
+                {waitlistError && (
+                  <div className="p-3 rounded-lg bg-[#FCEBEB] text-[13px] text-[#791F1F]">
+                    {waitlistError}
+                  </div>
+                )}
                 {!(booking.phone || (family as any)?.phone) && (
                   <p className="text-[12px] text-[#791F1F] leading-relaxed">
                     You need a mobile phone number on your family profile before you can join the waitlist. <Link to="/family/dashboard" className="underline font-medium">Add one on your dashboard</Link> and come back.
