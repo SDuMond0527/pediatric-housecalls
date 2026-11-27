@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { statementDedupCheck } from '../../lib/api'
 
-// Admin-only page. Runs the dedup scan with the signed-in session so no
-// manual token needed. Shows every claim in the practice that has two
-// or more active patient_statements, auto-installs the DB-level lock
-// when the list is clean. Sara 2026-11-27 — Eliza / Harrison / probably
-// more.
+// Deliberately minimal — no icon imports, no Tailwind, no ternaries
+// across complex trees. Inline styles only so a bad CSS import or
+// missing lucide module cannot blank the page. Sara 2026-11-27 — the
+// previous richer version returned blank on her machine and I need
+// something that cannot fail to render.
 
 type Row = {
   claim_id: string
@@ -28,19 +27,31 @@ type Resp = {
   already_installed?: boolean
 }
 
+const wrap: React.CSSProperties = { padding: 24, fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 1100, margin: '0 auto' }
+const h1:   React.CSSProperties = { fontSize: 22, fontWeight: 600, marginBottom: 4, color: '#1A1A2E' }
+const sub:  React.CSSProperties = { fontSize: 13, color: '#555', marginBottom: 20 }
+const btn:  React.CSSProperties = { padding: '8px 14px', background: '#F1EFE8', color: '#1A1A2E', border: '1px solid #E8E8E4', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500 }
+const box:  React.CSSProperties = { padding: 16, borderRadius: 12, marginBottom: 16, fontSize: 14 }
+const okBox:   React.CSSProperties = { ...box, background: '#ECFDF5', border: '1px solid #86E7C4', color: '#065F46' }
+const warnBox: React.CSSProperties = { ...box, background: '#FEF3C7', border: '1px solid #F7D06A', color: '#78350F' }
+const errBox:  React.CSSProperties = { ...box, background: '#FCEBEB', border: '1px solid #F2B5B5', color: '#791F1F' }
+const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', background: 'white', border: '1px solid #E8E8E4', borderRadius: 12, overflow: 'hidden', fontSize: 13 }
+const th:    React.CSSProperties = { textAlign: 'left', padding: '10px 14px', background: '#FAFAF8', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1A1A2E', borderBottom: '1px solid #E8E8E4' }
+const td:    React.CSSProperties = { padding: '10px 14px', borderBottom: '1px solid #F1EFE8', verticalAlign: 'top' }
+const mono:  React.CSSProperties = { fontFamily: 'ui-monospace, monospace', fontSize: 12, color: '#666' }
+
 export function AdminStatementDedupCheck() {
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [resp, setResp] = useState<Resp | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+  const [resp, setResp]       = useState<Resp | null>(null)
 
   async function run() {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const r = await statementDedupCheck()
       setResp(r)
     } catch (e: any) {
-      setError(e?.message ?? String(e))
+      setError(e?.message ? String(e.message) : String(e))
     } finally {
       setLoading(false)
     }
@@ -49,114 +60,72 @@ export function AdminStatementDedupCheck() {
   useEffect(() => { run() }, [])
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#7F77DD]/10 flex items-center justify-center">
-            <AlertTriangle size={18} className="text-[#7F77DD]" />
-          </div>
-          <div>
-            <h1 className="font-display text-xl font-semibold text-[#1A1A2E]">Duplicate statement scan</h1>
-            <p className="text-[12px] text-[#1A1A2E] mt-0.5">
-              Finds any claim that has more than one active (non-voided) patient statement. Installs
-              the database-level lock once the list is clean.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={run}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F1EFE8] text-[#555] text-[12px] font-medium rounded-lg hover:bg-[#E8E4D8] disabled:opacity-50">
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Re-run scan
+    <div style={wrap}>
+      <h1 style={h1}>Duplicate statement scan</h1>
+      <div style={sub}>
+        Finds every claim in your practice with two or more active statements. Installs the database lock automatically once the list is clean.
+      </div>
+      <div style={{ marginBottom: 20 }}>
+        <button style={btn} onClick={run} disabled={loading}>
+          {loading ? 'Scanning…' : 'Re-run scan'}
         </button>
       </div>
 
-      {loading && <div className="text-[13px] text-[#1A1A2E] py-6">Scanning...</div>}
+      {loading && <div style={box}>Scanning…</div>}
 
-      {error && !loading && (
-        <div className="bg-[#FCEBEB] border border-[#F2B5B5] rounded-xl p-4 text-[13px] text-[#791F1F]">
+      {!loading && error && (
+        <div style={errBox}>
           <strong>Scan failed:</strong> {error}
         </div>
       )}
 
-      {resp && !loading && !error && resp.duplicates_found === 0 && (
-        <div className="bg-[#ECFDF5] border border-[#86E7C4] rounded-xl p-5">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 size={22} className="text-[#047857] flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold text-[#065F46] text-[14px] mb-1">No duplicate statements found</div>
-              <div className="text-[13px] text-[#065F46]">{resp.message}</div>
-              {resp.lock_created_this_call && (
-                <div className="text-[12px] text-[#047857] mt-2 font-medium">
-                  Lock just installed. Any future race between the ERA webhook, cron poll, or self-pay
-                  sign-path will be stopped at the database.
-                </div>
-              )}
-              {resp.already_installed && (
-                <div className="text-[12px] text-[#047857] mt-2 font-medium">
-                  Lock was already installed from a previous run.
-                </div>
-              )}
-            </div>
-          </div>
+      {!loading && !error && resp && resp.duplicates_found === 0 && (
+        <div style={okBox}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>No duplicate statements found.</div>
+          <div>{resp.message}</div>
         </div>
       )}
 
-      {resp && !loading && !error && resp.duplicates_found > 0 && resp.duplicates && (
+      {!loading && !error && resp && resp.duplicates_found > 0 && (
         <>
-          <div className="bg-[#FEF3C7] border border-[#F7D06A] rounded-xl p-5 mb-5">
-            <div className="flex items-start gap-3">
-              <AlertTriangle size={22} className="text-[#92400E] flex-shrink-0 mt-0.5" />
-              <div>
-                <div className="font-semibold text-[#78350F] text-[14px] mb-1">
-                  {resp.duplicates_found} claim{resp.duplicates_found === 1 ? '' : 's'} with duplicate active statements
-                </div>
-                <div className="text-[13px] text-[#78350F]">{resp.message}</div>
-                <div className="text-[12px] text-[#92400E] mt-2">
-                  For each row below: open <strong>Admin → Patient Statements</strong>, search the patient's
-                  name, click <strong>Edit</strong> on all but one of their duplicate rows, hit <strong>Write
-                  off</strong> with reason <em>Billing error</em>. Re-run this scan when you're done; the DB
-                  lock installs automatically once the list hits zero.
-                </div>
-              </div>
+          <div style={warnBox}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              {resp.duplicates_found} claim{resp.duplicates_found === 1 ? '' : 's'} with duplicate active statements
+            </div>
+            <div>{resp.message}</div>
+            <div style={{ marginTop: 8, fontSize: 12 }}>
+              For each row: Admin → Patient Statements → search the patient → open each duplicate row → Write off → reason "Billing error". Re-run this scan when you're done.
             </div>
           </div>
-
-          <div className="bg-white border border-[#E8E8E4] rounded-xl overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead className="bg-[#FAFAF8] text-[11px] font-semibold text-[#1A1A2E] uppercase tracking-wider">
-                <tr>
-                  <th className="px-4 py-3 text-left">Patient</th>
-                  <th className="px-4 py-3 text-left">Date of service</th>
-                  <th className="px-4 py-3 text-left">Count</th>
-                  <th className="px-4 py-3 text-left">Amounts</th>
-                  <th className="px-4 py-3 text-left">Statuses</th>
-                  <th className="px-4 py-3 text-left">Claim ID</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F1EFE8]">
-                {resp.duplicates.map(d => {
-                  const dates = Array.from(new Set(d.service_dates.map(x => String(x).slice(0, 10))))
-                  return (
-                    <tr key={d.claim_id} className="hover:bg-[#FAFAF8]">
-                      <td className="px-4 py-3 font-medium text-[#1A1A2E]">{d.patient_name ?? '—'}</td>
-                      <td className="px-4 py-3 text-[#555] tabular-nums">{dates.join(', ')}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FEE2E2] text-[#7F1D1D]">
-                          {d.statement_count}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[#555] tabular-nums">
-                        {d.amounts.map(a => `$${parseFloat(String(a ?? '0')).toFixed(2)}`).join(', ')}
-                      </td>
-                      <td className="px-4 py-3 text-[#555] text-[12px]">{d.statuses.join(', ')}</td>
-                      <td className="px-4 py-3 text-[11px] text-[#666] font-mono">{d.claim_id.slice(0, 8)}…</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Patient</th>
+                <th style={th}>Date of service</th>
+                <th style={th}>Count</th>
+                <th style={th}>Amounts</th>
+                <th style={th}>Statuses</th>
+                <th style={th}>Claim</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(resp.duplicates ?? []).map(d => {
+                const dates   = Array.isArray(d.service_dates) ? Array.from(new Set(d.service_dates.map(x => String(x ?? '').slice(0, 10)))) : []
+                const amounts = Array.isArray(d.amounts) ? d.amounts.map(a => `$${(parseFloat(String(a ?? '0')) || 0).toFixed(2)}`) : []
+                const statuses = Array.isArray(d.statuses) ? d.statuses : []
+                return (
+                  <tr key={d.claim_id}>
+                    <td style={td}>{d.patient_name ?? '—'}</td>
+                    <td style={td}>{dates.join(', ') || '—'}</td>
+                    <td style={td}><strong>{d.statement_count}</strong></td>
+                    <td style={td}>{amounts.join(', ') || '—'}</td>
+                    <td style={td}>{statuses.join(', ') || '—'}</td>
+                    <td style={{ ...td, ...mono }}>{String(d.claim_id ?? '').slice(0, 8)}…</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </>
       )}
     </div>
