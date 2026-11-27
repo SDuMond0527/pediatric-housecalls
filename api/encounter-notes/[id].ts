@@ -444,28 +444,45 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
           const totalCharge = +(parseFloat(String(stmtClaim.total_charge ?? 0)) || 0).toFixed(2)
           const email = stmtClaim.parent_email ?? stmtClaim.family_email ?? null
           const phone = stmtClaim.parent_phone ?? stmtClaim.family_phone ?? null
-          const [spRow] = await sql`
-            INSERT INTO patient_statements (
-              practice_id, claim_id,
-              patient_first_name, patient_last_name, patient_dob,
-              date_of_service, cpt_codes,
-              patient_email, patient_phone,
-              amount_billed, insurance_payment, contractual_adjustment,
-              patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
-              remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-              status, created_at, updated_at
-            ) VALUES (
-              ${stmtClaim.practice_id}::uuid, ${stmtClaim.id},
-              ${stmtClaim.patient_first_name}, ${stmtClaim.patient_last_name}, ${stmtClaim.patient_dob},
-              ${stmtClaim.service_date}, ${JSON.stringify(stmtClaim.cpt_codes ?? [])}::jsonb,
-              ${email}, ${phone},
-              ${totalCharge}, 0, 0,
-              0, 0, 0, ${totalCharge},
-              ${totalCharge}, 0, ${totalCharge}, ${String(totalCharge)},
-              'draft', NOW(), NOW()
-            )
-            RETURNING id
-          `
+          // Dedup-race protection. If the sign path fires twice (double-
+          // click, retry) the unique index on (claim_id) WHERE voided_at
+          // IS NULL rejects the second. Catch and skip the auto-send so
+          // the family doesn't get two emails. Sara 2026-11-27.
+          let spRow: any = null
+          let spRaceSkip = false
+          try {
+            ;[spRow] = await sql`
+              INSERT INTO patient_statements (
+                practice_id, claim_id,
+                patient_first_name, patient_last_name, patient_dob,
+                date_of_service, cpt_codes,
+                patient_email, patient_phone,
+                amount_billed, insurance_payment, contractual_adjustment,
+                patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+                remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+                status, created_at, updated_at
+              ) VALUES (
+                ${stmtClaim.practice_id}::uuid, ${stmtClaim.id},
+                ${stmtClaim.patient_first_name}, ${stmtClaim.patient_last_name}, ${stmtClaim.patient_dob},
+                ${stmtClaim.service_date}, ${JSON.stringify(stmtClaim.cpt_codes ?? [])}::jsonb,
+                ${email}, ${phone},
+                ${totalCharge}, 0, 0,
+                0, 0, 0, ${totalCharge},
+                ${totalCharge}, 0, ${totalCharge}, ${String(totalCharge)},
+                'draft', NOW(), NOW()
+              )
+              RETURNING id
+            `
+          } catch (eSp: any) {
+            if (eSp?.code === '23505') {
+              const [winner] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${stmtClaim.id}::uuid AND voided_at IS NULL LIMIT 1`
+              if (winner) {
+                console.error('[encounter-notes sign self-pay] dedup race caught for claim', stmtClaim.id, '— using existing statement', winner.id)
+                spRow = { id: winner.id }
+                spRaceSkip = true
+              } else throw eSp
+            } else throw eSp
+          }
           try {
             await sql`
               CREATE TABLE IF NOT EXISTS claim_activity_log (
@@ -492,7 +509,10 @@ async function generateClaimForNote(sql: any, encounterNoteId: string, practiceI
           // charge is the patient's responsibility, Pam doesn't need to
           // review. Policy change 2026-10-06 after Sara talked to Pam.
           const spStmtId = (spRow as any)?.id as string | undefined
-          if (spStmtId && totalCharge > 0) {
+          // Skip auto-send when we lost the dedup race — the other path
+          // already handled sending (or will), and sending twice is the
+          // exact bug we're preventing.
+          if (spStmtId && totalCharge > 0 && !spRaceSkip) {
             const autoSendEnabled = String(process.env.AUTO_SEND_CLEAN_STATEMENTS ?? 'true').toLowerCase() !== 'false'
             if (autoSendEnabled) {
               const svcToken = process.env.INTERNAL_SERVICE_TOKEN || ''

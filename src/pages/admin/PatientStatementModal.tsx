@@ -188,7 +188,11 @@ export function PatientStatementModal({ claim, onClose, onSent }: Props) {
     async function load() {
       setLoading(true)
       try {
-        const stmt = await getPatientStatement(claim.id)
+        // When the caller passes a specific statement_id (e.g., from the
+        // Admin → Patient Statements list where duplicates can exist),
+        // load THAT exact statement instead of letting the server pick
+        // the first one for the claim. Sara 2026-11-27.
+        const stmt = await getPatientStatement(claim.id, (claim as any).statement_id)
         if (stmt) {
           setStatement(stmt)
           // If the saved statement is missing contact info, backfill from family profile

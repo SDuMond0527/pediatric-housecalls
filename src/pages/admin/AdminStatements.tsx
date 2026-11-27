@@ -213,6 +213,13 @@ export function AdminStatements() {
                           <button
                             onClick={() => setStatementClaim({
                               id: stmt.claim_id,
+                              // Carry the specific statement_id so the modal
+                              // can load THIS statement when duplicates
+                              // exist. Without it, GET /patient-statements?
+                              // claim_id=X uses LIMIT 1 and every row in
+                              // the list would open the same modal. Sara
+                              // 2026-11-27 — Eliza Starrs case.
+                              statement_id: stmt.id,
                               payer_name: stmt.payer_name,
                               patient_first_name: stmt.patient_first_name,
                               patient_last_name: stmt.patient_last_name,

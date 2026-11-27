@@ -24,20 +24,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const practiceId = provider.practice_id
 
     if (req.method === 'GET') {
-      const claimId = req.query.claim_id as string
-      if (!claimId) return res.status(400).json({ error: 'claim_id required' })
+      const claimId = req.query.claim_id as string | undefined
+      const stmtId  = req.query.id as string | undefined
+      // id (statement id) takes precedence over claim_id so that, when
+      // multiple statements exist for one claim (the dedup race bug),
+      // the caller can load the specific statement they clicked on
+      // instead of always getting the first one back. Sara 2026-11-27 —
+      // Eliza Starrs case: the list showed 3 duplicate statements but
+      // every Edit click opened the same statement because the modal
+      // was loading by claim_id with LIMIT 1.
+      if (!claimId && !stmtId) return res.status(400).json({ error: 'claim_id or id required' })
 
-      const rows = await sql`
-        SELECT ps.*,
-          COALESCE(fp.email, '') as family_email,
-          COALESCE(fp.phone, ch.parent_phone, '') as family_phone
-        FROM patient_statements ps
-        LEFT JOIN claims c ON c.id = ps.claim_id
-        LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
-        LEFT JOIN family_profiles fp ON fp.id = ch.family_id
-        WHERE ps.claim_id = ${claimId} AND ps.practice_id = ${practiceId}::uuid
-        LIMIT 1
-      `
+      const rows = stmtId
+        ? await sql`
+            SELECT ps.*,
+              COALESCE(fp.email, '') as family_email,
+              COALESCE(fp.phone, ch.parent_phone, '') as family_phone
+            FROM patient_statements ps
+            LEFT JOIN claims c ON c.id = ps.claim_id
+            LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
+            LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+            WHERE ps.id = ${stmtId}::uuid AND ps.practice_id = ${practiceId}::uuid
+            LIMIT 1
+          `
+        : await sql`
+            SELECT ps.*,
+              COALESCE(fp.email, '') as family_email,
+              COALESCE(fp.phone, ch.parent_phone, '') as family_phone
+            FROM patient_statements ps
+            LEFT JOIN claims c ON c.id = ps.claim_id
+            LEFT JOIN children ch ON ch.id = COALESCE(c.child_id, (SELECT child_id FROM appointments WHERE id = c.appointment_id LIMIT 1))
+            LEFT JOIN family_profiles fp ON fp.id = ch.family_id
+            WHERE ps.claim_id = ${claimId} AND ps.practice_id = ${practiceId}::uuid
+            LIMIT 1
+          `
       return res.status(200).json(rows[0] ?? null)
     }
 

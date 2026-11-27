@@ -1447,8 +1447,10 @@ export const deleteNoteTemplate = (id: string) =>
   apiFetch<void>(`/api/note-templates/${id}`, { method: 'DELETE' })
 
 // ── Patient Statements ────────────────────────────────────────
-export const getPatientStatement = (claimId: string) =>
-  apiFetch<any>(`/api/patient-statements?claim_id=${encodeURIComponent(claimId)}`)
+export const getPatientStatement = (claimId: string, statementId?: string) =>
+  apiFetch<any>(statementId
+    ? `/api/patient-statements?id=${encodeURIComponent(statementId)}`
+    : `/api/patient-statements?claim_id=${encodeURIComponent(claimId)}`)
 
 export const getAllPatientStatements = (status?: string) =>
   apiFetch<any[]>(`/api/patient-statements/all${status ? `?status=${encodeURIComponent(status)}` : ''}`)

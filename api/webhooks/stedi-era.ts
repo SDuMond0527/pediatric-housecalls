@@ -294,26 +294,35 @@ async function applyEraPaymentToClaim(sql: any, claim: any, parsed: ParsedEraPay
     }
   }
 
-  await sql`
-    INSERT INTO patient_statements (
-      practice_id, claim_id,
-      patient_first_name, patient_last_name, patient_dob,
-      date_of_service, cpt_codes,
-      patient_email, patient_phone,
-      amount_billed, insurance_payment, contractual_adjustment,
-      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
-      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, created_at, updated_at
-    ) VALUES (
-      ${claim.practice_id}::uuid, ${claim.id},
-      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
-      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
-      ${email}, ${phone},
-      ${parsed.amount_billed}, ${parsed.insurance_payment}, ${parsed.contractual_adjustment},
-      ${parsed.patient_copay}, ${parsed.patient_deductible}, ${parsed.patient_coinsurance}, ${parsed.patient_non_covered},
-      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      'draft', NOW(), NOW()
-    )`
+  // Dedup-race protection. See api/webhooks/stedi-transaction.ts.
+  try {
+    await sql`
+      INSERT INTO patient_statements (
+        practice_id, claim_id,
+        patient_first_name, patient_last_name, patient_dob,
+        date_of_service, cpt_codes,
+        patient_email, patient_phone,
+        amount_billed, insurance_payment, contractual_adjustment,
+        patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+        remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+        status, created_at, updated_at
+      ) VALUES (
+        ${claim.practice_id}::uuid, ${claim.id},
+        ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+        ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+        ${email}, ${phone},
+        ${parsed.amount_billed}, ${parsed.insurance_payment}, ${parsed.contractual_adjustment},
+        ${parsed.patient_copay}, ${parsed.patient_deductible}, ${parsed.patient_coinsurance}, ${parsed.patient_non_covered},
+        ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+        'draft', NOW(), NOW()
+      )`
+  } catch (e: any) {
+    if (e?.code === '23505') {
+      console.error('[webhooks/stedi-era] dedup race caught for claim', claim.id, '— statement already exists, skipping')
+      return { statementCreated: false }
+    }
+    throw e
+  }
   return { statementCreated: true }
 }
 

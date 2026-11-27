@@ -703,28 +703,42 @@ async function ensureStatementForClaim(
   // Sara 2026-10-06.
   const autoPaid = patientResp === 0 && (insurancePayment ?? 0) > 0
 
-  const [row] = await sql`
-    INSERT INTO patient_statements (
-      practice_id, claim_id,
-      patient_first_name, patient_last_name, patient_dob,
-      date_of_service, cpt_codes,
-      patient_email, patient_phone,
-      amount_billed, insurance_payment, contractual_adjustment,
-      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
-      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, paid_at, created_at, updated_at
-    ) VALUES (
-      ${claim.practice_id}::uuid, ${claim.id},
-      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
-      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
-      ${email}, ${phone},
-      ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
-      ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
-      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
-    )
-    RETURNING id
-  `
+  // Dedup-race protection. See api/webhooks/stedi-transaction.ts for the
+  // full story. Sara 2026-11-27 — Eliza Starrs case (3-way race).
+  let row: any = null
+  try {
+    ;[row] = await sql`
+      INSERT INTO patient_statements (
+        practice_id, claim_id,
+        patient_first_name, patient_last_name, patient_dob,
+        date_of_service, cpt_codes,
+        patient_email, patient_phone,
+        amount_billed, insurance_payment, contractual_adjustment,
+        patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+        remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+        status, paid_at, created_at, updated_at
+      ) VALUES (
+        ${claim.practice_id}::uuid, ${claim.id},
+        ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+        ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+        ${email}, ${phone},
+        ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
+        ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
+        ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+        ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
+      )
+      RETURNING id
+    `
+  } catch (e: any) {
+    if (e?.code === '23505') {
+      const [winner] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id}::uuid AND voided_at IS NULL LIMIT 1`
+      if (winner) {
+        console.error('[ensureStatementForClaim/cron] dedup race caught for claim', claim.id, '— using existing statement', winner.id)
+        return { created: false, statementId: winner.id as string }
+      }
+    }
+    throw e
+  }
   const stmtId = row?.id as string
   // Auto-send gate — kept in sync with webhooks/stedi-transaction.ts
   // and admin/refetch-known-eras.ts. See comment in webhook. Sara 2026-10-06.

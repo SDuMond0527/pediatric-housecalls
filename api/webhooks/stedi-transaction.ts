@@ -221,28 +221,49 @@ async function ensureStatementForClaim(
   // and api/cron/stedi-era-poll.ts. Sara 2026-10-06.
   const autoPaid = patientResp === 0 && (insurancePayment ?? 0) > 0
 
-  const [row] = await sql`
-    INSERT INTO patient_statements (
-      practice_id, claim_id,
-      patient_first_name, patient_last_name, patient_dob,
-      date_of_service, cpt_codes,
-      patient_email, patient_phone,
-      amount_billed, insurance_payment, contractual_adjustment,
-      patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
-      remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-      status, paid_at, created_at, updated_at
-    ) VALUES (
-      ${claim.practice_id}::uuid, ${claim.id},
-      ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
-      ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
-      ${email}, ${phone},
-      ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
-      ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
-      ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-      ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
-    )
-    RETURNING id
-  `
+  // Dedup-race protection: the partial unique index
+  // patient_statements_claim_active_unique (installed via
+  // /api/admin/statement-dedup-check) physically prevents a second
+  // active statement from being created for the same claim. If two
+  // ensure paths (webhook + cron, webhook + refetch, etc.) race and
+  // both reach the INSERT at the same instant, the loser gets a
+  // unique_violation (SQLSTATE 23505). We catch it, use the winner's
+  // statement, and the caller skips auto-send so the family doesn't
+  // get two emails. Sara 2026-11-27 — Eliza Starrs case.
+  let row: any = null
+  try {
+    ;[row] = await sql`
+      INSERT INTO patient_statements (
+        practice_id, claim_id,
+        patient_first_name, patient_last_name, patient_dob,
+        date_of_service, cpt_codes,
+        patient_email, patient_phone,
+        amount_billed, insurance_payment, contractual_adjustment,
+        patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+        remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+        status, paid_at, created_at, updated_at
+      ) VALUES (
+        ${claim.practice_id}::uuid, ${claim.id},
+        ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+        ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+        ${email}, ${phone},
+        ${amountBilled}, ${insurancePayment}, ${cas.contractual_adjustment},
+        ${cas.patient_copay}, ${cas.patient_deductible}, ${cas.patient_coinsurance}, ${cas.patient_non_covered},
+        ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+        ${autoPaid ? 'paid' : 'draft'}, ${autoPaid ? new Date() : null}, NOW(), NOW()
+      )
+      RETURNING id
+    `
+  } catch (e: any) {
+    if (e?.code === '23505') {
+      const [winner] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id}::uuid AND voided_at IS NULL LIMIT 1`
+      if (winner) {
+        console.error('[ensureStatementForClaim/webhook] dedup race caught for claim', claim.id, '— using existing statement', winner.id)
+        return { created: false, statementId: winner.id as string }
+      }
+    }
+    throw e
+  }
   const stmtId = row?.id as string
   // ── Auto-send clean statements (Sara 2026-10-06, revised) ───────────
   // When patient owes AND the ERA adjudication is CLEAN (nothing beyond
