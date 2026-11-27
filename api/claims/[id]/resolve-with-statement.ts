@@ -113,30 +113,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const email = claim.parent_email ?? claim.family_email ?? null
       const phone = claim.parent_phone ?? claim.family_phone ?? null
 
-      const [row] = await sql`
-        INSERT INTO patient_statements (
-          practice_id, claim_id,
-          patient_first_name, patient_last_name, patient_dob,
-          date_of_service, cpt_codes,
-          patient_email, patient_phone,
-          amount_billed, insurance_payment, contractual_adjustment,
-          patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
-          remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
-          status, created_at, updated_at
-        ) VALUES (
-          ${claim.practice_id}::uuid, ${claim.id},
-          ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
-          ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
-          ${email}, ${phone},
-          ${amountBilled}, ${insurancePay}, ${casContract},
-          ${casCopay}, ${casDeductible}, ${casCoins}, ${casNonCov},
-          ${remaining}, 0, ${patientResp}, ${String(patientResp)},
-          'draft', NOW(), NOW()
-        )
-        RETURNING id
-      `
-      statementId = row?.id
-      statementCreated = true
+      // Dedup-race protection. If a statement already exists for this
+      // claim (because the ERA webhook or cron got there first), catch
+      // the unique-violation and use the existing statement rather than
+      // creating a second one.
+      let row: any = null
+      try {
+        ;[row] = await sql`
+          INSERT INTO patient_statements (
+            practice_id, claim_id,
+            patient_first_name, patient_last_name, patient_dob,
+            date_of_service, cpt_codes,
+            patient_email, patient_phone,
+            amount_billed, insurance_payment, contractual_adjustment,
+            patient_copay, patient_deductible, patient_coinsurance, patient_non_covered,
+            remaining_balance, prior_balance, total_amount_due, total_amount_due_text,
+            status, created_at, updated_at
+          ) VALUES (
+            ${claim.practice_id}::uuid, ${claim.id},
+            ${claim.patient_first_name}, ${claim.patient_last_name}, ${claim.patient_dob},
+            ${claim.service_date}, ${JSON.stringify(claim.cpt_codes ?? [])}::jsonb,
+            ${email}, ${phone},
+            ${amountBilled}, ${insurancePay}, ${casContract},
+            ${casCopay}, ${casDeductible}, ${casCoins}, ${casNonCov},
+            ${remaining}, 0, ${patientResp}, ${String(patientResp)},
+            'draft', NOW(), NOW()
+          )
+          RETURNING id
+        `
+        statementId = row?.id
+        statementCreated = true
+      } catch (eR: any) {
+        if (eR?.code === '23505') {
+          const [existing] = await sql`SELECT id FROM patient_statements WHERE claim_id = ${claim.id}::uuid AND voided_at IS NULL LIMIT 1`
+          if (existing) {
+            console.error('[resolve-with-statement] dedup race caught for claim', claim.id, '— using existing statement', existing.id)
+            statementId = existing.id
+            statementCreated = false
+          } else throw eR
+        } else throw eR
+      }
     }
 
     // 3. Auto-send the statement — same pattern as self-pay auto-send

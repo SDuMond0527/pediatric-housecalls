@@ -86,60 +86,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const num = (v: any) => (v === '' || v == null ? null : Number(v))
 
-      const [row] = await sql`
-        INSERT INTO patient_statements (
-          practice_id,
-          claim_id,
-          patient_first_name,
-          patient_last_name,
-          patient_dob,
-          date_of_service,
-          cpt_codes,
-          patient_email,
-          patient_phone,
-          amount_billed,
-          insurance_payment,
-          contractual_adjustment,
-          patient_copay,
-          patient_deductible,
-          patient_coinsurance,
-          patient_non_covered,
-          remaining_balance,
-          prior_balance,
-          total_amount_due,
-          total_amount_due_text,
-          explanations,
-          status,
-          created_at,
-          updated_at
-        ) VALUES (
-          ${practiceId}::uuid,
-          ${claim_id},
-          ${patient_first_name || null},
-          ${patient_last_name || null},
-          ${patient_dob || null},
-          ${date_of_service || null},
-          ${JSON.stringify(cpt_codes ?? [])}::jsonb,
-          ${patient_email || null},
-          ${patient_phone || null},
-          ${num(amount_billed)},
-          ${num(insurance_payment)},
-          ${num(contractual_adjustment)},
-          ${num(patient_copay)},
-          ${num(patient_deductible)},
-          ${num(patient_coinsurance)},
-          ${num(patient_non_covered)},
-          ${num(remaining_balance)},
-          ${num(prior_balance)},
-          ${num(total_amount_due)},
-          ${num(total_amount_due) != null ? String(num(total_amount_due)) : null},
-          ${JSON.stringify(explanations ?? [])}::jsonb,
-          'draft',
-          NOW(),
-          NOW()
-        )
-        RETURNING *
-      `
+      // Dedup-race protection. If the unique index is in place and
+      // this INSERT would create a second active statement for the
+      // same claim, return the existing statement instead. Biller
+      // sees the already-existing row — never a duplicate going out.
+      let row: any = null
+      try {
+        ;[row] = await sql`
+          INSERT INTO patient_statements (
+            practice_id,
+            claim_id,
+            patient_first_name,
+            patient_last_name,
+            patient_dob,
+            date_of_service,
+            cpt_codes,
+            patient_email,
+            patient_phone,
+            amount_billed,
+            insurance_payment,
+            contractual_adjustment,
+            patient_copay,
+            patient_deductible,
+            patient_coinsurance,
+            patient_non_covered,
+            remaining_balance,
+            prior_balance,
+            total_amount_due,
+            total_amount_due_text,
+            explanations,
+            status,
+            created_at,
+            updated_at
+          ) VALUES (
+            ${practiceId}::uuid,
+            ${claim_id},
+            ${patient_first_name || null},
+            ${patient_last_name || null},
+            ${patient_dob || null},
+            ${date_of_service || null},
+            ${JSON.stringify(cpt_codes ?? [])}::jsonb,
+            ${patient_email || null},
+            ${patient_phone || null},
+            ${num(amount_billed)},
+            ${num(insurance_payment)},
+            ${num(contractual_adjustment)},
+            ${num(patient_copay)},
+            ${num(patient_deductible)},
+            ${num(patient_coinsurance)},
+            ${num(patient_non_covered)},
+            ${num(remaining_balance)},
+            ${num(prior_balance)},
+            ${num(total_amount_due)},
+            ${num(total_amount_due) != null ? String(num(total_amount_due)) : null},
+            ${JSON.stringify(explanations ?? [])}::jsonb,
+            'draft',
+            NOW(),
+            NOW()
+          )
+          RETURNING *
+        `
+      } catch (e: any) {
+        if (e?.code === '23505' && claim_id) {
+          const [existing] = await sql`SELECT * FROM patient_statements WHERE claim_id = ${claim_id} AND voided_at IS NULL AND practice_id = ${practiceId}::uuid LIMIT 1`
+          if (existing) {
+            console.error('[patient-statements POST] dedup race caught for claim', claim_id, '— returning existing statement', existing.id)
+            return res.status(200).json(existing)
+          }
+        }
+        throw e
+      }
       return res.status(201).json(row)
     }
 
